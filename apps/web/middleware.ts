@@ -21,6 +21,14 @@ export async function middleware(request: NextRequest) {
   // Build a mutable response; intlResponse may be a redirect (locale detection)
   let response = intlResponse ?? NextResponse.next({ request })
 
+  // Fast path: public marketing/catalog pages (/, /services, /p, …) are not
+  // protected. Skip the Supabase auth round-trip entirely so SSR/ISR stays fast.
+  const path = request.nextUrl.pathname.replace(/^\/(en|hi)(\/|$)/, '/').replace(/\/$/, '') || '/'
+  const needsAuthCheck = PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
+  if (!needsAuthCheck) {
+    return response
+  }
+
   // Supabase SSR client that reads cookies and can update the session cookie
   const supabase = createServerClient(
     process.env['NEXT_PUBLIC_SUPABASE_URL']!,

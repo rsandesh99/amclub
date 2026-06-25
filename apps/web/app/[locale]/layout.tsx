@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getMessages, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
-import { Inter } from 'next/font/google'
+import { Inter, Bricolage_Grotesque } from 'next/font/google'
 import { routing } from '@/i18n/routing'
 import { PostHogProvider } from '@/components/providers/posthog'
 import '@/app/globals.css'
@@ -10,6 +10,12 @@ import '@/app/globals.css'
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
+  display: 'swap',
+})
+
+const bricolage = Bricolage_Grotesque({
+  subsets: ['latin'],
+  variable: '--font-bricolage',
   display: 'swap',
 })
 
@@ -50,7 +56,7 @@ export default async function LocaleLayout({
   const messages = await getMessages()
 
   return (
-    <html lang={locale} className={inter.variable}>
+    <html lang={locale} className={`${inter.variable} ${bricolage.variable}`}>
       <body className="bg-background font-sans text-foreground antialiased">
         <NextIntlClientProvider messages={messages}>
           <PostHogProvider>{children}</PostHogProvider>

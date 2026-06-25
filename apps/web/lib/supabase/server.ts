@@ -1,5 +1,19 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+
+/**
+ * Cookie-less anon client for PUBLIC catalog reads (landing, /services, /p/*).
+ * No cookie access → does not force dynamic rendering, so ISR/static caching
+ * and sitemap generation work. Respects RLS via the anon key. §2.5 rule 1.
+ */
+export function createPublicClient() {
+  return createSupabaseClient(
+    process.env['NEXT_PUBLIC_SUPABASE_URL']!,
+    process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  )
+}
 
 /**
  * Supabase server client — use in Server Components, Server Actions, Route Handlers.

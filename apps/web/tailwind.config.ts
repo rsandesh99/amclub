@@ -30,8 +30,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display: ['Bricolage Grotesque', 'sans-serif'],
-        sans: ['Inter', 'Noto Sans Devanagari', 'sans-serif'],
+        display: ['var(--font-bricolage)', 'var(--font-inter)', 'sans-serif'],
+        sans: ['var(--font-inter)', 'Noto Sans Devanagari', 'sans-serif'],
       },
       fontSize: {
         // §4.2 type scale
