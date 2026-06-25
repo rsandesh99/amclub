@@ -109,6 +109,31 @@
     "saved": "Saved",
     "partner": "Partner"
   },
+  "checkout": {
+    "title": "Checkout",
+    "price": "Price",
+    "discount": "Discount",
+    "gst": "GST (18%)",
+    "included": "included",
+    "total": "Total payable",
+    "secure_note": "Secure payment. Money protected until you accept the work."
+  },
+  "orders": {
+    "actions": "Actions",
+    "timeline": "Timeline",
+    "status_placed": "Placed",
+    "status_accepted": "Accepted",
+    "status_requirements_submitted": "Requirements submitted",
+    "status_in_progress": "In progress",
+    "status_delivered": "Delivered",
+    "status_revision_requested": "Revision requested",
+    "status_completed": "Completed",
+    "status_reviewed": "Reviewed",
+    "status_disputed": "Disputed",
+    "status_refunded": "Refunded",
+    "status_auto_cancelled": "Auto-cancelled",
+    "status_cancelled_by_buyer": "Cancelled"
+  },
   "partner_home": {
     "title": "Partner Dashboard",
     "under_review_title": "Application under review",

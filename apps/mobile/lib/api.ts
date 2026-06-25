@@ -98,4 +98,49 @@ export async function toggleSaved(providerId: string, action: 'save' | 'unsave')
   return res.ok
 }
 
+// ── Checkout + orders (shared /api/v1; Bearer-authed) ──────────────────────────
+
+export async function createCheckout(packageId: string) {
+  const res = await fetch(`${API_URL}/api/v1/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ packageId, idempotencyKey: cryptoRandomUUID() }),
+  })
+  return { ok: res.ok, data: await res.json().catch(() => ({})) }
+}
+
+/** Simulation only — completes the captured-payment path when real keys absent. */
+export async function simulatePay(checkoutSessionId: string) {
+  const res = await fetch(`${API_URL}/api/v1/checkout/simulate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ checkoutSessionId }),
+  })
+  return { ok: res.ok, data: await res.json().catch(() => ({})) }
+}
+
+export async function fetchOrder(orderId: string) {
+  const res = await fetch(`${API_URL}/api/v1/orders/${orderId}`, { headers: await authHeaders() })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function transitionOrder(orderId: string, action: string) {
+  const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/transition`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ action }),
+  })
+  return { ok: res.ok, data: await res.json().catch(() => ({})) }
+}
+
+function cryptoRandomUUID(): string {
+  // RN lacks crypto.randomUUID in some runtimes — RFC4122 v4 fallback.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
 export { API_URL }

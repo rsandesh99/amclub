@@ -55,8 +55,9 @@ export default async function PackageDetailPage({
   const reqFields: RequirementField[] =
     (pkg.requirementsTemplate as { fields?: RequirementField[] } | null)?.fields ?? []
 
-  // Buy Now is an auth wall until Phase 4 checkout — return here after login.
-  const buyHref = `/login?next=${encodeURIComponent(`/p/${providerSlug}/${packageSlug}`)}`
+  // Buy Now → checkout. The (msme) layout auth-walls logged-out users to /login
+  // and returns them here after OTP.
+  const buyHref = `/app/checkout/${pkg.id}`
 
   const jsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',

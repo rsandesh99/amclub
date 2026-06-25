@@ -109,6 +109,31 @@
     "saved": "सहेजे",
     "partner": "पार्टनर"
   },
+  "checkout": {
+    "title": "चेकआउट",
+    "price": "कीमत",
+    "discount": "छूट",
+    "gst": "जीएसटी (18%)",
+    "included": "शामिल",
+    "total": "कुल देय",
+    "secure_note": "सुरक्षित भुगतान। काम स्वीकार करने तक पैसा सुरक्षित।"
+  },
+  "orders": {
+    "actions": "क्रियाएं",
+    "timeline": "टाइमलाइन",
+    "status_placed": "दिया गया",
+    "status_accepted": "स्वीकृत",
+    "status_requirements_submitted": "आवश्यकताएं जमा",
+    "status_in_progress": "प्रगति में",
+    "status_delivered": "डिलीवर किया गया",
+    "status_revision_requested": "संशोधन अनुरोध",
+    "status_completed": "पूर्ण",
+    "status_reviewed": "समीक्षित",
+    "status_disputed": "विवादित",
+    "status_refunded": "वापस किया गया",
+    "status_auto_cancelled": "स्वतः रद्द",
+    "status_cancelled_by_buyer": "रद्द किया गया"
+  },
   "partner_home": {
     "title": "पार्टनर डैशबोर्ड",
     "under_review_title": "आवेदन समीक्षाधीन है",

@@ -74,6 +74,8 @@ export default function AppLayout() {
       <Tabs.Screen name="category/[slug]" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="provider/[slug]" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="package/[providerSlug]/[packageSlug]" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="checkout/[packageId]" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="orders/[id]" options={{ href: null, headerShown: false }} />
     </Tabs>
   )
 }

@@ -113,7 +113,7 @@ export default function PackageScreen() {
       {/* Sticky Buy Now (auth wall handled by web login on the deep link) */}
       <View className="absolute inset-x-0 bottom-0 border-t border-gray-200 bg-surface px-4 py-3">
         <TouchableOpacity
-          onPress={() => Alert.alert(t('catalog.buy_now'), t('catalog.buy_now_note'))}
+          onPress={() => router.push(`/checkout/${pkg.id}?providerSlug=${providerSlug}&packageSlug=${packageSlug}` as never)}
           className="items-center rounded-xl bg-primary py-3"
         >
           <Text className="text-base font-semibold text-white">{t('catalog.buy_now')}</Text>
