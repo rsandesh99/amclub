@@ -89,18 +89,22 @@ export const packageStatusSchema = z.enum(['draft', 'active', 'paused', 'removed
 export const packageSchema = z.object({
   category_slug: z.enum(CATEGORY_SLUGS),
   title: z.string().min(5).max(200),
-  scope_included: z.array(z.string()).min(1),
-  scope_excluded: z.array(z.string()).optional(),
-  deliverables: z.array(z.string()).min(1),
+  scope_included: z.array(z.string().min(1)).min(1),
+  scope_excluded: z.array(z.string().min(1)).optional(),
+  deliverables: z.array(z.string().min(1)).min(1),
+  /** Buyer-requirement prompts collected at checkout (free-text questions). */
+  requirements: z.array(z.string().min(1)).max(15).optional(),
   price_paise: paiseSchema,
   discount_bps: z.number().int().min(0).max(9000).default(0),
   member_extra_discount_bps: z.number().int().min(0).max(5000).default(0),
   delivery_days: z.number().int().positive().max(365),
   revision_count: z.number().int().min(0).max(10).default(1),
   faqs: z
-    .array(z.object({ question: z.string(), answer: z.string() }))
+    .array(z.object({ question: z.string().min(1), answer: z.string().min(1) }))
     .max(10)
     .optional(),
+  /** publish → 'active'; save draft → 'draft'. */
+  status: z.enum(['draft', 'active']).default('active'),
 })
 
 export type PackageInput = z.infer<typeof packageSchema>
