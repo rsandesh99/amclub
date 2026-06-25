@@ -9,10 +9,9 @@ import { Label } from '@/components/ui/label'
 
 interface VerificationActionsProps {
   providerId: string
-  providerName: string
 }
 
-export function VerificationActions({ providerId, providerName }: VerificationActionsProps) {
+export function VerificationActions({ providerId }: VerificationActionsProps) {
   const t = useTranslations('admin')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -39,8 +38,8 @@ export function VerificationActions({ providerId, providerName }: VerificationAc
         throw new Error(d.error ?? 'Action failed')
       }
       router.refresh()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Action failed')
     } finally {
       setLoading(null)
     }

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 
 export default function LoginPage() {
   const t = useTranslations('auth')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [phone, setPhone] = useState('')
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
@@ -43,7 +44,7 @@ export default function LoginPage() {
             <PhoneStep onSuccess={(p) => { setPhone(p); setStep('otp') }} />
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-gray-200" />
-              <span className="text-xs text-foreground-secondary">{t('or' as any)}</span>
+              <span className="text-xs text-foreground-secondary">{tCommon('or')}</span>
               <div className="h-px flex-1 bg-gray-200" />
             </div>
             <GoogleButton redirectTo="/app" className="w-full" />

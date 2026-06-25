@@ -77,8 +77,8 @@ export function MsmeWizard({ skipAuth, initialPhone }: MsmeWizardProps) {
         throw new Error(d.error ?? 'Failed to save profile')
       }
       router.push('/app')
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save profile')
     } finally {
       setLoading(false)
     }

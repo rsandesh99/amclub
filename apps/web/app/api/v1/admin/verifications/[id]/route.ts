@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
@@ -67,11 +68,11 @@ export async function POST(
     // Non-fatal — profile is the source of truth
   }
 
-  // If approving, notify provider (placeholder — Phase 6 will wire notifications)
+  // Audit log — Phase 6 will wire real notifications
   if (action === 'approve') {
-    console.log(`[admin/verifications] Provider ${providerId} approved by ${user.id}`)
+    console.warn(`[admin/verifications] Provider ${providerId} approved by ${user.id}`)
   } else {
-    console.log(
+    console.warn(
       `[admin/verifications] Provider ${providerId} rejected by ${user.id}: ${reason}`,
     )
   }

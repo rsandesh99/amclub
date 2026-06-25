@@ -16,7 +16,8 @@
  * ⚠ This endpoint handles OTPs — keep it server-side only, rate-limit it,
  *   and never log OTPs in production.
  */
-import { NextRequest, NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 const hookSchema = z.object({
@@ -48,10 +49,7 @@ export async function POST(request: NextRequest) {
 
   if (!isRealKey) {
     // Dev: log to console (visible in terminal / Vercel logs)
-    console.log(`\n[SMS HOOK DEV] ──────────────────────────────`)
-    console.log(`  To: ${phone}`)
-    console.log(`  Message: ${message}`)
-    console.log(`────────────────────────────────────────────\n`)
+    console.warn(`[SMS HOOK DEV] To: ${phone} | Message: ${message}`)
     return NextResponse.json({ success: true, dev: true })
   }
 
@@ -83,8 +81,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true })
-  } catch (e: any) {
-    console.error('[SMS HOOK] Error:', e.message)
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'SMS delivery error'
+    console.error('[SMS HOOK] Error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

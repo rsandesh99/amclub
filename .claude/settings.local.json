@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/Users/Sandesh/AppData/Roaming/npm/pnpm.cmd --filter @amclub/web add clsx tailwind-merge react-hook-form @hookform/resolvers)"
+    ]
+  }
+}

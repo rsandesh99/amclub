@@ -123,7 +123,7 @@ export default async function VerificationsPage() {
                 )}
 
                 {/* Approve / Reject actions */}
-                <VerificationActions providerId={p.id} providerName={p.legal_name} />
+                <VerificationActions providerId={p.id} />
               </div>
             </div>
           ))}

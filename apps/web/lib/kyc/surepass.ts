@@ -42,8 +42,8 @@ export function makeSurepassClient(apiKey: string): KycClient {
           registrationDate: d.date_of_registration,
           isActive: d.taxpayer_type !== 'Cancelled',
         }
-      } catch (e: any) {
-        return { verified: false, error: e.message }
+      } catch (e: unknown) {
+        return { verified: false, error: e instanceof Error ? e.message : 'KYC error' }
       }
     },
 
@@ -63,8 +63,8 @@ export function makeSurepassClient(apiKey: string): KycClient {
           verified: data.success === true && d.account_exists === 'yes',
           accountHolderName: d.full_name,
         }
-      } catch (e: any) {
-        return { verified: false, error: e.message }
+      } catch (e: unknown) {
+        return { verified: false, error: e instanceof Error ? e.message : 'KYC error' }
       }
     },
   }

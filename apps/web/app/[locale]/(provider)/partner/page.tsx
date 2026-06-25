@@ -70,13 +70,15 @@ export default async function PartnerDashboardPage() {
 
         {/* Quick links */}
         <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: t('view_rfqs'), href: '/partner/rfqs', icon: '📬' },
-            { label: t('view_orders'), href: '/partner/orders', icon: '📦' },
-          ].map((link) => (
+          {(
+            [
+              { label: t('view_rfqs'), href: '/partner/rfqs', icon: '📬' },
+              { label: t('view_orders'), href: '/partner/orders', icon: '📦' },
+            ] as { label: string; href: string; icon: string }[]
+          ).map((link) => (
             <Link
               key={link.href}
-              href={link.href as any}
+              href={link.href}
               className="flex flex-col items-center gap-2 rounded-card border border-gray-200 bg-surface p-4 text-center shadow-card hover:border-primary/40 transition-colors"
             >
               <span className="text-2xl">{link.icon}</span>

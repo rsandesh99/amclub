@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { PhoneStep } from '@/components/auth/PhoneStep'
@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { CATEGORY_LIST } from '@amclub/shared'
@@ -66,7 +65,6 @@ export function ProviderWizard({ skipAuth, initialPhone }: ProviderWizardProps) 
   const [gstinLoading, setGstinLoading] = useState(false)
   const [bankLoading, setBankLoading] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingFor, setUploadingFor] = useState<string | null>(null)
 
   // Restore draft on mount
@@ -174,8 +172,8 @@ export function ProviderWizard({ skipAuth, initialPhone }: ProviderWizardProps) 
           [categorySlug]: { url: d.url, name: file.name },
         },
       })
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An error occurred')
     } finally {
       setUploadingFor(null)
     }
@@ -213,8 +211,8 @@ export function ProviderWizard({ skipAuth, initialPhone }: ProviderWizardProps) 
       }
       localStorage.removeItem(DRAFT_KEY)
       setStep('under_review')
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An error occurred')
     } finally {
       setLoading(false)
     }

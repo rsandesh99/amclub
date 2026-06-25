@@ -49,7 +49,7 @@ export default async function MsmeHomePage() {
         {/* Greeting */}
         <div>
           <h1 className="text-xl font-semibold">
-            {t(greeting as any)}, {name} 👋
+            {greeting === 'greeting_morning' ? t('greeting_morning') : greeting === 'greeting_afternoon' ? t('greeting_afternoon') : t('greeting_evening')}, {name} 👋
           </h1>
           <p className="mt-1 text-sm text-foreground-secondary">{t('subtitle')}</p>
         </div>
@@ -67,14 +67,16 @@ export default async function MsmeHomePage() {
 
         {/* Quick actions */}
         <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: t('browse_services'), href: '/services', icon: '🔍' },
-            { label: t('post_rfq'), href: '/app/rfq/new', icon: '📋' },
-            { label: t('my_orders'), href: '/app/orders', icon: '📦' },
-          ].map((action) => (
+          {(
+            [
+              { label: t('browse_services'), href: '/services', icon: '🔍' },
+              { label: t('post_rfq'), href: '/app/rfq/new', icon: '📋' },
+              { label: t('my_orders'), href: '/app/orders', icon: '📦' },
+            ] as { label: string; href: string; icon: string }[]
+          ).map((action) => (
             <Link
               key={action.href}
-              href={action.href as any}
+              href={action.href}
               className="flex flex-col items-center justify-center gap-2 rounded-card border border-gray-200 bg-surface p-4 text-center shadow-card hover:border-primary/40 hover:bg-primary/5 transition-colors"
             >
               <span className="text-2xl">{action.icon}</span>
