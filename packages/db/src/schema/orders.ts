@@ -90,9 +90,46 @@ export const payments = pgTable('payments', {
   status: text('status').notNull(),
   webhookPayload: jsonb('webhook_payload'),
   idempotencyKey: text('idempotency_key').unique().notNull(),
+  // §9.1 — TCS under GST Sec 52; readiness column, computed pre-live.
+  tcsPaise: bigint('tcs_paise', { mode: 'number' }).default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
+
+// Order intent — frozen amounts locked at checkout; the webhook materialises the
+// order from this row (checkout never creates the order). §2.5 webhook-as-truth.
+export const checkoutSessions = pgTable('checkout_sessions', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  razorpayOrderId: text('razorpay_order_id').unique(),
+  msmeId: uuid('msme_id').references(() => msmeProfiles.id).notNull(),
+  providerId: uuid('provider_id').references(() => providerProfiles.id).notNull(),
+  source: text('source').notNull(),
+  packageId: uuid('package_id').references(() => packages.id),
+  quoteId: uuid('quote_id').references(() => quotes.id),
+  title: text('title').notNull(),
+  scopeSnapshot: jsonb('scope_snapshot').notNull(),
+  pricePaise: bigint('price_paise', { mode: 'number' }).notNull(),
+  discountPaise: bigint('discount_paise', { mode: 'number' }).default(0).notNull(),
+  gstPaise: bigint('gst_paise', { mode: 'number' }).notNull(),
+  totalPaise: bigint('total_paise', { mode: 'number' }).notNull(),
+  commissionBps: integer('commission_bps').notNull(),
+  commissionPaise: bigint('commission_paise', { mode: 'number' }).notNull(),
+  providerEarningPaise: bigint('provider_earning_paise', { mode: 'number' }).notNull(),
+  deliveryDays: integer('delivery_days').notNull(),
+  revisionMax: integer('revision_max'),
+  couponCode: text('coupon_code'),
+  gstInvoice: jsonb('gst_invoice'),
+  idempotencyKey: text('idempotency_key').unique().notNull(),
+  // created | materialized | failed | expired
+  status: text('status').default('created').notNull(),
+  orderId: uuid('order_id').references(() => orders.id),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  index('checkout_sessions_rzp_order_idx').on(table.razorpayOrderId),
+  index('checkout_sessions_msme_idx').on(table.msmeId),
+])
 
 export const refunds = pgTable('refunds', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
