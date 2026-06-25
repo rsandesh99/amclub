@@ -61,6 +61,8 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     path,
+    // `url` is what the wizard stores in credentialUploads[slug].url
+    url: signedData?.signedUrl ?? null,
     signedUrl: signedData?.signedUrl ?? null,
   })
 }

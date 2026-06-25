@@ -40,16 +40,13 @@ export async function POST(
 
   const admin = await createAdminClient()
 
-  // Update provider_profiles status
+  // provider_profiles only carries status (active | rejected). Reviewer audit
+  // metadata lives on provider_verifications, which has verified_by/verified_at/
+  // rejection_reason columns.
   const newStatus = action === 'approve' ? 'active' : 'rejected'
   const { error: profileErr } = await admin
     .from('provider_profiles')
-    .update({
-      status: newStatus,
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: user.id,
-      rejection_reason: action === 'reject' ? reason : null,
-    })
+    .update({ status: newStatus })
     .eq('id', providerId)
 
   if (profileErr) {
@@ -57,15 +54,21 @@ export async function POST(
     return NextResponse.json({ error: profileErr.message }, { status: 500 })
   }
 
-  // Update provider_verifications status
+  // Stamp reviewer + outcome on the provider's verification rows.
+  // Verification status enum: pending | api_verified | manually_approved | rejected.
   const { error: verErr } = await admin
     .from('provider_verifications')
-    .update({ status: action === 'approve' ? 'approved' : 'rejected' })
+    .update({
+      status: action === 'approve' ? 'manually_approved' : 'rejected',
+      verified_by: user.id,
+      verified_at: new Date().toISOString(),
+      rejection_reason: action === 'reject' ? (reason ?? null) : null,
+    })
     .eq('provider_id', providerId)
 
   if (verErr) {
     console.error('[admin/verifications POST] verification update:', verErr)
-    // Non-fatal — profile is the source of truth
+    // Non-fatal — provider_profiles.status is the source of truth
   }
 
   // Audit log — Phase 6 will wire real notifications
