@@ -1,0 +1,69 @@
+import { createAdminClient } from '@/lib/supabase/server'
+import type { PaymentGateway, GatewayPayment } from './types'
+
+export interface CaptureInput {
+  razorpayOrderId: string
+  razorpayPaymentId: string
+  amountPaise: number
+  method?: string
+  payload: unknown
+}
+
+/**
+ * Idempotently materialise an order from a captured payment by calling the
+ * atomic `materialize_order` Postgres function. Used by BOTH the webhook and
+ * the reconciliation cron — one path for normal + dropped-webhook recovery.
+ * Returns the order id (existing or newly created), or null if the
+ * checkout_session is unknown.
+ */
+export async function materializeFromCapture(
+  admin: Awaited<ReturnType<typeof createAdminClient>>,
+  capture: CaptureInput,
+): Promise<{ orderId: string | null; error?: string }> {
+  const { data, error } = await admin.rpc('materialize_order', {
+    p_razorpay_order_id: capture.razorpayOrderId,
+    p_razorpay_payment_id: capture.razorpayPaymentId,
+    p_amount_paise: capture.amountPaise,
+    p_method: capture.method ?? null,
+    p_payload: capture.payload ?? {},
+  })
+  if (error) {
+    console.error('[materializeFromCapture]', error)
+    return { orderId: null, error: error.message }
+  }
+  return { orderId: (data as string | null) ?? null }
+}
+
+/**
+ * Reconciliation: compare Razorpay's captured payments against the local
+ * payments table and materialise any that are missing (dropped-webhook
+ * recovery). Idempotent — re-running recovers nothing new.
+ */
+export async function reconcileCapturedPayments(
+  gateway: PaymentGateway,
+  sinceUnixSeconds: number,
+  admin?: Awaited<ReturnType<typeof createAdminClient>>,
+): Promise<{ checked: number; recovered: number; orderIds: string[] }> {
+  const db = admin ?? (await createAdminClient())
+  const captured: GatewayPayment[] = await gateway.listCapturedPayments(sinceUnixSeconds)
+
+  const orderIds: string[] = []
+  for (const pay of captured) {
+    const { data: existing } = await db
+      .from('payments')
+      .select('id')
+      .eq('razorpay_payment_id', pay.razorpayPaymentId)
+      .maybeSingle()
+    if (existing) continue
+
+    const { orderId } = await materializeFromCapture(db, {
+      razorpayOrderId: pay.razorpayOrderId,
+      razorpayPaymentId: pay.razorpayPaymentId,
+      amountPaise: pay.amountPaise,
+      ...(pay.method ? { method: pay.method } : {}),
+      payload: { source: 'reconciliation', payment: pay },
+    })
+    if (orderId) orderIds.push(orderId)
+  }
+  return { checked: captured.length, recovered: orderIds.length, orderIds }
+}
