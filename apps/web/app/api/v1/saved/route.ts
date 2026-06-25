@@ -1,15 +1,17 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/auth/session'
+import { getAuthedSupabase } from '@/lib/auth/request'
 
 const bodySchema = z.object({
   providerId: z.string().uuid(),
   action: z.enum(['save', 'unsave']),
 })
 
-async function getMsmeId(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+async function getMsmeId(
+  supabase: Awaited<ReturnType<typeof getAuthedSupabase>>['supabase'],
+  userId: string,
+) {
   const { data } = await supabase
     .from('msme_profiles')
     .select('id')
@@ -18,12 +20,11 @@ async function getMsmeId(supabase: Awaited<ReturnType<typeof createClient>>, use
   return data?.id ?? null
 }
 
-/** List the current MSME's saved provider ids. */
+/** List the current MSME's saved provider ids. (cookie or Bearer auth) */
 export async function GET() {
-  const user = await getSessionUser()
-  if (!user) return NextResponse.json({ providerIds: [] })
-  const supabase = await createClient()
-  const msmeId = await getMsmeId(supabase, user.id)
+  const { supabase, userId } = await getAuthedSupabase()
+  if (!userId) return NextResponse.json({ providerIds: [] })
+  const msmeId = await getMsmeId(supabase, userId)
   if (!msmeId) return NextResponse.json({ providerIds: [] })
   const { data } = await supabase
     .from('saved_providers')
@@ -34,15 +35,14 @@ export async function GET() {
 
 /** Toggle a saved provider. RLS saved_providers owner-all enforces ownership. */
 export async function POST(request: NextRequest) {
-  const user = await getSessionUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { supabase, userId } = await getAuthedSupabase()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: 'Invalid body' }, { status: 422 })
 
-  const supabase = await createClient()
-  const msmeId = await getMsmeId(supabase, user.id)
+  const msmeId = await getMsmeId(supabase, userId)
   if (!msmeId) {
     return NextResponse.json({ error: 'MSME profile required' }, { status: 403 })
   }

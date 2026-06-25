@@ -1,84 +1,88 @@
-import { ScrollView, Text, TouchableOpacity, View, Alert } from 'react-native'
+import { ScrollView, Text, TouchableOpacity, View, TextInput } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { router } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
+import { CATEGORY_LIST } from '@amclub/shared'
 
 export default function HomeScreen() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [userName, setUserName] = useState('')
+  const [q, setQ] = useState('')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      const name = user.user_metadata?.['full_name'] as string | undefined
-      setUserName(name ?? '')
+      setUserName((user?.user_metadata?.['full_name'] as string | undefined) ?? '')
     })
   }, [])
 
-  async function signOut() {
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      Alert.alert('Error', error.message)
-      return
-    }
-    router.replace('/(auth)/login')
+  function submitSearch() {
+    router.push(`/search?query=${encodeURIComponent(q.trim())}` as never)
   }
 
-  const greeting = userName
-    ? `${t('msme_home.greeting')}, ${userName}!`
-    : t('msme_home.greeting') + '!'
-
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="px-6 py-8 gap-6">
-        {/* Header */}
+    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+      <ScrollView contentContainerClassName="px-4 py-4 gap-6">
         <View className="flex-row items-center justify-between">
           <View>
-            <Text className="text-2xl font-bold text-foreground">{greeting}</Text>
+            <Text className="text-xl font-bold text-foreground">
+              {t('msme_home.greeting')}{userName ? `, ${userName}` : ''}
+            </Text>
             <Text className="text-sm text-foreground-secondary">{t('msme_home.subtitle')}</Text>
           </View>
           <TouchableOpacity
-            onPress={signOut}
+            onPress={async () => { await supabase.auth.signOut(); router.replace('/(auth)/login') }}
             className="rounded-lg border border-gray-200 px-3 py-2"
           >
-            <Text className="text-sm text-foreground-secondary">{t('common.sign_out')}</Text>
+            <Text className="text-xs text-foreground-secondary">{t('common.sign_out')}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Quick actions */}
+        {/* Search */}
+        <View className="flex-row items-center gap-2 rounded-xl border border-gray-200 bg-surface px-3 py-1.5">
+          <Ionicons name="search-outline" size={18} color="#5C645C" />
+          <TextInput
+            className="flex-1 text-sm text-foreground"
+            placeholder={t('catalog.search_placeholder')}
+            placeholderTextColor="#9CA3AF"
+            value={q}
+            onChangeText={setQ}
+            onSubmitEditing={submitSearch}
+            returnKeyType="search"
+          />
+          <TouchableOpacity onPress={submitSearch} className="rounded-lg bg-primary px-3 py-2">
+            <Text className="text-xs font-semibold text-white">{t('catalog.search_btn')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Category grid */}
         <View className="gap-3">
-          <Text className="text-base font-semibold text-foreground">{t('msme_home.quick_actions')}</Text>
-          <View className="flex-row gap-3">
-            <TouchableOpacity className="flex-1 rounded-xl bg-primary p-5 items-center">
-              <Text className="text-2xl">🔍</Text>
-              <Text className="mt-2 text-sm font-medium text-white text-center">
-                {t('msme_home.find_services')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity className="flex-1 rounded-xl border border-gray-200 bg-surface p-5 items-center">
-              <Text className="text-2xl">📋</Text>
-              <Text className="mt-2 text-sm font-medium text-foreground text-center">
-                {t('msme_home.post_rfq')}
-              </Text>
-            </TouchableOpacity>
+          <Text className="text-base font-semibold text-foreground">{t('msme_home.explore_categories')}</Text>
+          <View className="flex-row flex-wrap gap-3">
+            {CATEGORY_LIST.map((c) => (
+              <TouchableOpacity
+                key={c.slug}
+                onPress={() => router.push(`/category/${c.slug}` as never)}
+                className="w-[47%] gap-2 rounded-xl border border-gray-200 bg-surface p-4"
+                activeOpacity={0.85}
+              >
+                <View className="h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <Ionicons name="cube-outline" size={20} color="#1B4D3E" />
+                </View>
+                <Text className="text-sm font-semibold text-foreground">{c.name_i18n[locale]}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-          <TouchableOpacity className="rounded-xl border border-gray-200 bg-surface p-5 flex-row items-center gap-4">
-            <Text className="text-2xl">📦</Text>
-            <View>
-              <Text className="text-sm font-medium text-foreground">{t('msme_home.my_orders')}</Text>
-              <Text className="text-xs text-foreground-secondary">{t('msme_home.no_orders_yet')}</Text>
-            </View>
-          </TouchableOpacity>
         </View>
 
-        {/* Become a provider CTA */}
+        {/* Provider CTA */}
         <View className="rounded-xl border border-primary/20 bg-primary/5 p-5">
           <Text className="text-sm font-semibold text-primary">{t('msme_home.provider_cta_title')}</Text>
           <Text className="mt-1 text-xs text-foreground-secondary">{t('msme_home.provider_cta_desc')}</Text>
           <TouchableOpacity
-            onPress={() => router.push('/(auth)/partner-signup')}
+            onPress={() => router.push('/(auth)/partner-signup' as never)}
             className="mt-3 self-start rounded-lg bg-primary px-4 py-2"
           >
             <Text className="text-sm font-semibold text-white">{t('msme_home.provider_cta_btn')}</Text>
