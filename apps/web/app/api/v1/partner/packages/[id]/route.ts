@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { packageSchema } from '@amclub/shared'
 import { toPackageRow } from '@/lib/partner/packageRow'
+import { revalidateCatalog } from '@/lib/catalog/revalidate'
 
 // Edit accepts the full package shape; status may also be 'paused'.
 const editSchema = packageSchema.extend({
@@ -68,6 +69,7 @@ export async function PATCH(
     console.error('[partner/packages PATCH]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+  revalidateCatalog({ categorySlug: d.category_slug })
   return NextResponse.json({ id, status: d.status })
 }
 
@@ -92,6 +94,7 @@ export async function POST(
   }
   const { error } = await supabase.from('packages').update({ status: parsed.data.status }).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  revalidateCatalog({})
   return NextResponse.json({ id, status: parsed.data.status })
 }
 
@@ -113,5 +116,6 @@ export async function DELETE(
     .update({ status: 'removed', deleted_at: new Date().toISOString() })
     .eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  revalidateCatalog({})
   return NextResponse.json({ id, deleted: true })
 }

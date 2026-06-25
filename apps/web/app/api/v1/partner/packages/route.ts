@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { packageSchema } from '@amclub/shared'
 import { toPackageRow, slugify } from '@/lib/partner/packageRow'
+import { revalidateCatalog } from '@/lib/catalog/revalidate'
 
 export async function POST(request: NextRequest) {
   const user = await getSessionUser()
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
 
   const { data: provider } = await supabase
     .from('provider_profiles')
-    .select('id')
+    .select('id, slug')
     .eq('user_id', user.id)
     .maybeSingle()
   if (!provider) {
@@ -55,6 +56,11 @@ export async function POST(request: NextRequest) {
   if (error || !pkg) {
     console.error('[partner/packages POST]', error)
     return NextResponse.json({ error: error?.message ?? 'Create failed' }, { status: 500 })
+  }
+
+  // Make the new listing appear on public ISR pages within seconds.
+  if (d.status === 'active') {
+    revalidateCatalog({ categorySlug: d.category_slug, providerSlug: provider.slug })
   }
 
   return NextResponse.json({ id: pkg.id, slug: pkg.slug, status: d.status })
