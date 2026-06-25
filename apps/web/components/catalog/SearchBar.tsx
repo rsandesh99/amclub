@@ -11,10 +11,13 @@ export function SearchBar({
   size = 'md',
   className,
   defaultValue = '',
+  action = '/services',
 }: {
   size?: 'md' | 'lg'
   className?: string
   defaultValue?: string
+  /** Destination path for the search submit (e.g. /services or /app/search). */
+  action?: string
 }) {
   const t = useTranslations('catalog')
   const router = useRouter()
@@ -23,7 +26,7 @@ export function SearchBar({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     const q = value.trim()
-    router.push(q ? `/services?query=${encodeURIComponent(q)}` : '/services')
+    router.push(q ? `${action}?query=${encodeURIComponent(q)}` : action)
   }
 
   return (

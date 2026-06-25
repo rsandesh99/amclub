@@ -7,6 +7,7 @@ import { VerificationBadges } from '@/components/catalog/VerificationBadges'
 import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
+import { SaveButton } from '@/components/catalog/SaveButton'
 import { getProviderBySlug, getPackagesForProvider, getReviews } from '@/lib/catalog/queries'
 import { pickI18n, initials, formatResponseTime } from '@/lib/format'
 import { INDIAN_STATES } from '@/lib/constants/india'
@@ -134,6 +135,9 @@ export default async function ProviderProfilePage({
             <div className="mt-3">
               <VerificationBadges badges={provider.badges} />
             </div>
+          </div>
+          <div className="shrink-0">
+            <SaveButton providerId={provider.id} returnPath={`/p/${provider.slug}`} />
           </div>
         </div>
 
