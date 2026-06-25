@@ -1,8 +1,9 @@
 import type { MetadataRoute } from 'next'
 import { getAllPublicSlugs, getCategories } from '@/lib/catalog/queries'
 import { CATEGORY_SLUGS } from '@amclub/shared'
+import { getSiteUrl } from '@/lib/site-url'
 
-const BASE = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://amclub.in'
+const BASE = getSiteUrl()
 
 // Build a localized URL: en is unprefixed, hi is /hi (localePrefix: 'as-needed').
 function url(locale: string, path: string) {

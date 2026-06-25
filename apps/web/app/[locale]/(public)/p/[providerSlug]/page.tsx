@@ -9,6 +9,7 @@ import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
 import { SaveButton } from '@/components/catalog/SaveButton'
 import { getProviderBySlug, getPackagesForProvider, getReviews } from '@/lib/catalog/queries'
+import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatResponseTime } from '@/lib/format'
 import { INDIAN_STATES } from '@/lib/constants/india'
 
@@ -58,7 +59,7 @@ export default async function ProviderProfilePage({
 
   const stateLabel = STATE_LABEL.get(provider.state) ?? provider.state
   const responseTime = formatResponseTime(provider.medianResponseMinutes)
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? ''
+  const appUrl = getSiteUrl()
 
   // schema.org LocalBusiness + aggregateRating + Service offers (§ Phase 3 SEO).
   const jsonLd: Record<string, unknown> = {

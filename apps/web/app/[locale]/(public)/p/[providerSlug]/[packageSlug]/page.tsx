@@ -7,6 +7,7 @@ import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
 import { getPackageDetail } from '@/lib/catalog/queries'
+import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, computePricing } from '@/lib/format'
 
 export const revalidate = 300
@@ -48,7 +49,7 @@ export default async function PackageDetailPage({
   const t = await getTranslations('catalog')
   const locale = await getLocale()
   const title = pickI18n(pkg.titleI18n, locale)
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? ''
+  const appUrl = getSiteUrl()
   const pricing = computePricing(pkg)
 
   const reqFields: RequirementField[] =
