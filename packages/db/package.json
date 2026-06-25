@@ -13,7 +13,11 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:check": "drizzle-kit check"
+    "db:check": "drizzle-kit check",
+    "db:apply-rls": "tsx src/scripts/apply-rls.ts",
+    "db:seed": "tsx src/seed.ts",
+    "db:test-rls": "tsx src/scripts/test-rls.ts",
+    "db:setup": "pnpm db:migrate && pnpm db:apply-rls && pnpm db:seed"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -25,6 +29,7 @@
     "@types/node": "^22.0.0",
     "dotenv": "^16.4.0",
     "drizzle-kit": "^0.31.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }
 }

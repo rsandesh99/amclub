@@ -3,8 +3,10 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 
 // Load .env from repo root when running db commands directly
-dotenv.config({ path: path.resolve(__dirname, '../../.env') })
+// Try web app env first (DATABASE_URL lives there), then repo root
+dotenv.config({ path: path.resolve(__dirname, '../../apps/web/.env.local') })
 dotenv.config({ path: path.resolve(__dirname, '../../.env.local') })
+dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 
 const databaseUrl = process.env['DATABASE_URL']
 if (!databaseUrl) {

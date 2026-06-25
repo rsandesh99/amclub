@@ -1,0 +1,494 @@
+-- =============================================================================
+-- AMClub — RLS Policies & Helper Functions  (Phase 1)
+-- Idempotent: safe to re-run. DROP POLICY IF EXISTS before each CREATE POLICY.
+-- =============================================================================
+
+-- ─── Helper functions ─────────────────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION auth_user_id()
+RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT auth.uid()
+$$;
+
+CREATE OR REPLACE FUNCTION has_role(r text)
+RETURNS bool LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM users WHERE id = auth.uid() AND r = ANY(roles)
+  )
+$$;
+
+-- Breaks the rfqs ↔ rfq_matches RLS cycle: reads rfq_matches bypassing RLS
+CREATE OR REPLACE FUNCTION is_provider_matched_to_rfq(p_rfq_id uuid)
+RETURNS bool LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM rfq_matches
+    WHERE rfq_id = p_rfq_id
+      AND provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth.uid())
+  )
+$$;
+
+-- ─── Enable RLS on every table ────────────────────────────────────────────────
+
+ALTER TABLE users                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE msme_profiles        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_profiles    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_verifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_bank_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_categories  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE packages             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rfqs                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rfq_matches          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quotes               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_events         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_milestones     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_documents      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE refunds              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payouts              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE disputes             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reviews              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE saved_providers      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupons              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupon_redemptions   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoices             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cms_banners          ENABLE ROW LEVEL SECURITY;
+
+-- ─── users ────────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "users: owner all" ON users;
+CREATE POLICY "users: owner all" ON users
+  FOR ALL USING (id = auth_user_id()) WITH CHECK (id = auth_user_id());
+
+DROP POLICY IF EXISTS "users: admin read" ON users;
+CREATE POLICY "users: admin read" ON users
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- ─── msme_profiles ────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "msme_profiles: owner all" ON msme_profiles;
+CREATE POLICY "msme_profiles: owner all" ON msme_profiles
+  FOR ALL USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "msme_profiles: admin read" ON msme_profiles;
+CREATE POLICY "msme_profiles: admin read" ON msme_profiles
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- ─── provider_profiles ────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "provider_profiles: owner all" ON provider_profiles;
+CREATE POLICY "provider_profiles: owner all" ON provider_profiles
+  FOR ALL USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "provider_profiles: public read active" ON provider_profiles;
+CREATE POLICY "provider_profiles: public read active" ON provider_profiles
+  FOR SELECT USING (status = 'active' AND deleted_at IS NULL);
+
+DROP POLICY IF EXISTS "provider_profiles: admin all" ON provider_profiles;
+CREATE POLICY "provider_profiles: admin all" ON provider_profiles
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- Public view: safe columns only (no PAN, GSTIN, bank details)
+CREATE OR REPLACE VIEW public_providers AS
+  SELECT
+    id, display_name, slug, about, logo_url,
+    state, city, languages,
+    avg_rating, review_count, completed_orders,
+    median_response_minutes, capacity_paused, top_rated,
+    created_at
+  FROM provider_profiles
+  WHERE status = 'active' AND deleted_at IS NULL;
+
+-- ─── provider_verifications ───────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "provider_verifications: owner read" ON provider_verifications;
+CREATE POLICY "provider_verifications: owner read" ON provider_verifications
+  FOR SELECT USING (
+    provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+  );
+
+DROP POLICY IF EXISTS "provider_verifications: admin all" ON provider_verifications;
+CREATE POLICY "provider_verifications: admin all" ON provider_verifications
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── provider_bank_accounts ───────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "provider_bank_accounts: owner all" ON provider_bank_accounts;
+CREATE POLICY "provider_bank_accounts: owner all" ON provider_bank_accounts
+  FOR ALL
+  USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
+  WITH CHECK (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "provider_bank_accounts: admin read" ON provider_bank_accounts;
+CREATE POLICY "provider_bank_accounts: admin read" ON provider_bank_accounts
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- ─── categories ───────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "categories: public read active" ON categories;
+CREATE POLICY "categories: public read active" ON categories
+  FOR SELECT USING (is_active = true);
+
+DROP POLICY IF EXISTS "categories: admin all" ON categories;
+CREATE POLICY "categories: admin all" ON categories
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── provider_categories ──────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "provider_categories: public read" ON provider_categories;
+CREATE POLICY "provider_categories: public read" ON provider_categories
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "provider_categories: owner all" ON provider_categories;
+CREATE POLICY "provider_categories: owner all" ON provider_categories
+  FOR ALL
+  USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
+  WITH CHECK (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+-- ─── packages ─────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "packages: public read active" ON packages;
+CREATE POLICY "packages: public read active" ON packages
+  FOR SELECT USING (
+    status = 'active'
+    AND deleted_at IS NULL
+    AND provider_id IN (SELECT id FROM provider_profiles WHERE status = 'active' AND deleted_at IS NULL)
+  );
+
+DROP POLICY IF EXISTS "packages: provider crud own" ON packages;
+CREATE POLICY "packages: provider crud own" ON packages
+  FOR ALL
+  USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
+  WITH CHECK (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "packages: admin all" ON packages;
+CREATE POLICY "packages: admin all" ON packages
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── rfqs ─────────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "rfqs: owner all" ON rfqs;
+CREATE POLICY "rfqs: owner all" ON rfqs
+  FOR ALL
+  USING (msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id()))
+  WITH CHECK (msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "rfqs: matched provider read" ON rfqs;
+CREATE POLICY "rfqs: matched provider read" ON rfqs
+  FOR SELECT USING (
+    status = 'open'
+    AND is_provider_matched_to_rfq(id)
+  );
+
+DROP POLICY IF EXISTS "rfqs: admin all" ON rfqs;
+CREATE POLICY "rfqs: admin all" ON rfqs
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── rfq_matches ──────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "rfq_matches: provider read own" ON rfq_matches;
+CREATE POLICY "rfq_matches: provider read own" ON rfq_matches
+  FOR SELECT USING (
+    provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+  );
+
+DROP POLICY IF EXISTS "rfq_matches: msme read own rfq" ON rfq_matches;
+CREATE POLICY "rfq_matches: msme read own rfq" ON rfq_matches
+  FOR SELECT USING (
+    rfq_id IN (
+      SELECT id FROM rfqs
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "rfq_matches: admin all" ON rfq_matches;
+CREATE POLICY "rfq_matches: admin all" ON rfq_matches
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── quotes ───────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "quotes: provider crud own" ON quotes;
+CREATE POLICY "quotes: provider crud own" ON quotes
+  FOR ALL
+  USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
+  WITH CHECK (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "quotes: msme read own rfq" ON quotes;
+CREATE POLICY "quotes: msme read own rfq" ON quotes
+  FOR SELECT USING (
+    rfq_id IN (
+      SELECT id FROM rfqs
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "quotes: admin all" ON quotes;
+CREATE POLICY "quotes: admin all" ON quotes
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── orders ───────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "orders: msme all own" ON orders;
+CREATE POLICY "orders: msme all own" ON orders
+  FOR ALL
+  USING (msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id()))
+  WITH CHECK (msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "orders: provider all own" ON orders;
+CREATE POLICY "orders: provider all own" ON orders
+  FOR ALL
+  USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
+  WITH CHECK (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "orders: admin all" ON orders;
+CREATE POLICY "orders: admin all" ON orders
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- order_safe_view: masks buyer phone from provider until order is accepted
+CREATE OR REPLACE VIEW order_safe_view AS
+  SELECT
+    o.*,
+    CASE
+      WHEN o.status = 'placed'
+        AND o.provider_id IN (
+          SELECT id FROM provider_profiles WHERE user_id = auth.uid()
+        )
+      THEN NULL
+      ELSE (
+        SELECT u.phone FROM users u
+        JOIN msme_profiles mp ON mp.user_id = u.id
+        WHERE mp.id = o.msme_id
+      )
+    END AS msme_phone
+  FROM orders o;
+
+-- ─── order_events ─────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "order_events: parties read" ON order_events;
+CREATE POLICY "order_events: parties read" ON order_events
+  FOR SELECT USING (
+    order_id IN (
+      SELECT id FROM orders
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "order_events: parties insert" ON order_events;
+CREATE POLICY "order_events: parties insert" ON order_events
+  FOR INSERT WITH CHECK (
+    order_id IN (
+      SELECT id FROM orders
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "order_events: admin all" ON order_events;
+CREATE POLICY "order_events: admin all" ON order_events
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── order_milestones & order_documents ───────────────────────────────────────
+
+DROP POLICY IF EXISTS "order_milestones: parties all" ON order_milestones;
+CREATE POLICY "order_milestones: parties all" ON order_milestones
+  FOR ALL USING (
+    order_id IN (
+      SELECT id FROM orders
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "order_documents: parties all" ON order_documents;
+CREATE POLICY "order_documents: parties all" ON order_documents
+  FOR ALL USING (
+    order_id IN (
+      SELECT id FROM orders
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+-- ─── payments ─────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "payments: msme read own" ON payments;
+CREATE POLICY "payments: msme read own" ON payments
+  FOR SELECT USING (
+    order_id IN (
+      SELECT id FROM orders
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "payments: admin all" ON payments;
+CREATE POLICY "payments: admin all" ON payments
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── refunds ──────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "refunds: msme read own" ON refunds;
+CREATE POLICY "refunds: msme read own" ON refunds
+  FOR SELECT USING (
+    payment_id IN (
+      SELECT id FROM payments
+      WHERE order_id IN (
+        SELECT id FROM orders
+        WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS "refunds: admin all" ON refunds;
+CREATE POLICY "refunds: admin all" ON refunds
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── payouts ──────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "payouts: provider read own" ON payouts;
+CREATE POLICY "payouts: provider read own" ON payouts
+  FOR SELECT USING (
+    provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+  );
+
+DROP POLICY IF EXISTS "payouts: admin all" ON payouts;
+CREATE POLICY "payouts: admin all" ON payouts
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── disputes ─────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "disputes: parties all" ON disputes;
+CREATE POLICY "disputes: parties all" ON disputes
+  FOR ALL USING (
+    order_id IN (
+      SELECT id FROM orders
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "disputes: admin all" ON disputes;
+CREATE POLICY "disputes: admin all" ON disputes
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── reviews ──────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "reviews: public read published" ON reviews;
+CREATE POLICY "reviews: public read published" ON reviews
+  FOR SELECT USING (status = 'published');
+
+DROP POLICY IF EXISTS "reviews: msme insert verified" ON reviews;
+CREATE POLICY "reviews: msme insert verified" ON reviews
+  FOR INSERT WITH CHECK (
+    msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+    AND order_id IN (
+      SELECT id FROM orders
+      WHERE status = 'completed'
+        AND msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "reviews: provider reply" ON reviews;
+CREATE POLICY "reviews: provider reply" ON reviews
+  FOR UPDATE
+  USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
+  WITH CHECK (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "reviews: admin all" ON reviews;
+CREATE POLICY "reviews: admin all" ON reviews
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── conversations & messages ──────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "conversations: parties all" ON conversations;
+CREATE POLICY "conversations: parties all" ON conversations
+  FOR ALL USING (
+    msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+    OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+  );
+
+DROP POLICY IF EXISTS "messages: parties all" ON messages;
+CREATE POLICY "messages: parties all" ON messages
+  FOR ALL USING (
+    conversation_id IN (
+      SELECT id FROM conversations
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+-- ─── saved_providers ──────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "saved_providers: owner all" ON saved_providers;
+CREATE POLICY "saved_providers: owner all" ON saved_providers
+  FOR ALL USING (
+    msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+  );
+
+-- ─── notifications ────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "notifications: owner read" ON notifications;
+CREATE POLICY "notifications: owner read" ON notifications
+  FOR SELECT USING (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "notifications: owner mark read" ON notifications;
+CREATE POLICY "notifications: owner mark read" ON notifications
+  FOR UPDATE
+  USING (user_id = auth_user_id())
+  WITH CHECK (user_id = auth_user_id());
+
+-- ─── coupons ──────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "coupons: public read active" ON coupons;
+CREATE POLICY "coupons: public read active" ON coupons
+  FOR SELECT USING (is_active = true AND valid_to > now());
+
+DROP POLICY IF EXISTS "coupons: admin all" ON coupons;
+CREATE POLICY "coupons: admin all" ON coupons
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── coupon_redemptions ───────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "coupon_redemptions: msme read own" ON coupon_redemptions;
+CREATE POLICY "coupon_redemptions: msme read own" ON coupon_redemptions
+  FOR SELECT USING (
+    msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+  );
+
+-- ─── invoices ─────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "invoices: parties read" ON invoices;
+CREATE POLICY "invoices: parties read" ON invoices
+  FOR SELECT USING (
+    order_id IN (
+      SELECT id FROM orders
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "invoices: admin all" ON invoices;
+CREATE POLICY "invoices: admin all" ON invoices
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── audit_logs ───────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "audit_logs: admin read" ON audit_logs;
+CREATE POLICY "audit_logs: admin read" ON audit_logs
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- ─── cms_banners ──────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS "cms_banners: public read active" ON cms_banners;
+CREATE POLICY "cms_banners: public read active" ON cms_banners
+  FOR SELECT USING (is_active = true AND (ends_at IS NULL OR ends_at > now()));
+
+DROP POLICY IF EXISTS "cms_banners: admin all" ON cms_banners;
+CREATE POLICY "cms_banners: admin all" ON cms_banners
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
