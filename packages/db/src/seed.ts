@@ -312,12 +312,12 @@ async function main() {
       INSERT INTO categories (slug, name_i18n, description_i18n, icon, commission_bps, required_credentials, rfq_template, sort_order, is_active)
       VALUES (
         ${cat.slug},
-        ${JSON.stringify(cat.nameI18n)}::jsonb,
-        ${JSON.stringify(cat.descriptionI18n)}::jsonb,
+        ${db.json(cat.nameI18n)},
+        ${db.json(cat.descriptionI18n)},
         ${cat.icon},
         ${cat.commissionBps},
         ${cat.requiredCredentials},
-        ${JSON.stringify(cat.rfqTemplate)}::jsonb,
+        ${db.json(cat.rfqTemplate)},
         ${cat.sortOrder},
         true
       )
@@ -413,10 +413,10 @@ async function main() {
           ${ppId},
           ${catId},
           ${slug},
-          ${JSON.stringify({ en: pkg.title, hi: pkg.title })}::jsonb,
-          ${JSON.stringify(['Primary deliverable included', 'Expert review', 'Digital documents'])}::jsonb,
-          ${JSON.stringify(['Final document / output', 'Summary report', 'Email support for 30 days'])}::jsonb,
-          ${JSON.stringify({ fields: [{ name: 'details', type: 'textarea', label_en: 'Describe your requirement', required: true }] })}::jsonb,
+          ${db.json({ en: pkg.title, hi: pkg.title })},
+          ${db.json(['Primary deliverable included', 'Expert review', 'Digital documents'])},
+          ${db.json(['Final document / output', 'Summary report', 'Email support for 30 days'])},
+          ${db.json({ fields: [{ name: 'details', type: 'textarea', label_en: 'Describe your requirement', required: true }] })},
           ${pkg.price},
           ${pkg.discount ?? 0},
           ${pkg.days},
