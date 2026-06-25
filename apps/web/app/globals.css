@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #fafaf7;
+    --surface: #ffffff;
+    --foreground: #1a1d1a;
+    --foreground-secondary: #5c645c;
+    --primary: #1b4d3e;
+    --primary-foreground: #ffffff;
+    --accent: #f4a300;
+    --trust: #1a6fbf;
+    --danger: #c73e3e;
+    --success: #1e8e5a;
+  }
+
+  * {
+    @apply border-gray-200;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Ensure minimum 44px tap targets on mobile §4.4 */
+  button,
+  [role="button"],
+  a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "common": {
+    "app_name": "AMClub",
+    "tagline": "Every service your business needs. One platform. Verified. Transparent.",
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "save": "Save",
+    "cancel": "Cancel",
+    "continue": "Continue",
+    "back": "Back",
+    "submit": "Submit",
+    "close": "Close",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "view_all": "View all",
+    "verified": "Verified",
+    "promoted": "Promoted",
+    "top_rated": "Top Rated"
+  },
+  "locale": {
+    "switch": "Switch language",
+    "en": "English",
+    "hi": "हिंदी"
+  },
+  "hello": {
+    "title": "Welcome to AMClub",
+    "subtitle": "Every service your business needs. One platform. Verified. Transparent.",
+    "shared_proof": "Shared package working — order states loaded:",
+    "web_note": "Next.js 15 · next-intl · Tailwind · shadcn/ui",
+    "mobile_note": "Expo · NativeWind · expo-router"
+  },
+  "auth": {
+    "sign_in": "Sign in",
+    "sign_up": "Sign up",
+    "sign_out": "Sign out",
+    "phone_label": "Mobile number",
+    "phone_placeholder": "Enter 10-digit mobile number",
+    "otp_label": "Enter OTP",
+    "otp_sent": "OTP sent to {phone}",
+    "otp_resend": "Resend OTP",
+    "otp_resend_in": "Resend in {seconds}s",
+    "name_label": "Your name",
+    "business_name_label": "Business name",
+    "continue_with_google": "Continue with Google"
+  },
+  "order": {
+    "placed": "Order placed",
+    "accepted": "Accepted by provider",
+    "requirements_submitted": "Requirements submitted",
+    "in_progress": "In progress",
+    "delivered": "Delivered",
+    "completed": "Completed",
+    "disputed": "Under dispute",
+    "auto_cancelled": "Auto-cancelled",
+    "cancelled_by_buyer": "Cancelled",
+    "refunded": "Refunded",
+    "reviewed": "Reviewed",
+    "revision_requested": "Revision requested"
+  },
+  "errors": {
+    "required": "This field is required",
+    "invalid_phone": "Enter a valid 10-digit Indian mobile number",
+    "invalid_gstin": "Enter a valid 15-character GSTIN",
+    "invalid_udyam": "Enter a valid Udyam number (e.g. UDYAM-MH-01-0123456)",
+    "payment_failed": "Payment didn’t go through. No money was deducted — try again.",
+    "network": "Check your internet connection and try again."
+  }
+}

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  # Stub env vars so Next.js build doesn't fail on missing vars in CI.
+  # Real secrets are injected only on deploy.
+  NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+jobs:
+  ci:
+    name: Lint · Typecheck · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (all packages)
+        run: pnpm turbo run typecheck
+
+      - name: Lint (web)
+        run: pnpm turbo run lint --filter=@amclub/web
+
+      - name: Build (web)
+        run: pnpm turbo run build --filter=@amclub/web
+        env:
+          # Disable Sentry source-map upload in CI — no auth token
+          SENTRY_AUTH_TOKEN: ""
+
+      - name: Export (mobile — bundle check only)
+        run: pnpm --filter=@amclub/mobile expo export --platform android --output-dir /tmp/mobile-export
+        continue-on-error: true  # Mobile export requires more setup; don't block CI in Phase 0

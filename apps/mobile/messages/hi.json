@@ -1,0 +1,70 @@
+{
+  "common": {
+    "app_name": "AMClub",
+    "tagline": "आपके व्यवसाय की हर ज़रूरत, एक ही जगह।",
+    "loading": "लोड हो रहा है…",
+    "error": "कुछ गलत हो गया",
+    "retry": "फिर कोशिश करें",
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "continue": "जारी रखें",
+    "back": "वापस",
+    "submit": "जमा करें",
+    "close": "बंद करें",
+    "search": "खोजें",
+    "filter": "फ़िल्टर",
+    "sort": "क्रमबद्ध करें",
+    "view_all": "सभी देखें",
+    "verified": "सत्यापित",
+    "promoted": "प्रायोजित",
+    "top_rated": "टॉप रेटेड"
+  },
+  "locale": {
+    "switch": "भाषा बदलें",
+    "en": "English",
+    "hi": "हिंदी"
+  },
+  "hello": {
+    "title": "AMClub में आपका स्वागत है",
+    "subtitle": "आपके व्यवसाय की हर ज़रूरत, एक ही जगह।",
+    "shared_proof": "Shared package काम कर रहा है — ऑर्डर स्टेटस लोड हुए:",
+    "web_note": "Next.js 15 · next-intl · Tailwind · shadcn/ui",
+    "mobile_note": "Expo · NativeWind · expo-router"
+  },
+  "auth": {
+    "sign_in": "साइन इन करें",
+    "sign_up": "साइन अप करें",
+    "sign_out": "साइन आउट",
+    "phone_label": "मोबाइल नंबर",
+    "phone_placeholder": "10 अंकों का मोबाइल नंबर दर्ज करें",
+    "otp_label": "OTP दर्ज करें",
+    "otp_sent": "{phone} पर OTP भेजा गया",
+    "otp_resend": "OTP दोबारा भेजें",
+    "otp_resend_in": "{seconds}s में दोबारा भेजें",
+    "name_label": "आपका नाम",
+    "business_name_label": "व्यवसाय का नाम",
+    "continue_with_google": "Google से जारी रखें"
+  },
+  "order": {
+    "placed": "ऑर्डर दिया गया",
+    "accepted": "प्रदाता ने स्वीकार किया",
+    "requirements_submitted": "आवश्यकताएं जमा की गईं",
+    "in_progress": "प्रगति में",
+    "delivered": "डिलीवर किया गया",
+    "completed": "पूर्ण",
+    "disputed": "विवाद में",
+    "auto_cancelled": "स्वतः रद्द",
+    "cancelled_by_buyer": "रद्द किया गया",
+    "refunded": "वापसी हुई",
+    "reviewed": "समीक्षा हुई",
+    "revision_requested": "संशोधन अनुरोध"
+  },
+  "errors": {
+    "required": "यह फ़ील्ड आवश्यक है",
+    "invalid_phone": "एक वैध 10 अंकों का भारतीय मोबाइल नंबर दर्ज करें",
+    "invalid_gstin": "एक वैध 15 अक्षरों का GSTIN दर्ज करें",
+    "invalid_udyam": "एक वैध उद्यम नंबर दर्ज करें (जैसे UDYAM-MH-01-0123456)",
+    "payment_failed": "भुगतान नहीं हुआ। कोई पैसा नहीं कटा — दोबारा कोशिश करें।",
+    "network": "अपना इंटरनेट कनेक्शन जांचें और दोबारा कोशिश करें।"
+  }
+}
