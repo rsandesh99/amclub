@@ -17,7 +17,8 @@
     "view_all": "सभी देखें",
     "verified": "सत्यापित",
     "promoted": "प्रायोजित",
-    "top_rated": "टॉप रेटेड"
+    "top_rated": "टॉप रेटेड",
+    "sign_out": "साइन आउट"
   },
   "locale": {
     "switch": "भाषा बदलें",
@@ -35,15 +36,53 @@
     "sign_in": "साइन इन करें",
     "sign_up": "साइन अप करें",
     "sign_out": "साइन आउट",
+    "sign_in_title": "वापस स्वागत है",
     "phone_label": "मोबाइल नंबर",
     "phone_placeholder": "10 अंकों का मोबाइल नंबर दर्ज करें",
     "otp_label": "OTP दर्ज करें",
+    "enter_otp": "OTP दर्ज करें",
     "otp_sent": "{phone} पर OTP भेजा गया",
+    "otp_sent_to": "OTP भेजा गया",
     "otp_resend": "OTP दोबारा भेजें",
     "otp_resend_in": "{seconds}s में दोबारा भेजें",
-    "name_label": "आपका नाम",
+    "name_label": "आपका पूरा नाम",
     "business_name_label": "व्यवसाय का नाम",
-    "continue_with_google": "Google से जारी रखें"
+    "continue_with_google": "Google से जारी रखें",
+    "send_otp_btn": "OTP भेजें",
+    "verify_btn": "OTP सत्यापित करें",
+    "change_number": "नंबर बदलें",
+    "no_account": "नए हैं?",
+    "have_account": "पहले से खाता है?"
+  },
+  "msme_signup": {
+    "step_profile_title": "आपकी प्रोफ़ाइल",
+    "business_name_label": "व्यवसाय / दुकान का नाम"
+  },
+  "msme_home": {
+    "greeting": "नमस्ते",
+    "subtitle": "आज क्या चाहिए?",
+    "quick_actions": "त्वरित क्रियाएं",
+    "find_services": "सेवाएं खोजें",
+    "post_rfq": "ज़रूरत पोस्ट करें",
+    "my_orders": "मेरे ऑर्डर",
+    "no_orders_yet": "कोई सक्रिय ऑर्डर नहीं",
+    "provider_cta_title": "क्या आप सेवा प्रदाता हैं?",
+    "provider_cta_desc": "AMClub से जुड़ें और पास के MSMEs से सत्यापित लीड्स पाएं।",
+    "provider_cta_btn": "प्रदाता बनें"
+  },
+  "partner_home": {
+    "title": "पार्टनर डैशबोर्ड",
+    "under_review_title": "आवेदन समीक्षाधीन है",
+    "under_review_desc": "हमारी टीम आपके दस्तावेज़ों की जांच कर रही है। 24–48 घंटों में जानकारी मिलेगी।",
+    "rejected_title": "आवेदन स्वीकृत नहीं हुआ",
+    "rejected_desc": "आपका आवेदन स्वीकृत नहीं हुआ। विवरण के लिए सहायता से संपर्क करें।",
+    "stat_rfqs": "खुले RFQ",
+    "stat_orders": "पूर्ण ऑर्डर",
+    "stat_earnings": "कमाई",
+    "no_rfqs_title": "अभी कोई RFQ नहीं",
+    "no_rfqs_desc": "जब MSMEs आपकी श्रेणी में ज़रूरत पोस्ट करेंगे, तो यहाँ दिखेगा।",
+    "not_applied_title": "आपने अभी तक प्रदाता के रूप में आवेदन नहीं किया।",
+    "apply_btn": "अभी आवेदन करें"
   },
   "order": {
     "placed": "ऑर्डर दिया गया",

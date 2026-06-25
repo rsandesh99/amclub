@@ -17,7 +17,8 @@
     "view_all": "View all",
     "verified": "Verified",
     "promoted": "Promoted",
-    "top_rated": "Top Rated"
+    "top_rated": "Top Rated",
+    "sign_out": "Sign out"
   },
   "locale": {
     "switch": "Switch language",
@@ -35,15 +36,53 @@
     "sign_in": "Sign in",
     "sign_up": "Sign up",
     "sign_out": "Sign out",
+    "sign_in_title": "Welcome back",
     "phone_label": "Mobile number",
     "phone_placeholder": "Enter 10-digit mobile number",
     "otp_label": "Enter OTP",
+    "enter_otp": "Enter the OTP",
     "otp_sent": "OTP sent to {phone}",
+    "otp_sent_to": "OTP sent to",
     "otp_resend": "Resend OTP",
     "otp_resend_in": "Resend in {seconds}s",
-    "name_label": "Your name",
+    "name_label": "Your full name",
     "business_name_label": "Business name",
-    "continue_with_google": "Continue with Google"
+    "continue_with_google": "Continue with Google",
+    "send_otp_btn": "Send OTP",
+    "verify_btn": "Verify OTP",
+    "change_number": "Change number",
+    "no_account": "New here?",
+    "have_account": "Already have an account?"
+  },
+  "msme_signup": {
+    "step_profile_title": "Your profile",
+    "business_name_label": "Business / shop name"
+  },
+  "msme_home": {
+    "greeting": "Hello",
+    "subtitle": "What do you need today?",
+    "quick_actions": "Quick actions",
+    "find_services": "Find services",
+    "post_rfq": "Post a requirement",
+    "my_orders": "My orders",
+    "no_orders_yet": "No active orders",
+    "provider_cta_title": "Are you a service provider?",
+    "provider_cta_desc": "Join AMClub to get verified leads from MSMEs near you.",
+    "provider_cta_btn": "Become a provider"
+  },
+  "partner_home": {
+    "title": "Partner Dashboard",
+    "under_review_title": "Application under review",
+    "under_review_desc": "Our team is reviewing your documents. You'll hear from us within 24–48 hours.",
+    "rejected_title": "Application not approved",
+    "rejected_desc": "Your application was not approved. Contact support for details.",
+    "stat_rfqs": "Open RFQs",
+    "stat_orders": "Orders done",
+    "stat_earnings": "Earnings",
+    "no_rfqs_title": "No open RFQs yet",
+    "no_rfqs_desc": "When MSMEs post requirements in your category, they'll appear here.",
+    "not_applied_title": "You haven't applied as a provider yet.",
+    "apply_btn": "Apply now"
   },
   "order": {
     "placed": "Order placed",

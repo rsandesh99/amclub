@@ -1,0 +1,224 @@
+'use client'
+
+import { useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useRouter } from '@/i18n/navigation'
+import { PhoneStep } from '@/components/auth/PhoneStep'
+import { OtpStep } from '@/components/auth/OtpStep'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
+import { Progress } from '@/components/ui/progress'
+import { INDIAN_STATES } from '@/lib/constants/india'
+
+type Step = 'phone' | 'otp' | 'profile' | 'business'
+
+interface WizardState {
+  phone: string
+  fullName: string
+  businessName: string
+  sector: string
+  stateCode: string
+  city: string
+  preferredLocale: string
+}
+
+interface MsmeWizardProps {
+  skipAuth?: boolean
+  initialPhone?: string
+}
+
+export function MsmeWizard({ skipAuth, initialPhone }: MsmeWizardProps) {
+  const t = useTranslations('msme_signup')
+  const tAuth = useTranslations('auth')
+  const tCommon = useTranslations('common')
+  const router = useRouter()
+
+  const [step, setStep] = useState<Step>(skipAuth ? 'profile' : 'phone')
+  const [wizardState, setWizardState] = useState<WizardState>({
+    phone: initialPhone ?? '',
+    fullName: '',
+    businessName: '',
+    sector: '',
+    stateCode: '',
+    city: '',
+    preferredLocale: 'en',
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const stepOrder: Step[] = skipAuth ? ['profile', 'business'] : ['phone', 'otp', 'profile', 'business']
+  const currentIdx = stepOrder.indexOf(step)
+  const progress = ((currentIdx + 1) / stepOrder.length) * 100
+
+  function update(patch: Partial<WizardState>) {
+    setWizardState((s) => ({ ...s, ...patch }))
+  }
+
+  async function submitBusiness(skip = false) {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/v1/profile/msme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: wizardState.fullName,
+          businessName: wizardState.businessName,
+          sector: skip ? undefined : wizardState.sector || undefined,
+          state: skip ? undefined : wizardState.stateCode || undefined,
+          city: skip ? undefined : wizardState.city || undefined,
+          preferredLocale: wizardState.preferredLocale,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error ?? 'Failed to save profile')
+      }
+      router.push('/app')
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Progress value={progress} />
+
+      {step === 'phone' && (
+        <>
+          <div>
+            <h2 className="mb-1 text-xl font-semibold">{t('step1_title')}</h2>
+            <p className="text-sm text-foreground-secondary">{t('step1_subtitle')}</p>
+          </div>
+          <PhoneStep
+            onSuccess={(phone) => { update({ phone }); setStep('otp') }}
+          />
+        </>
+      )}
+
+      {step === 'otp' && (
+        <OtpStep
+          phone={wizardState.phone}
+          onSuccess={() => setStep('profile')}
+          onChangePhone={() => setStep('phone')}
+        />
+      )}
+
+      {step === 'profile' && (
+        <>
+          <div>
+            <h2 className="mb-1 text-xl font-semibold">{t('step2_title')}</h2>
+            <p className="text-sm text-foreground-secondary">{t('step2_subtitle')}</p>
+          </div>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="fullName">{tAuth('name_label')}</Label>
+              <Input
+                id="fullName"
+                placeholder={tAuth('name_placeholder')}
+                value={wizardState.fullName}
+                onChange={(e) => update({ fullName: e.target.value })}
+                autoComplete="name"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="businessName">{tAuth('business_name_label')}</Label>
+              <Input
+                id="businessName"
+                placeholder={tAuth('business_name_placeholder')}
+                value={wizardState.businessName}
+                onChange={(e) => update({ businessName: e.target.value })}
+                autoComplete="organization"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="locale">{t('language_label')}</Label>
+              <Select
+                id="locale"
+                value={wizardState.preferredLocale}
+                onChange={(e) => update({ preferredLocale: e.target.value })}
+              >
+                <option value="en">English</option>
+                <option value="hi">हिंदी</option>
+              </Select>
+            </div>
+            {error && <p className="text-sm text-danger">{error}</p>}
+            <Button
+              onClick={() => {
+                if (!wizardState.fullName.trim() || !wizardState.businessName.trim()) {
+                  setError('Name and business name are required')
+                  return
+                }
+                setError('')
+                setStep('business')
+              }}
+              className="w-full"
+            >
+              {tCommon('continue')}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {step === 'business' && (
+        <>
+          <div>
+            <h2 className="mb-1 text-xl font-semibold">{t('step3_title')}</h2>
+            <p className="text-sm text-foreground-secondary">{t('step3_subtitle')}</p>
+          </div>
+          <p className="rounded-[10px] bg-accent/10 px-3 py-2 text-xs text-amber-700">
+            {t('rfq_notice')}
+          </p>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="sector">{t('sector_label')}</Label>
+              <Select
+                id="sector"
+                value={wizardState.sector}
+                onChange={(e) => update({ sector: e.target.value })}
+                placeholder="— Select sector —"
+              >
+                <option value="manufacturing">{t('sector_manufacturing')}</option>
+                <option value="trade">{t('sector_trade')}</option>
+                <option value="services">{t('sector_services')}</option>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="stateCode">{t('state_label')}</Label>
+              <Select
+                id="stateCode"
+                value={wizardState.stateCode}
+                onChange={(e) => update({ stateCode: e.target.value })}
+                placeholder="— Select state —"
+              >
+                {INDIAN_STATES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="city">{t('city_label')}</Label>
+              <Input
+                id="city"
+                placeholder="City"
+                value={wizardState.city}
+                onChange={(e) => update({ city: e.target.value })}
+              />
+            </div>
+            {error && <p className="text-sm text-danger">{error}</p>}
+            <Button onClick={() => submitBusiness(false)} loading={loading} className="w-full">
+              {t('done')}
+            </Button>
+            <Button variant="ghost" onClick={() => submitBusiness(true)} disabled={loading} className="w-full">
+              {t('skip_business')}
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

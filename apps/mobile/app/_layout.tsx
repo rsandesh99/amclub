@@ -24,6 +24,8 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ title: 'AMClub', headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(app)" options={{ headerShown: false }} />
       </Stack>
     </I18nProvider>
   )
