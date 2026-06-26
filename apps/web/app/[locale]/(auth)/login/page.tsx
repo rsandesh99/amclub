@@ -1,20 +1,40 @@
 'use client'
 
+import { Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Link, useRouter } from '@/i18n/navigation'
 import { AuthPanel } from '@/components/auth/AuthPanel'
 import { resolvePostAuthRoute } from '@/lib/auth/post-auth'
+import { safeNext } from '@/lib/auth/safe-next'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export default function LoginPage() {
+  // useSearchParams must sit inside a Suspense boundary (Next 15 static render).
+  return (
+    <Suspense fallback={<div className="h-72 animate-pulse rounded-card bg-gray-100" />}>
+      <LoginInner />
+    </Suspense>
+  )
+}
+
+function LoginInner() {
   const t = useTranslations('auth')
   const router = useRouter()
+  const params = useSearchParams()
+  // Where an auth-wall sent the user before bouncing them here.
+  const next = safeNext(params.get('next'))
 
   async function handleAuthenticated() {
     // Same decision regardless of method (phone / email / Google): a returning
-    // user goes to their role home; a brand-new one completes the quick profile.
+    // user goes to their intended page (or role home); a brand-new one completes
+    // the quick profile first.
     const { isNew, destination } = await resolvePostAuthRoute()
-    router.push(isNew ? '/signup?complete=1' : destination)
+    if (isNew) {
+      router.push('/signup?complete=1')
+    } else {
+      router.push(next ?? destination)
+    }
   }
 
   return (
@@ -25,7 +45,7 @@ export default function LoginPage() {
         <CardDescription>{t('login_subtitle')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <AuthPanel onAuthenticated={handleAuthenticated} googleRedirectTo="/app" />
+        <AuthPanel onAuthenticated={handleAuthenticated} googleRedirectTo={next ?? '/app'} />
         <p className="text-center text-sm text-foreground-secondary">
           {t('no_account')}{' '}
           <Link href="/signup" className="text-primary underline underline-offset-2 hover:no-underline">

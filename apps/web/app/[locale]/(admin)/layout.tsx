@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/auth/session'
+import { AppShell } from '@/components/shell/AppShell'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
@@ -13,14 +14,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <header className="border-b border-gray-200 bg-surface px-6 py-4">
-        <div className="flex items-center justify-between">
-          <span className="text-lg font-bold text-primary">AMClub Admin</span>
-          <span className="text-sm text-foreground-secondary">{user.fullName ?? user.email ?? user.phone}</span>
-        </div>
-      </header>
-      <main className="flex-1 p-6">{children}</main>
-    </div>
+    <AppShell context="admin" name={user.fullName} roles={user.roles}>
+      <div className="p-6">{children}</div>
+    </AppShell>
   )
 }

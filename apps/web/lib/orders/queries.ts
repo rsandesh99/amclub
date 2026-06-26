@@ -44,6 +44,44 @@ export async function getOrderDocuments(orderId: string) {
   )
 }
 
+export interface ProviderPayout {
+  id: string
+  orderId: string
+  orderNumber: string | null
+  orderTitle: string | null
+  amountPaise: number
+  status: string
+  scheduledFor: string | null
+  paidAt: string | null
+}
+
+/** List the provider's payouts (newest first), joined to their order. */
+export async function listMyPayouts(userId: string): Promise<ProviderPayout[]> {
+  const admin = await createAdminClient()
+  const actor = await resolveActor(admin, userId)
+  if (!actor.providerId) return []
+  const { data } = await admin
+    .from('payouts')
+    .select('id, order_id, amount_paise, status, scheduled_for, paid_at, orders(order_number, title)')
+    .eq('provider_id', actor.providerId)
+    .order('created_at', { ascending: false })
+  return (data ?? []).map((p) => {
+    // Supabase types an embedded to-one relation as an array; take the first.
+    const rel = p.orders as unknown as { order_number: string; title: string }[] | { order_number: string; title: string } | null
+    const order = Array.isArray(rel) ? rel[0] ?? null : rel
+    return {
+      id: p.id,
+      orderId: p.order_id,
+      orderNumber: order?.order_number ?? null,
+      orderTitle: order?.title ?? null,
+      amountPaise: Number(p.amount_paise),
+      status: p.status,
+      scheduledFor: p.scheduled_for,
+      paidAt: p.paid_at,
+    }
+  })
+}
+
 /** List the viewer's orders (as buyer or provider). */
 export async function listMyOrders(userId: string, as: 'msme' | 'provider') {
   const admin = await createAdminClient()

@@ -1,11 +1,12 @@
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { PublicHeaderAccount } from './PublicHeaderAccount'
 
-/** Shared header for public marketing/catalog pages. */
+/** Shared header for public marketing/catalog pages. Stays a static server
+ *  component; the account area (sign-in vs avatar) is a client child. */
 export function PublicHeader() {
   const t = useTranslations('catalog')
-  const tAuth = useTranslations('auth')
 
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-surface/95 backdrop-blur">
@@ -18,25 +19,15 @@ export function PublicHeader() {
             <Link href="/services" className="hover:text-primary">
               {t('browse_services')}
             </Link>
-            <Link href="/partner/signup" className="hover:text-primary">
+            {/* /partner/onboarding works for both: logged-in → KYC; logged-out → login → KYC. */}
+            <Link href="/partner/onboarding" className="hover:text-primary">
               {t('become_provider')}
             </Link>
           </nav>
         </div>
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
-          <Link
-            href="/login"
-            className="rounded-button px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/5"
-          >
-            {tAuth('sign_in')}
-          </Link>
-          <Link
-            href="/signup"
-            className="rounded-button bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary/90"
-          >
-            {tAuth('sign_up')}
-          </Link>
+          <PublicHeaderAccount />
         </div>
       </div>
     </header>

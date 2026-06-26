@@ -442,7 +442,21 @@
     "my_profile": "My profile",
     "business_info": "Business information",
     "personal_info": "Personal information",
-    "saved": "Profile updated"
+    "saved": "Profile updated",
+    "save_success": "Your changes have been saved.",
+    "save_failed": "Couldn't save changes. Please try again.",
+    "account_section": "Account",
+    "email_label": "Email",
+    "phone_label": "Phone",
+    "not_set": "Not set",
+    "public_profile": "Public profile",
+    "display_name_label": "Display name",
+    "about_label": "About your business",
+    "languages_label": "Languages you serve in",
+    "capacity_pause_label": "Pause new orders",
+    "capacity_pause_hint": "Your listings stay visible but buyers can't place new orders while paused.",
+    "kyc_locked_note": "Legal name, GSTIN, PAN and bank details are locked after verification. Contact support to change them.",
+    "view_public_page": "View public page"
   },
   "msme_home": {
     "greeting_morning": "Good morning",
@@ -455,18 +469,97 @@
     "complete_profile_cta": "Complete your profile to post requirements",
     "no_orders_title": "No orders yet",
     "no_orders_subtitle": "Your orders will appear here once you place one.",
-    "explore_cta": "Explore services"
+    "explore_cta": "Explore services",
+    "recent_orders": "Recent orders",
+    "saved": "Saved",
+    "view_all": "View all"
   },
   "partner_home": {
     "dashboard_title": "Partner Dashboard",
     "under_review_banner": "Your profile is under review. Listings will go live once approved (usually within 24h).",
     "new_rfqs": "New RFQs",
     "active_orders": "Active orders",
+    "completed_orders": "Completed",
+    "earnings": "Earnings",
     "earnings_month": "Earnings this month",
+    "manage_listings": "Manage listings",
+    "status_active": "Active",
+    "status_under_review": "Under review",
     "view_rfqs": "View RFQs",
     "view_orders": "View orders",
     "complete_onboarding": "Complete onboarding",
     "onboarding_cta": "Finish your KYC to start receiving orders"
+  },
+  "shell": {
+    "profile": "Profile & settings",
+    "become_provider": "Become a provider",
+    "provider_dashboard": "Provider dashboard",
+    "msme_home": "Buyer home",
+    "admin_panel": "Admin panel",
+    "dashboard": "My dashboard",
+    "help": "Help & support",
+    "sign_out": "Sign out",
+    "signing_out": "Signing out…"
+  },
+  "help": {
+    "title": "Help & support",
+    "subtitle": "We're here to help your business get things done.",
+    "contact_title": "Contact us",
+    "email_label": "Email",
+    "whatsapp_label": "WhatsApp",
+    "hours": "Support hours: Mon–Sat, 10am–7pm IST",
+    "faq_title": "Common questions",
+    "faq_orders": "Your payment is held securely and released to the provider only after you accept the delivered work.",
+    "faq_refund": "If you cancel before a provider accepts, you're refunded in full. Other cases follow the refund policy shown at checkout.",
+    "faq_verify": "Every provider is KYC- and credential-verified before their listings go live — look for the blue tick.",
+    "grievance_title": "Grievance officer",
+    "grievance_body": "For unresolved complaints, write to our grievance officer. We acknowledge within 24 hours and aim to resolve within 15 days."
+  },
+  "not_found": {
+    "title": "Page not found",
+    "subtitle": "The page you're looking for doesn't exist or may have moved.",
+    "home": "Go home",
+    "browse": "Browse services"
+  },
+  "error_boundary": {
+    "title": "Something went wrong",
+    "subtitle": "An unexpected error occurred. Please try again.",
+    "retry": "Try again",
+    "home": "Go home"
+  },
+  "coming_soon": {
+    "badge": "Coming soon",
+    "rfq_title": "Request for Quote",
+    "rfq_body": "Post your requirement once and receive competitive quotes from verified providers. This is launching shortly.",
+    "rfq_inbox_title": "Quote requests",
+    "rfq_inbox_body": "Incoming buyer requirements matched to your categories will appear here. This is launching shortly.",
+    "back_home": "Back to home",
+    "browse_services": "Browse services instead"
+  },
+  "invoices": {
+    "title": "Invoices",
+    "subtitle": "Tax invoices for your completed orders.",
+    "empty_title": "No invoices yet",
+    "empty_subtitle": "Invoices appear here once an order is completed.",
+    "download": "Download PDF",
+    "unavailable": "Preparing…",
+    "view_all": "Invoices"
+  },
+  "earnings": {
+    "title": "Earnings",
+    "subtitle": "Your completed-order earnings and payouts.",
+    "lifetime_earnings": "Lifetime earnings",
+    "completed_orders": "Completed orders",
+    "pending_clearance": "In progress",
+    "payouts_title": "Payouts",
+    "payout_scheduled": "Scheduled",
+    "payout_processing": "Processing",
+    "payout_paid": "Paid",
+    "payout_failed": "Failed",
+    "payout_held": "On hold",
+    "no_payouts_title": "No payouts yet",
+    "no_payouts_subtitle": "Payouts are released after an order is completed.",
+    "payout_note": "Payouts release only after a buyer accepts delivery (or after 72h auto-accept)."
   },
   "order": {
     "placed": "Order placed",

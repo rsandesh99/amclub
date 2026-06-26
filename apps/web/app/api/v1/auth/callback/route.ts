@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/server'
 import { upsertUserRow } from '@/lib/auth/session'
+import { safeNext } from '@/lib/auth/safe-next'
 
 /**
  * OAuth / magic-link callback. The new-vs-returning decision is made HERE by
@@ -73,13 +74,13 @@ export async function GET(request: NextRequest) {
     admin.from('provider_profiles').select('id').eq('user_id', authUser.id).maybeSingle(),
   ])
 
+  const wantsNext = safeNext(next)
   let dest: string
   if (roles.includes('admin') || roles.includes('ops')) {
     dest = '/admin/verifications'
-  } else if (provider) {
-    dest = '/partner'
-  } else if (msme) {
-    dest = '/app'
+  } else if (provider || msme) {
+    // Returning user → honor a deep-link `next` if present, else role home.
+    dest = wantsNext ?? (provider ? '/partner' : '/app')
   } else {
     // Brand-new user → run the right wizard ONCE. `next` carries the intent.
     dest = next.startsWith('/partner') ? '/partner/onboarding' : '/signup?complete=1'

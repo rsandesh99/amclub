@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/auth/session'
+import { AppShell } from '@/components/shell/AppShell'
 
 export default async function ProviderLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
@@ -15,5 +16,9 @@ export default async function ProviderLayout({ children }: { children: React.Rea
   // a provider profile to onboarding, and all provider data is keyed to the user's
   // own provider profile (null for non-providers → empty, no leak).
 
-  return <>{children}</>
+  return (
+    <AppShell context="provider" name={user.fullName} roles={user.roles}>
+      {children}
+    </AppShell>
+  )
 }

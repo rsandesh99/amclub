@@ -13,7 +13,7 @@ export async function GET() {
   // user without a public.users row and for Bearer requests.
   const admin = await createAdminClient()
   const [{ data: u }, { data: msme }, { data: provider }] = await Promise.all([
-    admin.from('users').select('roles').eq('id', userId).maybeSingle(),
+    admin.from('users').select('roles, full_name').eq('id', userId).maybeSingle(),
     admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle(),
     admin.from('provider_profiles').select('id, status').eq('user_id', userId).maybeSingle(),
   ])
@@ -29,6 +29,7 @@ export async function GET() {
   return NextResponse.json({
     authenticated: true,
     id: userId,
+    fullName: u?.full_name ?? null,
     role: primaryRole,
     roles,
     hasMsmeProfile: !!msme,

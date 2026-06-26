@@ -13,9 +13,16 @@ export default async function MsmeOrdersPage() {
   const t = await getTranslations('orders')
   const orders = await listMyOrders(user.id, 'msme')
 
+  const tInvoices = await getTranslations('invoices')
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="mb-6 font-display text-2xl font-bold">{t('my_orders')}</h1>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h1 className="font-display text-2xl font-bold">{t('my_orders')}</h1>
+        <Link href="/app/invoices" className="text-sm font-medium text-primary hover:underline">
+          {tInvoices('view_all')}
+        </Link>
+      </div>
       {orders.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-gray-300 bg-surface px-6 py-16 text-center">
           <PackageOpen className="h-10 w-10 text-foreground-secondary" />
