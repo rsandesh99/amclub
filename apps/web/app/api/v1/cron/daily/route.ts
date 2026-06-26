@@ -1,0 +1,42 @@
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/server'
+import { verifyCron } from '@/lib/jobs/cron-auth'
+import { autoCancelOrder, autoAcceptOrder } from '@/lib/orders/transitions'
+import { getPaymentGateway } from '@/lib/payments'
+import { runPayouts } from '@/lib/payments/payout'
+import { reconcileCapturedPayments } from '@/lib/payments/materialize'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+/**
+ * Single daily job tick — runs all four time-based jobs in sequence. Collapsed
+ * into one cron so it fits the Vercel Hobby plan (≤2 crons, daily-only); the
+ * individual /cron/* routes remain for testing and for Pro-plan fine-grained
+ * schedules. Idempotent throughout. §ADR 001.
+ */
+export async function GET(request: NextRequest) {
+  if (!verifyCron(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const admin = await createAdminClient()
+  const now = new Date().toISOString()
+
+  // 1. Auto-cancel orders placed >24h ago (→ refund 100%).
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+  const { data: stale } = await admin.from('orders').select('*').eq('status', 'placed').lt('created_at', cutoff).limit(200)
+  let cancelled = 0
+  for (const o of stale ?? []) if (await autoCancelOrder(admin, o)) cancelled++
+
+  // 2. Auto-accept delivered orders past their 72h window (→ payout + invoices).
+  const { data: due } = await admin.from('orders').select('*').eq('status', 'delivered').lte('auto_accept_at', now).limit(200)
+  let completed = 0
+  for (const o of due ?? []) if (await autoAcceptOrder(admin, o)) completed++
+
+  // 3. Payout batch (T+2 due).
+  const payouts = await runPayouts(admin, getPaymentGateway())
+
+  // 4. Reconcile dropped webhooks (last 48h).
+  const recon = await reconcileCapturedPayments(getPaymentGateway(), Math.floor(Date.now() / 1000) - 2 * 24 * 3600, admin)
+
+  return NextResponse.json({ cancelled, completed, payouts: payouts.processed, reconciled: recon.recovered })
+}

@@ -14,14 +14,20 @@ Running pg-boss would mean standing up a separate always-on service.
 
 ## Decision
 
-Use **Vercel Cron** + idempotent API routes for the Phase 4 jobs:
+Use **Vercel Cron** + idempotent API routes for the Phase 4 jobs.
 
-| Job | Route | Schedule |
-|---|---|---|
-| Auto-cancel unaccepted (24h) | `/api/v1/cron/auto-cancel` | hourly |
-| Auto-accept delivered (72h) | `/api/v1/cron/auto-accept` | hourly |
-| Payout batch (T+2) | `/api/v1/cron/payouts` | daily 04:00 |
-| Reconciliation | `/api/v1/cron/reconcile` | daily 04:30 |
+**Hobby-plan constraint (learned the hard way):** the Hobby plan allows **≤2 cron
+jobs, daily frequency only**. The initial config (4 crons, 2 hourly) made Vercel
+**reject the deployment**. Collapsed to a single daily tick:
+
+| Cron | Route | Schedule | Runs |
+|---|---|---|---|
+| Daily tick | `/api/v1/cron/daily` | daily 04:00 | auto-cancel → auto-accept → payouts → reconcile, in sequence |
+
+The individual routes (`/api/v1/cron/auto-cancel|auto-accept|payouts|reconcile`)
+are kept for tests and for Pro-plan fine-grained schedules, but only the combined
+`daily` route is registered in `vercel.json`. On Pro, split them back out and
+raise auto-cancel/auto-accept to hourly.
 
 Each route is **idempotent** (claims work via status CAS / unique constraints),
 authorised with `CRON_SECRET` (`verifyCron`), and reuses the same order/payment

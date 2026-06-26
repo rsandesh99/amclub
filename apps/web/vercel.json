@@ -1,9 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/v1/cron/auto-cancel", "schedule": "0 * * * *" },
-    { "path": "/api/v1/cron/auto-accept", "schedule": "0 * * * *" },
-    { "path": "/api/v1/cron/payouts", "schedule": "0 4 * * *" },
-    { "path": "/api/v1/cron/reconcile", "schedule": "30 4 * * *" }
+    { "path": "/api/v1/cron/daily", "schedule": "0 4 * * *" }
   ]
 }
