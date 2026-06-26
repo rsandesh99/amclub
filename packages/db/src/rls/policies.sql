@@ -492,3 +492,14 @@ CREATE POLICY "cms_banners: public read active" ON cms_banners
 DROP POLICY IF EXISTS "cms_banners: admin all" ON cms_banners;
 CREATE POLICY "cms_banners: admin all" ON cms_banners
   FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── provider_profiles column privileges (§5.7 — no PAN/GSTIN to public) ───────
+-- RLS is row-level; restrict sensitive COLUMNS via grants. Owner/admin read via
+-- the service-role key (bypasses these). See migration 0004.
+REVOKE SELECT ON provider_profiles FROM anon, authenticated;
+GRANT SELECT (
+  id, user_id, legal_name, display_name, slug, about, logo_url,
+  state, city, languages, status, avg_rating, review_count, completed_orders,
+  median_response_minutes, capacity_paused, top_rated,
+  created_at, updated_at, deleted_at
+) ON provider_profiles TO anon, authenticated;

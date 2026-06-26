@@ -140,7 +140,11 @@
     "action_submit_requirements": "Submit requirements",
     "action_accept_delivery": "Accept delivery",
     "action_request_revision": "Request revision",
-    "action_cancel": "Cancel order"
+    "action_cancel": "Cancel order",
+    "action_failed": "Action failed. Please try again.",
+    "upload_failed": "Upload failed. Please try again.",
+    "event_requirements": "Requirements submitted",
+    "event_document": "Document uploaded"
   },
   "catalog": {
     "off": "OFF",
@@ -323,10 +327,16 @@
     "employees_50_249": "50–249",
     "done": "Go to my dashboard",
     "skip_business": "Skip — I'll complete later",
-    "rfq_notice": "Sector and state are required to post a requirement (RFQ)."
+    "rfq_notice": "Sector and state are required to post a requirement (RFQ).",
+    "city_placeholder": "City",
+    "err_name_business": "Name and business name are required",
+    "save_failed": "Couldn't save your profile. Please try again."
   },
   "provider_signup": {
     "page_title": "Register as a service provider",
+    "upload_failed": "Upload failed. Please try again.",
+    "submission_failed": "Submission failed. Please try again.",
+    "error_generic": "Something went wrong. Please try again.",
     "step_contact": "Contact",
     "step_business": "Business",
     "step_kyc": "KYC",
@@ -403,6 +413,8 @@
     "approve_title": "Approve provider",
     "reject_title": "Reject provider",
     "reject_reason_label": "Reason for rejection",
+    "reason_required": "A reason for rejection is required",
+    "action_failed": "Action failed. Please try again.",
     "reject_reason_placeholder": "Explain what needs to be fixed before reapplying",
     "confirm_approve": "Confirm approval",
     "confirm_reject": "Confirm rejection",

@@ -10,6 +10,9 @@ const bodySchema = z.object({
   sector: z.string().optional(),
   state: z.string().optional(),
   city: z.string().optional(),
+  // §3.3 — optional at signup; nudged later for full RFQ access.
+  udyamNumber: z.string().trim().optional(),
+  gstin: z.string().trim().optional(),
   preferredLocale: z.enum(['en', 'hi']).default('en'),
 })
 
@@ -25,7 +28,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   }
 
-  const { fullName, businessName, sector, state, city, preferredLocale } = parsed.data
+  const { fullName, businessName, sector, state, city, udyamNumber, gstin, preferredLocale } = parsed.data
 
   // Update full_name + locale on the users row
   await upsertUserRow({
@@ -46,8 +49,10 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         business_name: businessName,
         sector: sector ?? null,
-        state: state ?? 'XX',
+        state: state ?? null, // honest NULL when skipped — RFQ matching depends on it
         city: city ?? null,
+        udyam_number: udyamNumber ?? null,
+        gstin: gstin ?? null,
         profile_completeness: calculateCompleteness({
           ...(sector ? { sector } : {}),
           ...(state ? { state } : {}),
@@ -68,7 +73,7 @@ export async function POST(request: NextRequest) {
 function calculateCompleteness(fields: { sector?: string; state?: string; city?: string }) {
   let score = 40 // base for having name + business name
   if (fields.sector) score += 20
-  if (fields.state && fields.state !== 'XX') score += 20
+  if (fields.state) score += 20
   if (fields.city) score += 20
   return score
 }

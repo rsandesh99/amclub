@@ -25,7 +25,8 @@ export const msmeProfiles = pgTable('msme_profiles', {
   udyamVerified: boolean('udyam_verified').default(false).notNull(),
   gstinVerified: boolean('gstin_verified').default(false).notNull(),
   sector: text('sector'),
-  state: text('state').notNull(),
+  // Nullable: business step is skippable at signup; RFQ (Phase 5) requires it.
+  state: text('state'),
   city: text('city'),
   pincode: text('pincode'),
   employeeBand: text('employee_band'),

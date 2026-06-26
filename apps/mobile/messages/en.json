@@ -120,7 +120,8 @@
     "gst": "GST (18%)",
     "included": "included",
     "total": "Total payable",
-    "secure_note": "Secure payment. Money protected until you accept the work."
+    "secure_note": "Secure payment. Money protected until you accept the work.",
+    "real_pay_note": "Real Razorpay payment activates once test keys are set."
   },
   "orders": {
     "actions": "Actions",
@@ -167,11 +168,29 @@
     "revision_requested": "Revision requested"
   },
   "errors": {
+    "title": "Please check",
+    "generic": "Something went wrong. Please try again.",
     "required": "This field is required",
     "invalid_phone": "Enter a valid 10-digit Indian mobile number",
+    "invalid_email": "Enter a valid email address",
+    "invalid_code": "Enter the 6-digit code",
+    "name_business_required": "Please fill in your name and business name",
+    "sign_in_to_save": "Please sign in to save providers",
+    "google_failed": "Google sign-in failed",
     "invalid_gstin": "Enter a valid 15-character GSTIN",
     "invalid_udyam": "Enter a valid Udyam number (e.g. UDYAM-MH-01-0123456)",
     "payment_failed": "Payment didn't go through. No money was deducted — try again.",
     "network": "Check your internet connection and try again."
+  },
+  "order_actions": {
+    "accept": "Accept order",
+    "start": "Start work",
+    "deliver": "Mark delivered",
+    "resume": "Resume work",
+    "submit_requirements": "Submit requirements",
+    "accept_delivery": "Accept delivery",
+    "request_revision": "Request revision",
+    "cancel": "Cancel order",
+    "failed": "Action failed. Please try again."
   }
 }

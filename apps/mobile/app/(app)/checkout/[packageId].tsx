@@ -36,9 +36,9 @@ export default function CheckoutScreen() {
         return
       }
       // Real Razorpay on mobile is wired when keys are provisioned (WebView/native sheet).
-      Alert.alert('Payment', 'Real Razorpay mobile sheet activates once test keys are set.')
+      Alert.alert(t('checkout.title'), t('checkout.real_pay_note'))
     } catch (e: any) {
-      Alert.alert('Error', e.message)
+      Alert.alert(t('common.error'), e.message)
     } finally {
       setPaying(false)
     }

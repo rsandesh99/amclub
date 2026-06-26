@@ -29,13 +29,13 @@ export default function SignupScreen() {
     try {
       if (method === 'phone') {
         const normalised = normalisePhone(phone)
-        if (normalised.length < 13) { Alert.alert('Invalid number', 'Enter a valid 10-digit mobile number.'); return }
+        if (normalised.length < 13) { Alert.alert(t('errors.title'), t('errors.invalid_phone')); return }
         const { error } = await supabase.auth.signInWithOtp({ phone: normalised, options: { shouldCreateUser: true } })
-        if (error) { Alert.alert('Error', error.message); return }
+        if (error) { Alert.alert(t('common.error'), error.message); return }
       } else {
-        if (!isEmail(email)) { Alert.alert('Invalid email', 'Enter a valid email address.'); return }
+        if (!isEmail(email)) { Alert.alert(t('errors.title'), t('errors.invalid_email')); return }
         const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: true } })
-        if (error) { Alert.alert('Error', error.message); return }
+        if (error) { Alert.alert(t('common.error'), error.message); return }
       }
       setStep('otp')
     } finally {
@@ -44,14 +44,14 @@ export default function SignupScreen() {
   }
 
   async function verifyOtp() {
-    if (otp.length !== 6) { Alert.alert('Invalid code', 'Enter the 6-digit code.'); return }
+    if (otp.length !== 6) { Alert.alert(t('errors.title'), t('errors.invalid_code')); return }
     setLoading(true)
     try {
       const { error } =
         method === 'phone'
           ? await supabase.auth.verifyOtp({ phone: normalisePhone(phone), token: otp, type: 'sms' })
           : await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: otp, type: 'email' })
-      if (error) { Alert.alert('Error', error.message); return }
+      if (error) { Alert.alert(t('common.error'), error.message); return }
       setStep('profile')
     } finally {
       setLoading(false)
@@ -62,12 +62,12 @@ export default function SignupScreen() {
     setLoading(true)
     const res = await signInWithGoogle()
     setLoading(false)
-    if (!res.ok) { if (!res.cancelled) Alert.alert('Google sign-in', res.error ?? 'Failed'); return }
+    if (!res.ok) { if (!res.cancelled) Alert.alert(t('common.error'), res.error ?? t('errors.google_failed')); return }
     setStep('profile') // collect quick profile → creates the user + msme profile
   }
 
   async function saveProfile() {
-    if (!fullName.trim() || !businessName.trim()) { Alert.alert('Required', 'Please fill in your name and business name.'); return }
+    if (!fullName.trim() || !businessName.trim()) { Alert.alert(t('errors.title'), t('errors.name_business_required')); return }
     setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -80,7 +80,7 @@ export default function SignupScreen() {
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? 'Profile save failed') }
       router.replace('/(app)/home')
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Profile save failed')
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('errors.generic'))
     } finally {
       setLoading(false)
     }

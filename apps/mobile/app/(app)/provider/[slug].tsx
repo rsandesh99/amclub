@@ -36,7 +36,7 @@ export default function ProviderScreen() {
     const next = !saved
     const ok = await toggleSaved(pid, next ? 'save' : 'unsave')
     if (ok) setSaved(next)
-    else Alert.alert('Sign in required', 'Please sign in to save providers.')
+    else Alert.alert(t('errors.title'), t('errors.sign_in_to_save'))
   }
 
   if (loading) {

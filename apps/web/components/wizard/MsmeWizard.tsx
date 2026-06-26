@@ -19,6 +19,8 @@ interface WizardState {
   sector: string
   stateCode: string
   city: string
+  udyamNumber: string
+  gstin: string
   preferredLocale: string
 }
 
@@ -41,6 +43,8 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
     sector: '',
     stateCode: '',
     city: '',
+    udyamNumber: '',
+    gstin: '',
     preferredLocale: 'en',
   })
   const [loading, setLoading] = useState(false)
@@ -67,16 +71,18 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
           sector: skip ? undefined : wizardState.sector || undefined,
           state: skip ? undefined : wizardState.stateCode || undefined,
           city: skip ? undefined : wizardState.city || undefined,
+          udyamNumber: skip ? undefined : wizardState.udyamNumber || undefined,
+          gstin: skip ? undefined : wizardState.gstin || undefined,
           preferredLocale: wizardState.preferredLocale,
         }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? 'Failed to save profile')
+        throw new Error(typeof d.error === 'string' ? d.error : t('save_failed'))
       }
       router.push('/app')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to save profile')
+      setError(e instanceof Error ? e.message : t('save_failed'))
     } finally {
       setLoading(false)
     }
@@ -138,7 +144,7 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
             <Button
               onClick={() => {
                 if (!wizardState.fullName.trim() || !wizardState.businessName.trim()) {
-                  setError('Name and business name are required')
+                  setError(t('err_name_business'))
                   return
                 }
                 setError('')
@@ -192,9 +198,27 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
               <Label htmlFor="city">{t('city_label')}</Label>
               <Input
                 id="city"
-                placeholder="City"
+                placeholder={t('city_placeholder')}
                 value={wizardState.city}
                 onChange={(e) => update({ city: e.target.value })}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="udyam">{t('udyam_label')}</Label>
+              <Input
+                id="udyam"
+                placeholder="UDYAM-XX-00-0000000"
+                value={wizardState.udyamNumber}
+                onChange={(e) => update({ udyamNumber: e.target.value.toUpperCase() })}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="gstin">{t('gstin_label')}</Label>
+              <Input
+                id="gstin"
+                placeholder="29ABCDE1234F1Z5"
+                value={wizardState.gstin}
+                onChange={(e) => update({ gstin: e.target.value.toUpperCase() })}
               />
             </div>
             {error && <p className="text-sm text-danger">{error}</p>}

@@ -40,6 +40,25 @@ function actionsFor(role: 'msme' | 'provider', status: string): { action: string
 
 interface DocItem { id: string; file_name: string; kind: string; signedUrl: string | null }
 
+// Timeline event → an existing translation key (mostly status labels).
+const EVENT_LABEL: Record<string, string> = {
+  placed: 'status_placed',
+  accept: 'status_accepted',
+  submit_requirements: 'status_requirements_submitted',
+  requirements_data: 'event_requirements',
+  start: 'status_in_progress',
+  deliver: 'status_delivered',
+  document_uploaded: 'event_document',
+  accept_delivery: 'status_completed',
+  auto_accepted: 'status_completed',
+  request_revision: 'status_revision_requested',
+  resume: 'status_in_progress',
+  cancel: 'status_cancelled_by_buyer',
+  auto_cancelled: 'status_auto_cancelled',
+  refunded: 'status_refunded',
+  raise_dispute: 'status_disputed',
+}
+
 export function OrderWorkspace({
   order,
   events,
@@ -72,10 +91,10 @@ export function OrderWorkspace({
         body: JSON.stringify({ action }),
       })
       const d = await res.json()
-      if (!res.ok) throw new Error(d.error ?? 'Action failed')
+      if (!res.ok) throw new Error(typeof d.error === 'string' ? d.error : t('action_failed'))
       router.refresh()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Action failed')
+      setError(e instanceof Error ? e.message : t('action_failed'))
     } finally {
       setBusy(null)
     }
@@ -91,11 +110,11 @@ export function OrderWorkspace({
       const res = await fetch(`/api/v1/orders/${id}/documents`, { method: 'POST', body: fd })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? 'Upload failed')
+        throw new Error(typeof d.error === 'string' ? d.error : t('upload_failed'))
       }
       router.refresh()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Upload failed')
+      setError(e instanceof Error ? e.message : t('upload_failed'))
     } finally {
       setBusy(null)
     }
@@ -174,7 +193,9 @@ export function OrderWorkspace({
             <li key={e.id} className="flex gap-3 text-sm">
               <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
               <div>
-                <p className="font-medium capitalize">{e.event.replace(/_/g, ' ')}</p>
+                <p className="font-medium">
+                  {EVENT_LABEL[e.event] ? t(EVENT_LABEL[e.event] as 'status_placed') : e.event.replace(/_/g, ' ')}
+                </p>
                 <p className="text-xs text-foreground-secondary">
                   {new Date(e.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
                 </p>

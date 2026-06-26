@@ -22,7 +22,7 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
 
   async function act(action: 'approve' | 'reject') {
     if (action === 'reject' && !reason.trim()) {
-      setError(t('reject_reason_label') + ' is required')
+      setError(t('reason_required'))
       return
     }
     setError('')
@@ -35,11 +35,11 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? 'Action failed')
+        throw new Error(typeof d.error === 'string' ? d.error : t('action_failed'))
       }
       router.refresh()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Action failed')
+      setError(e instanceof Error ? e.message : t('action_failed'))
     } finally {
       setLoading(null)
     }

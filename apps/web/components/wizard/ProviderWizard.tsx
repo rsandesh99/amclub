@@ -164,7 +164,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
         body: formData,
       })
       const d = await res.json()
-      if (!res.ok) throw new Error(d.error ?? 'Upload failed')
+      if (!res.ok) throw new Error(typeof d.error === 'string' ? d.error : t('upload_failed'))
       update({
         credentialUploads: {
           ...draft.credentialUploads,
@@ -172,7 +172,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
         },
       })
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'An error occurred')
+      setError(e instanceof Error ? e.message : t('error_generic'))
     } finally {
       setUploadingFor(null)
     }
@@ -206,12 +206,12 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? 'Submission failed')
+        throw new Error(typeof d.error === 'string' ? d.error : t('submission_failed'))
       }
       localStorage.removeItem(DRAFT_KEY)
       setStep('under_review')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'An error occurred')
+      setError(e instanceof Error ? e.message : t('error_generic'))
     } finally {
       setLoading(false)
     }

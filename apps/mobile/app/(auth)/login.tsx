@@ -25,13 +25,13 @@ export default function LoginScreen() {
     try {
       if (method === 'phone') {
         const normalised = normalisePhone(phone)
-        if (normalised.length < 13) { Alert.alert('Invalid number', 'Enter a valid 10-digit mobile number.'); return }
+        if (normalised.length < 13) { Alert.alert(t('errors.title'), t('errors.invalid_phone')); return }
         const { error } = await supabase.auth.signInWithOtp({ phone: normalised, options: { shouldCreateUser: true } })
-        if (error) { Alert.alert('Error', error.message); return }
+        if (error) { Alert.alert(t('common.error'), error.message); return }
       } else {
-        if (!isEmail(email)) { Alert.alert('Invalid email', 'Enter a valid email address.'); return }
+        if (!isEmail(email)) { Alert.alert(t('errors.title'), t('errors.invalid_email')); return }
         const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: true } })
-        if (error) { Alert.alert('Error', error.message); return }
+        if (error) { Alert.alert(t('common.error'), error.message); return }
       }
       setStep('otp')
     } finally {
@@ -40,14 +40,14 @@ export default function LoginScreen() {
   }
 
   async function verifyOtp() {
-    if (otp.length !== 6) { Alert.alert('Invalid code', 'Enter the 6-digit code.'); return }
+    if (otp.length !== 6) { Alert.alert(t('errors.title'), t('errors.invalid_code')); return }
     setLoading(true)
     try {
       const { data, error } =
         method === 'phone'
           ? await supabase.auth.verifyOtp({ phone: normalisePhone(phone), token: otp, type: 'sms' })
           : await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: otp, type: 'email' })
-      if (error || !data.user) { Alert.alert('Error', error?.message ?? 'Verification failed'); return }
+      if (error || !data.user) { Alert.alert(t('common.error'), error?.message ?? t('errors.generic')); return }
       const roles: string[] = data.user.user_metadata?.['roles'] ?? ['msme']
       router.replace(routeForRoles(roles) as never)
     } finally {
@@ -59,7 +59,7 @@ export default function LoginScreen() {
     setLoading(true)
     const res = await signInWithGoogle()
     setLoading(false)
-    if (!res.ok) { if (!res.cancelled) Alert.alert('Google sign-in', res.error ?? 'Failed'); return }
+    if (!res.ok) { if (!res.cancelled) Alert.alert(t('common.error'), res.error ?? t('errors.google_failed')); return }
     const { data } = await supabase.auth.getUser()
     router.replace(routeForRoles(data.user?.user_metadata?.['roles'] ?? ['msme']) as never)
   }

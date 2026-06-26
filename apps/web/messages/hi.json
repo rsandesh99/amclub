@@ -140,7 +140,11 @@
     "action_submit_requirements": "आवश्यकताएं जमा करें",
     "action_accept_delivery": "डिलीवरी स्वीकारें",
     "action_request_revision": "संशोधन का अनुरोध",
-    "action_cancel": "ऑर्डर रद्द करें"
+    "action_cancel": "ऑर्डर रद्द करें",
+    "action_failed": "कार्रवाई विफल। कृपया फिर से कोशिश करें।",
+    "upload_failed": "अपलोड विफल। कृपया फिर से कोशिश करें।",
+    "event_requirements": "आवश्यकताएं जमा की गईं",
+    "event_document": "दस्तावेज़ अपलोड किया गया"
   },
   "catalog": {
     "off": "छूट",
@@ -323,10 +327,16 @@
     "employees_50_249": "50–249",
     "done": "मेरे डैशबोर्ड पर जाएं",
     "skip_business": "छोड़ें — बाद में पूरा करूंगा/करूंगी",
-    "rfq_notice": "आवश्यकता पोस्ट करने के लिए क्षेत्र और राज्य ज़रूरी है।"
+    "rfq_notice": "आवश्यकता पोस्ट करने के लिए क्षेत्र और राज्य ज़रूरी है।",
+    "city_placeholder": "शहर",
+    "err_name_business": "नाम और व्यवसाय का नाम आवश्यक है",
+    "save_failed": "आपकी प्रोफ़ाइल सहेजी नहीं जा सकी। कृपया फिर से कोशिश करें।"
   },
   "provider_signup": {
     "page_title": "सेवा प्रदाता के रूप में पंजीकरण करें",
+    "upload_failed": "अपलोड विफल। कृपया फिर से कोशिश करें।",
+    "submission_failed": "सबमिशन विफल। कृपया फिर से कोशिश करें।",
+    "error_generic": "कुछ गलत हो गया। कृपया फिर से कोशिश करें।",
     "step_contact": "संपर्क",
     "step_business": "व्यवसाय",
     "step_kyc": "KYC",
@@ -403,6 +413,8 @@
     "approve_title": "प्रदाता को स्वीकृत करें",
     "reject_title": "प्रदाता को अस्वीकृत करें",
     "reject_reason_label": "अस्वीकृति का कारण",
+    "reason_required": "अस्वीकृति का कारण आवश्यक है",
+    "action_failed": "कार्रवाई विफल। कृपया फिर से कोशिश करें।",
     "reject_reason_placeholder": "बताएं कि पुनः आवेदन से पहले क्या ठीक करना होगा",
     "confirm_approve": "स्वीकृति की पुष्टि करें",
     "confirm_reject": "अस्वीकृति की पुष्टि करें",

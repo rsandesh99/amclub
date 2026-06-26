@@ -8,16 +8,17 @@ import { fetchOrder, transitionOrder } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function actionsFor(role: string, status: string) {
+// Returns action keys; labels come from t(`order_actions.${action}`).
+function actionsFor(role: string, status: string): string[] {
   if (role === 'provider') {
-    if (status === 'placed') return [{ action: 'accept', label: 'Accept order' }]
-    if (status === 'requirements_submitted') return [{ action: 'start', label: 'Start work' }]
-    if (status === 'in_progress') return [{ action: 'deliver', label: 'Mark delivered' }]
-    if (status === 'revision_requested') return [{ action: 'resume', label: 'Resume work' }]
+    if (status === 'placed') return ['accept']
+    if (status === 'requirements_submitted') return ['start']
+    if (status === 'in_progress') return ['deliver']
+    if (status === 'revision_requested') return ['resume']
   } else {
-    if (status === 'accepted') return [{ action: 'submit_requirements', label: 'Submit requirements' }]
-    if (status === 'delivered') return [{ action: 'accept_delivery', label: 'Accept delivery' }, { action: 'request_revision', label: 'Request revision' }]
-    if (status === 'placed' || status === 'accepted') return [{ action: 'cancel', label: 'Cancel order' }]
+    if (status === 'accepted') return ['submit_requirements']
+    if (status === 'delivered') return ['accept_delivery', 'request_revision']
+    if (status === 'placed' || status === 'accepted') return ['cancel']
   }
   return []
 }
@@ -41,7 +42,7 @@ export default function OrderScreen() {
     setBusy(true)
     const { ok, data: res } = await transitionOrder(id, action)
     setBusy(false)
-    if (!ok) { Alert.alert('Error', res.error ?? 'Action failed'); return }
+    if (!ok) { Alert.alert(t('common.error'), res.error ?? t('order_actions.failed')); return }
     load()
   }
 
@@ -70,9 +71,9 @@ export default function OrderScreen() {
         {actions.length > 0 && (
           <View className="rounded-xl border border-gray-200 bg-surface p-4 gap-2">
             <Text className="text-sm font-semibold text-foreground">{t('orders.actions')}</Text>
-            {actions.map((a) => (
-              <TouchableOpacity key={a.action} onPress={() => act(a.action)} disabled={busy} className={`items-center rounded-lg py-3 ${busy ? 'bg-primary/60' : 'bg-primary'}`}>
-                <Text className="text-sm font-semibold text-white">{a.label}</Text>
+            {actions.map((action) => (
+              <TouchableOpacity key={action} onPress={() => act(action)} disabled={busy} className={`items-center rounded-lg py-3 ${busy ? 'bg-primary/60' : 'bg-primary'}`}>
+                <Text className="text-sm font-semibold text-white">{t(`order_actions.${action}` as 'order_actions.accept')}</Text>
               </TouchableOpacity>
             ))}
           </View>
