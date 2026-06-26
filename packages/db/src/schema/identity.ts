@@ -6,7 +6,8 @@ import { sql } from 'drizzle-orm'
 // auth.users FK is added via raw SQL in the migration (cross-schema reference)
 export const users = pgTable('users', {
   id: uuid('id').primaryKey(),
-  phone: text('phone').unique().notNull(),
+  // Nullable: email/Google users have no phone. A CHECK requires phone OR email.
+  phone: text('phone').unique(),
   email: text('email').unique(),
   fullName: text('full_name'),
   preferredLocale: text('preferred_locale').default('en').notNull(),

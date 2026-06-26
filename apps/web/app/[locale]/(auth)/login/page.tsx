@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { Link, useRouter } from '@/i18n/navigation'
 import { AuthPanel } from '@/components/auth/AuthPanel'
+import { resolvePostAuthRoute } from '@/lib/auth/post-auth'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export default function LoginPage() {
@@ -10,19 +11,10 @@ export default function LoginPage() {
   const router = useRouter()
 
   async function handleAuthenticated() {
-    // Same routing regardless of method (phone / email / Google).
-    const res = await fetch('/api/v1/profile/me')
-    const data = await res.json().catch(() => ({}))
-    if (data.role === 'provider') {
-      router.push('/partner')
-    } else if (data.role === 'admin' || data.role === 'ops') {
-      router.push('/admin/verifications')
-    } else if (!data.hasMsmeProfile) {
-      // Authenticated but no profile yet — finish the quick profile.
-      router.push('/signup?complete=1')
-    } else {
-      router.push('/app')
-    }
+    // Same decision regardless of method (phone / email / Google): a returning
+    // user goes to their role home; a brand-new one completes the quick profile.
+    const { isNew, destination } = await resolvePostAuthRoute()
+    router.push(isNew ? '/signup?complete=1' : destination)
   }
 
   return (

@@ -1,31 +1,38 @@
 import { NextResponse } from 'next/server'
-import { getSessionUser, getMsmeProfile, getProviderProfile } from '@/lib/auth/session'
+import { createAdminClient } from '@/lib/supabase/server'
+import { getAuthedSupabase } from '@/lib/auth/request'
 
+/** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
-  const user = await getSessionUser()
-  if (!user) {
+  const { userId } = await getAuthedSupabase()
+  if (!userId) {
     return NextResponse.json({ authenticated: false }, { status: 401 })
   }
 
-  const msmeProfile = await getMsmeProfile(user.id)
-  const providerProfile = user.roles.includes('provider')
-    ? await getProviderProfile(user.id)
-    : null
+  // Read via admin (server-side, already authenticated) so it works for a fresh
+  // user without a public.users row and for Bearer requests.
+  const admin = await createAdminClient()
+  const [{ data: u }, { data: msme }, { data: provider }] = await Promise.all([
+    admin.from('users').select('roles').eq('id', userId).maybeSingle(),
+    admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle(),
+    admin.from('provider_profiles').select('id, status').eq('user_id', userId).maybeSingle(),
+  ])
+  const roles: string[] = u?.roles ?? ['msme']
 
-  // Primary role for redirect decisions
-  const primaryRole = user.roles.includes('admin') || user.roles.includes('ops')
-    ? 'admin'
-    : user.roles.includes('provider')
-    ? 'provider'
-    : 'msme'
+  const primaryRole =
+    roles.includes('admin') || roles.includes('ops')
+      ? 'admin'
+      : provider
+      ? 'provider'
+      : 'msme'
 
   return NextResponse.json({
     authenticated: true,
-    id: user.id,
+    id: userId,
     role: primaryRole,
-    roles: user.roles,
-    hasMsmeProfile: !!msmeProfile,
-    hasProviderProfile: !!providerProfile,
-    providerStatus: providerProfile?.status ?? null,
+    roles,
+    hasMsmeProfile: !!msme,
+    hasProviderProfile: !!provider,
+    providerStatus: provider?.status ?? null,
   })
 }

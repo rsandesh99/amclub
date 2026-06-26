@@ -44,9 +44,21 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     .from('users')
     .select('id, phone, email, full_name, roles, preferred_locale')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (!data) return null
+  // A freshly-authenticated user (email/Google OTP, before their profile is
+  // saved) may not have a public.users row yet — derive from the auth user so
+  // the profile-save flow works. The row is created by upsertUserRow on save.
+  if (!data) {
+    return {
+      id: user.id,
+      phone: user.phone ?? null,
+      email: user.email ?? null,
+      fullName: (user.user_metadata?.['full_name'] as string | undefined) ?? null,
+      roles: ['msme'],
+      preferredLocale: 'en',
+    }
+  }
 
   return {
     id: data.id,

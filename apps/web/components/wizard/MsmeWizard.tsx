@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { AuthPanel } from '@/components/auth/AuthPanel'
+import { resolvePostAuthRoute } from '@/lib/auth/post-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -58,6 +59,13 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
     setWizardState((s) => ({ ...s, ...patch }))
   }
 
+  // Returning user → role home; brand-new user → continue to the profile step.
+  async function handleAuthenticated() {
+    const { isNew, destination } = await resolvePostAuthRoute()
+    if (isNew) setStep('profile')
+    else router.push(destination)
+  }
+
   async function submitBusiness(skip = false) {
     setLoading(true)
     setError('')
@@ -98,7 +106,7 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
             <h2 className="mb-1 text-xl font-semibold">{t('step1_title')}</h2>
             <p className="text-sm text-foreground-secondary">{t('step1_subtitle')}</p>
           </div>
-          <AuthPanel onAuthenticated={() => setStep('profile')} googleRedirectTo="/signup?complete=1" />
+          <AuthPanel onAuthenticated={handleAuthenticated} googleRedirectTo="/signup?complete=1" />
         </>
       )}
 

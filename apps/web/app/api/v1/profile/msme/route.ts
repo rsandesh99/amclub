@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSessionUser, upsertUserRow } from '@/lib/auth/session'
+import { getAuthedSupabase } from '@/lib/auth/request'
+import { upsertUserRow } from '@/lib/auth/session'
 
 const bodySchema = z.object({
   fullName: z.string().min(2),
@@ -17,10 +18,13 @@ const bodySchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const user = await getSessionUser()
-  if (!user) {
+  // Cookie (web) OR Bearer (mobile). Tolerant: works even before the user has a
+  // public.users row (new email/Google user completing their first profile).
+  const { supabase, userId } = await getAuthedSupabase()
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const { data: { user: authUser } } = await supabase.auth.getUser()
 
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
@@ -30,23 +34,22 @@ export async function POST(request: NextRequest) {
 
   const { fullName, businessName, sector, state, city, udyamNumber, gstin, preferredLocale } = parsed.data
 
-  // Update full_name + locale on the users row
+  // Create/refresh the users row (preserve existing roles — never clobber).
+  const admin = await createAdminClient()
+  const { data: existingUser } = await admin.from('users').select('roles').eq('id', userId).maybeSingle()
   await upsertUserRow({
-    id: user.id,
-    ...(user.phone ? { phone: user.phone } : {}),
-    ...(user.email ? { email: user.email } : {}),
+    id: userId,
+    ...(authUser?.phone ? { phone: authUser.phone } : {}),
+    ...(authUser?.email ? { email: authUser.email } : {}),
     fullName,
-    roles: user.roles,
+    roles: existingUser?.roles ?? ['msme'],
     preferredLocale,
   })
-
-  // Upsert msme_profiles
-  const admin = await createAdminClient()
   const { error } = await admin
     .from('msme_profiles')
     .upsert(
       {
-        user_id: user.id,
+        user_id: userId,
         business_name: businessName,
         sector: sector ?? null,
         state: state ?? null, // honest NULL when skipped — RFQ matching depends on it

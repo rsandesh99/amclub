@@ -90,6 +90,14 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
     setDraft((d) => ({ ...d, ...patch }))
   }
 
+  // Already a provider → dashboard; otherwise continue KYC (new or msme-only user).
+  async function handleAuthenticated() {
+    const res = await fetch('/api/v1/profile/me')
+    const d = await res.json().catch(() => ({}))
+    if (d.hasProviderProfile) router.push('/partner')
+    else setStep('business')
+  }
+
   const stepOrder: Step[] = skipAuth
     ? ['business', 'kyc', 'bank', 'submit']
     : ['auth', 'business', 'kyc', 'bank', 'submit']
@@ -253,7 +261,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             <h2 className="mb-1 text-xl font-semibold">{t('step1_title')}</h2>
             <p className="text-sm text-foreground-secondary">{t('step1_subtitle')}</p>
           </div>
-          <AuthPanel onAuthenticated={() => setStep('business')} googleRedirectTo="/partner/onboarding" />
+          <AuthPanel onAuthenticated={handleAuthenticated} googleRedirectTo="/partner/onboarding" />
         </>
       )}
 
