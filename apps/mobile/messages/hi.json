@@ -111,6 +111,7 @@
     "home": "होम",
     "search": "खोज",
     "saved": "सहेजे",
+    "orders": "ऑर्डर",
     "partner": "पार्टनर"
   },
   "checkout": {
@@ -126,6 +127,10 @@
   "orders": {
     "actions": "क्रियाएं",
     "timeline": "टाइमलाइन",
+    "my_orders": "मेरे ऑर्डर",
+    "empty": "अभी कोई ऑर्डर नहीं",
+    "empty_subtitle": "ऑर्डर देने के बाद यहाँ दिखेंगे।",
+    "explore": "सेवाएं देखें",
     "status_placed": "दिया गया",
     "status_accepted": "स्वीकृत",
     "status_requirements_submitted": "आवश्यकताएं जमा",

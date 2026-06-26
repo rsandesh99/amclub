@@ -111,6 +111,7 @@
     "home": "Home",
     "search": "Search",
     "saved": "Saved",
+    "orders": "Orders",
     "partner": "Partner"
   },
   "checkout": {
@@ -126,6 +127,10 @@
   "orders": {
     "actions": "Actions",
     "timeline": "Timeline",
+    "my_orders": "My orders",
+    "empty": "No orders yet",
+    "empty_subtitle": "Your orders will appear here once you place one.",
+    "explore": "Explore services",
     "status_placed": "Placed",
     "status_accepted": "Accepted",
     "status_requirements_submitted": "Requirements submitted",

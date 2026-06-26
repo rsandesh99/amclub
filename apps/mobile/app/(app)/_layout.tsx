@@ -63,6 +63,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="orders/index"
+        options={{
+          title: t('tabs.orders'),
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => <Ionicons name="cube-outline" color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
         name="partner"
         options={{
           title: t('tabs.partner'),

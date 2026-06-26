@@ -119,6 +119,24 @@ export async function simulatePay(checkoutSessionId: string) {
   return { ok: res.ok, data: await res.json().catch(() => ({})) }
 }
 
+export interface OrderListItem {
+  id: string
+  order_number: string
+  title: string
+  status: string
+  total_paise: number
+  provider_earning_paise: number
+  created_at: string
+}
+
+/** The signed-in buyer's orders (newest first). Bearer-authed. */
+export async function fetchMyOrders(role: 'msme' | 'provider' = 'msme'): Promise<OrderListItem[]> {
+  const res = await fetch(`${API_URL}/api/v1/orders?role=${role}`, { headers: await authHeaders() })
+  if (!res.ok) return []
+  const d = await res.json().catch(() => ({}))
+  return d.orders ?? []
+}
+
 export async function fetchOrder(orderId: string) {
   const res = await fetch(`${API_URL}/api/v1/orders/${orderId}`, { headers: await authHeaders() })
   if (!res.ok) return null
