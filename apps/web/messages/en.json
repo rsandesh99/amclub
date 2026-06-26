@@ -285,8 +285,14 @@
     "login_title": "Sign in to AMClub",
     "login_subtitle": "Enter your mobile number to continue",
     "send_otp": "Send OTP",
+    "send_code": "Send code",
     "verify_otp": "Verify & continue",
     "change_phone": "Change number",
+    "change_email": "Change email",
+    "otp_sent_to": "We sent a 6-digit code to {target}",
+    "email_hint": "We'll email you a 6-digit code",
+    "use_email_instead": "Continue with email instead",
+    "use_phone_instead": "Continue with phone instead",
     "for_providers": "Service provider?",
     "register_as_provider": "Register your business"
   },
@@ -467,6 +473,7 @@
   "errors": {
     "required": "This field is required",
     "invalid_phone": "Enter a valid 10-digit Indian mobile number",
+    "invalid_email": "Enter a valid email address",
     "invalid_gstin": "Enter a valid 15-character GSTIN",
     "invalid_udyam": "Enter a valid Udyam number (e.g. UDYAM-MH-01-0123456)",
     "invalid_pan": "Enter a valid 10-character PAN",

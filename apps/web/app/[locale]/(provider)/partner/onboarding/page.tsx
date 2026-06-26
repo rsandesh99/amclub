@@ -17,7 +17,7 @@ export default async function ProviderOnboardingPage() {
             <CardTitle>{t('page_title')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <ProviderWizard skipAuth initialPhone={user.phone ?? ''} />
+            <ProviderWizard skipAuth />
           </CardContent>
         </Card>
       </div>

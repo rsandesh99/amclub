@@ -6,14 +6,22 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 
 interface OtpStepProps {
-  phone: string
+  /** Phone (E.164) when channel is 'sms'. */
+  phone?: string
+  /** Email when channel is 'email'. */
+  email?: string
+  /** Verification channel. Defaults to 'sms' for backward compatibility. */
+  channel?: 'sms' | 'email'
   onSuccess: () => void
+  /** Back to the identifier-entry step. */
   onChangePhone: () => void
 }
 
-export function OtpStep({ phone, onSuccess, onChangePhone }: OtpStepProps) {
+export function OtpStep({ phone, email, channel = 'sms', onSuccess, onChangePhone }: OtpStepProps) {
   const t = useTranslations('auth')
   const tErr = useTranslations('errors')
+
+  const target = channel === 'email' ? (email ?? '') : (phone ?? '')
 
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [loading, setLoading] = useState(false)
@@ -27,8 +35,8 @@ export function OtpStep({ phone, onSuccess, onChangePhone }: OtpStepProps) {
 
   useEffect(() => {
     if (resendCountdown <= 0) return
-    const t = setTimeout(() => setResendCountdown((c) => c - 1), 1000)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setResendCountdown((c) => c - 1), 1000)
+    return () => clearTimeout(timer)
   }, [resendCountdown])
 
   function handleInput(index: number, value: string) {
@@ -61,11 +69,10 @@ export function OtpStep({ phone, onSuccess, onChangePhone }: OtpStepProps) {
     setError('')
     setLoading(true)
     const supabase = createClient()
-    const { error: verifyError } = await supabase.auth.verifyOtp({
-      phone,
-      token: code,
-      type: 'sms',
-    })
+    const { error: verifyError } =
+      channel === 'email'
+        ? await supabase.auth.verifyOtp({ email: target, token: code, type: 'email' })
+        : await supabase.auth.verifyOtp({ phone: target, token: code, type: 'sms' })
     setLoading(false)
 
     if (verifyError) {
@@ -80,7 +87,11 @@ export function OtpStep({ phone, onSuccess, onChangePhone }: OtpStepProps) {
 
   async function resend() {
     const supabase = createClient()
-    await supabase.auth.signInWithOtp({ phone, options: { shouldCreateUser: true } })
+    if (channel === 'email') {
+      await supabase.auth.signInWithOtp({ email: target, options: { shouldCreateUser: true } })
+    } else {
+      await supabase.auth.signInWithOtp({ phone: target, options: { shouldCreateUser: true } })
+    }
     setResendCountdown(30)
     setOtp(['', '', '', '', '', ''])
     inputRefs.current[0]?.focus()
@@ -89,12 +100,12 @@ export function OtpStep({ phone, onSuccess, onChangePhone }: OtpStepProps) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <p className="text-sm text-foreground">{t('otp_sent', { phone })}</p>
+        <p className="text-sm text-foreground">{t('otp_sent_to', { target })}</p>
         <button
           onClick={onChangePhone}
           className="mt-1 text-xs text-primary underline underline-offset-2 hover:no-underline"
         >
-          {t('change_phone')}
+          {channel === 'email' ? t('change_email') : t('change_phone')}
         </button>
       </div>
 

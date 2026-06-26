@@ -285,8 +285,14 @@
     "login_title": "AMClub में साइन इन करें",
     "login_subtitle": "जारी रखने के लिए अपना मोबाइल नंबर दर्ज करें",
     "send_otp": "OTP भेजें",
+    "send_code": "कोड भेजें",
     "verify_otp": "सत्यापित करें और जारी रखें",
     "change_phone": "नंबर बदलें",
+    "change_email": "ईमेल बदलें",
+    "otp_sent_to": "हमने {target} पर 6-अंकों का कोड भेजा",
+    "email_hint": "हम आपको 6-अंकों का कोड ईमेल करेंगे",
+    "use_email_instead": "ईमेल से जारी रखें",
+    "use_phone_instead": "फ़ोन से जारी रखें",
     "for_providers": "सेवा प्रदाता हैं?",
     "register_as_provider": "अपना व्यवसाय पंजीकृत करें"
   },
@@ -467,6 +473,7 @@
   "errors": {
     "required": "यह फ़ील्ड आवश्यक है",
     "invalid_phone": "एक वैध 10 अंकों का भारतीय मोबाइल नंबर दर्ज करें",
+    "invalid_email": "एक वैध ईमेल पता दर्ज करें",
     "invalid_gstin": "एक वैध 15 अक्षरों का GSTIN दर्ज करें",
     "invalid_udyam": "एक वैध उद्यम नंबर दर्ज करें (जैसे UDYAM-MH-01-0123456)",
     "invalid_pan": "एक वैध 10 अक्षरों का PAN दर्ज करें",

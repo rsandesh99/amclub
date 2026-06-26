@@ -3,8 +3,7 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
-import { PhoneStep } from '@/components/auth/PhoneStep'
-import { OtpStep } from '@/components/auth/OtpStep'
+import { AuthPanel } from '@/components/auth/AuthPanel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,10 +11,9 @@ import { Select } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { INDIAN_STATES } from '@/lib/constants/india'
 
-type Step = 'phone' | 'otp' | 'profile' | 'business'
+type Step = 'auth' | 'profile' | 'business'
 
 interface WizardState {
-  phone: string
   fullName: string
   businessName: string
   sector: string
@@ -25,19 +23,19 @@ interface WizardState {
 }
 
 interface MsmeWizardProps {
+  /** True when the user is already authenticated (e.g. via Google/email) and
+   *  only needs to complete their profile. */
   skipAuth?: boolean
-  initialPhone?: string
 }
 
-export function MsmeWizard({ skipAuth, initialPhone }: MsmeWizardProps) {
+export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
   const t = useTranslations('msme_signup')
   const tAuth = useTranslations('auth')
   const tCommon = useTranslations('common')
   const router = useRouter()
 
-  const [step, setStep] = useState<Step>(skipAuth ? 'profile' : 'phone')
+  const [step, setStep] = useState<Step>(skipAuth ? 'profile' : 'auth')
   const [wizardState, setWizardState] = useState<WizardState>({
-    phone: initialPhone ?? '',
     fullName: '',
     businessName: '',
     sector: '',
@@ -48,7 +46,7 @@ export function MsmeWizard({ skipAuth, initialPhone }: MsmeWizardProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const stepOrder: Step[] = skipAuth ? ['profile', 'business'] : ['phone', 'otp', 'profile', 'business']
+  const stepOrder: Step[] = skipAuth ? ['profile', 'business'] : ['auth', 'profile', 'business']
   const currentIdx = stepOrder.indexOf(step)
   const progress = ((currentIdx + 1) / stepOrder.length) * 100
 
@@ -88,24 +86,14 @@ export function MsmeWizard({ skipAuth, initialPhone }: MsmeWizardProps) {
     <div className="flex flex-col gap-6">
       <Progress value={progress} />
 
-      {step === 'phone' && (
+      {step === 'auth' && (
         <>
           <div>
             <h2 className="mb-1 text-xl font-semibold">{t('step1_title')}</h2>
             <p className="text-sm text-foreground-secondary">{t('step1_subtitle')}</p>
           </div>
-          <PhoneStep
-            onSuccess={(phone) => { update({ phone }); setStep('otp') }}
-          />
+          <AuthPanel onAuthenticated={() => setStep('profile')} googleRedirectTo="/signup?complete=1" />
         </>
-      )}
-
-      {step === 'otp' && (
-        <OtpStep
-          phone={wizardState.phone}
-          onSuccess={() => setStep('profile')}
-          onChangePhone={() => setStep('phone')}
-        />
       )}
 
       {step === 'profile' && (

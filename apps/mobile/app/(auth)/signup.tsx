@@ -1,202 +1,153 @@
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useState } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
+import { normalisePhone, isEmail, signInWithGoogle } from '@/lib/auth'
 
-type Step = 'phone' | 'otp' | 'profile'
+type Method = 'phone' | 'email'
+type Step = 'auth' | 'otp' | 'profile'
 
-function normalisePhone(raw: string) {
-  const digits = raw.replace(/\D/g, '')
-  if (digits.startsWith('91') && digits.length === 12) return '+' + digits
-  if (digits.length === 10) return '+91' + digits
-  return '+' + digits
-}
+const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? ''
 
 export default function SignupScreen() {
   const { t } = useI18n()
-  const [step, setStep] = useState<Step>('phone')
+  const [method, setMethod] = useState<Method>('phone')
+  const [step, setStep] = useState<Step>('auth')
   const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [fullName, setFullName] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function sendOtp() {
-    const normalised = normalisePhone(phone)
-    if (normalised.length < 13) {
-      Alert.alert('Invalid number', 'Enter a valid 10-digit mobile number.')
-      return
-    }
-    setLoading(true)
-    const { error } = await supabase.auth.signInWithOtp({ phone: normalised })
-    setLoading(false)
-    if (error) { Alert.alert('Error', error.message); return }
-    setStep('otp')
-  }
-
-  async function verifyOtp() {
-    const normalised = normalisePhone(phone)
-    if (otp.length !== 6) { Alert.alert('Invalid OTP', 'Enter the 6-digit OTP.'); return }
-    setLoading(true)
-    const { error } = await supabase.auth.verifyOtp({
-      phone: normalised,
-      token: otp,
-      type: 'sms',
-    })
-    setLoading(false)
-    if (error) { Alert.alert('Error', error.message); return }
-    setStep('profile')
-  }
-
-  async function saveProfile() {
-    if (!fullName.trim() || !businessName.trim()) {
-      Alert.alert('Required', 'Please fill in your name and business name.')
-      return
-    }
     setLoading(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('Not authenticated')
-      const res = await fetch(`${process.env['EXPO_PUBLIC_API_URL'] ?? ''}/api/v1/profile/msme`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          fullName: fullName.trim(),
-          businessName: businessName.trim(),
-        }),
-      })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? 'Profile save failed')
+      if (method === 'phone') {
+        const normalised = normalisePhone(phone)
+        if (normalised.length < 13) { Alert.alert('Invalid number', 'Enter a valid 10-digit mobile number.'); return }
+        const { error } = await supabase.auth.signInWithOtp({ phone: normalised, options: { shouldCreateUser: true } })
+        if (error) { Alert.alert('Error', error.message); return }
+      } else {
+        if (!isEmail(email)) { Alert.alert('Invalid email', 'Enter a valid email address.'); return }
+        const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: true } })
+        if (error) { Alert.alert('Error', error.message); return }
       }
-      router.replace('/(app)/home')
-    } catch (e: any) {
-      Alert.alert('Error', e.message)
+      setStep('otp')
     } finally {
       setLoading(false)
     }
   }
 
-  const steps: Record<Step, string> = {
-    phone: t('auth.sign_up'),
-    otp: t('auth.enter_otp'),
-    profile: t('msme_signup.step_profile_title'),
+  async function verifyOtp() {
+    if (otp.length !== 6) { Alert.alert('Invalid code', 'Enter the 6-digit code.'); return }
+    setLoading(true)
+    try {
+      const { error } =
+        method === 'phone'
+          ? await supabase.auth.verifyOtp({ phone: normalisePhone(phone), token: otp, type: 'sms' })
+          : await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: otp, type: 'email' })
+      if (error) { Alert.alert('Error', error.message); return }
+      setStep('profile')
+    } finally {
+      setLoading(false)
+    }
   }
+
+  async function google() {
+    setLoading(true)
+    const res = await signInWithGoogle()
+    setLoading(false)
+    if (!res.ok) { if (!res.cancelled) Alert.alert('Google sign-in', res.error ?? 'Failed'); return }
+    setStep('profile') // collect quick profile → creates the user + msme profile
+  }
+
+  async function saveProfile() {
+    if (!fullName.trim() || !businessName.trim()) { Alert.alert('Required', 'Please fill in your name and business name.'); return }
+    setLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+      const res = await fetch(`${API_URL}/api/v1/profile/msme`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ fullName: fullName.trim(), businessName: businessName.trim() }),
+      })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? 'Profile save failed') }
+      router.replace('/(app)/home')
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Profile save failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const heading = step === 'profile' ? t('msme_signup.step_profile_title') : step === 'otp' ? t('auth.enter_otp') : t('auth.sign_up')
+  const identifierLabel = method === 'phone' ? `+91 ${phone}` : email
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <ScrollView contentContainerClassName="flex-grow justify-center px-6 py-10">
           <View className="mb-10 items-center">
             <Text className="text-3xl font-bold text-primary">AMClub</Text>
-            <Text className="mt-2 text-base text-foreground-secondary text-center">
-              {steps[step]}
-            </Text>
+            <Text className="mt-2 text-base text-foreground-secondary text-center">{heading}</Text>
           </View>
 
-          {step === 'phone' && (
+          {step === 'auth' && (
             <View className="gap-4">
-              <View className="flex-row items-center rounded-xl border border-gray-200 bg-surface px-4 py-3">
-                <Text className="mr-2 text-base font-medium text-foreground">+91</Text>
-                <View className="h-5 w-px bg-gray-300 mr-2" />
-                <TextInput
-                  className="flex-1 text-base text-foreground"
-                  placeholder={t('auth.phone_placeholder')}
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  value={phone}
-                  onChangeText={setPhone}
-                />
+              {method === 'phone' ? (
+                <View className="flex-row items-center rounded-xl border border-gray-200 bg-surface px-4 py-3">
+                  <Text className="mr-2 text-base font-medium text-foreground">+91</Text>
+                  <View className="h-5 w-px bg-gray-300 mr-2" />
+                  <TextInput className="flex-1 text-base text-foreground" placeholder={t('auth.phone_placeholder')} placeholderTextColor="#9CA3AF" keyboardType="phone-pad" maxLength={10} value={phone} onChangeText={setPhone} />
+                </View>
+              ) : (
+                <View className="rounded-xl border border-gray-200 bg-surface px-4 py-3">
+                  <TextInput className="text-base text-foreground" placeholder={t('auth.email_placeholder')} placeholderTextColor="#9CA3AF" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
+                </View>
+              )}
+              <TouchableOpacity onPress={sendOtp} disabled={loading} className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}>
+                <Text className="text-base font-semibold text-white">{loading ? t('common.loading') : t('auth.send_otp_btn')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setMethod((m) => (m === 'phone' ? 'email' : 'phone'))} className="items-center">
+                <Text className="text-sm text-primary">{method === 'phone' ? t('auth.use_email') : t('auth.use_phone')}</Text>
+              </TouchableOpacity>
+              <View className="flex-row items-center gap-3">
+                <View className="h-px flex-1 bg-gray-200" /><Text className="text-xs text-foreground-secondary">{t('common.or')}</Text><View className="h-px flex-1 bg-gray-200" />
               </View>
-              <TouchableOpacity
-                onPress={sendOtp}
-                disabled={loading}
-                className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}
-              >
-                <Text className="text-base font-semibold text-white">
-                  {loading ? t('common.loading') : t('auth.send_otp_btn')}
-                </Text>
+              <TouchableOpacity onPress={google} disabled={loading} className="flex-row items-center justify-center gap-2 rounded-xl border border-gray-200 bg-surface py-4">
+                <Text className="text-base font-semibold text-foreground">{t('auth.continue_with_google')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push('/(auth)/login')} className="items-center">
-                <Text className="text-sm text-foreground-secondary">
-                  {t('auth.have_account')}{' '}
-                  <Text className="font-semibold text-primary">{t('auth.sign_in')}</Text>
-                </Text>
+                <Text className="text-sm text-foreground-secondary">{t('auth.have_account')}{' '}<Text className="font-semibold text-primary">{t('auth.sign_in')}</Text></Text>
               </TouchableOpacity>
             </View>
           )}
 
           {step === 'otp' && (
             <View className="gap-4">
-              <Text className="text-sm text-foreground-secondary text-center">
-                {t('auth.otp_sent_to')} +91 {phone}
-              </Text>
-              <TextInput
-                className="rounded-xl border border-gray-200 bg-surface px-4 py-3 text-center text-2xl font-bold tracking-widest text-foreground"
-                placeholder="— — — — — —"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="number-pad"
-                maxLength={6}
-                value={otp}
-                onChangeText={setOtp}
-              />
-              <TouchableOpacity
-                onPress={verifyOtp}
-                disabled={loading}
-                className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}
-              >
-                <Text className="text-base font-semibold text-white">
-                  {loading ? t('common.loading') : t('auth.verify_btn')}
-                </Text>
+              <Text className="text-sm text-foreground-secondary text-center">{t('auth.otp_sent_to')} {identifierLabel}</Text>
+              <TextInput className="rounded-xl border border-gray-200 bg-surface px-4 py-3 text-center text-2xl font-bold tracking-widest text-foreground" placeholder="— — — — — —" placeholderTextColor="#9CA3AF" keyboardType="number-pad" maxLength={6} value={otp} onChangeText={setOtp} />
+              <TouchableOpacity onPress={verifyOtp} disabled={loading} className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}>
+                <Text className="text-base font-semibold text-white">{loading ? t('common.loading') : t('auth.verify_btn')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setStep('phone')} className="items-center">
-                <Text className="text-sm text-primary">{t('auth.change_number')}</Text>
+              <TouchableOpacity onPress={() => setStep('auth')} className="items-center">
+                <Text className="text-sm text-primary">{method === 'phone' ? t('auth.change_number') : t('auth.change_email')}</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {step === 'profile' && (
             <View className="gap-4">
-              <TextInput
-                className="rounded-xl border border-gray-200 bg-surface px-4 py-3 text-base text-foreground"
-                placeholder={t('auth.name_label')}
-                placeholderTextColor="#9CA3AF"
-                value={fullName}
-                onChangeText={setFullName}
-              />
-              <TextInput
-                className="rounded-xl border border-gray-200 bg-surface px-4 py-3 text-base text-foreground"
-                placeholder={t('msme_signup.business_name_label')}
-                placeholderTextColor="#9CA3AF"
-                value={businessName}
-                onChangeText={setBusinessName}
-              />
-              <TouchableOpacity
-                onPress={saveProfile}
-                disabled={loading}
-                className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}
-              >
-                <Text className="text-base font-semibold text-white">
-                  {loading ? t('common.loading') : t('common.continue')}
-                </Text>
+              <TextInput className="rounded-xl border border-gray-200 bg-surface px-4 py-3 text-base text-foreground" placeholder={t('auth.name_label')} placeholderTextColor="#9CA3AF" value={fullName} onChangeText={setFullName} />
+              <TextInput className="rounded-xl border border-gray-200 bg-surface px-4 py-3 text-base text-foreground" placeholder={t('msme_signup.business_name_label')} placeholderTextColor="#9CA3AF" value={businessName} onChangeText={setBusinessName} />
+              <TouchableOpacity onPress={saveProfile} disabled={loading} className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}>
+                <Text className="text-base font-semibold text-white">{loading ? t('common.loading') : t('common.continue')}</Text>
               </TouchableOpacity>
             </View>
           )}

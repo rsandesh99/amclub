@@ -32,5 +32,7 @@ export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // PKCE so the Google OAuth deep-link returns a code we exchange for a session.
+    flowType: 'pkce',
   },
 })

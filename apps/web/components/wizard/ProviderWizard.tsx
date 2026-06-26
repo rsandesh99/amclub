@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
-import { PhoneStep } from '@/components/auth/PhoneStep'
-import { OtpStep } from '@/components/auth/OtpStep'
+import { AuthPanel } from '@/components/auth/AuthPanel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,7 +13,7 @@ import { Progress } from '@/components/ui/progress'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { CATEGORY_LIST } from '@amclub/shared'
 
-type Step = 'phone' | 'otp' | 'business' | 'kyc' | 'bank' | 'submit' | 'under_review'
+type Step = 'auth' | 'business' | 'kyc' | 'bank' | 'submit' | 'under_review'
 
 const DRAFT_KEY = 'amclub_provider_wizard_draft'
 
@@ -49,17 +48,17 @@ const EMPTY: Draft = {
 }
 
 interface ProviderWizardProps {
+  /** True when the user is already authenticated and only needs to complete KYC. */
   skipAuth?: boolean
-  initialPhone?: string
 }
 
-export function ProviderWizard({ skipAuth, initialPhone }: ProviderWizardProps) {
+export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   const t = useTranslations('provider_signup')
   const tCommon = useTranslations('common')
   const router = useRouter()
 
-  const [step, setStep] = useState<Step>(skipAuth ? 'business' : 'phone')
-  const [draft, setDraft] = useState<Draft>({ ...EMPTY, phone: initialPhone ?? '' })
+  const [step, setStep] = useState<Step>(skipAuth ? 'business' : 'auth')
+  const [draft, setDraft] = useState<Draft>({ ...EMPTY })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [gstinLoading, setGstinLoading] = useState(false)
@@ -93,13 +92,13 @@ export function ProviderWizard({ skipAuth, initialPhone }: ProviderWizardProps) 
 
   const stepOrder: Step[] = skipAuth
     ? ['business', 'kyc', 'bank', 'submit']
-    : ['phone', 'otp', 'business', 'kyc', 'bank', 'submit']
+    : ['auth', 'business', 'kyc', 'bank', 'submit']
   const activeSteps = stepOrder.filter((s) => s !== 'under_review')
   const currentIdx = activeSteps.findIndex((s) => s === step)
   const progress = step === 'under_review' ? 100 : ((currentIdx + 1) / activeSteps.length) * 100
 
   const stepLabels: Record<Step, string> = {
-    phone: t('step_contact'), otp: t('step_contact'), business: t('step_business'),
+    auth: t('step_contact'), business: t('step_business'),
     kyc: t('step_kyc'), bank: t('step_bank'), submit: t('step_submit'), under_review: t('step_submit'),
   }
 
@@ -247,28 +246,15 @@ export function ProviderWizard({ skipAuth, initialPhone }: ProviderWizardProps) 
         </>
       )}
 
-      {/* ── Step 1: Phone ─────────────────────────────────────────────────── */}
-      {step === 'phone' && (
+      {/* ── Step 1: Auth (phone / email / Google) ─────────────────────────── */}
+      {step === 'auth' && (
         <>
           <div>
             <h2 className="mb-1 text-xl font-semibold">{t('step1_title')}</h2>
             <p className="text-sm text-foreground-secondary">{t('step1_subtitle')}</p>
           </div>
-          <PhoneStep
-            emailField
-            onEmailChange={(email) => update({ email })}
-            onSuccess={(phone) => { update({ phone }); setStep('otp') }}
-          />
+          <AuthPanel onAuthenticated={() => setStep('business')} googleRedirectTo="/partner/onboarding" />
         </>
-      )}
-
-      {/* ── Step 2: OTP ───────────────────────────────────────────────────── */}
-      {step === 'otp' && (
-        <OtpStep
-          phone={draft.phone}
-          onSuccess={() => setStep('business')}
-          onChangePhone={() => setStep('phone')}
-        />
       )}
 
       {/* ── Step 3: Business ──────────────────────────────────────────────── */}

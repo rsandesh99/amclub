@@ -1,22 +1,16 @@
 'use client'
 
-import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link, useRouter } from '@/i18n/navigation'
-import { PhoneStep } from '@/components/auth/PhoneStep'
-import { OtpStep } from '@/components/auth/OtpStep'
-import { GoogleButton } from '@/components/auth/GoogleButton'
+import { AuthPanel } from '@/components/auth/AuthPanel'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export default function LoginPage() {
   const t = useTranslations('auth')
-  const tCommon = useTranslations('common')
   const router = useRouter()
-  const [phone, setPhone] = useState('')
-  const [step, setStep] = useState<'phone' | 'otp'>('phone')
 
-  async function handleOtpSuccess() {
-    // After OTP verified, check if user has a profile
+  async function handleAuthenticated() {
+    // Same routing regardless of method (phone / email / Google).
     const res = await fetch('/api/v1/profile/me')
     const data = await res.json().catch(() => ({}))
     if (data.role === 'provider') {
@@ -24,7 +18,7 @@ export default function LoginPage() {
     } else if (data.role === 'admin' || data.role === 'ops') {
       router.push('/admin/verifications')
     } else if (!data.hasMsmeProfile) {
-      // Authenticated but no profile — go to signup step 2
+      // Authenticated but no profile yet — finish the quick profile.
       router.push('/signup?complete=1')
     } else {
       router.push('/app')
@@ -39,19 +33,7 @@ export default function LoginPage() {
         <CardDescription>{t('login_subtitle')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        {step === 'phone' ? (
-          <>
-            <PhoneStep onSuccess={(p) => { setPhone(p); setStep('otp') }} />
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-gray-200" />
-              <span className="text-xs text-foreground-secondary">{tCommon('or')}</span>
-              <div className="h-px flex-1 bg-gray-200" />
-            </div>
-            <GoogleButton redirectTo="/app" className="w-full" />
-          </>
-        ) : (
-          <OtpStep phone={phone} onSuccess={handleOtpSuccess} onChangePhone={() => setStep('phone')} />
-        )}
+        <AuthPanel onAuthenticated={handleAuthenticated} googleRedirectTo="/app" />
         <p className="text-center text-sm text-foreground-secondary">
           {t('no_account')}{' '}
           <Link href="/signup" className="text-primary underline underline-offset-2 hover:no-underline">

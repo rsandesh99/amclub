@@ -8,10 +8,12 @@ export default async function ProviderLayout({ children }: { children: React.Rea
     redirect('/login?next=/partner')
   }
 
-  if (!user.roles.includes('provider')) {
-    // User is authenticated but doesn't have provider role — redirect to MSME home
-    redirect('/app')
-  }
+  // Require auth only — NOT the provider role. This group hosts /partner/onboarding
+  // (the become-a-provider flow), which authenticated MSME / Google / email users
+  // must be able to reach before they have the role. The provider role is granted
+  // on application submit. Pages here (dashboard, listings) redirect users without
+  // a provider profile to onboarding, and all provider data is keyed to the user's
+  // own provider profile (null for non-providers → empty, no leak).
 
   return <>{children}</>
 }
