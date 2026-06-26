@@ -77,7 +77,7 @@ async function main() {
   const tB = await token(emailB)
   await saveMsme(tB, { fullName: 'Prov Test', businessName: 'Prov Biz', preferredLocale: 'en' })
   const { data: bRow } = await admin.from('users').select('roles').eq('id', b).single()
-  check('provider role preserved after msme profile save', (bRow.roles as string[]).includes('provider'))
+  check('provider role preserved after msme profile save', ((bRow?.roles as string[] | undefined) ?? []).includes('provider'))
 
   await cleanup()
   console.log(`\n${fail === 0 ? '✅ AUTH-FLOW VERIFICATION PASSED' : '❌ FAILED'} — ${pass} passed, ${fail} failed\n`)
