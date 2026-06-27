@@ -48,7 +48,7 @@ export function ListingActions({
           type="button"
           disabled={busy}
           onClick={() => setStatus('paused')}
-          className="inline-flex items-center gap-1 rounded-button px-2.5 py-1.5 text-xs font-medium text-foreground-secondary hover:bg-gray-100"
+          className="inline-flex items-center gap-1 rounded-button px-2.5 py-1.5 text-xs font-medium text-foreground-secondary hover:bg-muted"
         >
           <Pause className="h-3.5 w-3.5" /> {t('pause')}
         </button>

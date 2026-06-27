@@ -33,7 +33,7 @@ export function SearchBar({
     <form
       onSubmit={onSubmit}
       className={cn(
-        'flex w-full items-center gap-2 rounded-card border border-gray-200 bg-surface shadow-card',
+        'flex w-full items-center gap-2 rounded-card border border-border bg-surface shadow-card',
         size === 'lg' ? 'p-2' : 'p-1.5',
         className,
       )}

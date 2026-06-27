@@ -39,7 +39,7 @@ export function ListingControls() {
   const verified = params.get('verifiedOnly') === 'true'
 
   const selectCls =
-    'rounded-button border border-gray-200 bg-surface px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary'
+    'rounded-button border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary'
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -129,7 +129,7 @@ export function ListingControls() {
           'rounded-button border px-3 py-1.5 text-sm font-medium transition-colors',
           verified
             ? 'border-trust bg-trust/10 text-trust'
-            : 'border-gray-200 bg-surface text-foreground-secondary hover:border-trust/40',
+            : 'border-border bg-surface text-foreground-secondary hover:border-trust/40',
         )}
       >
         {t('verified_only')}

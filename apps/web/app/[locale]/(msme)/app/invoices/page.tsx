@@ -26,7 +26,7 @@ export default async function MsmeInvoicesPage() {
       <p className="mt-1 text-sm text-foreground-secondary">{t('subtitle')}</p>
 
       {invoices.length === 0 ? (
-        <div className="mt-6 flex flex-col items-center gap-3 rounded-card border border-dashed border-gray-300 bg-surface px-6 py-16 text-center">
+        <div className="mt-6 flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-surface px-6 py-16 text-center">
           <FileText className="h-10 w-10 text-foreground-secondary" />
           <p className="text-sm font-medium">{t('empty_title')}</p>
           <p className="text-sm text-foreground-secondary">{t('empty_subtitle')}</p>
@@ -36,7 +36,7 @@ export default async function MsmeInvoicesPage() {
           {invoices.map((inv) => (
             <li
               key={inv.id}
-              className="flex items-center justify-between gap-4 rounded-card border border-gray-200 bg-surface p-4 shadow-card"
+              className="flex items-center justify-between gap-4 rounded-card border border-border bg-surface p-4 shadow-card"
             >
               <div className="min-w-0">
                 <p className="truncate font-medium">{inv.number}</p>
@@ -52,7 +52,7 @@ export default async function MsmeInvoicesPage() {
                   href={inv.downloadUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-button border border-gray-200 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-button border border-border px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
                 >
                   <Download className="h-4 w-4" />
                   {t('download')}

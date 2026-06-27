@@ -21,7 +21,7 @@ export async function ComingSoon({ title, body, homeHref, showBrowse }: ComingSo
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
         <Clock className="h-7 w-7 text-primary" />
       </span>
-      <span className="mt-4 inline-block rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-amber-700">
+      <span className="mt-4 inline-block rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-warning">
         {t('badge')}
       </span>
       <h1 className="mt-3 text-xl font-semibold">{title}</h1>
@@ -36,7 +36,7 @@ export async function ComingSoon({ title, body, homeHref, showBrowse }: ComingSo
         {showBrowse && (
           <Link
             href="/services"
-            className="rounded-button border border-gray-200 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/5"
+            className="rounded-button border border-border px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/5"
           >
             {t('browse_services')}
           </Link>

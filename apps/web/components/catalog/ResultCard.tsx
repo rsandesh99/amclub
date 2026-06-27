@@ -1,10 +1,11 @@
 import { useLocale, useTranslations } from 'next-intl'
-import { BadgeCheck, Clock, MapPin, RefreshCw } from 'lucide-react'
+import { Clock, MapPin, RefreshCw } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { pickI18n, formatResponseTime, initials } from '@/lib/format'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { PriceBlock } from './PriceBlock'
 import { Stars } from './Stars'
+import { ProviderCredential } from './ProviderCredential'
 import type { CatalogResult } from '@/lib/catalog/types'
 
 const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
@@ -24,23 +25,20 @@ export function ResultCard({ result }: { result: CatalogResult }) {
   return (
     <Link
       href={`/p/${result.providerSlug}/${result.packageSlug}`}
-      className="group flex flex-col gap-3 rounded-card border border-gray-200 bg-surface p-4 shadow-card transition-colors hover:border-primary/40"
+      className="group flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:border-primary/40"
     >
-      {/* Provider row */}
+      {/* Provider row — credential-first (§4.3): credential leads, rating secondary */}
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
           {initials(result.displayName)}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1">
-            <span className="truncate text-sm font-semibold text-foreground">
-              {result.displayName}
-            </span>
-            {result.verified && (
-              <BadgeCheck className="h-4 w-4 shrink-0 text-trust" aria-label={t('verified')} />
-            )}
-          </div>
-          <Stars rating={result.avgRating} count={result.reviewCount} className="mt-0.5" />
+          <ProviderCredential
+            name={result.displayName}
+            credentialKind={result.headlineCredential}
+            verified={result.verified}
+          />
+          <Stars rating={result.avgRating} count={result.reviewCount} className="mt-1" />
         </div>
         {result.topRated && (
           <span className="shrink-0 rounded-chip bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent-foreground">
@@ -56,13 +54,13 @@ export function ResultCard({ result }: { result: CatalogResult }) {
 
       {/* Chips */}
       <div className="flex flex-wrap items-center gap-1.5 text-xs text-foreground-secondary">
-        <span className="inline-flex items-center gap-1 rounded-chip bg-gray-100 px-2 py-0.5">
+        <span className="inline-flex items-center gap-1 rounded-chip bg-muted px-2 py-0.5">
           <Clock className="h-3 w-3" /> {t('delivery_days', { days: result.deliveryDays })}
         </span>
-        <span className="inline-flex items-center gap-1 rounded-chip bg-gray-100 px-2 py-0.5">
+        <span className="inline-flex items-center gap-1 rounded-chip bg-muted px-2 py-0.5">
           <RefreshCw className="h-3 w-3" /> {t('revisions', { count: result.revisionCount })}
         </span>
-        <span className="inline-flex items-center gap-1 rounded-chip bg-gray-100 px-2 py-0.5">
+        <span className="inline-flex items-center gap-1 rounded-chip bg-muted px-2 py-0.5">
           <MapPin className="h-3 w-3" /> {stateLabel}
         </span>
         {responseTime && (
@@ -71,7 +69,7 @@ export function ResultCard({ result }: { result: CatalogResult }) {
       </div>
 
       {/* Price */}
-      <div className="mt-auto border-t border-gray-100 pt-3">
+      <div className="mt-auto border-t border-border pt-3">
         <PriceBlock
           pricePaise={result.pricePaise}
           discountBps={result.discountBps}

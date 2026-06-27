@@ -33,7 +33,7 @@ export function ListBuilder({
           {items.map((item, i) => (
             <li
               key={i}
-              className="flex items-center justify-between gap-2 rounded-button border border-gray-200 bg-surface px-3 py-2 text-sm"
+              className="flex items-center justify-between gap-2 rounded-button border border-border bg-surface px-3 py-2 text-sm"
             >
               <span className="min-w-0 flex-1 break-words">{item}</span>
               <button

@@ -48,6 +48,7 @@ function mapSearchRow(r: any): CatalogResult {
     medianResponseMinutes: r.median_response_minutes,
     topRated: r.top_rated ?? false,
     verified: r.verified ?? false,
+    headlineCredential: r.headline_credential ?? null,
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

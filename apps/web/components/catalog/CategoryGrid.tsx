@@ -19,7 +19,7 @@ export function CategoryGrid({
         <Link
           key={c.slug}
           href={`/services/${c.slug}`}
-          className="group flex flex-col gap-2 rounded-card border border-gray-200 bg-surface p-4 shadow-card transition-colors hover:border-primary/40 hover:bg-primary/5"
+          className="group flex flex-col gap-2 rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:border-primary/40 hover:bg-primary/5"
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-button bg-primary/10 text-primary">
             <CategoryIcon icon={c.icon} className="h-5 w-5" />

@@ -56,13 +56,13 @@ export default async function ListingsPage() {
       </div>
 
       {provider.status !== 'active' && (
-        <div className="mb-6 rounded-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="mb-6 rounded-card border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
           {t('not_active_notice')}
         </div>
       )}
 
       {list.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-gray-300 bg-surface px-6 py-16 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-surface px-6 py-16 text-center">
           <PackageOpen className="h-10 w-10 text-foreground-secondary" />
           <h3 className="text-md font-semibold">{t('empty_title')}</h3>
           <p className="max-w-sm text-sm text-foreground-secondary">{t('empty_body')}</p>
@@ -82,7 +82,7 @@ export default async function ListingsPage() {
             return (
               <li
                 key={pk.id}
-                className="flex flex-col gap-3 rounded-card border border-gray-200 bg-surface p-4 shadow-card sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">

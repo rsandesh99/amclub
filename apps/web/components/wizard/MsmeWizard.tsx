@@ -172,7 +172,7 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
             <h2 className="mb-1 text-xl font-semibold">{t('step3_title')}</h2>
             <p className="text-sm text-foreground-secondary">{t('step3_subtitle')}</p>
           </div>
-          <p className="rounded-[10px] bg-accent/10 px-3 py-2 text-xs text-amber-700">
+          <p className="rounded-button bg-accent/10 px-3 py-2 text-xs text-warning">
             {t('rfq_notice')}
           </p>
           <div className="flex flex-col gap-4">

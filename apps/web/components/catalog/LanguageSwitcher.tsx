@@ -16,7 +16,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
   }
 
   return (
-    <div className={cn('inline-flex items-center rounded-chip border border-gray-200 bg-surface p-0.5 text-xs', className)}>
+    <div className={cn('inline-flex items-center rounded-chip border border-border bg-surface p-0.5 text-xs', className)}>
       {(['en', 'hi'] as const).map((l) => (
         <button
           key={l}

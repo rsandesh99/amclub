@@ -29,8 +29,8 @@ export default async function PartnerDashboardPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
       {isUnderReview && (
-        <div className="rounded-card border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm text-amber-800">{t('under_review_banner')}</p>
+        <div className="rounded-card border border-warning/30 bg-warning/10 p-4">
+          <p className="text-sm text-warning">{t('under_review_banner')}</p>
         </div>
       )}
 
@@ -51,7 +51,7 @@ export default async function PartnerDashboardPage() {
           { label: t('completed_orders'), value: String(completedCount) },
           { label: t('earnings'), value: formatINR(earningsPaise) },
         ].map((stat) => (
-          <div key={stat.label} className="rounded-card border border-gray-200 bg-surface p-4 shadow-card text-center">
+          <div key={stat.label} className="rounded-card border border-border bg-surface p-4 shadow-card text-center">
             <p className="font-display text-xl font-bold text-primary">{stat.value}</p>
             <p className="mt-1 text-xs text-foreground-secondary">{stat.label}</p>
           </div>
@@ -81,7 +81,7 @@ export default async function PartnerDashboardPage() {
           <Link
             key={link.href}
             href={link.href}
-            className="flex flex-col items-center gap-2 rounded-card border border-gray-200 bg-surface p-4 text-center shadow-card hover:border-primary/40 transition-colors"
+            className="flex flex-col items-center gap-2 rounded-card border border-border bg-surface p-4 text-center shadow-card hover:border-primary/40 transition-colors"
           >
             <span className="text-2xl">{link.icon}</span>
             <span className="text-sm font-medium">{link.label}</span>

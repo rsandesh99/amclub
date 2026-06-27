@@ -1,9 +1,10 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getTranslations, getLocale } from 'next-intl/server'
-import { BadgeCheck, MapPin, Clock, CheckCircle2, Languages } from 'lucide-react'
+import { BadgeCheck, MapPin, Clock, CheckCircle2, Languages, ShieldCheck } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { VerificationBadges } from '@/components/catalog/VerificationBadges'
+import { headlineCredentialKind } from '@/lib/catalog/credential'
 import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
@@ -59,6 +60,7 @@ export default async function ProviderProfilePage({
 
   const stateLabel = STATE_LABEL.get(provider.state) ?? provider.state
   const responseTime = formatResponseTime(provider.medianResponseMinutes)
+  const headlineCredential = headlineCredentialKind(provider.badges.map((b) => b.kind))
   const appUrl = getSiteUrl()
 
   // schema.org LocalBusiness + aggregateRating + Service offers (§ Phase 3 SEO).
@@ -96,7 +98,7 @@ export default async function ProviderProfilePage({
       <JsonLd data={jsonLd} />
 
       {/* Header card */}
-      <section className="rounded-card border border-gray-200 bg-surface p-6 shadow-card">
+      <section className="rounded-card border border-border bg-surface p-6 shadow-card">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary">
             {initials(provider.displayName)}
@@ -113,6 +115,12 @@ export default async function ProviderProfilePage({
                 </span>
               )}
             </div>
+            {headlineCredential && (
+              <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-verified">
+                <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
+                {t(`badge_${headlineCredential}` as 'badge_gstin')} · {t('verified')}
+              </p>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground-secondary">
               <Stars rating={provider.avgRating} count={provider.reviewCount} />
               <span className="inline-flex items-center gap-1">
@@ -143,12 +151,12 @@ export default async function ProviderProfilePage({
         </div>
 
         {provider.categories.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
             {provider.categories.map((c) => (
               <Link
                 key={c.slug}
                 href={`/services/${c.slug}`}
-                className="rounded-chip border border-gray-200 px-2.5 py-1 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
+                className="rounded-chip border border-border px-2.5 py-1 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
               >
                 {pickI18n(c.nameI18n, locale)}
               </Link>
@@ -178,17 +186,17 @@ export default async function ProviderProfilePage({
               <Link
                 key={pk.slug}
                 href={`/p/${provider.slug}/${pk.slug}`}
-                className="group flex flex-col gap-3 rounded-card border border-gray-200 bg-surface p-4 shadow-card transition-colors hover:border-primary/40"
+                className="group flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:border-primary/40"
               >
                 <h3 className="text-md font-medium leading-snug text-foreground group-hover:text-primary">
                   {pickI18n(pk.titleI18n, locale)}
                 </h3>
                 <div className="flex items-center gap-2 text-xs text-foreground-secondary">
-                  <span className="inline-flex items-center gap-1 rounded-chip bg-gray-100 px-2 py-0.5">
+                  <span className="inline-flex items-center gap-1 rounded-chip bg-muted px-2 py-0.5">
                     <Clock className="h-3 w-3" /> {t('delivery_days', { days: pk.deliveryDays })}
                   </span>
                 </div>
-                <div className="mt-auto border-t border-gray-100 pt-3">
+                <div className="mt-auto border-t border-border pt-3">
                   <PriceBlock
                     pricePaise={pk.pricePaise}
                     discountBps={pk.discountBps}
@@ -211,14 +219,14 @@ export default async function ProviderProfilePage({
         ) : (
           <ul className="mt-4 space-y-4">
             {reviews.map((r) => (
-              <li key={r.id} className="rounded-card border border-gray-200 bg-surface p-4">
+              <li key={r.id} className="rounded-card border border-border bg-surface p-4">
                 <div className="flex items-center justify-between">
                   <Stars rating={r.rating} />
                   <span className="text-xs text-foreground-secondary">{t('verified_buyer')}</span>
                 </div>
                 {r.body && <p className="mt-2 text-sm text-foreground">{r.body}</p>}
                 {r.providerReply && (
-                  <div className="mt-3 rounded-button bg-gray-50 p-3 text-sm">
+                  <div className="mt-3 rounded-button bg-muted p-3 text-sm">
                     <span className="font-medium text-primary">{t('provider_reply')}: </span>
                     <span className="text-foreground-secondary">{r.providerReply}</span>
                   </div>

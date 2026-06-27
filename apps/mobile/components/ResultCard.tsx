@@ -5,16 +5,22 @@ import { pickI18n, initials } from '@/lib/format'
 import { PriceBlock } from './PriceBlock'
 import type { CatalogResult } from '@/lib/api'
 
-/** Mobile listing card — provider identity + trust + package title + price. */
+// Professional credential kind → display label (acronyms; locale-agnostic).
+const CREDENTIAL_LABEL: Record<string, string> = {
+  icai: 'ICAI', icsi: 'ICSI', bar_council: 'Bar Council', ca: 'CA', credential: 'Credential',
+}
+
+/** Mobile listing card — credential-first (§4.3): credential leads, rating secondary. */
 export function ResultCard({ result }: { result: CatalogResult }) {
   const { t, locale } = useI18n()
   const title = pickI18n(result.titleI18n, locale)
+  const credentialLabel = result.headlineCredential ? CREDENTIAL_LABEL[result.headlineCredential] : null
 
   return (
     <TouchableOpacity
       onPress={() => router.push(`/package/${result.providerSlug}/${result.packageSlug}` as never)}
       activeOpacity={0.85}
-      className="gap-3 rounded-xl border border-gray-200 bg-surface p-4"
+      className="gap-3 rounded-xl border border-border bg-surface p-4"
     >
       <View className="flex-row items-center gap-3">
         <View className="h-9 w-9 items-center justify-center rounded-full bg-primary/10">
@@ -25,8 +31,15 @@ export function ResultCard({ result }: { result: CatalogResult }) {
             <Text className="flex-1 text-sm font-semibold text-foreground" numberOfLines={1}>
               {result.displayName}
             </Text>
-            {result.verified && <Text className="text-trust">✓</Text>}
+            {result.verified && <Text className="text-verified">✓</Text>}
           </View>
+          {credentialLabel ? (
+            <Text className="text-xs font-medium text-verified">
+              {credentialLabel} · {t('catalog.verified')}
+            </Text>
+          ) : result.verified ? (
+            <Text className="text-xs font-medium text-verified">{t('catalog.verified')}</Text>
+          ) : null}
           <Text className="text-xs text-foreground-secondary">
             {result.avgRating > 0 ? `★ ${result.avgRating.toFixed(1)} (${result.reviewCount})` : t('catalog.new')}
           </Text>
@@ -43,17 +56,17 @@ export function ResultCard({ result }: { result: CatalogResult }) {
       </Text>
 
       <View className="flex-row flex-wrap items-center gap-1.5">
-        <View className="rounded-full bg-gray-100 px-2 py-0.5">
+        <View className="rounded-full bg-muted px-2 py-0.5">
           <Text className="text-xs text-foreground-secondary">
             {result.deliveryDays} {t('catalog.days')}
           </Text>
         </View>
-        <View className="rounded-full bg-gray-100 px-2 py-0.5">
+        <View className="rounded-full bg-muted px-2 py-0.5">
           <Text className="text-xs text-foreground-secondary">{result.state}</Text>
         </View>
       </View>
 
-      <View className="border-t border-gray-100 pt-3">
+      <View className="border-t border-border pt-3">
         <PriceBlock
           pricePaise={result.pricePaise}
           discountBps={result.discountBps}

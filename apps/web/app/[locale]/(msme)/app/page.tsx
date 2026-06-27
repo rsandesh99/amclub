@@ -42,8 +42,8 @@ export default async function MsmeHomePage() {
 
       {/* Profile completeness */}
       {profile.profileCompleteness < 80 && (
-        <div className="rounded-card border border-amber-200 bg-amber-50 p-4">
-          <p className="mb-2 text-sm font-medium text-amber-800">{t('complete_profile_cta')}</p>
+        <div className="rounded-card border border-warning/30 bg-warning/10 p-4">
+          <p className="mb-2 text-sm font-medium text-warning">{t('complete_profile_cta')}</p>
           <Progress value={profile.profileCompleteness} label={tProfile('completeness')} />
           <Link href="/app/profile" className="mt-3 inline-block text-xs text-primary underline underline-offset-2">
             {tProfile('edit_profile')} →
@@ -64,7 +64,7 @@ export default async function MsmeHomePage() {
           <Link
             key={action.href}
             href={action.href}
-            className="flex flex-col items-center justify-center gap-2 rounded-card border border-gray-200 bg-surface p-4 text-center shadow-card hover:border-primary/40 hover:bg-primary/5 transition-colors"
+            className="flex flex-col items-center justify-center gap-2 rounded-card border border-border bg-surface p-4 text-center shadow-card hover:border-primary/40 hover:bg-primary/5 transition-colors"
           >
             <span className="text-2xl">{action.icon}</span>
             <span className="text-sm font-medium">{action.label}</span>
@@ -81,7 +81,7 @@ export default async function MsmeHomePage() {
           )}
         </div>
         {orders.length === 0 ? (
-          <div className="rounded-card border border-gray-200 bg-surface p-6 text-center shadow-card">
+          <div className="rounded-card border border-border bg-surface p-6 text-center shadow-card">
             <p className="text-sm font-medium">{t('no_orders_title')}</p>
             <p className="mt-1 text-xs text-foreground-secondary">{t('no_orders_subtitle')}</p>
             <Link href="/services">
@@ -92,7 +92,7 @@ export default async function MsmeHomePage() {
           <ul className="space-y-2">
             {orders.map((o) => (
               <li key={o.id}>
-                <Link href={`/app/orders/${o.id}`} className="flex items-center justify-between rounded-card border border-gray-200 bg-surface p-3 shadow-card hover:border-primary/40">
+                <Link href={`/app/orders/${o.id}`} className="flex items-center justify-between rounded-card border border-border bg-surface p-3 shadow-card hover:border-primary/40">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{o.title}</p>
                     <p className="text-xs text-foreground-secondary">{formatINR(Number(o.total_paise))}</p>

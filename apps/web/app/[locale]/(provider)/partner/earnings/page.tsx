@@ -54,19 +54,19 @@ export default async function PartnerEarningsPage() {
           { label: t('completed_orders'), value: String(completed.length) },
           { label: t('pending_clearance'), value: formatINR(inProgressPaise) },
         ].map((s) => (
-          <div key={s.label} className="rounded-card border border-gray-200 bg-surface p-4 text-center shadow-card">
+          <div key={s.label} className="rounded-card border border-border bg-surface p-4 text-center shadow-card">
             <p className="font-display text-lg font-bold text-primary">{s.value}</p>
             <p className="mt-1 text-xs text-foreground-secondary">{s.label}</p>
           </div>
         ))}
       </div>
 
-      <p className="rounded-[10px] bg-primary/5 px-3 py-2 text-xs text-foreground-secondary">{t('payout_note')}</p>
+      <p className="rounded-button bg-primary/5 px-3 py-2 text-xs text-foreground-secondary">{t('payout_note')}</p>
 
       <section>
         <h2 className="mb-3 text-sm font-semibold">{t('payouts_title')}</h2>
         {payouts.length === 0 ? (
-          <div className="rounded-card border border-dashed border-gray-300 bg-surface px-6 py-12 text-center">
+          <div className="rounded-card border border-dashed border-border bg-surface px-6 py-12 text-center">
             <p className="text-sm font-medium">{t('no_payouts_title')}</p>
             <p className="mt-1 text-xs text-foreground-secondary">{t('no_payouts_subtitle')}</p>
           </div>
@@ -79,7 +79,7 @@ export default async function PartnerEarningsPage() {
                 <li key={p.id}>
                   <Link
                     href={`/partner/orders/${p.orderId}`}
-                    className="flex items-center justify-between gap-3 rounded-card border border-gray-200 bg-surface p-3 shadow-card hover:border-primary/40"
+                    className="flex items-center justify-between gap-3 rounded-card border border-border bg-surface p-3 shadow-card hover:border-primary/40"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{p.orderTitle ?? p.orderNumber ?? '—'}</p>

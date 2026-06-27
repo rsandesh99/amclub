@@ -87,7 +87,7 @@ export default async function CategoryListingPage({
             <Link
               key={c.slug}
               href={`/services/${c.slug}`}
-              className="rounded-chip border border-gray-200 bg-surface px-3 py-1 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
+              className="rounded-chip border border-border bg-surface px-3 py-1 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
             >
               {pickI18n(c.nameI18n, locale)}
             </Link>

@@ -48,13 +48,13 @@ export default async function VerificationsPage() {
       </div>
 
       {providers.length === 0 ? (
-        <div className="rounded-card border border-gray-200 bg-surface p-12 text-center shadow-card">
+        <div className="rounded-card border border-border bg-surface p-12 text-center shadow-card">
           <p className="text-foreground-secondary">{t('no_pending')}</p>
         </div>
       ) : (
         <div className="space-y-4">
           {providers.map((p) => (
-            <div key={p.id} className="rounded-card border border-gray-200 bg-surface shadow-card">
+            <div key={p.id} className="rounded-card border border-border bg-surface shadow-card">
               <div className="p-5">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4">
@@ -104,7 +104,7 @@ export default async function VerificationsPage() {
                     <p className="text-xs font-medium text-foreground-secondary uppercase tracking-wide mb-2">{t('credentials')}</p>
                     <div className="flex flex-wrap gap-2">
                       {p.verifications.map((v) => (
-                        <div key={v.kind} className="flex items-center gap-2 rounded-[8px] border border-gray-200 px-3 py-1.5 text-xs">
+                        <div key={v.kind} className="flex items-center gap-2 rounded-[8px] border border-border px-3 py-1.5 text-xs">
                           <span className="font-medium">{v.kind.replace(/_/g, ' ')}</span>
                           {v.document_url && (
                             <a

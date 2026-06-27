@@ -34,6 +34,9 @@ export const orders = pgTable('orders', {
   cancelledReason: text('cancelled_reason'),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   autoAcceptAt: timestamp('auto_accept_at', { withTimezone: true }),
+  // LOCK 5 (§3.7) — set while an in_progress order is blocked on a government/
+  // external portal. Display sub-state only; status stays in_progress.
+  externalWaitSince: timestamp('external_wait_since', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

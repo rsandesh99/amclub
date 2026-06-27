@@ -52,6 +52,8 @@ export interface CatalogResult {
   medianResponseMinutes: number | null
   topRated: boolean
   verified: boolean
+  /** Headline professional credential KIND (e.g. 'icai'), never the number. */
+  headlineCredential: string | null
 }
 
 export interface SearchResponse {

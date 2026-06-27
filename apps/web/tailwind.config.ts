@@ -10,23 +10,44 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // §4.2 design tokens
+        // §4.2 semantic design tokens — named by JOB. The palette is locked;
+        // never use raw gray-*/amber-* or hex in components.
         primary: {
-          DEFAULT: '#1B4D3E',
+          DEFAULT: '#1B4D3E', // brand — FINAL, never blue/navy
           foreground: '#FFFFFF',
         },
         accent: {
-          DEFAULT: '#F4A300',
+          DEFAULT: '#F4A300', // marigold — discounts + rating stars ONLY
           foreground: '#1A1D1A',
         },
+        success: '#1E8E5A', // positive/completed (green family)
+        // Verification blue — badges/ticks ONLY. `verified` is the semantic name;
+        // `trust` kept as an alias for existing usages.
         trust: '#1A6FBF',
+        verified: '#1A6FBF',
+        // Destructive/hard-error red — never decorative. `destructive` is the
+        // semantic name; `danger` kept as an alias.
+        danger: {
+          DEFAULT: '#C73E3E',
+          foreground: '#FFFFFF',
+        },
+        destructive: {
+          DEFAULT: '#C73E3E',
+          foreground: '#FFFFFF',
+        },
+        // Caution/pending (under-review, external waits). Distinct from accent.
+        warning: {
+          DEFAULT: '#B45309',
+          foreground: '#FFFFFF',
+        },
         background: '#FAFAF7',
         surface: '#FFFFFF',
-        danger: '#C73E3E',
-        success: '#1E8E5A',
+        // De-emphasis: borders + muted surfaces (replaces raw gray-*).
+        border: '#E6E7E3',
+        muted: '#F3F4F1',
         foreground: {
           DEFAULT: '#1A1D1A',
-          secondary: '#5C645C',
+          secondary: '#5C645C', // muted text + disabled
         },
       },
       fontFamily: {

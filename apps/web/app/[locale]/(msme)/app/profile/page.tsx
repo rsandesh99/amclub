@@ -39,7 +39,7 @@ export default async function MsmeProfilePage() {
       </div>
 
       {/* Account (read-only identity) */}
-      <section className="rounded-card border border-gray-200 bg-gray-50 p-4 text-sm">
+      <section className="rounded-card border border-border bg-muted p-4 text-sm">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground-secondary">
           {t('account_section')}
         </h2>

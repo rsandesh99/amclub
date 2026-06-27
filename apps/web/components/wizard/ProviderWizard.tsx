@@ -249,7 +249,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
         <>
           <Progress value={progress} label={stepLabels[step]} />
           {draftRestored && (
-            <p className="rounded-[10px] bg-success/10 px-3 py-2 text-xs text-success">{t('draft_restored')}</p>
+            <p className="rounded-button bg-success/10 px-3 py-2 text-xs text-success">{t('draft_restored')}</p>
           )}
         </>
       )}
@@ -297,7 +297,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                       draft.categorySlugs.includes(cat.slug)
                         ? 'border-primary bg-primary text-white'
-                        : 'border-gray-300 text-foreground hover:border-primary hover:text-primary'
+                        : 'border-border text-foreground hover:border-primary hover:text-primary'
                     }`}
                   >
                     {cat.name_i18n.en}
@@ -322,7 +322,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
               <div className="flex gap-2">
                 {(['en', 'hi'] as const).map((lang) => (
                   <button key={lang} type="button" onClick={() => toggleLanguage(lang)}
-                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${draft.languages.includes(lang) ? 'border-primary bg-primary text-white' : 'border-gray-300 text-foreground hover:border-primary'}`}>
+                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${draft.languages.includes(lang) ? 'border-primary bg-primary text-white' : 'border-border text-foreground hover:border-primary'}`}>
                     {lang === 'en' ? 'English' : 'हिंदी'}
                   </button>
                 ))}
@@ -397,7 +397,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
                 const cat = CATEGORY_LIST.find((c) => c.slug === slug)
                 const uploaded = draft.credentialUploads[slug]
                 return (
-                  <div key={slug} className="flex items-center justify-between rounded-[10px] border border-gray-200 p-3">
+                  <div key={slug} className="flex items-center justify-between rounded-button border border-border p-3">
                     <div>
                       <p className="text-sm font-medium">{cat?.name_i18n.en}</p>
                       {uploaded && (
@@ -414,7 +414,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
                           if (file) handleCredentialUpload(slug, file)
                         }}
                       />
-                      <span className={`inline-flex h-9 items-center rounded-[10px] border px-3 text-xs font-medium transition-colors ${uploaded ? 'border-success/40 text-success' : 'border-primary text-primary hover:bg-primary/10'}`}>
+                      <span className={`inline-flex h-9 items-center rounded-button border px-3 text-xs font-medium transition-colors ${uploaded ? 'border-success/40 text-success' : 'border-primary text-primary hover:bg-primary/10'}`}>
                         {uploadingFor === slug ? '…' : uploaded ? 'Re-upload' : t('credential_upload')}
                       </span>
                     </label>

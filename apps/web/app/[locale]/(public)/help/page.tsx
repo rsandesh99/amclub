@@ -24,7 +24,7 @@ export default async function HelpPage() {
         <p className="mt-1 text-foreground-secondary">{t('subtitle')}</p>
       </header>
 
-      <section className="rounded-card border border-gray-200 bg-surface p-5 shadow-card space-y-3">
+      <section className="rounded-card border border-border bg-surface p-5 shadow-card space-y-3">
         <h2 className="text-lg font-semibold">{t('contact_title')}</h2>
         <a
           href={`mailto:${SUPPORT_EMAIL}`}
@@ -54,7 +54,7 @@ export default async function HelpPage() {
         <h2 className="text-lg font-semibold">{t('faq_title')}</h2>
         <div className="space-y-3">
           {faqs.map((f, i) => (
-            <div key={i} className="flex gap-3 rounded-card border border-gray-200 bg-surface p-4">
+            <div key={i} className="flex gap-3 rounded-card border border-border bg-surface p-4">
               <f.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
               <p className="text-sm text-foreground">{f.body}</p>
             </div>
@@ -62,7 +62,7 @@ export default async function HelpPage() {
         </div>
       </section>
 
-      <section className="rounded-card border border-gray-200 bg-gray-50 p-5">
+      <section className="rounded-card border border-border bg-muted p-5">
         <h2 className="text-base font-semibold">{t('grievance_title')}</h2>
         <p className="mt-1 text-sm text-foreground-secondary">{t('grievance_body')}</p>
         <a

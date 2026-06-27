@@ -327,6 +327,8 @@ completed → reviewed
 ```
 Payout to provider releases ONLY from `completed` or `resolved_release/partial`.
 
+**External/government-wait sub-state (display only — not a new enum):** while an order is `in_progress`, work may block on a government portal/registrar/bank — time outside the provider's control. This is modelled as a marker on the order (`external_wait_since timestamptz NULL` + an `external_wait` / `external_resume` timeline event), **not** a new status in the canonical machine above. While the marker is set the timeline shows **"Pending Government Portal Processing"** (External time), and the delivery-SLA / 72h auto-accept clock **pauses**. Canonical transitions and the payout-release set are unchanged (§8.4-safe).
+
 ## 3.8 Empty, loading & error states (explicit)
 
 - **Empty orders:** illustration + "Your orders will appear here" + CTA "Explore services".
@@ -351,28 +353,43 @@ login→ role home (`/app` | `/partner` | `/admin`) · logout→ `/` · pay-succ
 
 ## 4.2 Tokens
 
-| Token | Value | Use |
-|-------|-------|-----|
-| `--primary` | `#1B4D3E` (deep enterprise green) | CTAs, active nav — echoes the AMC brand green |
-| `--accent` | `#F4A300` (marigold) | Discounts, ratings stars, highlights |
-| `--trust` | `#1A6FBF` (verification blue) | Badges, verified ticks only — never decorative |
-| `--bg` | `#FAFAF7` | App background |
-| `--surface` | `#FFFFFF` | Cards |
-| `--text` | `#1A1D1A` / `#5C645C` secondary | |
-| `--danger / --success` | `#C73E3E` / `#1E8E5A` | |
-| Radius | 12px cards, 10px buttons, 999px chips | |
-| Shadow | `0 1px 3px rgb(0 0 0 / .08)` cards; one level only | |
-| Type | **Display:** Bricolage Grotesque (headings, numerals on price) · **Body/UI:** Inter · **Devanagari:** Noto Sans Devanagari (pair tested at same optical size) | |
-| Scale | 13/15/17/20/24/30; body 15px mobile | |
+**The palette is LOCKED.** Green `#1B4D3E` is the primary brand colour — **final, never switch to blue/navy.** Tokens are named by *meaning*, and every colour has exactly one job. Hardcoded hex and raw Tailwind palette colours (`gray-*`, `amber-*`, …) are prohibited in components — use the semantic tokens below so a future polish pass is a token change, not a file sweep.
 
-**Signature element:** the **price block** — large tabular numeral, strikethrough original, marigold discount pill ("20% off · AMC member −5% more"), and delivery-days chip — repeated identically on every card and detail page. It is the product's thesis (price transparency) rendered as a component.
+| Semantic token | Value | Job — and ONLY this job |
+|-------|-------|-----|
+| `primary` | `#1B4D3E` (deep enterprise green) | Brand: CTAs, active nav. **FINAL.** |
+| `success` | `#1E8E5A` | Positive/completed states (green family, sibling of brand) |
+| `verified` (alias `trust`) | `#1A6FBF` (verification blue) | **Verification badges/ticks ONLY — never decorative, never brand** |
+| `destructive` (alias `danger`) | `#C73E3E` | **Destructive actions + hard errors ONLY — never decorative/branding** |
+| `accent` | `#F4A300` (marigold) | **Discounts + rating stars ONLY** |
+| `warning` | `#B45309` on `warning/10` | Caution/pending states (e.g. "under review", external waits). Distinct from `accent`. |
+| `background` / `surface` | `#FAFAF7` / `#FFFFFF` | App background / cards |
+| `foreground` / `foreground-secondary` | `#1A1D1A` / `#5C645C` | Primary text / **de-emphasis (muted gray) + disabled** |
+| `border` | `#E6E7E3` | All card/divider borders (replaces raw `gray-*` borders) |
+| `muted` | `#F3F4F1` | Muted surfaces, skeletons, chip backgrounds (replaces raw `gray-*` fills) |
+
+**Colour discipline (enforced):** green = brand + success/verified-positive; marigold = discounts/ratings only; **red = destructive/warnings only (never decoration or branding)**; blue = verification badges only; gray = secondary text + disabled. If a colour's job isn't in this table, it doesn't ship.
+
+| Non-colour token | Value |
+|-------|-------|
+| Radius | 12px cards (`rounded-card`), 10px buttons (`rounded-button`), 999px chips (`rounded-chip`) |
+| Shadow | `0 1px 3px rgb(0 0 0 / .08)` cards; **one level only** |
+| Spacing | Generous/institutional: page gutters `px-4` mobile, content `max-w-*` centred, vertical rhythm `py-6`–`py-8`, card padding `p-4`–`p-5`, list gaps `gap-3`. Standardised via a shared `<PageContainer>` — not cramped. |
+| Type | **Display:** Bricolage Grotesque (headings, price numerals) · **Body/UI:** Inter · **Devanagari:** Noto Sans Devanagari (same optical size) |
+| Scale | 13/15/17/20/24/30; body 15px mobile |
+
+**Signature element:** the **price block** — large tabular numeral, strikethrough original, marigold discount pill ("20% off · AMC member −5% more"), and delivery-days chip — repeated identically on every card and detail page. It is the product's thesis (price transparency) rendered as a component. *(V1 pricing model: professional fee only; split professional/govt-fee display is a logged future enhancement, not built in V1.)*
+
+**CTA copy convention (LOCKED — applies to Phases 5–7):** buttons use action-oriented verbs only — "Get quotes", "Pay securely", "Accept draft", "Send requirements". **Never** "Submit", "OK", or "Click here". One verb, sentence case.
 
 ## 4.3 Key patterns
 
-- **Provider card** (the workhorse): logo/initials avatar, name + trust-blue ✓, rating ★4.6 (132), top package line, price block, "Responds ~2h", state chip.
+- **Provider card — CREDENTIAL-FIRST (LOCKED):** the card *leads* with professional credential + verification, because MSMEs hire on trust, not slogans. Order: logo/initials avatar → **provider name + headline credential + verified tick** (e.g. "CA R. Sharma · ICAI-verified", or "Sharma & Associates · ICAI #12345 · ✓"), → package title → price block → delivery/state/response chips. **Rating is secondary** (smaller, below the credential line) — never the headline. The headline credential is the highest-priority *professional* verification (ICAI/ICSI/Bar Council/CA/credential); KYC items (GSTIN/PAN/bank) stay as detail-page badges, and their raw numbers are never surfaced on cards.
+- **Jurisdiction/state selector — FIRST-CLASS (LOCKED):** compliance is local, so state/jurisdiction is a **prominent header-level selector** (in the app shell, from screen one), *not* a buried filter. It seeds and persists the `state` filter across browse/search; the in-filter state control remains as a secondary refine. Persisted per user like locale.
 - **Comparison view:** RFQ quotes render as a swipeable card stack on mobile, sortable table on desktop.
-- **Order timeline:** vertical stepper with timestamps; current step pulses subtly.
-- **Badges are earned, never decorative:** ✓ GSTIN · ✓ Credential (ICAI/Bar) · ✓ Bank verified · ⭐ Top Rated (algorithmic: ≥4.5 over ≥20 orders). Sponsored placement always labelled "Promoted".
+- **Order timeline — PROVIDER TIME vs GOVERNMENT/EXTERNAL TIME (LOCKED):** vertical stepper with timestamps; current step pulses subtly. The timeline visually **distinguishes time the provider controls from time spent waiting on an external party** (government portal, registrar, bank). When work is blocked on a government/statutory process, the order surfaces a display sub-status **"Pending Government Portal Processing"** (muted/`warning`, grouped as *External time*) so the buyer sees the delay is outside the provider's control, and the provider isn't unfairly penalised. Implementation note: this is a **display sub-state on `in_progress`** (an `external_wait_since` marker + timeline event), **not** a new enum in the order state machine — the canonical §3.7 transitions and payout-release set are untouched (§8.4). The delivery SLA / 72h auto-accept clock **pauses** while external-wait is active.
+- **Badges are earned, never decorative:** ✓ GSTIN · ✓ Credential (ICAI/Bar) · ✓ Bank verified · ⭐ Top Rated (algorithmic: ≥4.5 over ≥20 orders). Sponsored placement always labelled "Promoted". **Verification is API + admin-queue driven (§5/§9) — never a manual `is_verified` boolean.**
+- **In-order communication stays masked/in-app (LOCKED, anti-disintermediation §9.3):** order messaging is the masked in-app thread. **Never** expose a WhatsApp link, phone number, or email for direct off-platform contact inside an order — that enables disintermediation and breaks the escrow/trust loop.
 - **Forms:** one question-group per screen on mobile (wizard), inline validation, save-as-draft on RFQ.
 
 ## 4.4 Localisation & accessibility
@@ -741,6 +758,14 @@ Bidding wars/auctions on RFQs (race-to-bottom destroys provider quality) · prov
 - ADRs (`docs/adr/NNN-*.md`) for any decision touching money, auth, or the order state machine.
 - The order state machine may only be EXTENDED (new states), never have transitions repurposed — downstream payout logic depends on it.
 - Schema changes after launch require: migration + backfill plan + rollback note in the PR description.
+
+## 8.5 Logged future enhancements (from MSME-buyer UX analysis — NOT V1)
+
+Recorded here so they're not lost; each still needs an §8.1 mini-PRD + RICE before build.
+
+- **Scope Revision protocol (Phase 5/6 — payment-implicated, scope carefully).** A formal mid-order top-up flow: provider requests a scope/price revision → **escrow is frozen and the delivery/SLA timer pauses** → buyer either **Approve & Top-up** (additional escrow captured, order resumes) or **Reject** (order continues at original scope or routes to dispute). Reuses the timer-pause primitive introduced for external/government wait (§3.7). Touches escrow, the order state machine, and refund math — must go through an ADR (§8.4).
+- **Structured named-slot document vault (Phase 5/6).** Extends the existing `requirements_template` (jsonb) into specific *labelled* upload slots (e.g. "PAN card", "Board resolution", "Rent agreement") with per-slot status, so document collection is guided rather than a freeform dump. Builds on the order document store already in §5.
+- **Document watermarking (Phase 8).** Watermark delivered documents (buyer identity + order ref) to deter leakage/reuse. Deferred — needs the delivery pipeline and real usage before it's worth the friction.
 
 ---
 

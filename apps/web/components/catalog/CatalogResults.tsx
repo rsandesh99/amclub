@@ -28,7 +28,7 @@ export async function CatalogResults({
 
   if (results.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-gray-300 bg-surface px-6 py-16 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-surface px-6 py-16 text-center">
         <SearchX className="h-10 w-10 text-foreground-secondary" />
         <h3 className="text-md font-semibold">
           {stateLabel ? t('empty_in_state', { state: stateLabel }) : t('empty_no_results')}
@@ -71,7 +71,7 @@ export async function CatalogResults({
           {hasPrev ? (
             <Link
               href={buildUrl(Math.max(0, offset - PAGE_SIZE))}
-              className="rounded-button border border-gray-200 px-4 py-2 text-sm font-medium hover:border-primary/40"
+              className="rounded-button border border-border px-4 py-2 text-sm font-medium hover:border-primary/40"
             >
               ← {t('prev')}
             </Link>
@@ -81,7 +81,7 @@ export async function CatalogResults({
           {hasNext && (
             <Link
               href={buildUrl(offset + PAGE_SIZE)}
-              className="rounded-button border border-gray-200 px-4 py-2 text-sm font-medium hover:border-primary/40"
+              className="rounded-button border border-border px-4 py-2 text-sm font-medium hover:border-primary/40"
             >
               {t('next')} →
             </Link>

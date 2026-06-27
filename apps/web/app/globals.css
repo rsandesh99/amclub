@@ -12,12 +12,17 @@
     --primary-foreground: #ffffff;
     --accent: #f4a300;
     --trust: #1a6fbf;
+    --verified: #1a6fbf;
     --danger: #c73e3e;
+    --destructive: #c73e3e;
+    --warning: #b45309;
     --success: #1e8e5a;
+    --border: #e6e7e3;
+    --muted: #f3f4f1;
   }
 
   * {
-    @apply border-gray-200;
+    @apply border-border;
   }
 
   body {

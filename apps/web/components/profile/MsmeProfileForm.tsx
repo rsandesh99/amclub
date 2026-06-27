@@ -76,7 +76,7 @@ export function MsmeProfileForm({ initial }: { initial: MsmeProfileInitial }) {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-card border border-gray-200 bg-surface p-5 shadow-card space-y-4">
+      <section className="rounded-card border border-border bg-surface p-5 shadow-card space-y-4">
         <h2 className="text-base font-semibold">{tProfile('personal_info')}</h2>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="fullName">{tAuth('name_label')}</Label>
@@ -91,7 +91,7 @@ export function MsmeProfileForm({ initial }: { initial: MsmeProfileInitial }) {
         </div>
       </section>
 
-      <section className="rounded-card border border-gray-200 bg-surface p-5 shadow-card space-y-4">
+      <section className="rounded-card border border-border bg-surface p-5 shadow-card space-y-4">
         <h2 className="text-base font-semibold">{tProfile('business_info')}</h2>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="businessName">{tAuth('business_name_label')}</Label>

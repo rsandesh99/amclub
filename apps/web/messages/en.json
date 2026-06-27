@@ -144,7 +144,14 @@
     "action_failed": "Action failed. Please try again.",
     "upload_failed": "Upload failed. Please try again.",
     "event_requirements": "Requirements submitted",
-    "event_document": "Document uploaded"
+    "event_document": "Document uploaded",
+    "status_external_wait": "Pending Government Portal Processing",
+    "external_wait_banner": "This order is waiting on a government/external portal. This time is outside the provider's control and is shown separately.",
+    "external_time_tag": "External time",
+    "event_external_wait": "Waiting on government portal",
+    "event_external_resume": "Government portal cleared — work resumed",
+    "action_mark_external_wait": "Waiting on government portal",
+    "action_resume_external": "Portal cleared — resume"
   },
   "catalog": {
     "off": "OFF",
@@ -290,6 +297,7 @@
     "login_subtitle": "Enter your mobile number to continue",
     "send_otp": "Send OTP",
     "send_code": "Send code",
+    "verifying_human": "Verifying…",
     "verify_otp": "Verify & continue",
     "change_phone": "Change number",
     "change_email": "Change email",
@@ -588,6 +596,9 @@
     "otp_expired": "OTP expired — request a new one",
     "payment_failed": "Payment didn't go through. No money was deducted — try again.",
     "network": "Check your internet connection and try again.",
+    "rate_limited": "Too many attempts. Please wait a minute and try again.",
+    "captcha_failed": "Couldn't verify you're human. Please try again.",
+    "otp_send_failed": "Couldn't send the code. Please try again.",
     "unauthorized": "You don't have permission to access this page.",
     "not_found": "Page not found.",
     "upload_failed": "Upload failed — try again",

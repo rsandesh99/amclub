@@ -90,15 +90,15 @@ export function CheckoutClient({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-card border border-gray-200 bg-surface p-5 shadow-card">
+      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
         <h2 className="font-medium">{title}</h2>
         <p className="text-sm text-foreground-secondary">{providerName} · {t('delivery_days', { days: deliveryDays })}</p>
-        <dl className="mt-4 space-y-2 border-t border-gray-100 pt-4 text-sm">
+        <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
           <Row label={t('price')} value={formatINR(amounts.pricePaise)} />
           {amounts.discountPaise > 0 && <Row label={t('discount')} value={'− ' + formatINR(amounts.discountPaise)} />}
           <Row label={t('taxable')} value={formatINR(amounts.taxablePaise)} />
           <Row label={t('gst')} value={formatINR(amounts.gstPaise)} />
-          <div className="flex items-center justify-between border-t border-gray-100 pt-2 text-base font-bold">
+          <div className="flex items-center justify-between border-t border-border pt-2 text-base font-bold">
             <span>{t('total')}</span>
             <span className="font-display text-primary">{formatINR(amounts.totalPaise)}</span>
           </div>
@@ -109,7 +109,7 @@ export function CheckoutClient({
         <Input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder={t('coupon')} />
       </div>
 
-      <div className="rounded-card border border-gray-200 bg-surface p-4">
+      <div className="rounded-card border border-border bg-surface p-4">
         <button type="button" onClick={() => setGstOpen((v) => !v)} className="flex w-full items-center justify-between text-sm font-medium">
           {t('gst_invoice')} <span className="text-foreground-secondary">{gstOpen ? '−' : '+'}</span>
         </button>

@@ -9,7 +9,7 @@ export async function PublicFooter() {
   const categories = await getCategories()
 
   return (
-    <footer className="mt-16 border-t border-gray-200 bg-surface">
+    <footer className="mt-16 border-t border-border bg-surface">
       <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-4 py-10 sm:grid-cols-4">
         <div className="col-span-2 sm:col-span-1">
           <span className="font-display text-lg font-bold text-primary">AMClub</span>
@@ -53,7 +53,7 @@ export async function PublicFooter() {
           </ul>
         </div>
       </div>
-      <div className="border-t border-gray-100 py-4 text-center text-xs text-foreground-secondary">
+      <div className="border-t border-border py-4 text-center text-xs text-foreground-secondary">
         © {new Date().getFullYear()} AMClub · {t('common.tagline')}
       </div>
     </footer>

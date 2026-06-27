@@ -147,7 +147,7 @@ export function PackageWizard({
     <div className="mx-auto max-w-2xl">
       <Progress value={progress} label={t(`step_${step}` as 'step_basics')} className="mb-6" />
 
-      <div className="rounded-card border border-gray-200 bg-surface p-6 shadow-card">
+      <div className="rounded-card border border-border bg-surface p-6 shadow-card">
         {step === 'basics' && (
           <div className="space-y-4">
             <div>
@@ -284,7 +284,7 @@ export function PackageWizard({
               </div>
             </div>
             {priceP > 0 && (
-              <div className="rounded-button border border-gray-200 bg-background p-3">
+              <div className="rounded-button border border-border bg-background p-3">
                 <p className="mb-1 text-xs text-foreground-secondary">{t('preview_price')}</p>
                 <PriceBlock
                   pricePaise={priceP}
@@ -301,7 +301,7 @@ export function PackageWizard({
           <div className="space-y-4">
             <p className="text-xs text-foreground-secondary">{t('faqs_hint')}</p>
             {draft.faqs.map((f, i) => (
-              <div key={i} className="space-y-2 rounded-button border border-gray-200 p-3">
+              <div key={i} className="space-y-2 rounded-button border border-border p-3">
                 <Input
                   value={f.question}
                   onChange={(e) => {

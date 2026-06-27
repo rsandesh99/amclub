@@ -51,7 +51,7 @@ export default async function LandingPage() {
               <Link
                 key={c.slug}
                 href={`/services/${c.slug}`}
-                className="rounded-chip border border-gray-200 bg-surface px-2.5 py-1 hover:border-primary/40 hover:text-primary"
+                className="rounded-chip border border-border bg-surface px-2.5 py-1 hover:border-primary/40 hover:text-primary"
               >
                 {locale === 'hi' && c.nameI18n.hi ? c.nameI18n.hi : c.nameI18n.en}
               </Link>
@@ -61,7 +61,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Trust stats */}
-      <section className="border-y border-gray-200 bg-surface">
+      <section className="border-y border-border bg-surface">
         <div className="mx-auto grid max-w-5xl grid-cols-2 gap-6 px-4 py-8 sm:grid-cols-4">
           {stats.map((s) => (
             <div key={s.label} className="text-center">

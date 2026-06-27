@@ -67,7 +67,7 @@ export function SaveButton({
         'inline-flex items-center gap-1.5 rounded-button border px-3 py-1.5 text-sm font-medium transition-colors',
         saved && authed
           ? 'border-danger bg-danger/10 text-danger'
-          : 'border-gray-200 text-foreground-secondary hover:border-danger/40 hover:text-danger',
+          : 'border-border text-foreground-secondary hover:border-danger/40 hover:text-danger',
       )}
     >
       <Heart className={cn('h-4 w-4', saved && authed && 'fill-danger')} />

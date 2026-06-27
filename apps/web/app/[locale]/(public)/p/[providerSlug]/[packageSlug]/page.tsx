@@ -178,7 +178,7 @@ export default async function PackageDetailPage({
               <h2 className="font-display text-lg font-bold">{t('faqs')}</h2>
               <div className="mt-3 space-y-3">
                 {pkg.faqs.map((f, i) => (
-                  <details key={i} className="rounded-card border border-gray-200 bg-surface p-4">
+                  <details key={i} className="rounded-card border border-border bg-surface p-4">
                     <summary className="cursor-pointer text-sm font-medium">{f.q}</summary>
                     <p className="mt-2 text-sm text-foreground-secondary">{f.a}</p>
                   </details>
@@ -190,14 +190,14 @@ export default async function PackageDetailPage({
 
         {/* Buy box */}
         <aside className="lg:col-span-1">
-          <div className="sticky top-20 rounded-card border border-gray-200 bg-surface p-5 shadow-card">
+          <div className="sticky top-20 rounded-card border border-border bg-surface p-5 shadow-card">
             <PriceBlock
               pricePaise={pkg.pricePaise}
               discountBps={pkg.discountBps}
               memberExtraDiscountBps={pkg.memberExtraDiscountBps}
               size="detail"
             />
-            <dl className="mt-4 space-y-2 border-t border-gray-100 pt-4 text-sm">
+            <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
               <div className="flex items-center justify-between">
                 <dt className="inline-flex items-center gap-1.5 text-foreground-secondary">
                   <Clock className="h-4 w-4" /> {t('delivery_time')}

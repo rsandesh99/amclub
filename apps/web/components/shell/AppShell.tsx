@@ -1,5 +1,6 @@
 import { Link } from '@/i18n/navigation'
 import { LanguageSwitcher } from '@/components/catalog/LanguageSwitcher'
+import { JurisdictionSelector } from '@/components/catalog/JurisdictionSelector'
 import { AccountMenu, type ShellContext } from './AccountMenu'
 
 /**
@@ -27,12 +28,14 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-30 border-b border-gray-200 bg-surface/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
           <Link href={homeHref as '/app'} className="font-display text-lg font-bold text-primary">
             AMClub<span className="text-foreground-secondary">{suffix}</span>
           </Link>
           <div className="flex items-center gap-2">
+            {/* Jurisdiction is a buyer-discovery control — shown in the MSME shell. */}
+            {context === 'msme' && <JurisdictionSelector className="hidden sm:inline-flex" />}
             <LanguageSwitcher />
             <AccountMenu name={name} context={context} isMsme={isMsme} isProvider={isProvider} isAdmin={isAdmin} />
           </div>

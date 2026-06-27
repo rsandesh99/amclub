@@ -32,7 +32,7 @@ export function RouteError({ error, reset }: { error: Error & { digest?: string 
         </button>
         <Link
           href="/"
-          className="rounded-button border border-gray-200 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/5"
+          className="rounded-button border border-border px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/5"
         >
           {t('home')}
         </Link>

@@ -46,7 +46,7 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
   }
 
   return (
-    <div className="mt-5 border-t border-gray-100 pt-4">
+    <div className="mt-5 border-t border-border pt-4">
       {mode === 'rejecting' ? (
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">

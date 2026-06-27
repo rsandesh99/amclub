@@ -57,7 +57,12 @@ const EVENT_LABEL: Record<string, string> = {
   auto_cancelled: 'status_auto_cancelled',
   refunded: 'status_refunded',
   raise_dispute: 'status_disputed',
+  external_wait: 'event_external_wait',
+  external_resume: 'event_external_resume',
 }
+
+// Events that represent EXTERNAL (government/portal) time, not provider time.
+const EXTERNAL_EVENTS = new Set(['external_wait', 'external_resume'])
 
 export function OrderWorkspace({
   order,
@@ -79,6 +84,31 @@ export function OrderWorkspace({
   const id = order['id'] as string
   const status = order['status'] as string
   const actions = actionsFor(viewerRole, status)
+  // External/government wait is a DISPLAY sub-state on in_progress (LOCK 5).
+  const externalWait = status === 'in_progress' && !!order['external_wait_since']
+  const statusVariant = externalWait ? 'warning' : (STATUS_VARIANT[status] ?? 'default')
+  const statusLabel = externalWait ? t('status_external_wait') : t(`status_${status}` as 'status_placed')
+
+  async function toggleExternalWait(active: boolean) {
+    setBusy('external_wait')
+    setError('')
+    try {
+      const res = await fetch(`/api/v1/orders/${id}/external-wait`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(typeof d.error === 'string' ? d.error : t('action_failed'))
+      }
+      router.refresh()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('action_failed'))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function doAction(action: string) {
     setBusy(action)
@@ -123,15 +153,20 @@ export function OrderWorkspace({
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
       {/* Header */}
-      <div className="rounded-card border border-gray-200 bg-surface p-5 shadow-card">
+      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs text-foreground-secondary">{String(order['order_number'])}</p>
             <h1 className="font-display text-xl font-bold">{String(order['title'])}</h1>
           </div>
-          <Badge variant={STATUS_VARIANT[status] ?? 'default'}>{t(`status_${status}` as 'status_placed')}</Badge>
+          <Badge variant={statusVariant}>{statusLabel}</Badge>
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-4 text-sm">
+        {externalWait && (
+          <p className="mt-3 rounded-button bg-warning/10 px-3 py-2 text-xs text-warning">
+            {t('external_wait_banner')}
+          </p>
+        )}
+        <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-4 text-sm">
           <div><dt className="text-foreground-secondary">{t('total')}</dt><dd className="font-medium">{formatINR(Number(order['total_paise']))}</dd></div>
           {viewerRole === 'provider' && (
             <div><dt className="text-foreground-secondary">{t('you_earn')}</dt><dd className="font-medium">{formatINR(Number(order['provider_earning_paise']))}</dd></div>
@@ -140,8 +175,8 @@ export function OrderWorkspace({
       </div>
 
       {/* Actions */}
-      {actions.length > 0 && (
-        <div className="rounded-card border border-gray-200 bg-surface p-5 shadow-card space-y-3">
+      {(actions.length > 0 || (viewerRole === 'provider' && status === 'in_progress')) && (
+        <div className="rounded-card border border-border bg-surface p-5 shadow-card space-y-3">
           <h2 className="text-sm font-semibold">{t('actions')}</h2>
           {/* Provider deliver flow: attach a deliverable */}
           {viewerRole === 'provider' && status === 'in_progress' && (
@@ -163,13 +198,23 @@ export function OrderWorkspace({
                 {t(`action_${a.label}` as 'action_accept')}
               </Button>
             ))}
+            {/* Provider: flag/clear government-portal wait (display sub-state, LOCK 5) */}
+            {viewerRole === 'provider' && status === 'in_progress' && (
+              <Button
+                variant="outline"
+                onClick={() => toggleExternalWait(!externalWait)}
+                loading={busy === 'external_wait'}
+              >
+                {externalWait ? t('action_resume_external') : t('action_mark_external_wait')}
+              </Button>
+            )}
           </div>
           {error && <p className="text-sm text-danger">{error}</p>}
         </div>
       )}
 
       {/* Documents */}
-      <div className="rounded-card border border-gray-200 bg-surface p-5 shadow-card">
+      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
         <h2 className="mb-3 text-sm font-semibold">{t('documents')}</h2>
         {documents.length === 0 ? (
           <p className="text-sm text-foreground-secondary">{t('no_documents')}</p>
@@ -186,22 +231,30 @@ export function OrderWorkspace({
       </div>
 
       {/* Timeline */}
-      <div className="rounded-card border border-gray-200 bg-surface p-5 shadow-card">
+      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
         <h2 className="mb-3 text-sm font-semibold">{t('timeline')}</h2>
         <ol className="space-y-3">
-          {events.map((e) => (
-            <li key={e.id} className="flex gap-3 text-sm">
-              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
-              <div>
-                <p className="font-medium">
-                  {EVENT_LABEL[e.event] ? t(EVENT_LABEL[e.event] as 'status_placed') : e.event.replace(/_/g, ' ')}
-                </p>
-                <p className="text-xs text-foreground-secondary">
-                  {new Date(e.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
-                </p>
-              </div>
-            </li>
-          ))}
+          {events.map((e) => {
+            const isExternal = EXTERNAL_EVENTS.has(e.event)
+            return (
+              <li key={e.id} className="flex gap-3 text-sm">
+                <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${isExternal ? 'bg-warning' : 'bg-primary'}`} />
+                <div>
+                  <p className="font-medium">
+                    {EVENT_LABEL[e.event] ? t(EVENT_LABEL[e.event] as 'status_placed') : e.event.replace(/_/g, ' ')}
+                    {isExternal && (
+                      <span className="ml-2 rounded-chip bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
+                        {t('external_time_tag')}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-foreground-secondary">
+                    {new Date(e.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+                  </p>
+                </div>
+              </li>
+            )
+          })}
         </ol>
       </div>
     </div>

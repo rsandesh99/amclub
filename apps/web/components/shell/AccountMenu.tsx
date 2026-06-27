@@ -51,7 +51,7 @@ export function AccountMenu({ name, context, isMsme, isProvider, isAdmin }: Acco
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-surface py-1 pl-1 pr-2 hover:border-primary/40"
+        className="flex items-center gap-1.5 rounded-full border border-border bg-surface py-1 pl-1 pr-2 hover:border-primary/40"
       >
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
           {initial}
@@ -62,10 +62,10 @@ export function AccountMenu({ name, context, isMsme, isProvider, isAdmin }: Acco
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-card border border-gray-200 bg-surface py-1 shadow-card"
+          className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-card border border-border bg-surface py-1 shadow-card"
         >
           {name && (
-            <div className="border-b border-gray-100 px-3 py-2">
+            <div className="border-b border-border px-3 py-2">
               <p className="truncate text-sm font-medium">{name}</p>
             </div>
           )}
@@ -93,7 +93,7 @@ export function AccountMenu({ name, context, isMsme, isProvider, isAdmin }: Acco
 
           <MenuLink href="/help" icon={LifeBuoy} label={t('help')} onClick={() => setOpen(false)} />
 
-          <div className="my-1 border-t border-gray-100" />
+          <div className="my-1 border-t border-border" />
           <button
             type="button"
             role="menuitem"

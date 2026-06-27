@@ -77,7 +77,7 @@ export function ProviderProfileForm({ initial }: { initial: ProviderProfileIniti
 
   return (
     <div className="space-y-6">
-      <section className="rounded-card border border-gray-200 bg-surface p-5 shadow-card space-y-4">
+      <section className="rounded-card border border-border bg-surface p-5 shadow-card space-y-4">
         <h2 className="text-base font-semibold">{t('public_profile')}</h2>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="displayName">{t('display_name_label')}</Label>
@@ -102,7 +102,7 @@ export function ProviderProfileForm({ initial }: { initial: ProviderProfileIniti
                 className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
                   form.languages.includes(lang)
                     ? 'border-primary bg-primary text-white'
-                    : 'border-gray-300 text-foreground hover:border-primary'
+                    : 'border-border text-foreground hover:border-primary'
                 }`}
               >
                 {lang === 'en' ? 'English' : 'हिंदी'}
@@ -112,13 +112,13 @@ export function ProviderProfileForm({ initial }: { initial: ProviderProfileIniti
         </div>
       </section>
 
-      <section className="rounded-card border border-gray-200 bg-surface p-5 shadow-card">
+      <section className="rounded-card border border-border bg-surface p-5 shadow-card">
         <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
             checked={form.capacityPaused}
             onChange={(e) => update({ capacityPaused: e.target.checked })}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+            className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
           />
           <span>
             <span className="block text-sm font-medium">{t('capacity_pause_label')}</span>
@@ -127,7 +127,7 @@ export function ProviderProfileForm({ initial }: { initial: ProviderProfileIniti
         </label>
       </section>
 
-      <p className="rounded-[10px] bg-amber-50 px-3 py-2 text-xs text-amber-700">{t('kyc_locked_note')}</p>
+      <p className="rounded-button bg-warning/10 px-3 py-2 text-xs text-warning">{t('kyc_locked_note')}</p>
 
       {error && <p className="text-sm text-danger">{error}</p>}
       {saved && <p className="text-sm text-success">{t('save_success')}</p>}

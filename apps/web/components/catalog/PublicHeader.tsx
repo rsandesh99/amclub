@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { JurisdictionSelector } from './JurisdictionSelector'
 import { PublicHeaderAccount } from './PublicHeaderAccount'
 
 /** Shared header for public marketing/catalog pages. Stays a static server
@@ -9,7 +10,7 @@ export function PublicHeader() {
   const t = useTranslations('catalog')
 
   return (
-    <header className="sticky top-0 z-30 border-b border-gray-200 bg-surface/95 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
         <div className="flex items-center gap-6">
           <Link href="/" className="font-display text-lg font-bold text-primary">
@@ -26,6 +27,7 @@ export function PublicHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
+          <JurisdictionSelector className="hidden sm:inline-flex" />
           <LanguageSwitcher />
           <PublicHeaderAccount />
         </div>

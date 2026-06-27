@@ -57,14 +57,14 @@ export default async function SavedPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-gray-200 bg-surface px-4 py-3">
+      <header className="border-b border-border bg-surface px-4 py-3">
         <div className="mx-auto max-w-3xl">
           <h1 className="font-display text-lg font-bold">{t('saved_title')}</h1>
         </div>
       </header>
       <div className="mx-auto max-w-3xl px-4 py-6">
         {providers.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-gray-300 bg-surface px-6 py-16 text-center">
+          <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-surface px-6 py-16 text-center">
             <Heart className="h-10 w-10 text-foreground-secondary" />
             <p className="text-sm text-foreground-secondary">{t('saved_empty')}</p>
             <Link

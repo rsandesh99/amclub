@@ -18,7 +18,7 @@ export default async function AppSearchPage({
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-gray-200 bg-surface px-4 py-3">
+      <header className="border-b border-border bg-surface px-4 py-3">
         <div className="mx-auto max-w-3xl">
           <h1 className="font-display text-lg font-bold">{t('search_title')}</h1>
         </div>

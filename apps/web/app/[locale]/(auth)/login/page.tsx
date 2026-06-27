@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 export default function LoginPage() {
   // useSearchParams must sit inside a Suspense boundary (Next 15 static render).
   return (
-    <Suspense fallback={<div className="h-72 animate-pulse rounded-card bg-gray-100" />}>
+    <Suspense fallback={<div className="h-72 animate-pulse rounded-card bg-muted" />}>
       <LoginInner />
     </Suspense>
   )
