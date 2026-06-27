@@ -51,7 +51,9 @@ export async function POST(request: NextRequest) {
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
-  const { packageId, quoteId, couponCode, gstInvoice, idempotencyKey } = parsed.data
+  const { packageId, quoteId, gstInvoice, idempotencyKey } = parsed.data
+  // Coupon codes are stored upper-cased — normalise before lookup + freezing.
+  const couponCode = parsed.data.couponCode?.trim().toUpperCase() || undefined
 
   // Idempotent: a repeat with the same key returns the existing session/order.
   const { data: existing } = await supabase

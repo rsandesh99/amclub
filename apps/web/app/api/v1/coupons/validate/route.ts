@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon, COUPON_ERROR_KEY } from '@/lib/coupons/apply'
 
@@ -58,7 +59,11 @@ export async function POST(request: NextRequest) {
     /* eslint-enable @typescript-eslint/no-explicit-any */
   }
 
-  const { data: coupon } = await supabase.from('coupons').select('*').eq('code', code.toUpperCase()).maybeSingle()
+  // Read the coupon via the admin client: the public RLS policy hides expired /
+  // inactive coupons, which would collapse every rejection into "not found".
+  // evaluateCoupon then returns the precise reason (expired / usage / etc.).
+  const adminDb = await createAdminClient()
+  const { data: coupon } = await adminDb.from('coupons').select('*').eq('code', code.toUpperCase()).maybeSingle()
   const result = evaluateCoupon(coupon, taxableBeforeCoupon, categoryId)
 
   if (result.error) {
