@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
+import { serverError } from '@/lib/api/errors'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -50,8 +51,7 @@ export async function POST(request: NextRequest) {
     })
 
   if (error) {
-    console.error('[credential-upload]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return serverError('[credential-upload]', error)
   }
 
   // Return a signed URL valid for 7 days so the admin can view it

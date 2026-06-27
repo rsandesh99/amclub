@@ -5,16 +5,20 @@ import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createClient } from '@/lib/supabase/client'
 import { phoneSchema } from '@amclub/shared'
+import type { RequestOtp } from './AuthPanel'
 
 interface PhoneStepProps {
   onSuccess: (phone: string) => void
+  /** Sends the OTP via the rate-limited / captcha proxy. */
+  requestOtp: RequestOtp
+  /** False while the captcha is still solving (when captcha is enabled). */
+  captchaReady?: boolean
   emailField?: boolean
   onEmailChange?: (email: string) => void
 }
 
-export function PhoneStep({ onSuccess, emailField, onEmailChange }: PhoneStepProps) {
+export function PhoneStep({ onSuccess, requestOtp, captchaReady = true, emailField, onEmailChange }: PhoneStepProps) {
   const t = useTranslations('auth')
   const tErr = useTranslations('errors')
 
@@ -34,15 +38,11 @@ export function PhoneStep({ onSuccess, emailField, onEmailChange }: PhoneStepPro
     const normalised = phone.startsWith('+91') ? phone : `+91${phone.replace(/^0/, '')}`
 
     setLoading(true)
-    const supabase = createClient()
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      phone: normalised,
-      options: { shouldCreateUser: true },
-    })
+    const result = await requestOtp('sms', normalised)
     setLoading(false)
 
-    if (otpError) {
-      setError(otpError.message)
+    if (!result.ok) {
+      setError(tErr(result.code === 'rate_limited' ? 'rate_limited' : result.code === 'captcha_failed' ? 'captcha_failed' : 'otp_send_failed'))
       return
     }
 
@@ -55,7 +55,7 @@ export function PhoneStep({ onSuccess, emailField, onEmailChange }: PhoneStepPro
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="phone">{t('phone_label')}</Label>
         <div className="flex">
-          <span className="inline-flex h-11 items-center rounded-l-[10px] border border-r-0 border-gray-300 bg-gray-50 px-3 text-sm text-foreground-secondary select-none">
+          <span className="inline-flex h-11 items-center rounded-l-[10px] border border-r-0 border-border bg-muted px-3 text-sm text-foreground-secondary select-none">
             +91
           </span>
           <Input
@@ -88,8 +88,8 @@ export function PhoneStep({ onSuccess, emailField, onEmailChange }: PhoneStepPro
         </div>
       )}
 
-      <Button onClick={handleSend} loading={loading} className="w-full">
-        {t('send_otp')}
+      <Button onClick={handleSend} loading={loading} disabled={!captchaReady} className="w-full">
+        {captchaReady ? t('send_otp') : t('verifying_human')}
       </Button>
     </div>
   )

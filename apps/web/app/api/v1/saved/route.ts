@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { serverError } from '@/lib/api/errors'
 
 const bodySchema = z.object({
   providerId: z.string().uuid(),
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase
       .from('saved_providers')
       .upsert({ msme_id: msmeId, provider_id: providerId }, { onConflict: 'msme_id,provider_id' })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return serverError('[saved POST save]', error)
     return NextResponse.json({ saved: true })
   }
 
@@ -61,6 +62,6 @@ export async function POST(request: NextRequest) {
     .delete()
     .eq('msme_id', msmeId)
     .eq('provider_id', providerId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('[saved POST unsave]', error)
   return NextResponse.json({ saved: false })
 }

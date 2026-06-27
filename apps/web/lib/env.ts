@@ -19,6 +19,10 @@ const publicEnvSchema = z.object({
   NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string().optional(),
+  // Cloudflare Turnstile site key (public). The matching SECRET key lives in the
+  // Supabase dashboard (Auth → Settings → CAPTCHA), not here. When unset, the
+  // captcha widget is skipped (dev/local).
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional(),
 })
 
 const serverEnvSchema = z.object({
@@ -33,6 +37,10 @@ const serverEnvSchema = z.object({
   KYC_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   SENTRY_AUTH_TOKEN: z.string().optional(),
+  // Upstash Redis REST — backs rate limiting. When unset, the limiter is a
+  // no-op (allow all) so local/dev keeps working without Redis.
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 })
 
 function parseEnv() {

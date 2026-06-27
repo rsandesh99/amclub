@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { resolveActor } from '@/lib/orders/actor'
+import { serverError } from '@/lib/api/errors'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'application/zip']
 const MAX_BYTES = 15 * 1024 * 1024 // 15 MB
@@ -69,8 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     upsert: false,
   })
   if (upErr) {
-    console.error('[order documents upload]', upErr)
-    return NextResponse.json({ error: upErr.message }, { status: 500 })
+    return serverError('[order documents upload]', upErr)
   }
 
   const { data: doc, error } = await admin
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
     .select('id')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('[order documents insert]', error)
 
   await admin.from('order_events').insert({
     order_id: id,

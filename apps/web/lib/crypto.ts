@@ -14,6 +14,7 @@
  * is used with a loud warning. In production a missing key throws — we never
  * silently store bank data with a default key.
  */
+import 'server-only'
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
 
 const DEV_KEY_HEX = '0'.repeat(64) // 32 zero-bytes — DEV ONLY, never production

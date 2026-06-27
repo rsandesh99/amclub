@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { serverError } from '@/lib/api/errors'
 
 /**
  * Lightweight edits to a provider's PUBLIC profile. Deliberately does NOT touch
@@ -55,8 +56,7 @@ export async function PATCH(request: NextRequest) {
     .eq('id', existing.id)
 
   if (error) {
-    console.error('[profile/provider/settings PATCH]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return serverError('[profile/provider/settings PATCH]', error)
   }
 
   return NextResponse.json({ success: true })

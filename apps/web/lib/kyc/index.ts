@@ -1,3 +1,4 @@
+import 'server-only'
 import type { KycClient } from './types'
 import { stubKycClient } from './stub'
 import { makeSurepassClient } from './surepass'

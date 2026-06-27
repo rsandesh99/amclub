@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { computeOrderAmounts } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { getPaymentGateway } from '@/lib/payments'
+import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 
 const bodySchema = z.object({
   packageId: z.string().uuid(),
@@ -40,6 +41,10 @@ function resolveCouponDiscountPaise(coupon: any, taxableBeforeCoupon: number, ca
 export async function POST(request: NextRequest) {
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Per-user request cap (idempotencyKey already prevents double-charge).
+  const rl = await enforce(limiters.checkout, `checkout:${userId}`)
+  if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)

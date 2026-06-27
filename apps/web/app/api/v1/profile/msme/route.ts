@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { upsertUserRow } from '@/lib/auth/session'
+import { serverError } from '@/lib/api/errors'
 
 const bodySchema = z.object({
   fullName: z.string().min(2),
@@ -66,8 +67,7 @@ export async function POST(request: NextRequest) {
     )
 
   if (error) {
-    console.error('[profile/msme POST]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return serverError('[profile/msme POST]', error)
   }
 
   return NextResponse.json({ success: true })

@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { searchPackages } from '@/lib/catalog/queries'
+import { enforce, limiters, tooManyRequests, clientIp } from '@/lib/rate-limit'
 
 const querySchema = z.object({
   query: z.string().trim().max(120).optional(),
@@ -20,6 +21,10 @@ const querySchema = z.object({
 })
 
 export async function GET(request: NextRequest) {
+  // Unauthenticated + DB-heavy → per-IP cap.
+  const rl = await enforce(limiters.search, `search:${clientIp(request)}`)
+  if (!rl.ok) return tooManyRequests(rl.retryAfter)
+
   const sp = request.nextUrl.searchParams
   const parsed = querySchema.safeParse(Object.fromEntries(sp.entries()))
   if (!parsed.success) {

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
+import { serverError } from '@/lib/api/errors'
 
 const bodySchema = z.object({
   action: z.enum(['approve', 'reject']),
@@ -50,8 +51,7 @@ export async function POST(
     .eq('id', providerId)
 
   if (profileErr) {
-    console.error('[admin/verifications POST] profile update:', profileErr)
-    return NextResponse.json({ error: profileErr.message }, { status: 500 })
+    return serverError('[admin/verifications POST] profile update:', profileErr)
   }
 
   // Stamp reviewer + outcome on the provider's verification rows.

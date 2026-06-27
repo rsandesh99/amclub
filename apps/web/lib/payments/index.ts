@@ -1,3 +1,4 @@
+import 'server-only'
 import type { PaymentGateway } from './types'
 import { mockGateway } from './mock'
 import { makeRazorpayGateway } from './razorpay'

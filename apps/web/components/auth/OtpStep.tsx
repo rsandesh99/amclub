@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
+import type { RequestOtp } from './AuthPanel'
 
 interface OtpStepProps {
   /** Phone (E.164) when channel is 'sms'. */
@@ -12,12 +13,14 @@ interface OtpStepProps {
   email?: string
   /** Verification channel. Defaults to 'sms' for backward compatibility. */
   channel?: 'sms' | 'email'
+  /** Re-sends the OTP via the rate-limited / captcha proxy. */
+  requestOtp: RequestOtp
   onSuccess: () => void
   /** Back to the identifier-entry step. */
   onChangePhone: () => void
 }
 
-export function OtpStep({ phone, email, channel = 'sms', onSuccess, onChangePhone }: OtpStepProps) {
+export function OtpStep({ phone, email, channel = 'sms', requestOtp, onSuccess, onChangePhone }: OtpStepProps) {
   const t = useTranslations('auth')
   const tErr = useTranslations('errors')
 
@@ -86,11 +89,11 @@ export function OtpStep({ phone, email, channel = 'sms', onSuccess, onChangePhon
   }
 
   async function resend() {
-    const supabase = createClient()
-    if (channel === 'email') {
-      await supabase.auth.signInWithOtp({ email: target, options: { shouldCreateUser: true } })
-    } else {
-      await supabase.auth.signInWithOtp({ phone: target, options: { shouldCreateUser: true } })
+    setError('')
+    const result = await requestOtp(channel, target)
+    if (!result.ok) {
+      setError(tErr(result.code === 'rate_limited' ? 'rate_limited' : result.code === 'captcha_failed' ? 'captcha_failed' : 'otp_send_failed'))
+      return
     }
     setResendCountdown(30)
     setOtp(['', '', '', '', '', ''])
@@ -120,7 +123,7 @@ export function OtpStep({ phone, email, channel = 'sms', onSuccess, onChangePhon
             value={digit}
             onChange={(e) => handleInput(i, e.target.value)}
             onKeyDown={(e) => handleKeyDown(i, e)}
-            className="h-12 w-12 rounded-[10px] border border-gray-300 bg-surface text-center text-lg font-semibold focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="h-12 w-12 rounded-button border border-border bg-surface text-center text-lg font-semibold focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             aria-label={`OTP digit ${i + 1}`}
           />
         ))}

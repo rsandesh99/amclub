@@ -5,16 +5,20 @@ import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createClient } from '@/lib/supabase/client'
+import type { RequestOtp } from './AuthPanel'
 
 interface EmailStepProps {
   /** Called with the email after a code has been sent. */
   onSuccess: (email: string) => void
+  /** Sends the OTP via the rate-limited / captcha proxy. */
+  requestOtp: RequestOtp
+  /** False while the captcha is still solving (when captcha is enabled). */
+  captchaReady?: boolean
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export function EmailStep({ onSuccess }: EmailStepProps) {
+export function EmailStep({ onSuccess, requestOtp, captchaReady = true }: EmailStepProps) {
   const t = useTranslations('auth')
   const tErr = useTranslations('errors')
   const [email, setEmail] = useState('')
@@ -29,15 +33,10 @@ export function EmailStep({ onSuccess }: EmailStepProps) {
       return
     }
     setLoading(true)
-    const supabase = createClient()
-    // Supabase email OTP. shouldCreateUser:true so new emails sign up too.
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: value,
-      options: { shouldCreateUser: true },
-    })
+    const result = await requestOtp('email', value)
     setLoading(false)
-    if (otpError) {
-      setError(otpError.message)
+    if (!result.ok) {
+      setError(tErr(result.code === 'rate_limited' ? 'rate_limited' : result.code === 'captcha_failed' ? 'captcha_failed' : 'otp_send_failed'))
       return
     }
     onSuccess(value)
@@ -59,8 +58,8 @@ export function EmailStep({ onSuccess }: EmailStepProps) {
         />
         <p className="text-xs text-foreground-secondary">{t('email_hint')}</p>
       </div>
-      <Button onClick={handleSend} loading={loading} className="w-full">
-        {t('send_code')}
+      <Button onClick={handleSend} loading={loading} disabled={!captchaReady} className="w-full">
+        {captchaReady ? t('send_code') : t('verifying_human')}
       </Button>
     </div>
   )
