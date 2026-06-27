@@ -16,6 +16,11 @@ import { CATEGORY_LIST, categoriesNeedingCredentialUpload } from '@amclub/shared
 type Step = 'auth' | 'business' | 'kyc' | 'bank' | 'submit' | 'under_review'
 
 const DRAFT_KEY = 'amclub_provider_wizard_draft'
+// A provider may list in up to 5 categories (server enforces the same — §5).
+const MAX_CATEGORIES = 5
+// Drafts older than this are discarded (signed credential URLs expire ~7d, and
+// stale verification flags shouldn't linger).
+const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 interface Draft {
   phone: string
@@ -66,23 +71,32 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   const [draftRestored, setDraftRestored] = useState(false)
   const [uploadingFor, setUploadingFor] = useState<string | null>(null)
 
-  // Restore draft on mount
+  // Restore draft on mount — only if it isn't stale (TTL). Note the bank account
+  // number is never persisted (see below), so it comes back blank to re-enter.
   useEffect(() => {
     try {
       const saved = localStorage.getItem(DRAFT_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved) as Partial<Draft>
-        setDraft((d) => ({ ...d, ...parsed }))
-        setDraftRestored(true)
-        setTimeout(() => setDraftRestored(false), 3000)
+      if (!saved) return
+      const env = JSON.parse(saved) as { savedAt?: number; draft?: Partial<Draft> }
+      // Back-compat: older drafts were stored as the bare draft object.
+      const parsed = env.draft ?? (env as Partial<Draft>)
+      const savedAt = env.savedAt ?? 0
+      if (savedAt && Date.now() - savedAt > DRAFT_TTL_MS) {
+        localStorage.removeItem(DRAFT_KEY)
+        return
       }
+      setDraft((d) => ({ ...d, ...parsed, bankAccount: '' }))
+      setDraftRestored(true)
+      setTimeout(() => setDraftRestored(false), 3000)
     } catch {}
   }, [])
 
-  // Persist draft to localStorage on change
+  // Persist draft on change. NEVER store the bank account number in localStorage
+  // (sensitive financial data; XSS-readable) — strip it; re-entered on restore.
   useEffect(() => {
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+      const safe = { ...draft, bankAccount: '' }
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), draft: safe }))
     } catch {}
   }, [draft])
 
@@ -141,6 +155,10 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
 
   async function verifyBank() {
     if (!draft.bankAccount || !draft.bankIfsc || !draft.bankHolder) return
+    // Validate format up front (the dev stub "verifies" anything; the server
+    // rejects bad formats on submit). Matches the server's Zod rules.
+    if (!/^\d{9,18}$/.test(draft.bankAccount)) { setError(t('err_bank_account')); return }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(draft.bankIfsc)) { setError(t('err_bank_ifsc')); return }
     setBankLoading(true)
     setError('')
     try {
@@ -220,7 +238,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(typeof d.error === 'string' ? d.error : t('submission_failed'))
+        throw new Error(readApiError(d))
       }
       localStorage.removeItem(DRAFT_KEY)
       setStep('under_review')
@@ -231,12 +249,40 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
     }
   }
 
+  // Turn a server error (string OR Zod fieldErrors) into a readable message, so
+  // a validation failure is never hidden behind a generic "Submission failed".
+  function readApiError(d: unknown): string {
+    const err = (d as { error?: unknown })?.error
+    if (typeof err === 'string') return err
+    const fieldErrors = (err as { fieldErrors?: Record<string, string[]> })?.fieldErrors
+    if (fieldErrors) {
+      if (fieldErrors['categorySlugs']) return t('err_categories_max', { max: MAX_CATEGORIES })
+      if (fieldErrors['bankAccount']) return t('err_bank_account')
+      if (fieldErrors['bankIfsc']) return t('err_bank_ifsc')
+      const first = Object.values(fieldErrors).flat()[0]
+      if (first) return first
+    }
+    return t('submission_failed')
+  }
+
+  // Step back to re-check a previous form.
+  function goBack() {
+    const idx = stepOrder.indexOf(step)
+    if (idx > 0) {
+      setError('')
+      setStep(stepOrder[idx - 1]!)
+    }
+  }
+
   function toggleCategory(slug: string) {
     const existing = draft.categorySlugs
     if (existing.includes(slug)) {
       update({ categorySlugs: existing.filter((s) => s !== slug) })
-    } else {
+    } else if (existing.length < MAX_CATEGORIES) {
       update({ categorySlugs: [...existing, slug] })
+    } else {
+      // At the cap — tell the user instead of silently ignoring.
+      setError(t('err_categories_max', { max: MAX_CATEGORIES }))
     }
   }
 
@@ -293,22 +339,32 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>{t('categories_label')}</Label>
-              <p className="text-xs text-foreground-secondary">{t('categories_hint')}</p>
+              <p className="text-xs text-foreground-secondary">
+                {t('categories_hint')} · {t('categories_count', { n: draft.categorySlugs.length, max: MAX_CATEGORIES })}
+              </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                {CATEGORY_LIST.map((cat) => (
-                  <button
-                    key={cat.slug}
-                    type="button"
-                    onClick={() => toggleCategory(cat.slug)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      draft.categorySlugs.includes(cat.slug)
-                        ? 'border-primary bg-primary text-white'
-                        : 'border-border text-foreground hover:border-primary hover:text-primary'
-                    }`}
-                  >
-                    {cat.name_i18n.en}
-                  </button>
-                ))}
+                {CATEGORY_LIST.map((cat) => {
+                  const selected = draft.categorySlugs.includes(cat.slug)
+                  const atCap = !selected && draft.categorySlugs.length >= MAX_CATEGORIES
+                  return (
+                    <button
+                      key={cat.slug}
+                      type="button"
+                      onClick={() => toggleCategory(cat.slug)}
+                      disabled={atCap}
+                      aria-pressed={selected}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selected
+                          ? 'border-primary bg-primary text-white'
+                          : atCap
+                          ? 'border-border text-foreground-secondary opacity-50'
+                          : 'border-border text-foreground hover:border-primary hover:text-primary'
+                      }`}
+                    >
+                      {cat.name_i18n.en}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <div className="flex gap-3">
@@ -337,8 +393,8 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             {error && <p className="text-sm text-danger">{error}</p>}
             <Button
               onClick={() => {
-                if (!draft.legalName || !draft.displayName || draft.categorySlugs.length === 0 || !draft.stateCode) {
-                  setError('Please fill required fields and select at least one category')
+                if (!draft.legalName.trim() || !draft.displayName.trim() || draft.categorySlugs.length === 0 || !draft.stateCode) {
+                  setError(t('err_business_required'))
                   return
                 }
                 setError('')
@@ -435,17 +491,20 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
               )}
             </div>
             {error && <p className="text-sm text-danger">{error}</p>}
-            <Button
-              onClick={() => {
-                if (!draft.gstinVerified) { setError(t('gstin_required_error')); return }
-                if (!credsComplete) { setError(t('credential_required_error')); return }
-                setError('')
-                setStep('bank')
-              }}
-              className="w-full"
-            >
-              {tCommon('continue')}
-            </Button>
+            <div className="flex gap-3">
+              <Button variant="ghost" onClick={goBack} className="shrink-0">{tCommon('back')}</Button>
+              <Button
+                onClick={() => {
+                  if (!draft.gstinVerified) { setError(t('gstin_required_error')); return }
+                  if (!credsComplete) { setError(t('credential_required_error')); return }
+                  setError('')
+                  setStep('bank')
+                }}
+                className="flex-1"
+              >
+                {tCommon('continue')}
+              </Button>
+            </div>
           </div>
         </>
       )}
@@ -474,16 +533,19 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
               {draft.bankVerified ? (draft.bankStub ? t('bank_dev_stub') : t('bank_verified')) : t('bank_verify_btn')}
             </Button>
             {error && <p className="text-sm text-danger">{error}</p>}
-            <Button
-              onClick={() => {
-                if (!draft.bankVerified) { setError('Please verify your bank account before continuing'); return }
-                setError('')
-                setStep('submit')
-              }}
-              className="w-full"
-            >
-              {tCommon('continue')}
-            </Button>
+            <div className="flex gap-3">
+              <Button variant="ghost" onClick={goBack} className="shrink-0">{tCommon('back')}</Button>
+              <Button
+                onClick={() => {
+                  if (!draft.bankVerified) { setError(t('err_bank_verify_required')); return }
+                  setError('')
+                  setStep('submit')
+                }}
+                className="flex-1"
+              >
+                {tCommon('continue')}
+              </Button>
+            </div>
           </div>
         </>
       )}
@@ -513,14 +575,17 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             ))}
           </div>
           {error && <p className="text-sm text-danger">{error}</p>}
-          <Button
-            onClick={submitForReview}
-            loading={loading}
-            disabled={!draft.gstinVerified || !credsComplete || !draft.bankVerified}
-            className="w-full"
-          >
-            {t('submit_btn')}
-          </Button>
+          <div className="flex gap-3">
+            <Button variant="ghost" onClick={goBack} disabled={loading} className="shrink-0">{tCommon('back')}</Button>
+            <Button
+              onClick={submitForReview}
+              loading={loading}
+              disabled={!draft.gstinVerified || !credsComplete || !draft.bankVerified}
+              className="flex-1"
+            >
+              {t('submit_btn')}
+            </Button>
+          </div>
         </>
       )}
 
