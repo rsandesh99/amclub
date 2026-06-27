@@ -5,6 +5,7 @@ import { computeOrderAmounts } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { getPaymentGateway } from '@/lib/payments'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
+import { evaluateCoupon } from '@/lib/coupons/apply'
 
 const bodySchema = z
   .object({
@@ -25,24 +26,6 @@ const bodySchema = z
   .refine((d) => !!d.packageId !== !!d.quoteId, {
     message: 'Provide exactly one of packageId or quoteId',
   })
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function resolveCouponDiscountPaise(coupon: any, taxableBeforeCoupon: number, categoryId: string): number {
-  if (!coupon) return 0
-  const now = new Date()
-  if (!coupon.is_active) return 0
-  if (coupon.valid_from && new Date(coupon.valid_from) > now) return 0
-  if (coupon.valid_to && new Date(coupon.valid_to) < now) return 0
-  if (coupon.usage_limit != null && coupon.used_count >= coupon.usage_limit) return 0
-  if (coupon.category_id && coupon.category_id !== categoryId) return 0
-
-  let discount = 0
-  if (coupon.kind === 'percent') discount = Math.round((taxableBeforeCoupon * coupon.value_bps) / 10000)
-  else if (coupon.kind === 'fixed') discount = coupon.value_bps // paise for fixed coupons
-  if (coupon.max_discount_paise != null) discount = Math.min(discount, coupon.max_discount_paise)
-  return Math.max(0, Math.min(discount, taxableBeforeCoupon))
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /** Common frozen-session shape produced by either the package or quote branch. */
 interface Prep {
@@ -113,7 +96,7 @@ export async function POST(request: NextRequest) {
     if (couponCode) {
       const { data: coupon } = await supabase.from('coupons').select('*').eq('code', couponCode).maybeSingle()
       const taxableBeforeCoupon = p.price_paise - Math.round((p.price_paise * p.discount_bps) / 10000)
-      extraDiscountPaise = resolveCouponDiscountPaise(coupon, taxableBeforeCoupon, p.category_id)
+      extraDiscountPaise = evaluateCoupon(coupon, taxableBeforeCoupon, p.category_id).discountPaise
     }
 
     prep = {

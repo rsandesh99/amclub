@@ -1,6 +1,7 @@
 import { Link } from '@/i18n/navigation'
 import { LanguageSwitcher } from '@/components/catalog/LanguageSwitcher'
 import { JurisdictionSelector } from '@/components/catalog/JurisdictionSelector'
+import { NotificationBell } from './NotificationBell'
 import { AccountMenu, type ShellContext } from './AccountMenu'
 
 /**
@@ -25,6 +26,7 @@ export function AppShell({
 
   const homeHref = context === 'provider' ? '/partner' : context === 'admin' ? '/admin/verifications' : '/app'
   const suffix = context === 'provider' ? ' Partner' : context === 'admin' ? ' Admin' : ''
+  const notificationsHref = context === 'provider' ? '/partner/notifications' : '/app/notifications'
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -37,6 +39,7 @@ export function AppShell({
             {/* Jurisdiction is a buyer-discovery control — shown in the MSME shell. */}
             {context === 'msme' && <JurisdictionSelector className="hidden sm:inline-flex" />}
             <LanguageSwitcher />
+            <NotificationBell href={notificationsHref} />
             <AccountMenu name={name} context={context} isMsme={isMsme} isProvider={isProvider} isAdmin={isAdmin} />
           </div>
         </div>

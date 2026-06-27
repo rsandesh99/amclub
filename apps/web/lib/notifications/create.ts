@@ -1,8 +1,10 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
+import { CHANNELS, type ChannelMessage, type ChannelResult } from './channels'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 type I18n = { en: string; hi: string }
+type Locale = 'en' | 'hi'
 
 export interface NotificationInput {
   userId: string
@@ -10,18 +12,21 @@ export interface NotificationInput {
   titleI18n: I18n
   bodyI18n: I18n
   link?: string
-  /** Extra channels beyond in-app, e.g. 'sms' | 'whatsapp'. Dispatched behind stubs. */
+  /** Extra channels beyond in-app, e.g. 'email' | 'sms' | 'whatsapp'. */
   channels?: string[]
 }
 
 /**
- * Create an in-app notification (always) and best-effort fan out to other
- * channels. The SMS/WhatsApp dispatchers are stubs until the Phase-6
- * `notification.dispatch` worker lands — they log and no-op so a missing
- * provider key never breaks the triggering action. Never throws.
+ * `notification.dispatch` (§5.9). Always writes the in-app row, then fans the
+ * same notification out across the requested channels via the CHANNELS registry.
+ * Each channel runs independently with its own try/catch — one channel failing
+ * (e.g. Resend down) never blocks the others or the triggering action. The
+ * in-app insert is the source of truth for the notification centre + bell.
+ * Never throws.
  */
 export async function createNotification(admin: Admin, input: NotificationInput): Promise<void> {
-  const channels = ['in_app', ...(input.channels ?? [])]
+  const extra = input.channels ?? []
+  const channels = ['in_app', ...extra]
   try {
     await admin.from('notifications').insert({
       user_id: input.userId,
@@ -31,13 +36,10 @@ export async function createNotification(admin: Admin, input: NotificationInput)
       link: input.link ?? null,
       channels,
     })
-    for (const ch of input.channels ?? []) {
-      // Phase 6 will replace these with MSG91 / Gupshup dispatch + retry.
-      console.warn(`[notify:${ch} stub] user=${input.userId} kind=${input.kind}`)
-    }
   } catch (e) {
-    console.error('[createNotification]', e)
+    console.error('[createNotification:in_app]', e)
   }
+  if (extra.length > 0) await fanout(admin, [input.userId], input, extra)
 }
 
 /** Fan a notification out to many users (e.g. RFQ fan-out). Best-effort. */
@@ -47,21 +49,59 @@ export async function createNotificationsBulk(
   base: Omit<NotificationInput, 'userId'>,
 ): Promise<void> {
   if (userIds.length === 0) return
-  const channels = ['in_app', ...(base.channels ?? [])]
-  const rows = userIds.map((userId) => ({
-    user_id: userId,
-    kind: base.kind,
-    title_i18n: base.titleI18n,
-    body_i18n: base.bodyI18n,
-    link: base.link ?? null,
-    channels,
-  }))
+  const extra = base.channels ?? []
+  const channels = ['in_app', ...extra]
   try {
-    await admin.from('notifications').insert(rows)
-    if ((base.channels ?? []).length > 0) {
-      console.warn(`[notify:${(base.channels ?? []).join(',')} stub] ${userIds.length} recipients kind=${base.kind}`)
-    }
+    await admin.from('notifications').insert(
+      userIds.map((userId) => ({
+        user_id: userId,
+        kind: base.kind,
+        title_i18n: base.titleI18n,
+        body_i18n: base.bodyI18n,
+        link: base.link ?? null,
+        channels,
+      })),
+    )
   } catch (e) {
-    console.error('[createNotificationsBulk]', e)
+    console.error('[createNotificationsBulk:in_app]', e)
   }
+  if (extra.length > 0) await fanout(admin, userIds, base, extra)
+}
+
+/** Resolve recipients' contact + locale and run each extra channel handler. */
+async function fanout(
+  admin: Admin,
+  userIds: string[],
+  base: Omit<NotificationInput, 'userId'>,
+  extra: string[],
+): Promise<void> {
+  const { data: users } = await admin
+    .from('users')
+    .select('id, email, phone, preferred_locale')
+    .in('id', userIds)
+  const byId = new Map((users ?? []).map((u) => [u.id, u]))
+
+  const tasks: Promise<ChannelResult>[] = []
+  for (const userId of userIds) {
+    const u = byId.get(userId)
+    const locale: Locale = u?.preferred_locale === 'hi' ? 'hi' : 'en'
+    const msg: ChannelMessage = {
+      toUserId: userId,
+      email: u?.email ?? null,
+      phone: u?.phone ?? null,
+      locale,
+      title: base.titleI18n[locale],
+      body: base.bodyI18n[locale],
+      link: base.link ?? null,
+      kind: base.kind,
+    }
+    for (const ch of extra) {
+      const handler = CHANNELS[ch]
+      if (!handler) continue
+      tasks.push(handler(msg).catch((e) => ({ channel: ch, ok: false, detail: `error:${(e as Error).message}` })))
+    }
+  }
+  const results = await Promise.all(tasks)
+  const failed = results.filter((r) => !r.ok)
+  if (failed.length > 0) console.warn('[notify:fanout] channel failures', failed)
 }

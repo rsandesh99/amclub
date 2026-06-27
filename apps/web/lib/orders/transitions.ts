@@ -10,6 +10,7 @@ import {
 import type { createAdminClient } from '@/lib/supabase/server'
 import { getPaymentGateway } from '@/lib/payments'
 import { generateInvoices } from '@/lib/invoices/generate'
+import { notifyOrderTransition, notifyAutoCancelled, notifyAutoAccepted } from '@/lib/notifications/events'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -218,6 +219,13 @@ export async function applyTransition(
     }
   }
 
+  // Notify the counterparty (+ review prompt on completion). Never block the txn.
+  try {
+    await notifyOrderTransition(admin, updated, action)
+  } catch (e) {
+    console.error('[notifyOrderTransition]', e)
+  }
+
   return { ok: true, order: updated }
 }
 
@@ -234,6 +242,7 @@ export async function autoCancelOrder(admin: Admin, order: any): Promise<boolean
     await admin.from('orders').update({ status: 'refunded' }).eq('id', order.id)
     await addEvent(admin, order.id, 'refunded', null, { amount_paise: refunded })
   }
+  try { await notifyAutoCancelled(admin, order) } catch (e) { console.error('[notifyAutoCancelled]', e) }
   return true
 }
 
@@ -247,6 +256,7 @@ export async function autoAcceptOrder(admin: Admin, order: any): Promise<boolean
   const updated = { ...order, status: 'completed', completed_at: completedAt }
   await schedulePayout(admin, updated)
   await generateInvoices(admin, order.id)
+  try { await notifyAutoAccepted(admin, updated) } catch (e) { console.error('[notifyAutoAccepted]', e) }
   return true
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

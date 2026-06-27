@@ -239,5 +239,22 @@
     "request_revision": "Request revision",
     "cancel": "Cancel order",
     "failed": "Action failed. Please try again."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "mark_all_read": "Mark all read",
+    "empty": "You're all caught up."
+  },
+  "reviews": {
+    "heading": "Reviews",
+    "prompt": "Share your experience to help other businesses.",
+    "text_placeholder": "What went well? Anything to improve?",
+    "submit": "Submit review",
+    "pick_rating": "Please select a star rating.",
+    "failed": "Could not submit. Please try again.",
+    "provider_reply": "Provider's reply",
+    "reply_placeholder": "Write a reply…",
+    "reply_submit": "Post reply",
+    "status_flagged": "This review is under moderation."
   }
 }

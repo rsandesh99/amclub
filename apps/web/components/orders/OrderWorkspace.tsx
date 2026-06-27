@@ -6,6 +6,7 @@ import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ReviewSection } from './ReviewSection'
 
 interface OrderEvent {
   id: string
@@ -212,6 +213,9 @@ export function OrderWorkspace({
           {error && <p className="text-sm text-danger">{error}</p>}
         </div>
       )}
+
+      {/* Reviews — prompt/form for the buyer on completion; reply box for the provider */}
+      {(status === 'completed' || status === 'reviewed') && <ReviewSection orderId={id} />}
 
       {/* Documents */}
       <div className="rounded-card border border-border bg-surface p-5 shadow-card">

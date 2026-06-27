@@ -61,6 +61,10 @@ export const limiters = {
   rfqCreate: build(10, '10 m', 'rl:rfq-create'),
   /** Quote submission per provider — one quote per RFQ anyway. */
   quoteSubmit: build(30, '1 m', 'rl:quote-submit'),
+  /** Review submit / reply / flag per user — abuse + review-bomb guard. */
+  reviewWrite: build(20, '10 m', 'rl:review-write'),
+  /** Coupon code validation per user — blunts code-guessing/brute force. */
+  couponValidate: build(30, '1 m', 'rl:coupon-validate'),
 } as const
 
 export interface RateLimitResult {

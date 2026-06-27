@@ -1,5 +1,6 @@
 import type { createAdminClient } from '@/lib/supabase/server'
 import type { PaymentGateway } from './types'
+import { notifyPayoutPaid } from '@/lib/notifications/events'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -50,6 +51,7 @@ export async function runPayouts(
       .update({ status: 'paid', razorpay_transfer_id: transfer.razorpayTransferId, paid_at: new Date().toISOString() })
       .eq('id', p.id)
     transferIds.push(transfer.razorpayTransferId)
+    try { await notifyPayoutPaid(admin, p.provider_id, Number(p.amount_paise), p.order_id) } catch (e) { console.error('[notifyPayoutPaid]', e) }
   }
   return { processed: transferIds.length, transferIds, simulated }
 }

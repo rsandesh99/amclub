@@ -5,17 +5,20 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
+import { fetchUnreadCount } from '@/lib/api'
 import { CATEGORY_LIST } from '@amclub/shared'
 
 export default function HomeScreen() {
   const { t, locale } = useI18n()
   const [userName, setUserName] = useState('')
   const [q, setQ] = useState('')
+  const [unread, setUnread] = useState(0)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserName((user?.user_metadata?.['full_name'] as string | undefined) ?? '')
     })
+    fetchUnreadCount().then(setUnread)
   }, [])
 
   function submitSearch() {
@@ -32,12 +35,22 @@ export default function HomeScreen() {
             </Text>
             <Text className="text-sm text-foreground-secondary">{t('msme_home.subtitle')}</Text>
           </View>
-          <TouchableOpacity
-            onPress={async () => { await supabase.auth.signOut(); router.replace('/(auth)/login') }}
-            className="rounded-lg border border-gray-200 px-3 py-2"
-          >
-            <Text className="text-xs text-foreground-secondary">{t('common.sign_out')}</Text>
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-2">
+            <TouchableOpacity onPress={() => router.push('/notifications' as never)} className="relative rounded-lg border border-gray-200 p-2">
+              <Ionicons name="notifications-outline" size={18} color="#5C645C" />
+              {unread > 0 && (
+                <View className="absolute -right-1 -top-1 h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1">
+                  <Text className="text-[10px] font-bold text-white">{unread > 9 ? '9+' : unread}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={async () => { await supabase.auth.signOut(); router.replace('/(auth)/login') }}
+              className="rounded-lg border border-gray-200 px-3 py-2"
+            >
+              <Text className="text-xs text-foreground-secondary">{t('common.sign_out')}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Search */}

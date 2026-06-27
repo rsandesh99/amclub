@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import type { PaymentGateway, GatewayPayment } from './types'
 import { finalizeQuoteAcceptance } from '@/lib/rfq/finalize'
+import { notifyOrderPlaced } from '@/lib/notifications/events'
+import { recordCouponRedemption } from '@/lib/coupons/redeem'
 
 export interface CaptureInput {
   razorpayOrderId: string
@@ -40,6 +42,27 @@ export async function materializeFromCapture(
       await finalizeQuoteAcceptance(admin, orderId)
     } catch (e) {
       console.error('[finalizeQuoteAcceptance]', e)
+    }
+    // One-time placed side effects (coupon redemption + notifications). The
+    // webhook can replay, so gate on an order_events marker — these run once.
+    const { data: already } = await admin
+      .from('order_events')
+      .select('id')
+      .eq('order_id', orderId)
+      .eq('event', 'placed_side_effects')
+      .maybeSingle()
+    if (!already) {
+      await admin.from('order_events').insert({ order_id: orderId, event: 'placed_side_effects' })
+      try {
+        await recordCouponRedemption(admin, orderId)
+      } catch (e) {
+        console.error('[recordCouponRedemption]', e)
+      }
+      try {
+        await notifyOrderPlaced(admin, orderId)
+      } catch (e) {
+        console.error('[notifyOrderPlaced]', e)
+      }
     }
   }
   return { orderId }

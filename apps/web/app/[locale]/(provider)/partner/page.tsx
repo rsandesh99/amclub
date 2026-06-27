@@ -76,6 +76,7 @@ export default async function PartnerDashboardPage() {
             { label: t('view_orders'), href: '/partner/orders', icon: '📦' },
             { label: t('earnings'), href: '/partner/earnings', icon: '💰' },
             { label: t('view_rfqs'), href: '/partner/rfqs', icon: '📬' },
+            { label: t('view_reviews'), href: '/partner/reviews', icon: '⭐' },
           ] as { label: string; href: string; icon: string }[]
         ).map((link) => (
           <Link

@@ -29,12 +29,46 @@ export function CheckoutClient({
   amounts: OrderAmounts
 }) {
   const t = useTranslations('checkout')
+  const tc = useTranslations('coupons')
   const router = useRouter()
   const [coupon, setCoupon] = useState('')
+  const [applied, setApplied] = useState<{ code: string; discountPaise: number } | null>(null)
+  const [couponMsg, setCouponMsg] = useState('')
+  const [couponBusy, setCouponBusy] = useState(false)
   const [gstOpen, setGstOpen] = useState(false)
   const [gstin, setGstin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Live total preview when a coupon is applied. The coupon reduces the pre-GST
+  // base; the server re-evaluates + freezes the authoritative amount at checkout.
+  const gstRate = amounts.taxablePaise > 0 ? amounts.gstPaise / amounts.taxablePaise : 0
+  const couponDiscount = applied?.discountPaise ?? 0
+  const dispTaxable = amounts.taxablePaise - couponDiscount
+  const dispGst = Math.round(dispTaxable * gstRate)
+  const dispTotal = dispTaxable + dispGst
+
+  async function applyCoupon() {
+    const code = coupon.trim()
+    if (!code) return
+    setCouponBusy(true); setCouponMsg('')
+    try {
+      const res = await fetch('/api/v1/coupons/validate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, packageId }),
+      })
+      const d = await res.json()
+      if (d.ok && d.discountPaise > 0) {
+        setApplied({ code: d.code ?? code.toUpperCase(), discountPaise: d.discountPaise })
+        setCouponMsg('')
+      } else {
+        setApplied(null)
+        setCouponMsg(tc(d.error ?? 'coupon_not_found'))
+      }
+    } catch {
+      setCouponMsg(tc('coupon_not_found'))
+    } finally { setCouponBusy(false) }
+  }
 
   async function pay() {
     setLoading(true)
@@ -96,17 +130,27 @@ export function CheckoutClient({
         <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
           <Row label={t('price')} value={formatINR(amounts.pricePaise)} />
           {amounts.discountPaise > 0 && <Row label={t('discount')} value={'− ' + formatINR(amounts.discountPaise)} />}
-          <Row label={t('taxable')} value={formatINR(amounts.taxablePaise)} />
-          <Row label={t('gst')} value={formatINR(amounts.gstPaise)} />
+          {couponDiscount > 0 && <Row label={`${tc('applied')} (${applied!.code})`} value={'− ' + formatINR(couponDiscount)} />}
+          <Row label={t('taxable')} value={formatINR(dispTaxable)} />
+          <Row label={t('gst')} value={formatINR(dispGst)} />
           <div className="flex items-center justify-between border-t border-border pt-2 text-base font-bold">
             <span>{t('total')}</span>
-            <span className="font-display text-primary">{formatINR(amounts.totalPaise)}</span>
+            <span className="font-display text-primary">{formatINR(dispTotal)}</span>
           </div>
         </dl>
       </div>
 
-      <div className="flex gap-2">
-        <Input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder={t('coupon')} />
+      <div className="space-y-1.5">
+        <div className="flex gap-2">
+          <Input
+            value={coupon}
+            onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setApplied(null); setCouponMsg('') }}
+            placeholder={t('coupon')}
+          />
+          <Button variant="secondary" onClick={applyCoupon} loading={couponBusy} disabled={!coupon.trim()}>{tc('apply')}</Button>
+        </div>
+        {applied && <p className="text-sm text-success">{tc('applied_msg', { amount: formatINR(applied.discountPaise) })}</p>}
+        {couponMsg && <p className="text-sm text-danger">{couponMsg}</p>}
       </div>
 
       <div className="rounded-card border border-border bg-surface p-4">
@@ -124,7 +168,7 @@ export function CheckoutClient({
       {error && <p className="text-sm text-danger">{error}</p>}
 
       <Button onClick={pay} loading={loading} className="w-full" size="lg">
-        {t('pay', { amount: formatINR(amounts.totalPaise) })}
+        {t('pay', { amount: formatINR(dispTotal) })}
       </Button>
       <p className="text-center text-xs text-foreground-secondary">{t('secure_note')}</p>
     </div>

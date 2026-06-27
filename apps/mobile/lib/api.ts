@@ -233,6 +233,65 @@ export async function transitionOrder(orderId: string, action: string) {
   return { ok: res.ok, data: await res.json().catch(() => ({})) }
 }
 
+// ── Notifications (Phase 6) — Bearer-authed; RLS scopes to the user ────────────
+
+export interface NotificationItem {
+  id: string
+  kind: string
+  title_i18n: { en: string; hi: string }
+  body_i18n: { en: string; hi: string }
+  link: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export async function fetchNotifications(): Promise<{ notifications: NotificationItem[]; unread: number }> {
+  const res = await fetch(`${API_URL}/api/v1/notifications`, { headers: await authHeaders() })
+  if (!res.ok) return { notifications: [], unread: 0 }
+  return res.json()
+}
+
+export async function fetchUnreadCount(): Promise<number> {
+  const res = await fetch(`${API_URL}/api/v1/notifications?unread=1`, { headers: await authHeaders() })
+  if (!res.ok) return 0
+  return (await res.json()).unread ?? 0
+}
+
+export async function markNotificationRead(opts: { id?: string; all?: boolean }) {
+  const res = await fetch(`${API_URL}/api/v1/notifications/read`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify(opts),
+  })
+  return res.ok
+}
+
+// ── Reviews (Phase 6) ──────────────────────────────────────────────────────────
+
+export async function fetchOrderReview(orderId: string) {
+  const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/review`, { headers: await authHeaders() })
+  if (!res.ok) return { review: null, canReview: false, isProvider: false }
+  return res.json()
+}
+
+export async function submitReview(orderId: string, rating: number, text?: string) {
+  const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ rating, ...(text ? { text } : {}) }),
+  })
+  return { ok: res.ok, data: await res.json().catch(() => ({})) }
+}
+
+export async function replyReview(reviewId: string, reply: string) {
+  const res = await fetch(`${API_URL}/api/v1/reviews/${reviewId}/reply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ reply }),
+  })
+  return { ok: res.ok, data: await res.json().catch(() => ({})) }
+}
+
 function cryptoRandomUUID(): string {
   // RN lacks crypto.randomUUID in some runtimes — RFC4122 v4 fallback.
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/auth/session'
 import { AppShell } from '@/components/shell/AppShell'
+import { AdminNav } from '@/components/shell/AdminNav'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
@@ -15,6 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <AppShell context="admin" name={user.fullName} roles={user.roles}>
+      <AdminNav />
       <div className="p-6">{children}</div>
     </AppShell>
   )

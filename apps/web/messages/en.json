@@ -507,7 +507,8 @@
     "view_rfqs": "View RFQs",
     "view_orders": "View orders",
     "complete_onboarding": "Complete onboarding",
-    "onboarding_cta": "Finish your KYC to start receiving orders"
+    "onboarding_cta": "Finish your KYC to start receiving orders",
+    "view_reviews": "Reviews"
   },
   "shell": {
     "profile": "Profile & settings",
@@ -703,5 +704,95 @@
     "upload_failed": "Upload failed — try again",
     "file_too_large": "File too large (max 5 MB)",
     "invalid_file_type": "Only PDF, JPG, and PNG files are accepted"
+  },
+  "reviews": {
+    "heading": "Reviews",
+    "prompt": "Share your experience to help other businesses.",
+    "text_placeholder": "What went well? Anything to improve?",
+    "submit": "Submit review",
+    "pick_rating": "Please select a star rating.",
+    "failed": "Could not submit. Please try again.",
+    "provider_reply": "Provider's reply",
+    "reply_placeholder": "Write a reply…",
+    "reply_submit": "Post reply",
+    "status_flagged": "This review is under moderation.",
+    "status_removed": "This review was removed.",
+    "partner_title": "Your reviews",
+    "partner_empty": "No reviews yet. Completed orders can be reviewed by buyers.",
+    "count_label": "reviews",
+    "loading": "Loading…"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "mark_all_read": "Mark all read",
+    "loading": "Loading…",
+    "empty": "You're all caught up."
+  },
+  "coupons": {
+    "apply": "Apply",
+    "applied": "Coupon",
+    "applied_msg": "Coupon applied — you save {amount}.",
+    "coupon_not_found": "This coupon code is not valid.",
+    "coupon_inactive": "This coupon is no longer active.",
+    "coupon_not_started": "This coupon isn't active yet.",
+    "coupon_expired": "This coupon has expired.",
+    "coupon_usage_exceeded": "This coupon has reached its usage limit.",
+    "coupon_category_mismatch": "This coupon doesn't apply to this service."
+  },
+  "admin_nav": {
+    "verifications": "Verifications",
+    "reviews": "Reviews",
+    "coupons": "Coupons",
+    "cms": "Banners"
+  },
+  "admin_reviews": {
+    "title": "Flagged reviews",
+    "subtitle": "Reviews reported or auto-flagged for moderation. Remove hides them; restore re-publishes.",
+    "loading": "Loading…",
+    "empty": "No flagged reviews.",
+    "remove": "Remove",
+    "restore": "Restore"
+  },
+  "admin_coupons": {
+    "title": "Coupons",
+    "subtitle": "Create and manage discount codes.",
+    "new_coupon": "New coupon",
+    "code": "Code",
+    "kind": "Type",
+    "percent": "Percent",
+    "fixed": "Fixed amount",
+    "value_percent": "Percent (%)",
+    "value_rupees": "Amount (₹)",
+    "max_discount": "Max discount (₹)",
+    "optional": "Optional",
+    "valid_from": "Valid from",
+    "valid_to": "Valid to",
+    "usage_limit": "Usage limit",
+    "create": "Create coupon",
+    "create_failed": "Could not create coupon.",
+    "loading": "Loading…",
+    "value": "Value",
+    "used": "Used",
+    "status": "Active",
+    "empty": "No coupons yet."
+  },
+  "admin_cms": {
+    "title": "Banners",
+    "subtitle": "Create and schedule promotional banners.",
+    "new_banner": "New banner",
+    "slot": "Slot",
+    "locale": "Language",
+    "all_locales": "All languages",
+    "image_url": "Image URL",
+    "link": "Link",
+    "optional": "Optional",
+    "starts_at": "Starts",
+    "ends_at": "Ends",
+    "create": "Create banner",
+    "create_failed": "Could not create banner.",
+    "loading": "Loading…",
+    "empty": "No banners yet.",
+    "disable": "Disable",
+    "enable": "Enable"
   }
 }

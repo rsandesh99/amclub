@@ -5,6 +5,7 @@ import { SearchBar } from '@/components/catalog/SearchBar'
 import { CategoryGrid } from '@/components/catalog/CategoryGrid'
 import { ProviderMiniCard } from '@/components/catalog/ProviderMiniCard'
 import { getCategories, getTopRatedProviders } from '@/lib/catalog/queries'
+import { BannerSlot } from '@/components/cms/BannerSlot'
 
 // ISR — landing refreshes hourly (§ Phase 3 SEO).
 export const revalidate = 3600
@@ -59,6 +60,9 @@ export default async function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* CMS promotional banners (A6) */}
+      <BannerSlot slot="home_hero" />
 
       {/* Trust stats */}
       <section className="border-y border-border bg-surface">
