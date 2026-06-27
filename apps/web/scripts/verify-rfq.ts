@@ -21,11 +21,13 @@ const check = (n: string, ok: boolean, extra = '') => { console.log(`  ${ok ? 'â
 const tag = `rfqv_${Date.now()}`
 const created: { users: string[]; providerIds: string[]; msmeIds: string[]; rfqIds: string[] } = { users: [], providerIds: [], msmeIds: [], rfqIds: [] }
 
-async function mkUser(label: string): Promise<{ uid: string; token: string }> {
+async function mkUser(label: string, roles: string[] = ['msme']): Promise<{ uid: string; token: string }> {
   const email = `${tag}_${label}@killtest.amclub`
   const { data, error } = await admin.auth.admin.createUser({ email, password: 'Test1234!', email_confirm: true })
   if (error) throw new Error(`${label}: ${error.message}`)
   created.users.push(data.user.id)
+  // public.users row (profile FKs reference it; auth.users alone isn't enough).
+  await admin.from('users').insert({ id: data.user.id, email, roles })
   const anon = createClient(URL, ANON, { auth: { persistSession: false } })
   const { data: s } = await anon.auth.signInWithPassword({ email, password: 'Test1234!' })
   return { uid: data.user.id, token: s.session!.access_token }
@@ -53,7 +55,7 @@ async function main() {
   // Providers: 8 matching (KA, active, unpaused) + 1 paused + 1 wrong-state (MH)
   const matching: { uid: string; token: string; providerId: string }[] = []
   async function mkProvider(label: string, state: string, paused: boolean) {
-    const u = await mkUser(label)
+    const u = await mkUser(label, ['provider'])
     const { data: p } = await admin.from('provider_profiles').insert({
       user_id: u.uid, legal_name: `Prov ${label}`, display_name: `Prov ${label}`,
       slug: `${tag}-${label}`, state, status: 'active', capacity_paused: paused, languages: ['en'],
