@@ -1,9 +1,11 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { categoriesNeedingCredentialUpload } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser, upsertUserRow } from '@/lib/auth/session'
 import { encryptColumn } from '@/lib/crypto'
+import { serverError } from '@/lib/api/errors'
 
 const credentialUploadSchema = z.object({
   url: z.string().optional(),
@@ -53,6 +55,19 @@ export async function POST(request: NextRequest) {
   }
 
   const d = parsed.data
+
+  // §3.3/§5 — categories that require a credential document must have one
+  // uploaded before submit (defense-in-depth; the wizard also gates this).
+  const missingCreds = categoriesNeedingCredentialUpload(d.categorySlugs).filter(
+    (slug) => !d.credentialUploads[slug]?.url && !d.credentialUploads[slug]?.path,
+  )
+  if (missingCreds.length > 0) {
+    return NextResponse.json(
+      { error: 'Required credential documents are missing for your selected categories', missing: missingCreds },
+      { status: 422 },
+    )
+  }
+
   const admin = await createAdminClient()
 
   // 1. Ensure the user row carries the provider role
@@ -72,8 +87,7 @@ export async function POST(request: NextRequest) {
     .select('id, slug')
     .in('slug', d.categorySlugs)
   if (catLookupErr) {
-    console.error('[profile/provider POST] category lookup:', catLookupErr)
-    return NextResponse.json({ error: catLookupErr.message }, { status: 500 })
+    return serverError('[profile/provider POST] category lookup:', catLookupErr)
   }
   if (!cats || cats.length === 0) {
     return NextResponse.json({ error: 'No valid categories selected' }, { status: 422 })
@@ -111,8 +125,7 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (profileErr || !profile) {
-    console.error('[profile/provider POST] upsert profile:', profileErr)
-    return NextResponse.json({ error: profileErr?.message ?? 'DB error' }, { status: 500 })
+    return serverError('[profile/provider POST] upsert profile:', profileErr)
   }
   const providerId = profile.id
 
@@ -168,8 +181,7 @@ export async function POST(request: NextRequest) {
     { onConflict: 'provider_id' },
   )
   if (bankErr) {
-    console.error('[profile/provider POST] bank account:', bankErr)
-    return NextResponse.json({ error: bankErr.message }, { status: 500 })
+    return serverError('[profile/provider POST] bank account:', bankErr)
   }
 
   return NextResponse.json({ success: true, providerId, slug, status: 'under_review' })

@@ -144,3 +144,25 @@ export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
 }
 
 export const CATEGORY_LIST: CategoryMeta[] = Object.values(CATEGORIES)
+
+/**
+ * Credential kinds a provider uploads a DOCUMENT for (professional bodies).
+ * `gstin`/`pan` are API-verified elsewhere, not uploaded — so they don't make a
+ * category require a credential upload.
+ */
+export const UPLOADED_CREDENTIAL_KINDS = ['icai', 'icsi', 'bar_council', 'ca', 'credential'] as const
+
+/** Does listing in this category require the provider to UPLOAD a credential
+ *  document? (§3.3 / §5 required_credentials, excluding API-verified gstin/pan.) */
+export function categoryRequiresCredentialUpload(slug: CategorySlug): boolean {
+  const cat = CATEGORIES[slug]
+  if (!cat) return false
+  return cat.required_credentials.some((k) =>
+    (UPLOADED_CREDENTIAL_KINDS as readonly string[]).includes(k),
+  )
+}
+
+/** The subset of the given category slugs that require a credential upload. */
+export function categoriesNeedingCredentialUpload(slugs: string[]): string[] {
+  return slugs.filter((s) => categoryRequiresCredentialUpload(s as CategorySlug))
+}

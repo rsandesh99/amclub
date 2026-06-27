@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { INDIAN_STATES } from '@/lib/constants/india'
-import { CATEGORY_LIST } from '@amclub/shared'
+import { CATEGORY_LIST, categoriesNeedingCredentialUpload } from '@amclub/shared'
 
 type Step = 'auth' | 'business' | 'kyc' | 'bank' | 'submit' | 'under_review'
 
@@ -109,6 +109,12 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
     auth: t('step_contact'), business: t('step_business'),
     kyc: t('step_kyc'), bank: t('step_bank'), submit: t('step_submit'), under_review: t('step_submit'),
   }
+
+  // Credential gating (§3.3/§5): only categories whose required_credentials need
+  // an uploaded document (icai/bar_council/…) — gstin/pan are API-verified.
+  const credsNeededSlugs = categoriesNeedingCredentialUpload(draft.categorySlugs)
+  const credsRequired = credsNeededSlugs.length > 0
+  const credsComplete = credsNeededSlugs.every((slug) => !!draft.credentialUploads[slug])
 
   async function verifyGstin() {
     if (!draft.gstin) return
@@ -389,43 +395,50 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
               <Label htmlFor="pan">{t('pan_label')} <span className="text-foreground-secondary font-normal">({tCommon('optional')})</span></Label>
               <Input id="pan" placeholder={t('pan_placeholder')} value={draft.pan} onChange={(e) => update({ pan: e.target.value.toUpperCase() })} maxLength={10} />
             </div>
-            {/* Credential uploads */}
+            {/* Credential uploads — only categories that require an uploaded document */}
             <div className="flex flex-col gap-3">
               <Label>{t('credential_section')}</Label>
               <p className="text-xs text-foreground-secondary">{t('credential_hint')}</p>
-              {draft.categorySlugs.map((slug) => {
-                const cat = CATEGORY_LIST.find((c) => c.slug === slug)
-                const uploaded = draft.credentialUploads[slug]
-                return (
-                  <div key={slug} className="flex items-center justify-between rounded-button border border-border p-3">
-                    <div>
-                      <p className="text-sm font-medium">{cat?.name_i18n.en}</p>
-                      {uploaded && (
-                        <p className="text-xs text-success mt-0.5">{t('credential_uploaded', { name: uploaded.name })}</p>
-                      )}
+              {credsRequired ? (
+                credsNeededSlugs.map((slug) => {
+                  const cat = CATEGORY_LIST.find((c) => c.slug === slug)
+                  const uploaded = draft.credentialUploads[slug]
+                  return (
+                    <div key={slug} className="flex items-center justify-between rounded-button border border-border p-3">
+                      <div>
+                        <p className="text-sm font-medium">{cat?.name_i18n.en}</p>
+                        {uploaded ? (
+                          <p className="text-xs text-success mt-0.5">{t('credential_uploaded', { name: uploaded.name })}</p>
+                        ) : (
+                          <p className="text-xs text-warning mt-0.5">{t('credential_required_badge')}</p>
+                        )}
+                      </div>
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleCredentialUpload(slug, file)
+                          }}
+                        />
+                        <span className={`inline-flex h-9 items-center rounded-button border px-3 text-xs font-medium transition-colors ${uploaded ? 'border-success/40 text-success' : 'border-primary text-primary hover:bg-primary/10'}`}>
+                          {uploadingFor === slug ? '…' : uploaded ? 'Re-upload' : t('credential_upload')}
+                        </span>
+                      </label>
                     </div>
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        className="sr-only"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleCredentialUpload(slug, file)
-                        }}
-                      />
-                      <span className={`inline-flex h-9 items-center rounded-button border px-3 text-xs font-medium transition-colors ${uploaded ? 'border-success/40 text-success' : 'border-primary text-primary hover:bg-primary/10'}`}>
-                        {uploadingFor === slug ? '…' : uploaded ? 'Re-upload' : t('credential_upload')}
-                      </span>
-                    </label>
-                  </div>
-                )
-              })}
+                  )
+                })
+              ) : (
+                <p className="rounded-button bg-muted px-3 py-2 text-xs text-foreground-secondary">{t('credential_not_required')}</p>
+              )}
             </div>
             {error && <p className="text-sm text-danger">{error}</p>}
             <Button
               onClick={() => {
-                if (!draft.gstinVerified) { setError('Please verify your GSTIN before continuing'); return }
+                if (!draft.gstinVerified) { setError(t('gstin_required_error')); return }
+                if (!credsComplete) { setError(t('credential_required_error')); return }
                 setError('')
                 setStep('bank')
               }}
@@ -485,7 +498,12 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
           <div className="flex flex-col gap-2">
             {[
               { key: 'gstin', done: draft.gstinVerified, label: t('submit_checklist_gstin') },
-              { key: 'creds', done: Object.keys(draft.credentialUploads).length > 0, label: t('submit_checklist_creds') },
+              {
+                key: 'creds',
+                done: credsComplete,
+                // When no selected category needs an upload, show "not required".
+                label: credsRequired ? t('submit_checklist_creds') : t('submit_checklist_creds_not_required'),
+              },
               { key: 'bank', done: draft.bankVerified, label: t('submit_checklist_bank') },
             ].map(({ key, done, label }) => (
               <div key={key} className="flex items-center gap-2 text-sm">
@@ -495,7 +513,12 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             ))}
           </div>
           {error && <p className="text-sm text-danger">{error}</p>}
-          <Button onClick={submitForReview} loading={loading} className="w-full">
+          <Button
+            onClick={submitForReview}
+            loading={loading}
+            disabled={!draft.gstinVerified || !credsComplete || !draft.bankVerified}
+            className="w-full"
+          >
             {t('submit_btn')}
           </Button>
         </>

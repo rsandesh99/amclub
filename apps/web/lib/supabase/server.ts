@@ -1,3 +1,4 @@
+import 'server-only'
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
@@ -49,26 +50,19 @@ export async function createClient() {
  * Admin client that bypasses RLS. §2.5 rule 1:
  * ONLY use in server-side admin route handlers with an explicit authz check.
  * Never expose to client-reachable paths.
+ *
+ * IMPORTANT: this must NOT be built with `createServerClient({ cookies })`.
+ * @supabase/ssr would attach the logged-in user's JWT as the Authorization
+ * header, silently downgrading the client from `service_role` to the request
+ * user's `authenticated` role — so writes to tables where `authenticated` lacks
+ * grants (e.g. provider_profiles after migration 0004) fail with
+ * "permission denied for table …". A cookie-less service-role client always
+ * runs as service_role. (`async` kept for call-site compatibility.)
  */
 export async function createAdminClient() {
-  const cookieStore = await cookies()
-
-  return createServerClient(
+  return createSupabaseClient(
     process.env['NEXT_PUBLIC_SUPABASE_URL']!,
     process.env['SUPABASE_SERVICE_ROLE_KEY']!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
-            )
-          } catch {}
-        },
-      },
-    },
+    { auth: { persistSession: false, autoRefreshToken: false } },
   )
 }
