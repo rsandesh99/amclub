@@ -6,19 +6,25 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { getPaymentGateway } from '@/lib/payments'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 
-const bodySchema = z.object({
-  packageId: z.string().uuid(),
-  couponCode: z.string().max(50).optional(),
-  gstInvoice: z
-    .object({
-      gstin: z.string().optional(),
-      businessName: z.string().optional(),
-      address: z.string().optional(),
-    })
-    .optional(),
-  // Client-generated; dedupes a double-submit into one checkout session + order.
-  idempotencyKey: z.string().uuid(),
-})
+const bodySchema = z
+  .object({
+    packageId: z.string().uuid().optional(),
+    quoteId: z.string().uuid().optional(),
+    couponCode: z.string().max(50).optional(),
+    gstInvoice: z
+      .object({
+        gstin: z.string().optional(),
+        businessName: z.string().optional(),
+        address: z.string().optional(),
+      })
+      .optional(),
+    // Client-generated; dedupes a double-submit into one checkout session + order.
+    idempotencyKey: z.string().uuid(),
+  })
+  // Exactly one source — package (Buy Now) OR quote (accepted RFQ quote).
+  .refine((d) => !!d.packageId !== !!d.quoteId, {
+    message: 'Provide exactly one of packageId or quoteId',
+  })
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function resolveCouponDiscountPaise(coupon: any, taxableBeforeCoupon: number, categoryId: string): number {
@@ -38,6 +44,19 @@ function resolveCouponDiscountPaise(coupon: any, taxableBeforeCoupon: number, ca
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+/** Common frozen-session shape produced by either the package or quote branch. */
+interface Prep {
+  providerId: string
+  source: 'package' | 'quote'
+  packageId: string | null
+  quoteId: string | null
+  title: string
+  scopeSnapshot: Record<string, unknown>
+  deliveryDays: number
+  revisionMax: number | null
+  amounts: ReturnType<typeof computeOrderAmounts>
+}
+
 export async function POST(request: NextRequest) {
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -49,7 +68,7 @@ export async function POST(request: NextRequest) {
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
-  const { packageId, couponCode, gstInvoice, idempotencyKey } = parsed.data
+  const { packageId, quoteId, couponCode, gstInvoice, idempotencyKey } = parsed.data
 
   // Idempotent: a repeat with the same key returns the existing session/order.
   const { data: existing } = await supabase
@@ -68,61 +87,102 @@ export async function POST(request: NextRequest) {
   }
 
   // Buyer's MSME profile (RLS: owner read).
-  const { data: msme } = await supabase
-    .from('msme_profiles')
-    .select('id')
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (!msme) {
-    return NextResponse.json({ error: 'Complete your business profile first' }, { status: 403 })
-  }
-
-  // Active package + its provider + category commission (public read).
-  const { data: pkg } = await supabase
-    .from('packages')
-    .select(
-      'id, provider_id, category_id, title_i18n, scope_included, scope_excluded, deliverables, requirements_template, price_paise, discount_bps, member_extra_discount_bps, delivery_days, revision_count, status, provider:provider_profiles!inner(id, status), category:categories(commission_bps)',
-    )
-    .eq('id', packageId)
-    .eq('status', 'active')
-    .maybeSingle()
+  const { data: msme } = await supabase.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
+  if (!msme) return NextResponse.json({ error: 'Complete your business profile first' }, { status: 403 })
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  const p = pkg as any
-  if (!p || p.provider?.status !== 'active') {
-    return NextResponse.json({ error: 'Package not available' }, { status: 404 })
-  }
-  const commissionBps: number = p.category?.commission_bps ?? 1000
+  let prep: Prep
 
-  // Optional coupon → extra discount, folded into frozen amounts.
-  let extraDiscountPaise = 0
-  if (couponCode) {
-    const { data: coupon } = await supabase
-      .from('coupons')
-      .select('*')
-      .eq('code', couponCode)
+  if (packageId) {
+    const { data: pkg } = await supabase
+      .from('packages')
+      .select(
+        'id, provider_id, category_id, title_i18n, scope_included, scope_excluded, deliverables, requirements_template, price_paise, discount_bps, member_extra_discount_bps, delivery_days, revision_count, status, provider:provider_profiles!inner(id, status), category:categories(commission_bps)',
+      )
+      .eq('id', packageId)
+      .eq('status', 'active')
       .maybeSingle()
-    const taxableBeforeCoupon =
-      p.price_paise - Math.round((p.price_paise * p.discount_bps) / 10000)
-    extraDiscountPaise = resolveCouponDiscountPaise(coupon, taxableBeforeCoupon, p.category_id)
-  }
 
-  const amounts = computeOrderAmounts({
-    pricePaise: Number(p.price_paise),
-    discountBps: p.discount_bps,
-    commissionBps,
-    extraDiscountPaise,
-  })
+    const p = pkg as any
+    if (!p || p.provider?.status !== 'active') {
+      return NextResponse.json({ error: 'Package not available' }, { status: 404 })
+    }
+    const commissionBps: number = p.category?.commission_bps ?? 1000
 
-  const scopeSnapshot = {
-    title: p.title_i18n,
-    scopeIncluded: p.scope_included ?? [],
-    scopeExcluded: p.scope_excluded ?? [],
-    deliverables: p.deliverables ?? [],
-    requirementsTemplate: p.requirements_template ?? null,
+    let extraDiscountPaise = 0
+    if (couponCode) {
+      const { data: coupon } = await supabase.from('coupons').select('*').eq('code', couponCode).maybeSingle()
+      const taxableBeforeCoupon = p.price_paise - Math.round((p.price_paise * p.discount_bps) / 10000)
+      extraDiscountPaise = resolveCouponDiscountPaise(coupon, taxableBeforeCoupon, p.category_id)
+    }
+
+    prep = {
+      providerId: p.provider_id,
+      source: 'package',
+      packageId: p.id,
+      quoteId: null,
+      title: p.title_i18n?.en ?? 'Service order',
+      scopeSnapshot: {
+        title: p.title_i18n,
+        scopeIncluded: p.scope_included ?? [],
+        scopeExcluded: p.scope_excluded ?? [],
+        deliverables: p.deliverables ?? [],
+        requirementsTemplate: p.requirements_template ?? null,
+      },
+      deliveryDays: p.delivery_days,
+      revisionMax: p.revision_count,
+      amounts: computeOrderAmounts({
+        pricePaise: Number(p.price_paise),
+        discountBps: p.discount_bps,
+        commissionBps,
+        extraDiscountPaise,
+      }),
+    }
+  } else {
+    // Quote branch — accepting a submitted quote on the buyer's own RFQ.
+    const { data: q } = await supabase
+      .from('quotes')
+      .select(
+        'id, status, provider_id, price_paise, delivery_days, scope, rfq:rfqs!inner(id, msme_id, category_id, title, status, details)',
+      )
+      .eq('id', quoteId!)
+      .maybeSingle()
+    const quote = q as any
+    const rfq = quote?.rfq
+    if (!quote || !rfq) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+    if (rfq.msme_id !== msme.id) return NextResponse.json({ error: 'Not your RFQ' }, { status: 403 })
+    if (quote.status !== 'submitted') return NextResponse.json({ error: 'Quote no longer available' }, { status: 409 })
+    if (!(rfq.status === 'open' || rfq.status === 'quoted')) {
+      return NextResponse.json({ error: 'This request is closed' }, { status: 409 })
+    }
+
+    const { data: cat } = await supabase.from('categories').select('commission_bps').eq('id', rfq.category_id).maybeSingle()
+    const commissionBps: number = cat?.commission_bps ?? 1000
+
+    prep = {
+      providerId: quote.provider_id,
+      source: 'quote',
+      packageId: null,
+      quoteId: quote.id,
+      title: rfq.title,
+      scopeSnapshot: {
+        title: { en: rfq.title, hi: rfq.title },
+        scope: quote.scope,
+        rfqDetails: rfq.details ?? null,
+        deliverables: [],
+      },
+      deliveryDays: quote.delivery_days,
+      revisionMax: null,
+      amounts: computeOrderAmounts({
+        pricePaise: Number(quote.price_paise),
+        discountBps: 0,
+        commissionBps,
+      }),
+    }
   }
-  const title = p.title_i18n?.en ?? 'Service order'
   /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  const { amounts } = prep
 
   // Create the checkout session (frozen). ON CONFLICT guards a racing double-submit.
   const { data: session, error: insErr } = await supabase
@@ -130,11 +190,12 @@ export async function POST(request: NextRequest) {
     .upsert(
       {
         msme_id: msme.id,
-        provider_id: p.provider_id,
-        source: 'package',
-        package_id: p.id,
-        title,
-        scope_snapshot: scopeSnapshot,
+        provider_id: prep.providerId,
+        source: prep.source,
+        package_id: prep.packageId,
+        quote_id: prep.quoteId,
+        title: prep.title,
+        scope_snapshot: prep.scopeSnapshot,
         price_paise: amounts.pricePaise,
         discount_paise: amounts.discountPaise,
         gst_paise: amounts.gstPaise,
@@ -142,8 +203,8 @@ export async function POST(request: NextRequest) {
         commission_bps: amounts.commissionBps,
         commission_paise: amounts.commissionPaise,
         provider_earning_paise: amounts.providerEarningPaise,
-        delivery_days: p.delivery_days,
-        revision_max: p.revision_count,
+        delivery_days: prep.deliveryDays,
+        revision_max: prep.revisionMax,
         coupon_code: couponCode ?? null,
         gst_invoice: gstInvoice ?? null,
         idempotency_key: idempotencyKey,
@@ -157,7 +218,7 @@ export async function POST(request: NextRequest) {
 
   if (insErr || !session) {
     console.error('[checkout] session insert', insErr)
-    return NextResponse.json({ error: insErr?.message ?? 'Checkout failed' }, { status: 500 })
+    return NextResponse.json({ error: 'Checkout failed' }, { status: 500 })
   }
 
   // Create the Razorpay order (TEST mode or simulation) and bind it to the session.
@@ -165,7 +226,7 @@ export async function POST(request: NextRequest) {
   const order = await gateway.createOrder({
     amountPaise: amounts.totalPaise,
     receipt: `cs_${session.id}`.slice(0, 40),
-    notes: { checkout_session_id: session.id, package_id: p.id, msme_id: msme.id },
+    notes: { checkout_session_id: session.id, source: prep.source, msme_id: msme.id },
     idempotencyKey,
   })
 

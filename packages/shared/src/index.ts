@@ -7,5 +7,8 @@ export * from './money'
 // Category taxonomy
 export * from './categories'
 
+// RFQ template fields + contact masking
+export * from './rfq'
+
 // Zod schemas and derived TypeScript types
 export * from './schemas/index'

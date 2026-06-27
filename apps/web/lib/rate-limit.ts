@@ -57,6 +57,10 @@ export const limiters = {
   kyc: build(8, '1 m', 'rl:kyc'),
   /** Checkout creation per user (idempotency already prevents double-charge). */
   checkout: build(20, '1 m', 'rl:checkout'),
+  /** RFQ creation per user — fan-out is work; keep it sane. */
+  rfqCreate: build(10, '10 m', 'rl:rfq-create'),
+  /** Quote submission per provider — one quote per RFQ anyway. */
+  quoteSubmit: build(30, '1 m', 'rl:quote-submit'),
 } as const
 
 export interface RateLimitResult {

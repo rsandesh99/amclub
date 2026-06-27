@@ -103,16 +103,14 @@ export default function PartnerScreen() {
               ))}
             </View>
 
-            {/* Empty state */}
-            <View className="items-center rounded-xl border border-gray-200 bg-surface p-10 gap-3">
-              <Text className="text-4xl">📭</Text>
-              <Text className="text-base font-medium text-foreground">
-                {t('partner_home.no_rfqs_title')}
-              </Text>
-              <Text className="text-sm text-foreground-secondary text-center">
-                {t('partner_home.no_rfqs_desc')}
-              </Text>
-            </View>
+            {/* Quote requests (RFQ inbox) */}
+            <TouchableOpacity onPress={() => router.push('/partner-rfqs' as never)} className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-surface p-5">
+              <View>
+                <Text className="text-base font-semibold text-foreground">{t('rfq.inbox_title')}</Text>
+                <Text className="mt-0.5 text-xs text-foreground-secondary">{t('rfq.no_matched')}</Text>
+              </View>
+              <Text className="text-2xl">📬</Text>
+            </TouchableOpacity>
           </>
         )}
 

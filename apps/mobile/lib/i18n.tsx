@@ -17,7 +17,7 @@ const MESSAGES: Record<Locale, Messages> = { en, hi }
 interface I18nContextValue {
   locale: Locale
   setLocale: (locale: Locale) => void
-  t: (key: string) => string
+  t: (key: string, params?: Record<string, string | number>) => string
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null)
@@ -25,14 +25,16 @@ const I18nContext = createContext<I18nContextValue | null>(null)
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocale] = useState<Locale>('en')
 
-  function t(key: string): string {
+  function t(key: string, params?: Record<string, string | number>): string {
     const parts = key.split('.')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let value: any = MESSAGES[locale]
     for (const part of parts) {
       value = value?.[part]
     }
-    return typeof value === 'string' ? value : key
+    let out = typeof value === 'string' ? value : key
+    if (params) for (const [k, v] of Object.entries(params)) out = out.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
+    return out
   }
 
   return <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>

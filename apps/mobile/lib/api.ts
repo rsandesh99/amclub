@@ -139,6 +139,85 @@ export async function fetchMyOrders(role: 'msme' | 'provider' = 'msme'): Promise
   return d.orders ?? []
 }
 
+// ── RFQ (Phase 5) — same /api/v1 the web uses, Bearer-authed ───────────────────
+
+export async function createRfq(body: {
+  category_slug: string
+  title: string
+  details: Record<string, unknown>
+  budget_min_paise?: number
+  budget_max_paise?: number
+  needed_by?: string
+}) {
+  const res = await fetch(`${API_URL}/api/v1/rfq`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ ...body, attachments: [] }),
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
+export async function fetchMyRfqs() {
+  const res = await fetch(`${API_URL}/api/v1/rfq/mine`, { headers: await authHeaders() })
+  if (!res.ok) return []
+  return (await res.json()).rfqs ?? []
+}
+
+export async function fetchRfq(rfqId: string) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}`, { headers: await authHeaders() })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function fetchMatchedRfqs() {
+  const res = await fetch(`${API_URL}/api/v1/rfq/matched`, { headers: await authHeaders() })
+  if (!res.ok) return []
+  return (await res.json()).rfqs ?? []
+}
+
+export async function submitQuote(rfqId: string, body: { price_paise: number; delivery_days: number; scope: string; message?: string }) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify(body),
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
+export async function acceptQuote(quoteId: string) {
+  const co = await fetch(`${API_URL}/api/v1/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ quoteId, idempotencyKey: cryptoRandomUUID() }),
+  })
+  const cod = await co.json().catch(() => ({}))
+  if (!co.ok) return { ok: false, data: cod }
+  if (cod.simulated) {
+    const sim = await fetch(`${API_URL}/api/v1/checkout/simulate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ checkoutSessionId: cod.checkoutSessionId }),
+    })
+    return { ok: sim.ok, data: await sim.json().catch(() => ({})) }
+  }
+  return { ok: true, data: cod }
+}
+
+export async function fetchQuoteMessages(quoteId: string) {
+  const res = await fetch(`${API_URL}/api/v1/quotes/${quoteId}/messages`, { headers: await authHeaders() })
+  if (!res.ok) return []
+  return (await res.json()).messages ?? []
+}
+
+export async function sendQuoteMessage(quoteId: string, body: string) {
+  const res = await fetch(`${API_URL}/api/v1/quotes/${quoteId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ body }),
+  })
+  return res.ok ? res.json() : null
+}
+
 export async function fetchOrder(orderId: string) {
   const res = await fetch(`${API_URL}/api/v1/orders/${orderId}`, { headers: await authHeaders() })
   if (!res.ok) return null

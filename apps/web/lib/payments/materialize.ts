@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import type { PaymentGateway, GatewayPayment } from './types'
+import { finalizeQuoteAcceptance } from '@/lib/rfq/finalize'
 
 export interface CaptureInput {
   razorpayOrderId: string
@@ -31,7 +32,17 @@ export async function materializeFromCapture(
     console.error('[materializeFromCapture]', error)
     return { orderId: null, error: error.message }
   }
-  return { orderId: (data as string | null) ?? null }
+  const orderId = (data as string | null) ?? null
+  if (orderId) {
+    // Quote-sourced orders: accept the quote, auto-decline siblings, close the
+    // RFQ. Idempotent + best-effort — must never fail order creation.
+    try {
+      await finalizeQuoteAcceptance(admin, orderId)
+    } catch (e) {
+      console.error('[finalizeQuoteAcceptance]', e)
+    }
+  }
+  return { orderId }
 }
 
 /**

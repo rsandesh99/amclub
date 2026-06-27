@@ -111,10 +111,16 @@ export type PackageInput = z.infer<typeof packageSchema>
 
 // ── RFQ ───────────────────────────────────────────────────────────────────────
 
+export const rfqAttachmentSchema = z.object({
+  url: z.string(),
+  name: z.string().max(200),
+})
+
 export const rfqSchema = z.object({
   category_slug: z.enum(CATEGORY_SLUGS),
   title: z.string().min(10).max(200),
   details: z.record(z.string(), z.unknown()),
+  attachments: z.array(rfqAttachmentSchema).max(5).default([]),
   budget_min_paise: paiseSchema.optional(),
   budget_max_paise: paiseSchema.optional(),
   needed_by: z.string().date().optional(),
@@ -131,6 +137,13 @@ export const quoteSchema = z.object({
 })
 
 export type QuoteInput = z.infer<typeof quoteSchema>
+
+/** A message on a quote thread (pre-payment; server masks contact info). */
+export const quoteMessageSchema = z.object({
+  body: z.string().min(1).max(1000),
+})
+
+export type QuoteMessageInput = z.infer<typeof quoteMessageSchema>
 
 // ── Order ─────────────────────────────────────────────────────────────────────
 

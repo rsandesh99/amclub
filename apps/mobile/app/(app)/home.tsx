@@ -77,6 +77,15 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* RFQ entry */}
+        <TouchableOpacity onPress={() => router.push('/rfq' as never)} className="flex-row items-center justify-between rounded-xl border border-accent/30 bg-accent/5 p-5">
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-foreground">{t('rfq.new_title')}</Text>
+            <Text className="mt-0.5 text-xs text-foreground-secondary">{t('rfq.list_title')}</Text>
+          </View>
+          <Text className="text-2xl">📋</Text>
+        </TouchableOpacity>
+
         {/* Provider CTA */}
         <View className="rounded-xl border border-primary/20 bg-primary/5 p-5">
           <Text className="text-sm font-semibold text-primary">{t('msme_home.provider_cta_title')}</Text>
