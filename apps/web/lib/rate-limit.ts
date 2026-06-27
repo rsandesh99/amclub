@@ -26,10 +26,6 @@ if (!redis && process.env.NODE_ENV === 'production') {
   console.warn('[rate-limit] UPSTASH_REDIS_REST_URL/TOKEN not set — rate limiting is DISABLED.')
 }
 
-/** Whether the Upstash client was constructed at MODULE LOAD (i.e. both env vars
- *  were present when this module first initialised). Used only by the debug route. */
-export const rateLimiterRedisActive = redis !== null
-
 type Window = `${number} ${'ms' | 's' | 'm' | 'h' | 'd'}`
 
 function build(tokens: number, window: Window, prefix: string): Ratelimit | null {
