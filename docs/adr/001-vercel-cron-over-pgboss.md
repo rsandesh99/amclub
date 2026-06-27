@@ -29,6 +29,28 @@ are kept for tests and for Pro-plan fine-grained schedules, but only the combine
 `daily` route is registered in `vercel.json`. On Pro, split them back out and
 raise auto-cancel/auto-accept to hourly.
 
+**Update — 2026-06-27 (now on Vercel Pro): re-split into independent schedules.**
+The Pro plan lifts the Hobby limits (≤2 crons / daily-only), so the Hobby stopgap
+is removed. Each Phase-4 job runs on its own schedule (UTC):
+
+| Job | Route | Schedule (cron) | Cadence | Why |
+|---|---|---|---|---|
+| `order.auto_cancel_unaccepted` | `/api/v1/cron/auto-cancel` | `0 * * * *` | hourly | cancel + refund within ~1h of crossing the 24h no-accept SLA, not up to 24h later |
+| `order.auto_accept_delivered` | `/api/v1/cron/auto-accept` | `30 * * * *` | hourly (offset :30) | auto-accept + payout within ~1h of the 72h window, not up to 24h later |
+| reconcile dropped webhooks | `/api/v1/cron/reconcile` | `15 */6 * * *` | every 6h | recover a paid-but-missing order (dropped webhook) within ≤6h instead of ≤24h — payment safety net |
+| `payout.schedule_and_transfer` | `/api/v1/cron/payouts` | `0 4 * * *` | daily 04:00 UTC (09:30 IST) | payouts genuinely batch once/day (T+2 due); higher frequency adds nothing |
+
+The combined `/api/v1/cron/daily` route is **no longer scheduled**; it's retained
+as a guarded "run everything once" endpoint for ops/manual backfills.
+
+All routes remain idempotent and `CRON_SECRET`-guarded via `verifyCron` (Vercel
+sends `Authorization: Bearer $CRON_SECRET` to registered cron paths). Unchanged.
+
+Not in this re-split: the **24/48h delivery-acceptance reminders** (§5.9
+`order.auto_accept_delivered (… with 24/48h reminders)`) — those need the Phase-6
+`notification.dispatch` channel, which isn't built yet. The 72h auto-accept is
+handled now; the reminder cadence lands with Phase 6 notifications.
+
 Each route is **idempotent** (claims work via status CAS / unique constraints),
 authorised with `CRON_SECRET` (`verifyCron`), and reuses the same order/payment
 logic as the live request paths. The jobs are all **time-based**, which maps

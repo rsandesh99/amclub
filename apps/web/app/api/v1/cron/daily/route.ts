@@ -11,10 +11,11 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 /**
- * Single daily job tick — runs all four time-based jobs in sequence. Collapsed
- * into one cron so it fits the Vercel Hobby plan (≤2 crons, daily-only); the
- * individual /cron/* routes remain for testing and for Pro-plan fine-grained
- * schedules. Idempotent throughout. §ADR 001.
+ * Runs all four time-based jobs in sequence. This was the single registered cron
+ * under the Vercel Hobby plan (≤2 crons, daily-only). On Pro the jobs are split
+ * back into independent schedules (see vercel.json + ADR 001), so this route is
+ * NO LONGER scheduled — it's kept as a guarded "run everything once" endpoint for
+ * ops/manual backfills. Idempotent throughout. §ADR 001.
  */
 export async function GET(request: NextRequest) {
   if (!verifyCron(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
