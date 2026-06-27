@@ -123,7 +123,8 @@ async function main() {
     `flag=${flag.status} queued=${queued} remove=${remove.status} count→${provRemoved!.review_count} avg→${provRemoved!.avg_rating}`)
 
   // ── Criterion 4: notifications (locale, unread, mark-read), email + stubs ────
-  const { data: placedNotif } = await admin.from('notifications').select('channels, title_i18n').eq('user_id', provUser.uid).eq('kind', 'order_placed').maybeSingle()
+  const { data: placedRows } = await admin.from('notifications').select('channels, title_i18n').eq('user_id', provUser.uid).eq('kind', 'order_placed').order('created_at', { ascending: false }).limit(1)
+  const placedNotif = placedRows?.[0]
   const list1 = await (await api(buyer.token, '/api/v1/notifications', undefined, 'GET')).json()
   const unreadBefore = list1.unread
   await api(buyer.token, '/api/v1/notifications/read', { all: true })

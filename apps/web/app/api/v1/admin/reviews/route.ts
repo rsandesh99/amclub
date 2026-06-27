@@ -1,15 +1,12 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/admin'
 
 /** GET — flagged reviews queue for ops (A4). */
 export async function GET(request: NextRequest) {
-  const user = await getSessionUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!user.roles.includes('admin') && !user.roles.includes('ops')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const gate = await requireAdmin()
+  if (gate.error) return gate.error
 
   const status = new URL(request.url).searchParams.get('status') ?? 'flagged'
   const admin = await createAdminClient()

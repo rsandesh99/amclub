@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/admin'
 import { serverError } from '@/lib/api/errors'
 
 /**
@@ -20,15 +20,6 @@ const createSchema = z.object({
   validTo: z.string().datetime(),
   usageLimit: z.number().int().positive().optional(),
 }).refine((d) => d.kind !== 'percent' || d.value <= 100, { message: 'Percentage cannot exceed 100', path: ['value'] })
-
-async function requireAdmin() {
-  const user = await getSessionUser()
-  if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  if (!user.roles.includes('admin') && !user.roles.includes('ops')) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
-  }
-  return { user }
-}
 
 export async function GET() {
   const gate = await requireAdmin()

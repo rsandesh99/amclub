@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/admin'
 import { serverError } from '@/lib/api/errors'
 
 const createSchema = z.object({
@@ -15,15 +15,6 @@ const createSchema = z.object({
 })
 
 const patchSchema = z.object({ id: z.string().uuid(), isActive: z.boolean() })
-
-async function requireAdmin() {
-  const user = await getSessionUser()
-  if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  if (!user.roles.includes('admin') && !user.roles.includes('ops')) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
-  }
-  return { user }
-}
 
 export async function GET() {
   const gate = await requireAdmin()
