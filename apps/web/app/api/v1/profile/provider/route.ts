@@ -170,10 +170,22 @@ export async function POST(request: NextRequest) {
   }
 
   // 6. Bank account (encrypted account number). Upsert by provider_id.
+  // encryptColumn throws in production if COLUMN_ENCRYPTION_KEY is unset/invalid
+  // (it refuses a default key for bank data). Catch it so the whole submit fails
+  // with a logged, diagnosable error instead of a silent 500.
+  let accountNumberEnc: string
+  try {
+    accountNumberEnc = encryptColumn(d.bankAccount)
+  } catch (e) {
+    // Distinct, non-secret code so a missing/invalid COLUMN_ENCRYPTION_KEY is
+    // diagnosable in prod instead of a silent 500. Full detail logged server-side.
+    console.error('[profile/provider POST] bank encryption — check COLUMN_ENCRYPTION_KEY:', e)
+    return NextResponse.json({ error: 'bank_encryption_unconfigured' }, { status: 503 })
+  }
   const { error: bankErr } = await admin.from('provider_bank_accounts').upsert(
     {
       provider_id: providerId,
-      account_number_enc: encryptColumn(d.bankAccount),
+      account_number_enc: accountNumberEnc,
       ifsc: d.bankIfsc,
       account_holder: d.bankHolder,
       penny_drop_verified: d.bankVerified,
