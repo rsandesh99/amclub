@@ -41,6 +41,9 @@ const serverEnvSchema = z.object({
   // no-op (allow all) so local/dev keeps working without Redis.
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+  // Feature flags. 'true' enables; anything else (incl. unset) = OFF.
+  // COUPONS_ENABLED gates the entire Phase-6 coupon path (see lib/flags.ts).
+  COUPONS_ENABLED: z.string().optional(),
 })
 
 function parseEnv() {

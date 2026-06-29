@@ -5,6 +5,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon, COUPON_ERROR_KEY } from '@/lib/coupons/apply'
+import { COUPONS_ENABLED } from '@/lib/flags'
 
 const bodySchema = z
   .object({
@@ -21,6 +22,9 @@ const bodySchema = z
  * checkout (the discount is frozen on the checkout_session).
  */
 export async function POST(request: NextRequest) {
+  // Flag-gated (default OFF). Dormant when disabled — behaves as if absent.
+  if (!COUPONS_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

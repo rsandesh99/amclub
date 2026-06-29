@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { computeOrderAmounts } from '@amclub/shared'
 import { pickI18n } from '@/lib/format'
+import { COUPONS_ENABLED } from '@/lib/flags'
 import { CheckoutClient } from './CheckoutClient'
 
 export default async function CheckoutPage({ params }: { params: Promise<{ packageId: string }> }) {
@@ -40,6 +41,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ packa
         providerName={p.provider.display_name}
         deliveryDays={p.delivery_days}
         amounts={amounts}
+        couponsEnabled={COUPONS_ENABLED}
       />
     </div>
   )

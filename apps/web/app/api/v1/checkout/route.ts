@@ -6,6 +6,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { getPaymentGateway } from '@/lib/payments'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon } from '@/lib/coupons/apply'
+import { COUPONS_ENABLED } from '@/lib/flags'
 
 const bodySchema = z
   .object({
@@ -52,8 +53,10 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   const { packageId, quoteId, gstInvoice, idempotencyKey } = parsed.data
-  // Coupon codes are stored upper-cased — normalise before lookup + freezing.
-  const couponCode = parsed.data.couponCode?.trim().toUpperCase() || undefined
+  // Coupons are flag-gated (default OFF). When OFF, any client-supplied code is
+  // ignored and the coupon branch is skipped entirely — one less branch in the
+  // money math. Codes are stored upper-cased, so normalise before lookup.
+  const couponCode = COUPONS_ENABLED ? parsed.data.couponCode?.trim().toUpperCase() || undefined : undefined
 
   // Idempotent: a repeat with the same key returns the existing session/order.
   const { data: existing } = await supabase

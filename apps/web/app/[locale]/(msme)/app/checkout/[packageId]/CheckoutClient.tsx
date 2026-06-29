@@ -21,12 +21,16 @@ export function CheckoutClient({
   providerName,
   deliveryDays,
   amounts,
+  couponsEnabled = false,
 }: {
   packageId: string
   title: string
   providerName: string
   deliveryDays: number
   amounts: OrderAmounts
+  /** Coupons feature flag (default OFF). When false the input is hidden and the
+   *  total never includes a coupon discount. */
+  couponsEnabled?: boolean
 }) {
   const t = useTranslations('checkout')
   const tc = useTranslations('coupons')
@@ -140,18 +144,21 @@ export function CheckoutClient({
         </dl>
       </div>
 
-      <div className="space-y-1.5">
-        <div className="flex gap-2">
-          <Input
-            value={coupon}
-            onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setApplied(null); setCouponMsg('') }}
-            placeholder={t('coupon')}
-          />
-          <Button variant="secondary" onClick={applyCoupon} loading={couponBusy} disabled={!coupon.trim()}>{tc('apply')}</Button>
+      {/* Coupons are flag-gated (default OFF) — hidden until re-enabled. */}
+      {couponsEnabled && (
+        <div className="space-y-1.5">
+          <div className="flex gap-2">
+            <Input
+              value={coupon}
+              onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setApplied(null); setCouponMsg('') }}
+              placeholder={t('coupon')}
+            />
+            <Button variant="secondary" onClick={applyCoupon} loading={couponBusy} disabled={!coupon.trim()}>{tc('apply')}</Button>
+          </div>
+          {applied && <p className="text-sm text-success">{tc('applied_msg', { amount: formatINR(applied.discountPaise) })}</p>}
+          {couponMsg && <p className="text-sm text-danger">{couponMsg}</p>}
         </div>
-        {applied && <p className="text-sm text-success">{tc('applied_msg', { amount: formatINR(applied.discountPaise) })}</p>}
-        {couponMsg && <p className="text-sm text-danger">{couponMsg}</p>}
-      </div>
+      )}
 
       <div className="rounded-card border border-border bg-surface p-4">
         <button type="button" onClick={() => setGstOpen((v) => !v)} className="flex w-full items-center justify-between text-sm font-medium">

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
 import { serverError } from '@/lib/api/errors'
+import { COUPONS_ENABLED } from '@/lib/flags'
 
 /**
  * Admin coupon management (A6 / §5.5). `value` is human units: for percent it's
@@ -22,6 +23,7 @@ const createSchema = z.object({
 }).refine((d) => d.kind !== 'percent' || d.value <= 100, { message: 'Percentage cannot exceed 100', path: ['value'] })
 
 export async function GET() {
+  if (!COUPONS_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const gate = await requireAdmin()
   if (gate.error) return gate.error
   const admin = await createAdminClient()
@@ -34,6 +36,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  if (!COUPONS_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const gate = await requireAdmin()
   if (gate.error) return gate.error
 

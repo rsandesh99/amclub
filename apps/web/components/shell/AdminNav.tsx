@@ -11,13 +11,15 @@ const ITEMS = [
   { href: '/admin/cms', key: 'cms' },
 ] as const
 
-/** Ops sub-navigation across the admin surfaces (A4/A6/§7). */
-export function AdminNav() {
+/** Ops sub-navigation across the admin surfaces (A4/A6/§7). The Coupons tab is
+ *  hidden while the COUPONS_ENABLED flag is OFF (passed from the layout). */
+export function AdminNav({ couponsEnabled = false }: { couponsEnabled?: boolean }) {
   const t = useTranslations('admin_nav')
   const pathname = usePathname()
+  const items = ITEMS.filter((it) => it.key !== 'coupons' || couponsEnabled)
   return (
     <nav className="flex flex-wrap gap-1 border-b border-border px-6 pt-4">
-      {ITEMS.map((it) => {
+      {items.map((it) => {
         const active = pathname.includes(it.href)
         return (
           <Link
