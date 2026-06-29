@@ -38,3 +38,58 @@
     min-width: 44px;
   }
 }
+
+@layer components {
+  /* ── Elevation & interactive surfaces (§4) ────────────────────────────────
+     ONE coherent system so every card/surface across the app inherits the
+     same depth + hover/press behaviour. Motion (the lift) is gated behind
+     `motion-safe:` so it is automatically disabled under
+     prefers-reduced-motion; shadow/colour shifts still provide feedback. */
+
+  /* Static elevated surface — panels, non-clickable cards. */
+  .card-surface {
+    @apply rounded-card border border-border bg-surface shadow-resting;
+  }
+
+  /* Clickable surface — lifts and deepens its shadow on hover, settles on
+     press, shows a clear focus ring for keyboard users. */
+  .card-interactive {
+    @apply rounded-card border border-border bg-surface shadow-resting
+      transition duration-200 ease-out
+      hover:border-primary/40 hover:shadow-hover
+      active:shadow-resting
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
+      focus-visible:ring-offset-2 focus-visible:ring-offset-background
+      motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0;
+  }
+
+  /* ── Form controls (§4) — consistent height, padding, border, focus ────────
+     Replaces raw browser-default inputs/selects everywhere. */
+  .field-control {
+    @apply h-11 w-full rounded-button border border-border bg-surface px-3 text-sm text-foreground
+      transition-colors placeholder:text-foreground-secondary
+      focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* <select> styled to match — native chevron removed, replaced with a
+     token-coloured chevron so dropdowns stop looking like raw OS widgets. */
+  .field-select {
+    @apply h-11 w-full cursor-pointer appearance-none rounded-button border border-border bg-surface
+      py-0 pl-3 pr-9 text-sm text-foreground transition-colors
+      focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25
+      disabled:cursor-not-allowed disabled:opacity-50;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235C645C' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 1rem;
+  }
+
+  /* Pill toggle for filter bars (aria-pressed). The active/idle colours are
+     supplied by the caller; this owns layout, sizing and the focus ring. */
+  .chip-toggle {
+    @apply inline-flex h-11 items-center gap-1.5 rounded-button border px-3.5 text-sm font-medium
+      transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
+      focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+}

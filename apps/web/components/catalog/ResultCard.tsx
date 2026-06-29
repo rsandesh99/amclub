@@ -25,7 +25,7 @@ export function ResultCard({ result }: { result: CatalogResult }) {
   return (
     <Link
       href={`/p/${result.providerSlug}/${result.packageSlug}`}
-      className="group flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:border-primary/40"
+      className="card-interactive group flex h-full flex-col gap-3 p-4"
     >
       {/* Provider row — credential-first (§4.3): credential leads, rating secondary */}
       <div className="flex items-center gap-3">

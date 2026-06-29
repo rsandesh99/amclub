@@ -1,5 +1,6 @@
 'use client'
 
+import { BadgeCheck } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { useSearchParams } from 'next/navigation'
@@ -38,8 +39,9 @@ export function ListingControls() {
     Object.entries(PRICE_BUCKETS).find(([k]) => k === params.get('price'))?.[0] ?? 'any'
   const verified = params.get('verifiedOnly') === 'true'
 
-  const selectCls =
-    'rounded-button border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary'
+  // Filter selects share the design-system `.field-select` (consistent height,
+  // border, focus ring, token-coloured chevron) — never raw browser defaults.
+  const selectCls = 'field-select w-auto min-w-[7.5rem]'
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -120,18 +122,19 @@ export function ListingControls() {
         ))}
       </select>
 
-      {/* Verified-only */}
+      {/* Verified-only — pill toggle, same height as the selects */}
       <button
         type="button"
         onClick={() => update({ verifiedOnly: verified ? null : 'true' })}
         aria-pressed={verified}
         className={cn(
-          'rounded-button border px-3 py-1.5 text-sm font-medium transition-colors',
+          'chip-toggle',
           verified
             ? 'border-trust bg-trust/10 text-trust'
-            : 'border-border bg-surface text-foreground-secondary hover:border-trust/40',
+            : 'border-border bg-surface text-foreground-secondary hover:border-trust/40 hover:text-foreground',
         )}
       >
+        <BadgeCheck className="h-4 w-4" aria-hidden />
         {t('verified_only')}
       </button>
     </div>

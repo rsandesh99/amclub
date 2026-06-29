@@ -6,6 +6,9 @@ import { CategoryGrid } from '@/components/catalog/CategoryGrid'
 import { ProviderMiniCard } from '@/components/catalog/ProviderMiniCard'
 import { getCategories, getTopRatedProviders } from '@/lib/catalog/queries'
 import { BannerSlot } from '@/components/cms/BannerSlot'
+import { HeroBanner } from '@/components/cms/HeroBanner'
+import { getActiveBanners, getMaxDiscountPct } from '@/lib/cms/queries'
+import { pickI18n } from '@/lib/format'
 
 // ISR — landing refreshes hourly (§ Phase 3 SEO).
 export const revalidate = 3600
@@ -14,10 +17,25 @@ export default async function LandingPage() {
   const t = await getTranslations('landing')
   const tCat = await getTranslations('catalog')
   const locale = await getLocale()
-  const [categories, topProviders] = await Promise.all([
+  const heroLocale = locale === 'hi' ? 'hi' : 'en'
+  const [categories, topProviders, heroBanners, maxDiscountPct] = await Promise.all([
     getCategories(),
     getTopRatedProviders(8),
+    getActiveBanners('hero', heroLocale),
+    getMaxDiscountPct(),
   ])
+
+  // Hero copy + discount come from the CMS `hero` slot when an admin has set
+  // one; otherwise fall back to default i18n copy with the REAL catalog max
+  // discount so the "up to X%" claim is always backable (item 8 trust rule).
+  const adminHero = heroBanners.find((b) => b.variant === 'hero') ?? null
+  const hero = {
+    headline: adminHero?.headline ? pickI18n(adminHero.headline, locale) : t('hero_promo_headline'),
+    subline: adminHero?.subline ? pickI18n(adminHero.subline, locale) : t('hero_promo_subline'),
+    ctaLabel: adminHero?.ctaLabel ? pickI18n(adminHero.ctaLabel, locale) : t('hero_promo_cta'),
+    ctaHref: adminHero?.ctaHref || '/services',
+    discountPct: adminHero ? adminHero.discountPct : maxDiscountPct,
+  }
 
   const stats = [
     { value: '6.3 Cr+', label: t('stat_msmes') },
@@ -34,7 +52,17 @@ export default async function LandingPage() {
 
   return (
     <>
-      {/* Hero */}
+      {/* Promotional hero banner (CMS-driven, A6) — copy/discount/CTA editable
+          from /admin/cms; honest default discount from the live catalog. */}
+      <HeroBanner
+        headline={hero.headline}
+        subline={hero.subline}
+        ctaLabel={hero.ctaLabel}
+        ctaHref={hero.ctaHref}
+        discountPct={hero.discountPct}
+      />
+
+      {/* Search hero */}
       <section className="bg-gradient-to-b from-primary/5 to-background">
         <div className="mx-auto max-w-4xl px-4 py-14 text-center sm:py-20">
           <h1 className="font-display text-2xl font-bold leading-tight text-foreground sm:text-[40px] sm:leading-[1.1]">

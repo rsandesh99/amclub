@@ -33,7 +33,8 @@ export function SearchBar({
     <form
       onSubmit={onSubmit}
       className={cn(
-        'flex w-full items-center gap-2 rounded-card border border-border bg-surface shadow-card',
+        'flex w-full items-center gap-2 rounded-card border border-border bg-surface shadow-resting transition-shadow',
+        'focus-within:border-primary/50 focus-within:shadow-hover focus-within:ring-2 focus-within:ring-primary/20',
         size === 'lg' ? 'p-2' : 'p-1.5',
         className,
       )}
@@ -54,7 +55,9 @@ export function SearchBar({
       <button
         type="submit"
         className={cn(
-          'shrink-0 rounded-button bg-primary font-semibold text-white transition-colors hover:bg-primary/90',
+          'shrink-0 rounded-button bg-primary font-semibold text-white shadow-xs transition',
+          'hover:bg-primary/90 hover:shadow-hover active:bg-primary active:shadow-pressed motion-safe:active:scale-[0.98]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
           size === 'lg' ? 'px-5 py-2.5 text-md' : 'px-4 py-2 text-sm',
         )}
       >

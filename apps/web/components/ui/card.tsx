@@ -1,10 +1,16 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+export function Card({
+  className,
+  interactive = false,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { interactive?: boolean }) {
+  // `card-surface` / `card-interactive` are the shared elevation classes
+  // (globals.css §4) so every Card inherits the one coherent shadow system.
   return (
     <div
-      className={cn('rounded-card border border-border bg-surface shadow-card', className)}
+      className={cn(interactive ? 'card-interactive' : 'card-surface', className)}
       {...props}
     />
   )

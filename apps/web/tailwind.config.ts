@@ -55,22 +55,38 @@ const config: Config = {
         sans: ['var(--font-inter)', 'Noto Sans Devanagari', 'sans-serif'],
       },
       fontSize: {
-        // §4.2 type scale
-        xs: ['13px', '1.4'],
-        sm: ['15px', '1.5'],
-        base: ['15px', '1.5'],
-        md: ['17px', '1.4'],
-        lg: ['20px', '1.3'],
-        xl: ['24px', '1.25'],
-        '2xl': ['30px', '1.2'],
+        // §4.2 type scale — tightened tracking on the larger steps for cleaner
+        // heading hierarchy. Body stays at 15px.
+        xs: ['13px', { lineHeight: '1.4' }],
+        sm: ['15px', { lineHeight: '1.5' }],
+        base: ['15px', { lineHeight: '1.5' }],
+        md: ['17px', { lineHeight: '1.4' }],
+        lg: ['20px', { lineHeight: '1.3', letterSpacing: '-0.01em' }],
+        xl: ['24px', { lineHeight: '1.25', letterSpacing: '-0.015em' }],
+        '2xl': ['30px', { lineHeight: '1.2', letterSpacing: '-0.02em' }],
+        '3xl': ['36px', { lineHeight: '1.15', letterSpacing: '-0.022em' }],
+        '4xl': ['44px', { lineHeight: '1.08', letterSpacing: '-0.025em' }],
+        '5xl': ['56px', { lineHeight: '1.04', letterSpacing: '-0.028em' }],
       },
       borderRadius: {
         card: '12px',
         button: '10px',
         chip: '999px',
       },
+      // §4 elevation scale — ONE coherent system. Brand-tinted (cool green-black)
+      // so shadows harmonise with the #1B4D3E palette instead of flat grey.
+      // resting → hover → lg map to the card lift states; `card` is kept as an
+      // alias for the many existing `shadow-card` usages.
       boxShadow: {
-        card: '0 1px 3px rgb(0 0 0 / .08)',
+        xs: '0 1px 2px 0 rgb(16 30 24 / 0.05)',
+        resting: '0 1px 2px 0 rgb(16 30 24 / 0.04), 0 1px 3px 0 rgb(16 30 24 / 0.08)',
+        card: '0 1px 2px 0 rgb(16 30 24 / 0.04), 0 1px 3px 0 rgb(16 30 24 / 0.08)',
+        hover: '0 6px 16px -4px rgb(16 30 24 / 0.12), 0 2px 6px -2px rgb(16 30 24 / 0.07)',
+        lg: '0 16px 40px -8px rgb(16 30 24 / 0.16), 0 4px 12px -4px rgb(16 30 24 / 0.08)',
+        pressed: 'inset 0 1px 2px 0 rgb(16 30 24 / 0.10)',
+      },
+      transitionDuration: {
+        DEFAULT: '180ms',
       },
     },
   },

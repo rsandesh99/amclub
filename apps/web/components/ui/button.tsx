@@ -19,14 +19,19 @@ export function Button({
   ...props
 }: ButtonProps) {
   const base =
-    'inline-flex items-center justify-center rounded-button font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50'
+    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-button font-medium ' +
+    'transition duration-150 ease-out ' +
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ' +
+    'disabled:pointer-events-none disabled:opacity-50 ' +
+    'motion-safe:active:scale-[0.98]'
 
   const variants = {
-    primary: 'bg-primary text-white hover:bg-primary/90',
-    secondary: 'bg-primary/10 text-primary hover:bg-primary/20',
-    outline: 'border border-primary text-primary hover:bg-primary/10',
-    ghost: 'text-primary hover:bg-primary/10',
-    danger: 'bg-danger text-white hover:bg-danger/90',
+    // Primary carries subtle depth so it reads as the main action.
+    primary: 'bg-primary text-white shadow-xs hover:bg-primary/90 hover:shadow-hover active:bg-primary active:shadow-pressed',
+    secondary: 'bg-primary/10 text-primary hover:bg-primary/[0.16] active:bg-primary/20',
+    outline: 'border border-primary text-primary hover:bg-primary/10 active:bg-primary/15',
+    ghost: 'text-primary hover:bg-primary/10 active:bg-primary/15',
+    danger: 'bg-danger text-white shadow-xs hover:bg-danger/90 hover:shadow-hover active:bg-danger active:shadow-pressed',
   }
 
   const sizes = {
@@ -43,7 +48,7 @@ export function Button({
     >
       {loading && (
         <svg
-          className="mr-2 h-4 w-4 animate-spin"
+          className="h-4 w-4 animate-spin"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"

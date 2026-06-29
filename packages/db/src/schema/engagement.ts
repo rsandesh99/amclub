@@ -122,8 +122,16 @@ export const auditLogs = pgTable('audit_logs', {
 export const cmsBanners = pgTable('cms_banners', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   slot: text('slot').notNull(),
-  imageUrl: text('image_url').notNull(),
+  // 'image' | 'hero'. Hero banners render styled copy instead of an image.
+  variant: text('variant').default('image').notNull(),
+  imageUrl: text('image_url'), // required only for variant='image'
   link: text('link'),
+  // Hero-variant content (editable from /admin/cms — no code change). i18n {en,hi}.
+  headline: jsonb('headline'),
+  subline: jsonb('subline'),
+  ctaLabel: jsonb('cta_label'),
+  ctaHref: text('cta_href'),
+  discountPct: integer('discount_pct'),
   locale: text('locale'),
   startsAt: timestamp('starts_at', { withTimezone: true }),
   endsAt: timestamp('ends_at', { withTimezone: true }),

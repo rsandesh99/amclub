@@ -257,7 +257,12 @@
     "top_rated_title": "Top-rated providers",
     "provider_cta_title": "Are you a service provider?",
     "provider_cta_body": "Reach thousands of MSMEs looking for exactly what you offer. List your services free.",
-    "provider_cta_btn": "Start selling on AMClub"
+    "provider_cta_btn": "Start selling on AMClub",
+    "hero_promo_headline": "Verified experts. Real savings.",
+    "hero_promo_subline": "Compare trusted, verified providers for CA, legal, HR, registrations and more — upfront pricing, no haggling.",
+    "hero_promo_cta": "Browse services",
+    "hero_eyebrow": "Up to {pct}% off business services",
+    "hero_savings": "savings"
   },
   "locale": {
     "switch": "Switch language",
@@ -800,7 +805,17 @@
     "loading": "Loading…",
     "empty": "No banners yet.",
     "disable": "Disable",
-    "enable": "Enable"
+    "enable": "Enable",
+    "variant_hero": "Hero",
+    "variant_image": "Image",
+    "headline": "Headline",
+    "headline_ph": "Verified experts. Real savings.",
+    "subline": "Subline",
+    "cta_label": "Button label",
+    "cta_ph": "Browse services",
+    "cta_href": "Button link",
+    "discount_pct": "Discount %",
+    "discount_hint": "Live catalog max: {pct}% — keep the figure backable by a real listing."
   },
   "admin_ops": {
     "loading": "Loading…",

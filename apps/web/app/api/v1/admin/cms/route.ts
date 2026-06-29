@@ -3,16 +3,31 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
+import { getMaxDiscountPct } from '@/lib/cms/queries'
 import { serverError } from '@/lib/api/errors'
 
-const createSchema = z.object({
-  slot: z.string().trim().min(1).max(40),
-  imageUrl: z.string().url(),
-  link: z.string().url().optional(),
-  locale: z.enum(['en', 'hi']).nullable().optional(),
-  startsAt: z.string().datetime().nullable().optional(),
-  endsAt: z.string().datetime().nullable().optional(),
-})
+const i18nText = z.object({ en: z.string().trim().min(1).max(200), hi: z.string().trim().max(200).optional() })
+
+const createSchema = z
+  .object({
+    slot: z.string().trim().min(1).max(40),
+    variant: z.enum(['image', 'hero']).default('image'),
+    imageUrl: z.string().url().optional(),
+    link: z.string().url().optional(),
+    headline: i18nText.optional(),
+    subline: i18nText.optional(),
+    ctaLabel: i18nText.optional(),
+    // Relative path (/services) or absolute URL — not validated as URL.
+    ctaHref: z.string().trim().max(300).optional(),
+    discountPct: z.number().int().min(0).max(100).optional(),
+    locale: z.enum(['en', 'hi']).nullable().optional(),
+    startsAt: z.string().datetime().nullable().optional(),
+    endsAt: z.string().datetime().nullable().optional(),
+  })
+  // image banners need an image; hero banners need a headline.
+  .refine((d) => (d.variant === 'image' ? !!d.imageUrl : !!d.headline), {
+    message: 'image banners require imageUrl; hero banners require a headline',
+  })
 
 const patchSchema = z.object({ id: z.string().uuid(), isActive: z.boolean() })
 
@@ -22,10 +37,15 @@ export async function GET() {
   const admin = await createAdminClient()
   const { data } = await admin
     .from('cms_banners')
-    .select('id, slot, image_url, link, locale, starts_at, ends_at, is_active, created_at')
+    .select(
+      'id, slot, variant, image_url, link, headline, subline, cta_label, cta_href, discount_pct, locale, starts_at, ends_at, is_active, created_at',
+    )
     .order('created_at', { ascending: false })
     .limit(200)
-  return NextResponse.json({ banners: data ?? [] })
+  // Live catalog max discount — surfaced so the admin keeps the hero figure
+  // honest (item 8 trust rule).
+  const maxDiscountPct = await getMaxDiscountPct()
+  return NextResponse.json({ banners: data ?? [], maxDiscountPct })
 }
 
 export async function POST(request: NextRequest) {
@@ -42,8 +62,14 @@ export async function POST(request: NextRequest) {
     .from('cms_banners')
     .insert({
       slot: d.slot,
-      image_url: d.imageUrl,
+      variant: d.variant,
+      image_url: d.variant === 'image' ? d.imageUrl : null,
       link: d.link ?? null,
+      headline: d.variant === 'hero' ? d.headline : null,
+      subline: d.variant === 'hero' ? (d.subline ?? null) : null,
+      cta_label: d.variant === 'hero' ? (d.ctaLabel ?? null) : null,
+      cta_href: d.variant === 'hero' ? (d.ctaHref ?? null) : null,
+      discount_pct: d.variant === 'hero' ? (d.discountPct ?? null) : null,
       locale: d.locale ?? null,
       starts_at: d.startsAt ?? null,
       ends_at: d.endsAt ?? null,

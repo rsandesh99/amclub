@@ -20,7 +20,7 @@ export function ProviderMiniCard({ provider }: { provider: ProviderDetail }) {
   return (
     <Link
       href={`/p/${provider.slug}`}
-      className="flex w-60 shrink-0 flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:border-primary/40"
+      className="card-interactive group flex w-60 shrink-0 flex-col gap-3 p-4"
     >
       {/* Credential-first (§4.3): credential leads, rating secondary */}
       <div className="flex items-center gap-3">

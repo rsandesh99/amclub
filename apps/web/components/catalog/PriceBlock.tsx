@@ -33,8 +33,8 @@ export function PriceBlock({
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span
           className={cn(
-            'font-display font-bold tabular-nums text-foreground',
-            detail ? 'text-2xl' : 'text-lg',
+            'font-display font-bold leading-none tracking-tight tabular-nums text-foreground',
+            detail ? 'text-3xl' : 'text-xl',
           )}
         >
           {formatINR(p.discountedPaise)}
@@ -44,12 +44,12 @@ export function PriceBlock({
             <span
               className={cn(
                 'text-foreground-secondary line-through tabular-nums',
-                detail ? 'text-base' : 'text-sm',
+                detail ? 'text-md' : 'text-sm',
               )}
             >
               {formatINR(p.listPaise)}
             </span>
-            <span className="rounded-chip bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-foreground">
+            <span className="rounded-chip bg-accent px-2 py-0.5 text-xs font-bold tabular-nums text-accent-foreground shadow-xs">
               {p.discountPct}% {t('off')}
             </span>
           </>
