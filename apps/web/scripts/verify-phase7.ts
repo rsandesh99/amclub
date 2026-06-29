@@ -72,10 +72,14 @@ async function main() {
   await admin.from('provider_bank_accounts').insert({ provider_id: provider!.id, account_number_enc: 'enc_test', ifsc: 'HDFC0000001', account_holder: 'P7 Prov', penny_drop_verified: true })
 
   // Dedicated test category (commission 10%) via the admin API (also tests create + audit).
+  // Category slug must be kebab-case (no underscores) per the route's schema.
+  const catSlug = `${tag}-cat`.replace(/_/g, '-')
   const catRes = await api(adminUser.token, '/api/v1/admin/categories', {
-    slug: `${tag}-cat`, nameI18n: { en: 'P7 Test Cat', hi: 'P7' }, commissionBps: 1000, requiredCredentials: [],
+    slug: catSlug, nameI18n: { en: 'P7 Test Cat', hi: 'P7' }, commissionBps: 1000, requiredCredentials: [],
   })
-  const catId = (await catRes.json()).category?.id as string
+  const catJson = await catRes.json()
+  const catId = catJson.category?.id as string
+  if (!catId) throw new Error(`category create failed: ${catRes.status} ${JSON.stringify(catJson)}`)
   if (catId) created.categoryIds.push(catId)
   await admin.from('provider_categories').insert({ provider_id: provider!.id, category_id: catId })
 
@@ -90,17 +94,20 @@ async function main() {
   const o1 = await placeOrder(buyer.token, pkg!.id); created.orderIds.push(o1)
   await completeOrder(buyer, prov, o1)
   const kpi = await (await api(adminUser.token, `/api/v1/admin/kpi?from=${new Date(Date.now() - 86400000).toISOString()}&to=${new Date(Date.now() + 86400000).toISOString()}`, undefined, 'GET')).json()
-  const liq = kpi.liquidityMatrix?.matrix?.[`${tag}-cat`]?.['KA'] ?? 0
+  const liq = kpi.liquidityMatrix?.matrix?.[catSlug]?.['KA'] ?? 0
   check('1. KPI: GMV/take-rate/funnel + category×state liquidity render',
     kpi.financial?.gmvPaise > 0 && kpi.financial?.takeRateBps > 0 && kpi.funnel?.ordersPlaced >= 1 && liq >= 1,
     `gmv=${kpi.financial?.gmvPaise} take=${kpi.financial?.takeRateBps}bps orders=${kpi.funnel?.ordersPlaced} liq(KA)=${liq}`)
 
   // ── Criterion 2: suspend provider → listings vanish publicly; reactivate ─────
-  const pubBefore = await fetch(`${BASE}/api/v1/catalog/provider/${tag}-prov`)
+  // The public route sets s-maxage=300, so bust the CDN cache with a unique
+  // query string per request to observe the live (data-layer) visibility.
+  const pub = (cb: string) => fetch(`${BASE}/api/v1/catalog/provider/${tag}-prov?cb=${cb}-${Date.now()}`)
+  const pubBefore = await pub('before')
   const susp = await api(adminUser.token, `/api/v1/admin/providers/${provider!.id}`, { action: 'suspend', reason: 'kill-test' })
-  const pubAfter = await fetch(`${BASE}/api/v1/catalog/provider/${tag}-prov`)
+  const pubAfter = await pub('after')
   const react = await api(adminUser.token, `/api/v1/admin/providers/${provider!.id}`, { action: 'reactivate' })
-  const pubReact = await fetch(`${BASE}/api/v1/catalog/provider/${tag}-prov`)
+  const pubReact = await pub('react')
   check('2. Suspend hides listings publicly; reactivate restores (audit-logged)',
     pubBefore.status === 200 && susp.ok && pubAfter.status === 404 && react.ok && pubReact.status === 200,
     `before=${pubBefore.status} suspend=${susp.status} after=${pubAfter.status} reactivate=${react.status} restored=${pubReact.status}`)
