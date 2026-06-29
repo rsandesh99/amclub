@@ -13,11 +13,14 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
 export async function runPayouts(
   admin: Admin,
   gateway: PaymentGateway,
-  opts?: { allScheduled?: boolean },
+  opts?: { allScheduled?: boolean; orderId?: string },
 ): Promise<{ processed: number; transferIds: string[]; simulated: boolean }> {
   const today = new Date().toISOString().slice(0, 10)
   let query = admin.from('payouts').select('*').eq('status', 'scheduled')
-  if (!opts?.allScheduled) query = query.lte('scheduled_for', today)
+  // Single-order settlement (dispute resolution / manual retry) reuses this same
+  // proven transfer path — never a parallel money path.
+  if (opts?.orderId) query = query.eq('order_id', opts.orderId)
+  else if (!opts?.allScheduled) query = query.lte('scheduled_for', today)
   const { data: due } = await query
 
   const transferIds: string[] = []

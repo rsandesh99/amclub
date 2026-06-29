@@ -65,6 +65,8 @@ export const limiters = {
   reviewWrite: build(20, '10 m', 'rl:review-write'),
   /** Coupon code validation per user — blunts code-guessing/brute force. */
   couponValidate: build(30, '1 m', 'rl:coupon-validate'),
+  /** Admin mutations (suspend, resolve dispute, commission change, …) per user. */
+  adminMutation: build(60, '1 m', 'rl:admin-mutation'),
 } as const
 
 export interface RateLimitResult {
