@@ -43,6 +43,7 @@ const api = (token: string, path: string, body?: unknown, method = 'POST') =>
 async function main() {
   console.log(`\nPhase 5 RFQ verification → ${BASE}\n`)
 
+  try {
   // category
   const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
   const categoryId = cat!.id
@@ -140,7 +141,8 @@ async function main() {
   // UPSTASH_* is set, graceful no-op otherwise (security-pass design).
   check('7. Rate limiting applied on RFQ-create + quote-submit', true, 'enforce() wired on both routes; active when UPSTASH_REDIS_REST_* is set')
 
-  // cleanup — order matters (orders reference quotes; quotes cascade from rfqs).
+  } finally {
+  // cleanup — ALWAYS runs (even on a thrown assertion) so no residue is left.
   console.log('\n🧹 cleanup…')
   const t = (p: PromiseLike<unknown>) => Promise.resolve(p).catch(() => {})
   for (const mid of created.msmeIds) {
@@ -164,6 +166,7 @@ async function main() {
   for (const mid of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', mid))
   for (const uid of created.users) { await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
 
+  }
   console.log(`\n${fail === 0 ? '✅ PHASE 5 RFQ — ALL CRITERIA PASS' : '❌ FAILURES'} — ${pass} passed, ${fail} failed\n`)
   process.exit(fail === 0 ? 0 : 1)
 }

@@ -52,6 +52,7 @@ async function placeOrder(buyer: { token: string }, packageId: string): Promise<
 async function main() {
   console.log(`\nPhase 6 verification → ${BASE}\n`)
 
+  try {
   const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
   const categoryId = cat!.id
 
@@ -193,7 +194,8 @@ async function main() {
   check('7. Rate limiting active on coupon-validate (review-write shares limiter)',
     throttled > 0, `429s=${throttled}/36 (expected >0 when Upstash live)`)
 
-  // ── cleanup ──────────────────────────────────────────────────────────────────
+  } finally {
+  // ── cleanup — ALWAYS runs (even on a thrown assertion) so no residue is left ──
   console.log('\n🧹 cleanup…')
   const t = (p: PromiseLike<unknown>) => Promise.resolve(p).catch(() => {})
   for (const id of created.bannerIds) await t(admin.from('cms_banners').delete().eq('id', id))
@@ -214,6 +216,7 @@ async function main() {
   for (const mid of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', mid))
   for (const uid of created.users) { await t(admin.from('notifications').delete().eq('user_id', uid)); await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
 
+  }
   console.log(`\n${fail === 0 ? '✅ PHASE 6 — ALL CRITERIA PASS' : '❌ FAILURES'} — ${pass} passed, ${fail} failed\n`)
   process.exit(fail === 0 ? 0 : 1)
 }

@@ -57,6 +57,7 @@ async function completeOrder(buyer: { token: string }, prov: { token: string }, 
 async function main() {
   console.log(`\nPhase 7 Admin & Ops verification → ${BASE}\n`)
 
+  try {
   const adminUser = await mkUser('admin', ['admin', 'ops'])
   const buyer = await mkUser('buyer')
   const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'P7 Buyer Co', state: 'KA', sector: 'services' }).select('id').single()
@@ -169,7 +170,8 @@ async function main() {
   check('6. requireAdmin blocks non-admin (Bearer 403) + unauth (401)',
     nonAdmin.status === 403 && noAuth.status === 401, `nonAdmin=${nonAdmin.status} noAuth=${noAuth.status}`)
 
-  // ── cleanup ──────────────────────────────────────────────────────────────────
+  } finally {
+  // ── cleanup — ALWAYS runs (even on a thrown assertion) so no residue is left ──
   console.log('\n🧹 cleanup…')
   const t = (p: PromiseLike<unknown>) => Promise.resolve(p).catch(() => {})
   for (const oid of created.orderIds.filter(Boolean)) {
@@ -199,6 +201,7 @@ async function main() {
     await admin.auth.admin.deleteUser(uid).catch(() => {})
   }
 
+  }
   console.log(`\n${fail === 0 ? '✅ PHASE 7 — ALL CRITERIA PASS' : '❌ FAILURES'} — ${pass} passed, ${fail} failed\n`)
   process.exit(fail === 0 ? 0 : 1)
 }
