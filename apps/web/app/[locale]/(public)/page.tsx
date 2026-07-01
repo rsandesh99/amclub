@@ -82,7 +82,7 @@ export default async function LandingPage() {
               <Link
                 key={c.slug}
                 href={`/services/${c.slug}`}
-                className="rounded-chip border border-white/25 bg-white/10 px-3 py-1 text-white transition-colors hover:bg-white/20"
+                className="inline-flex items-center rounded-chip border border-white/30 bg-white/15 px-3.5 py-1.5 font-medium leading-none text-white transition-colors hover:border-white/50 hover:bg-white/25"
               >
                 {locale === 'hi' && c.nameI18n.hi ? c.nameI18n.hi : c.nameI18n.en}
               </Link>

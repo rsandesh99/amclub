@@ -16,12 +16,12 @@ export function PublicHeader() {
           <Link href="/" className="font-display text-lg font-bold text-primary">
             AMClub
           </Link>
-          <nav className="hidden items-center gap-5 text-sm text-foreground-secondary sm:flex">
-            <Link href="/services" className="hover:text-primary">
+          <nav className="hidden items-center gap-1 text-sm font-medium text-foreground-secondary sm:flex">
+            <Link href="/services" className="inline-flex items-center rounded-button px-3 py-2 leading-none transition-colors hover:bg-primary/5 hover:text-primary">
               {t('browse_services')}
             </Link>
             {/* /partner/onboarding works for both: logged-in → KYC; logged-out → login → KYC. */}
-            <Link href="/partner/onboarding" className="hover:text-primary">
+            <Link href="/partner/onboarding" className="inline-flex items-center rounded-button px-3 py-2 leading-none transition-colors hover:bg-primary/5 hover:text-primary">
               {t('become_provider')}
             </Link>
           </nav>
