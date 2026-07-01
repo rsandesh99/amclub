@@ -4,21 +4,50 @@
 
 @layer base {
   :root {
+    /* ── Semantic colour tokens — palette LOCKED, one colour one job (§4.2).
+       Mirrors packages tailwind.config.ts; both resolve to the same hex. ── */
     --background: #fafaf7;
     --surface: #ffffff;
     --foreground: #1a1d1a;
     --foreground-secondary: #5c645c;
     --primary: #1b4d3e;
+    --primary-strong: #143f33; /* hover/pressed deepen */
     --primary-foreground: #ffffff;
-    --accent: #f4a300;
+    --accent: #f4a300; /* discounts + rating stars ONLY */
+    --accent-foreground: #1a1d1a; /* AA text on marigold */
     --trust: #1a6fbf;
-    --verified: #1a6fbf;
+    --verified: #1a6fbf; /* verification badges/ticks ONLY */
     --danger: #c73e3e;
+    --danger-foreground: #ffffff;
     --destructive: #c73e3e;
     --warning: #b45309;
     --success: #1e8e5a;
     --border: #e6e7e3;
     --muted: #f3f4f1;
+    --ring: #1b4d3e;
+
+    /* ── Soft tint fills — pre-mixed, for badges/icon-chips/section washes,
+       so we never hand-roll rgba() per component. ── */
+    --primary-soft: #e8eeeb;
+    --accent-soft: #fdefd2;
+    --verified-soft: #e6eff8;
+    --success-soft: #e5f2ec;
+    --warning-soft: #f5ebdd;
+    --danger-soft: #f8e8e8;
+
+    /* ── Radii ── */
+    --radius-card: 12px;
+    --radius-button: 10px;
+    --radius-input: 10px;
+    --radius-chip: 999px;
+
+    /* ── Motion — quiet + quick, no bounce (gated by prefers-reduced-motion) ── */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+
+    /* Minimum tap target (§4.4) */
+    --tap-min: 44px;
   }
 
   * {

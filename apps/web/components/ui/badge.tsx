@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'outline'
+type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'accent' | 'outline'
 
 interface BadgeProps {
   variant?: BadgeVariant
@@ -8,12 +8,14 @@ interface BadgeProps {
   children: React.ReactNode
 }
 
+// Pre-mixed soft-tint fills (§4.2) — consistent contrast, no per-badge rgba().
 const variants: Record<BadgeVariant, string> = {
-  default: 'bg-primary/10 text-primary',
-  success: 'bg-success/10 text-success',
-  warning: 'bg-warning/10 text-warning',
-  danger: 'bg-danger/10 text-danger',
-  info: 'bg-verified/10 text-verified',
+  default: 'bg-primary-soft text-primary',
+  success: 'bg-success-soft text-success',
+  warning: 'bg-warning-soft text-warning',
+  danger: 'bg-danger-soft text-danger',
+  info: 'bg-verified-soft text-verified',
+  accent: 'bg-accent font-bold text-accent-foreground',
   outline: 'border border-border text-foreground-secondary',
 }
 

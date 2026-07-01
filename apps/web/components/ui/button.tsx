@@ -4,15 +4,22 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
+  /** `accent` (marigold) is for use ON the green hero only (§4.2). */
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline' | 'accent'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
+  /** Optional leading icon (e.g. an <Icon /> element). */
+  iconLeft?: React.ReactNode
+  /** Optional trailing icon (e.g. an arrow). */
+  iconRight?: React.ReactNode
 }
 
 export function Button({
   variant = 'primary',
   size = 'md',
   loading = false,
+  iconLeft,
+  iconRight,
   className,
   children,
   disabled,
@@ -26,12 +33,14 @@ export function Button({
     'motion-safe:active:scale-[0.98]'
 
   const variants = {
-    // Primary carries subtle depth so it reads as the main action.
-    primary: 'bg-primary text-white shadow-xs hover:bg-primary/90 hover:shadow-hover active:bg-primary active:shadow-pressed',
+    // Primary carries subtle depth + deepens to primary-strong on interaction.
+    primary: 'bg-primary text-white shadow-xs hover:bg-primary-strong hover:shadow-hover active:bg-primary-strong active:shadow-pressed',
     secondary: 'bg-primary/10 text-primary hover:bg-primary/[0.16] active:bg-primary/20',
     outline: 'border border-primary text-primary hover:bg-primary/10 active:bg-primary/15',
     ghost: 'text-primary hover:bg-primary/10 active:bg-primary/15',
     danger: 'bg-danger text-white shadow-xs hover:bg-danger/90 hover:shadow-hover active:bg-danger active:shadow-pressed',
+    // Marigold action — ONLY on the green hero (never a general CTA).
+    accent: 'bg-accent text-accent-foreground shadow-xs hover:bg-accent/90 hover:shadow-hover active:shadow-pressed',
   }
 
   const sizes = {
@@ -62,7 +71,9 @@ export function Button({
           />
         </svg>
       )}
+      {!loading && iconLeft}
       {children}
+      {!loading && iconRight}
     </button>
   )
 }

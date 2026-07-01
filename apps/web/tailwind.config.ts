@@ -14,12 +14,20 @@ const config: Config = {
         // never use raw gray-*/amber-* or hex in components.
         primary: {
           DEFAULT: '#1B4D3E', // brand — FINAL, never blue/navy
+          strong: '#143F33', // hover/pressed deepen
           foreground: '#FFFFFF',
         },
         accent: {
           DEFAULT: '#F4A300', // marigold — discounts + rating stars ONLY
           foreground: '#1A1D1A',
         },
+        // Pre-mixed soft-tint fills for badges / icon chips / section washes.
+        'primary-soft': '#E8EEEB',
+        'accent-soft': '#FDEFD2',
+        'verified-soft': '#E6EFF8',
+        'success-soft': '#E5F2EC',
+        'warning-soft': '#F5EBDD',
+        'danger-soft': '#F8E8E8',
         success: '#1E8E5A', // positive/completed (green family)
         // Verification blue — badges/ticks ONLY. `verified` is the semantic name;
         // `trust` kept as an alias for existing usages.
