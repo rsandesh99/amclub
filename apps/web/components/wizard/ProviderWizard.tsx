@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { CATEGORY_LIST, categoriesNeedingCredentialUpload } from '@amclub/shared'
+import { loadProviderDraft } from '@/components/gateway/draft'
 
 type Step = 'auth' | 'business' | 'kyc' | 'bank' | 'submit' | 'under_review'
 
@@ -89,6 +90,18 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
       setDraftRestored(true)
       setTimeout(() => setDraftRestored(false), 3000)
     } catch {}
+  }, [])
+
+  // Phase 8a — seed category + state from the gateway's partner mini-wizard
+  // when this wizard has no answer of its own yet (own draft always wins).
+  useEffect(() => {
+    const gw = loadProviderDraft()
+    if (!gw) return
+    setDraft((d) => ({
+      ...d,
+      categorySlugs: d.categorySlugs.length > 0 ? d.categorySlugs : gw.cat ? [gw.cat] : [],
+      stateCode: d.stateCode || (gw.state ?? ''),
+    }))
   }, [])
 
   // Persist draft on change. NEVER store the bank account number in localStorage

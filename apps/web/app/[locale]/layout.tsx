@@ -2,7 +2,13 @@ import type { Metadata } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getMessages, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
-import { Inter, Bricolage_Grotesque } from 'next/font/google'
+import {
+  Inter,
+  Bricolage_Grotesque,
+  Noto_Sans_Devanagari,
+  Noto_Sans_Telugu,
+  Noto_Sans_Tamil,
+} from 'next/font/google'
 import { routing } from '@/i18n/routing'
 import { PostHogProvider } from '@/components/providers/posthog'
 import '@/app/globals.css'
@@ -18,6 +24,38 @@ const bricolage = Bricolage_Grotesque({
   variable: '--font-bricolage',
   display: 'swap',
 })
+
+// Indic companions (§4.2) — all three publish the SAME CSS variable
+// (--font-indic, referenced by the Tailwind sans/display stacks) and only the
+// active locale's class lands on <html>, so exactly one resolves per page and
+// the other scripts are never downloaded. preload:false keeps them off the
+// critical path (they would be dead weight on en pages).
+const notoDevanagari = Noto_Sans_Devanagari({
+  subsets: ['devanagari'],
+  variable: '--font-indic',
+  display: 'swap',
+  preload: false,
+})
+
+const notoTelugu = Noto_Sans_Telugu({
+  subsets: ['telugu'],
+  variable: '--font-indic',
+  display: 'swap',
+  preload: false,
+})
+
+const notoTamil = Noto_Sans_Tamil({
+  subsets: ['tamil'],
+  variable: '--font-indic',
+  display: 'swap',
+  preload: false,
+})
+
+const INDIC_FONT: Record<string, { variable: string } | undefined> = {
+  hi: notoDevanagari,
+  te: notoTelugu,
+  ta: notoTamil,
+}
 
 export async function generateMetadata({
   params,
@@ -55,8 +93,13 @@ export default async function LocaleLayout({
 
   const messages = await getMessages()
 
+  const indic = INDIC_FONT[locale]
+
   return (
-    <html lang={locale} className={`${inter.variable} ${bricolage.variable}`}>
+    <html
+      lang={locale}
+      className={`${inter.variable} ${bricolage.variable}${indic ? ` ${indic.variable}` : ''}`}
+    >
       <body className="bg-background font-sans text-foreground antialiased">
         <NextIntlClientProvider messages={messages}>
           <PostHogProvider>{children}</PostHogProvider>

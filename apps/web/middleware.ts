@@ -1,9 +1,12 @@
 import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 import createNextIntlMiddleware from 'next-intl/middleware'
-import { routing } from './i18n/routing'
+import { routing, LOCALE_PREFIX_PATTERN } from './i18n/routing'
 
 const nextIntl = createNextIntlMiddleware(routing)
+
+// Locale prefix stripper built from the single source of truth in i18n/routing.
+const LOCALE_RE = new RegExp(`^/(${LOCALE_PREFIX_PATTERN})(/|$)`)
 
 // Routes requiring authentication — matched against the path AFTER stripping the locale prefix
 const PROTECTED_PREFIXES = ['/app', '/partner/onboarding', '/partner/earnings', '/partner/listings', '/partner/rfqs', '/partner/orders', '/partner/profile', '/admin']
@@ -14,23 +17,12 @@ const PROVIDER_PREFIXES = ['/partner/onboarding', '/partner/earnings', '/partner
 // Routes that require admin/ops role
 const ADMIN_PREFIXES = ['/admin']
 
-export async function middleware(request: NextRequest) {
-  // Apply next-intl locale routing first
-  const intlResponse = nextIntl(request)
+function stripLocale(pathname: string): string {
+  return pathname.replace(LOCALE_RE, '/').replace(/\/$/, '') || '/'
+}
 
-  // Build a mutable response; intlResponse may be a redirect (locale detection)
-  let response = intlResponse ?? NextResponse.next({ request })
-
-  // Fast path: public marketing/catalog pages (/, /services, /p, …) are not
-  // protected. Skip the Supabase auth round-trip entirely so SSR/ISR stays fast.
-  const path = request.nextUrl.pathname.replace(/^\/(en|hi)(\/|$)/, '/').replace(/\/$/, '') || '/'
-  const needsAuthCheck = PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
-  if (!needsAuthCheck) {
-    return response
-  }
-
-  // Supabase SSR client that reads cookies and can update the session cookie
-  const supabase = createServerClient(
+function makeSupabase(request: NextRequest, response: NextResponse) {
+  return createServerClient(
     process.env['NEXT_PUBLIC_SUPABASE_URL']!,
     process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!,
     {
@@ -50,28 +42,78 @@ export async function middleware(request: NextRequest) {
       },
     },
   )
+}
+
+export async function middleware(request: NextRequest) {
+  // Apply next-intl locale routing first
+  const intlResponse = nextIntl(request)
+
+  // Build a mutable response; intlResponse may be a redirect (locale detection)
+  let response = intlResponse ?? NextResponse.next({ request })
+
+  const path = stripLocale(request.nextUrl.pathname)
+
+  // Detect current locale for building redirect URLs
+  const localeMatch = request.nextUrl.pathname.match(LOCALE_RE)
+  const locale = localeMatch ? localeMatch[1] : 'en'
+  const localePrefix = locale === 'en' ? '' : `/${locale}`
+
+  // ── Phase 8a gateway bypass ─────────────────────────────────────────────
+  // Logged-in users never see the anonymous gateway at `/`: redirect them to
+  // their role home BEFORE first paint. Cookie sniff first so anonymous
+  // visitors (no sb-* auth cookie) keep the zero-network fast path and `/`
+  // stays static.
+  const isRedirect = response.status >= 300 && response.status < 400
+  if (path === '/' && !isRedirect) {
+    const hasAuthCookie = request.cookies
+      .getAll()
+      .some((c) => c.name.startsWith('sb-') && c.name.includes('-auth-token'))
+    if (hasAuthCookie) {
+      const supabase = makeSupabase(request, response)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        // Same resolution order as /api/v1/profile/me (admin → provider → msme).
+        // Own-row reads under RLS; a missing row simply yields null.
+        const [{ data: u }, { data: provider }, { data: msme }] = await Promise.all([
+          supabase.from('users').select('roles').eq('id', user.id).maybeSingle(),
+          supabase.from('provider_profiles').select('id').eq('user_id', user.id).maybeSingle(),
+          supabase.from('msme_profiles').select('id').eq('user_id', user.id).maybeSingle(),
+        ])
+        const roles: string[] = u?.roles ?? []
+        const destination =
+          roles.includes('admin') || roles.includes('ops')
+            ? '/admin/verifications'
+            : provider
+              ? '/partner'
+              : msme
+                ? '/app'
+                : '/signup?complete=1'
+        return NextResponse.redirect(new URL(`${localePrefix}${destination}`, request.url))
+      }
+    }
+    return response
+  }
+
+  // Fast path: public marketing/catalog pages (/services, /p, …) are not
+  // protected. Skip the Supabase auth round-trip entirely so SSR/ISR stays fast.
+  const needsAuthCheck = PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
+  if (!needsAuthCheck) {
+    return response
+  }
+
+  // Supabase SSR client that reads cookies and can update the session cookie
+  const supabase = makeSupabase(request, response)
 
   // Refresh session (this also updates the cookie expiry)
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { pathname } = request.nextUrl
-
-  // Strip locale prefix (e.g. /hi/app → /app; /app → /app since en has no prefix)
-  const localePattern = /^\/(en|hi)(\/|$)/
-  const cleanPath = pathname.replace(localePattern, '/').replace(/\/$/, '') || '/'
-
-  // Detect current locale for building redirect URLs
-  const localeMatch = pathname.match(/^\/(en|hi)(\/|$)/)
-  const locale = localeMatch ? localeMatch[1] : 'en'
-  const localePrefix = locale === 'en' ? '' : `/${locale}`
-
-  const isProtected = PROTECTED_PREFIXES.some((p) => cleanPath === p || cleanPath.startsWith(`${p}/`))
-
-  if (isProtected && !user) {
+  if (!user) {
     const loginUrl = new URL(`${localePrefix}/login`, request.url)
-    loginUrl.searchParams.set('next', pathname)
+    loginUrl.searchParams.set('next', request.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)
   }
 

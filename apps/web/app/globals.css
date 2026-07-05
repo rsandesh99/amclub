@@ -122,3 +122,57 @@
       focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Phase 8a — Gateway `/` choreography (DESIGN.md §6 Phase 8a).
+   Keyframes + timings ported verbatim from the design handoff
+   (design_handoff_amclub_design_system/AMClub Gateway - *.html).
+   Everything is scoped under .gw-stage; all motion collapses under
+   prefers-reduced-motion so the gateway renders instantly.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes gwDriftA { 0% { transform: translate(0,0) scale(1); } 50% { transform: translate(120px,60px) scale(1.15); } 100% { transform: translate(0,0) scale(1); } }
+@keyframes gwDriftB { 0% { transform: translate(0,0) scale(1.1); } 50% { transform: translate(-140px,-50px) scale(0.95); } 100% { transform: translate(0,0) scale(1.1); } }
+@keyframes gwDriftC { 0% { transform: translate(0,0) scale(1); } 50% { transform: translate(60px,-90px) scale(1.2); } 100% { transform: translate(0,0) scale(1); } }
+@keyframes gwRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes gwPop { 0% { opacity: 0; transform: scale(0.92); } 70% { opacity: 1; transform: scale(1.015); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes gwSheet { 0% { opacity: 0; transform: translateY(48px) scale(0.97); } 70% { opacity: 1; transform: translateY(-6px) scale(1.005); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes gwFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gwSlideIn { from { opacity: 0; transform: translateX(46px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes gwTickPop { 0% { transform: scale(0); } 70% { transform: scale(1.25); } 100% { transform: scale(1); } }
+
+/* Reusable animation shorthands (delays set inline per element). */
+.gw-rise { animation: gwRise 400ms var(--ease-out) both; }
+.gw-rise-sm { animation: gwRise 350ms var(--ease-out) both; }
+.gw-rise-xs { animation: gwRise 260ms var(--ease-out) both; }
+.gw-fade { animation: gwFade 400ms var(--ease-out) both; }
+.gw-fade-fast { animation: gwFade 300ms var(--ease-out) both; }
+.gw-slide-in { animation: gwSlideIn 350ms var(--ease-out) both; }
+.gw-tick-pop { animation: gwTickPop 150ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* Card entrance: bottom sheet on mobile, centered pop on ≥640px. */
+.gw-card-enter { animation: gwSheet 450ms cubic-bezier(0.34, 1.56, 0.64, 1) 350ms both; }
+@media (min-width: 640px) {
+  .gw-card-enter { animation: gwPop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) 350ms both; }
+}
+
+/* Ambient stage glows (blurred radial washes, pure decoration). */
+.gw-glow-a { background: radial-gradient(circle, rgba(244, 163, 0, 0.14), transparent 62%); filter: blur(60px); animation: gwDriftA 20s ease-in-out infinite; }
+.gw-glow-b { background: radial-gradient(circle, rgba(27, 77, 62, 0.9), transparent 60%); filter: blur(70px); animation: gwDriftB 26s ease-in-out infinite; }
+.gw-glow-c { background: radial-gradient(circle, rgba(244, 163, 0, 0.10), transparent 60%); filter: blur(50px); animation: gwDriftC 23s ease-in-out infinite; }
+/* Marigold hue-shift once the visitor is inside a wizard (progress marker). */
+.gw-warm-wash { background: radial-gradient(70% 60% at 50% 110%, rgba(244, 163, 0, 0.16), transparent 70%); transition: opacity 700ms var(--ease-out); }
+/* Film grain (inline SVG turbulence, 5% opacity). */
+.gw-grain { opacity: 0.05; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='0.6'/></svg>"); }
+
+/* Reduced motion: collapse every gateway animation/transition to instant.
+   Scoped to the stage so the rest of the app keeps its motion-safe: rules. */
+@media (prefers-reduced-motion: reduce) {
+  .gw-stage *,
+  .gw-stage *::before,
+  .gw-stage *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

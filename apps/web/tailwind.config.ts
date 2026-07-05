@@ -59,8 +59,10 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display: ['var(--font-bricolage)', 'var(--font-inter)', 'sans-serif'],
-        sans: ['var(--font-inter)', 'Noto Sans Devanagari', 'sans-serif'],
+        // --font-indic is set per-locale in app/[locale]/layout.tsx (Noto Sans
+        // Devanagari / Telugu / Tamil); unset for en, hence the fallback value.
+        display: ['var(--font-bricolage)', 'var(--font-indic, sans-serif)', 'var(--font-inter)', 'sans-serif'],
+        sans: ['var(--font-inter)', 'var(--font-indic, sans-serif)', 'Noto Sans Devanagari', 'sans-serif'],
       },
       fontSize: {
         // §4.2 type scale — tightened tracking on the larger steps for cleaner

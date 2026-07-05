@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next'
 import { getAllPublicSlugs, getCategories } from '@/lib/catalog/queries'
 import { CATEGORY_SLUGS } from '@amclub/shared'
 import { getSiteUrl } from '@/lib/site-url'
+import { routing } from '@/i18n/routing'
 
 const BASE = getSiteUrl()
 
@@ -41,10 +42,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: path === '/' ? 'daily' : 'weekly',
       priority: path === '/' ? 1 : path.startsWith('/p/') ? 0.7 : 0.8,
       alternates: {
-        languages: {
-          en: url('en', path),
-          hi: url('hi', path),
-        },
+        languages: Object.fromEntries(routing.locales.map((l) => [l, url(l, path)])),
       },
     })
   }

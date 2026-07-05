@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useEffect, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { AuthPanel } from '@/components/auth/AuthPanel'
 import { resolvePostAuthRoute } from '@/lib/auth/post-auth'
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { INDIAN_STATES } from '@/lib/constants/india'
+import { loadBuyerDraft } from '@/components/gateway/draft'
 
 type Step = 'auth' | 'profile' | 'business'
 
@@ -36,6 +37,7 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
   const tAuth = useTranslations('auth')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const locale = useLocale()
 
   const [step, setStep] = useState<Step>(skipAuth ? 'profile' : 'auth')
   const [wizardState, setWizardState] = useState<WizardState>({
@@ -50,6 +52,22 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Phase 8a — prefill from the gateway wizard's draft profile (biz → sector,
+  // state → stateCode; both enums match 1:1). Effect, not initial state:
+  // localStorage is unavailable during SSR/hydration of this page.
+  useEffect(() => {
+    const draft = loadBuyerDraft()
+    if (!draft) return
+    setWizardState((s) => ({
+      ...s,
+      sector: s.sector || (draft.biz ?? ''),
+      stateCode: s.stateCode || (draft.state ?? ''),
+      // preferred_locale is en/hi in the DB (notifications §Phase 6); te/ta
+      // gateway visitors keep the 'en' default until those channels exist.
+      preferredLocale: locale === 'hi' ? 'hi' : s.preferredLocale,
+    }))
+  }, [locale])
 
   const stepOrder: Step[] = skipAuth ? ['profile', 'business'] : ['auth', 'profile', 'business']
   const currentIdx = stepOrder.indexOf(step)

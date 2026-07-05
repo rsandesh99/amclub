@@ -11,3 +11,11 @@ import 'server-only'
  * COUPONS_ENABLED=true to restore the full behaviour with no code change.
  */
 export const COUPONS_ENABLED = process.env['COUPONS_ENABLED'] === 'true'
+
+/**
+ * GATEWAY_ENABLED — Phase 8a two-door gateway at `/` for anonymous visitors.
+ * Default ON (founder-approved scope, DESIGN.md §6 Phase 8a); set
+ * GATEWAY_ENABLED=false as the kill switch to serve the previous
+ * "Confident Marketplace" landing page unchanged.
+ */
+export const GATEWAY_ENABLED = process.env['GATEWAY_ENABLED'] !== 'false'

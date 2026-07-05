@@ -3,21 +3,32 @@
 import { useLocale } from 'next-intl'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { cn } from '@/lib/utils'
+import type { AppLocale } from '@/i18n/routing'
 
-/** EN/HI switch that preserves the current path. Works on all public pages. */
+/** Locale label shown in switchers/chips — native script, per §4.4. */
+export const LOCALE_LABELS: Record<AppLocale, string> = {
+  en: 'EN',
+  hi: 'हिं',
+  te: 'తె',
+  ta: 'த',
+}
+
+const LOCALES = Object.keys(LOCALE_LABELS) as AppLocale[]
+
+/** Locale switch that preserves the current path. Works on all public pages. */
 export function LanguageSwitcher({ className }: { className?: string }) {
   const locale = useLocale()
   const pathname = usePathname()
   const router = useRouter()
 
-  function switchTo(next: 'en' | 'hi') {
+  function switchTo(next: AppLocale) {
     if (next === locale) return
     router.replace(pathname, { locale: next })
   }
 
   return (
     <div className={cn('inline-flex items-center rounded-chip border border-border bg-surface p-0.5 text-xs', className)}>
-      {(['en', 'hi'] as const).map((l) => (
+      {LOCALES.map((l) => (
         <button
           key={l}
           type="button"
@@ -28,7 +39,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
             locale === l ? 'bg-primary text-white' : 'text-foreground-secondary hover:text-primary',
           )}
         >
-          {l === 'en' ? 'EN' : 'हिं'}
+          {LOCALE_LABELS[l]}
         </button>
       ))}
     </div>

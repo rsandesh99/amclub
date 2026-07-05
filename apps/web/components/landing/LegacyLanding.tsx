@@ -9,10 +9,12 @@ import { BannerSlot } from '@/components/cms/BannerSlot'
 import { getActiveBanners, getMaxDiscountPct } from '@/lib/cms/queries'
 import { pickI18n } from '@/lib/format'
 
-// ISR — landing refreshes hourly (§ Phase 3 SEO).
-export const revalidate = 3600
-
-export default async function LandingPage() {
+/**
+ * The pre-Phase-8a "Confident Marketplace" landing, kept verbatim as the
+ * GATEWAY_ENABLED=false fallback (kill switch, DESIGN.md §6 Phase 8a).
+ * Rendered by app/[locale]/(gateway)/page.tsx which owns `/` and its ISR.
+ */
+export async function LegacyLanding() {
   const t = await getTranslations('landing')
   const tCat = await getTranslations('catalog')
   const locale = await getLocale()
