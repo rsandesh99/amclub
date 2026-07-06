@@ -256,5 +256,32 @@
     "reply_placeholder": "Write a reply…",
     "reply_submit": "Post reply",
     "status_flagged": "This review is under moderation."
+  },
+  "voice": {
+    "intro_title": "Speak your requirement",
+    "intro_sub": "Say what you need in Telugu, Tamil, Hindi or English — we will fill the form for you. Up to 60 seconds.",
+    "record_cta": "Tap to speak",
+    "stop_cta": "Stop recording",
+    "recording": "Listening…",
+    "seconds_left": "{s}s left",
+    "use_recording": "Use this recording",
+    "re_record": "Re-record",
+    "processing": "Understanding your requirement…",
+    "err_unsupported": "Voice input isn't supported on this browser.",
+    "err_mic_denied": "We couldn't access your microphone.",
+    "err_rate_limited": "Too many voice requests — please wait a minute and try again.",
+    "err_too_long": "The recording is longer than 60 seconds.",
+    "err_too_large": "The recording is too large.",
+    "err_no_speech": "We couldn't hear anything in the recording.",
+    "err_transcribe": "We couldn't process the recording.",
+    "type_instead": "You can type your requirement in the form below.",
+    "heard_label": "We heard:",
+    "think_label": "We think you need:",
+    "uncertain_note": "We're not sure which service this is — please choose the category below.",
+    "check_note": "Please check and edit before submitting — nothing is sent until you press Submit.",
+    "stub_note": "(Demo mode: AI keys not configured — sample output.)",
+    "gateway_gate_note": "Voice needs a free account, so your request reaches verified providers. Create one and speak your requirement there.",
+    "gateway_gate_cta": "Create free account",
+    "consent_note": "By recording, you agree your voice is sent to a transcription service to fill this form. The audio is not stored after processing."
   }
 }

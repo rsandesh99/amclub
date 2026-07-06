@@ -148,11 +148,31 @@ export async function createRfq(body: {
   budget_min_paise?: number
   budget_max_paise?: number
   needed_by?: string
+  /** Phase 8b — transcript + parse when the RFQ began as voice. */
+  voice_meta?: Record<string, unknown>
 }) {
   const res = await fetch(`${API_URL}/api/v1/rfq`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ ...body, attachments: [] }),
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
+/** Phase 8b — voice → structured RFQ prefill. Parses only; never creates an
+ *  RFQ. Content-Type is left to fetch so RN sets the multipart boundary. */
+export async function voiceParse(fileUri: string, mimeType: string, durationMs: number) {
+  const form = new FormData()
+  form.append('audio', {
+    uri: fileUri,
+    name: mimeType.includes('m4a') || mimeType.includes('mp4') ? 'recording.m4a' : 'recording.webm',
+    type: mimeType,
+  } as unknown as Blob)
+  form.append('duration_ms', String(Math.round(durationMs)))
+  const res = await fetch(`${API_URL}/api/v1/rfq/voice-parse`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: form,
   })
   return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
 }

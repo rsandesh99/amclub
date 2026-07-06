@@ -10,5 +10,8 @@ export * from './categories'
 // RFQ template fields + contact masking
 export * from './rfq'
 
+// Voice RFQ specialization vocabulary (Phase 8b)
+export * from './specializations'
+
 // Zod schemas and derived TypeScript types
 export * from './schemas/index'

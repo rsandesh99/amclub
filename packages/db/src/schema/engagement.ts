@@ -119,6 +119,29 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
 })
 
+// Append-only AI telemetry (Phase 8b v1.1) — one row per model call. Written
+// via service role only; RLS enabled with no policies. cost_est_paise is an
+// estimate (env-driven rates); raw vendor usage lives in meta.
+export const aiInvocations = pgTable('ai_invocations', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  feature: text('feature').notNull(),
+  step: text('step').notNull(), // 'stt' | 'parse'
+  vendor: text('vendor').notNull(),
+  status: text('status').notNull(), // 'ok' | 'error' | 'stub'
+  latencyMs: integer('latency_ms').notNull(),
+  costEstPaise: bigint('cost_est_paise', { mode: 'number' }),
+  inputBytes: integer('input_bytes'),
+  outputChars: integer('output_chars'),
+  requestId: text('request_id'),
+  error: text('error'),
+  meta: jsonb('meta'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [
+  index('ai_invocations_feature_created_idx').on(table.feature, table.createdAt),
+  index('ai_invocations_status_created_idx').on(table.status, table.createdAt),
+])
+
 export const cmsBanners = pgTable('cms_banners', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   slot: text('slot').notNull(),

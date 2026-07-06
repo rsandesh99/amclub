@@ -40,6 +40,12 @@
           "resizeMode": "contain",
           "backgroundColor": "#1B4D3E"
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "AMClub uses the microphone so you can speak your service requirement instead of typing it."
+        }
       ]
     ],
     "experiments": {

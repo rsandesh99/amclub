@@ -8,6 +8,7 @@ import {
   IndianRupee,
   Lock,
   MessageCircle,
+  Mic,
   ShieldCheck,
 } from 'lucide-react'
 import { useRouter } from '@/i18n/navigation'
@@ -34,6 +35,7 @@ interface RevealResultsProps {
  */
 export function RevealResults({ answers, onStartOver, onSelectLocale, track }: RevealResultsProps) {
   const t = useTranslations('gateway')
+  const tv = useTranslations('voice')
   const router = useRouter()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -42,6 +44,7 @@ export function RevealResults({ answers, onStartOver, onSelectLocale, track }: R
   const [failed, setFailed] = useState(false)
   const [rfqOpen, setRfqOpen] = useState(false)
   const [rfqGate, setRfqGate] = useState(false)
+  const [voiceGate, setVoiceGate] = useState(false)
   const [note, setNote] = useState(answers.note ?? '')
 
   useEffect(() => {
@@ -188,14 +191,43 @@ export function RevealResults({ answers, onStartOver, onSelectLocale, track }: R
                     </span>
                   )}
                 </div>
-                <textarea
-                  rows={3}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  aria-label={t('rfq_title')}
-                  placeholder={t('rfq_ph')}
-                  className="w-full resize-none rounded-button border border-border bg-surface px-3.5 py-3 font-sans text-base leading-normal text-foreground placeholder:text-foreground-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
-                />
+                <div className="relative">
+                  <textarea
+                    rows={3}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    aria-label={t('rfq_title')}
+                    placeholder={t('rfq_ph')}
+                    className="w-full resize-none rounded-button border border-border bg-surface py-3 pl-3.5 pr-14 font-sans text-base leading-normal text-foreground placeholder:text-foreground-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
+                  />
+                  {/* Phase 8b — voice input needs an account (paid STT is authed);
+                      gateway visitors are anonymous by construction, so gate. */}
+                  <button
+                    type="button"
+                    aria-label={tv('record_cta')}
+                    onClick={() => {
+                      track('voice_rfq_started', { surface: 'gateway', gated: true })
+                      setVoiceGate(true)
+                    }}
+                    className="absolute bottom-3 right-3 inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary-soft text-primary transition-colors hover:bg-primary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  >
+                    <Mic className="h-5 w-5" aria-hidden />
+                  </button>
+                </div>
+                {voiceGate && (
+                  <div className="gw-rise-xs flex flex-wrap items-center gap-3 rounded-button bg-primary-soft/60 px-3.5 py-3">
+                    <span className="flex-1 text-[13.5px] leading-[1.45] text-foreground">
+                      {tv('gateway_gate_note')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => router.push('/signup')}
+                      className="inline-flex min-h-11 shrink-0 items-center rounded-button bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                    >
+                      {tv('gateway_gate_cta')}
+                    </button>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={sendRfq}

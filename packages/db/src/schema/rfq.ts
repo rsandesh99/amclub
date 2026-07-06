@@ -16,6 +16,8 @@ export const rfqs = pgTable('rfqs', {
   budgetMinPaise: bigint('budget_min_paise', { mode: 'number' }),
   budgetMaxPaise: bigint('budget_max_paise', { mode: 'number' }),
   neededBy: date('needed_by'),
+  // Phase 8b — transcript + parse when the RFQ began as a voice recording.
+  voiceMeta: jsonb('voice_meta'),
   // open | quoted | accepted | expired | cancelled
   status: text('status').default('open').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),

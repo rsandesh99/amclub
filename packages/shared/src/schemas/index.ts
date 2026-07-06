@@ -116,6 +116,49 @@ export const rfqAttachmentSchema = z.object({
   name: z.string().max(200),
 })
 
+// ── Voice RFQ (Phase 8b) ──────────────────────────────────────────────────────
+
+/** Structured parse of a spoken requirement — the LLM's contract. A value the
+ *  model can't map confidently comes back null (+ uncertain), never a guess. */
+export const voiceParseSchema = z.object({
+  category_slug: z.enum(CATEGORY_SLUGS).nullable(),
+  /** One of SPECIALIZATIONS[category_slug] (curated vocabulary) or null. */
+  specialization: z.string().max(60).nullable(),
+  /** 2-letter Indian state code (INDIAN_STATES) or null. */
+  state: z
+    .string()
+    .regex(/^[A-Z]{2}$/)
+    .nullable(),
+  description_english: z.string().min(1).max(2000),
+  /** BCP-47 code from the STT vendor, e.g. 'te-IN'; 'unknown' when undetected. */
+  original_language: z.string().max(16),
+  uncertain: z.boolean(),
+})
+export type VoiceParse = z.infer<typeof voiceParseSchema>
+
+/** /api/v1/rfq/voice-parse response body. */
+export const voiceParseResponseSchema = z.object({
+  transcript_english: z.string(),
+  parse: voiceParseSchema,
+  /** True when a vendor ran in stub mode (no API key) — clients show a hint. */
+  stub: z.boolean(),
+})
+export type VoiceParseResponse = z.infer<typeof voiceParseResponseSchema>
+
+/** Persisted on rfqs.voice_meta for quality review + training signal (§8b). */
+export const voiceMetaSchema = z.object({
+  transcript_english: z.string().max(4000),
+  parse: voiceParseSchema,
+  duration_ms: z.number().int().positive().max(60_000),
+  /** Form fields the user corrected after the parse pre-filled them. */
+  edited_fields: z.array(z.string().max(40)).max(20).default([]),
+  vendor: z.object({
+    stt: z.string().max(40),
+    parser: z.string().max(80),
+  }),
+})
+export type VoiceMeta = z.infer<typeof voiceMetaSchema>
+
 export const rfqSchema = z.object({
   category_slug: z.enum(CATEGORY_SLUGS),
   title: z.string().min(10).max(200),
@@ -124,6 +167,8 @@ export const rfqSchema = z.object({
   budget_min_paise: paiseSchema.optional(),
   budget_max_paise: paiseSchema.optional(),
   needed_by: z.string().date().optional(),
+  /** Present only when the RFQ began as a voice recording (Phase 8b). */
+  voice_meta: voiceMetaSchema.optional(),
 })
 
 export type RfqInput = z.infer<typeof rfqSchema>

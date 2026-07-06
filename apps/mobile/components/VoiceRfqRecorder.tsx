@@ -1,0 +1,222 @@
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import {
+  AudioModule,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioRecorder,
+} from 'expo-audio'
+import { useI18n } from '@/lib/i18n'
+import { track } from '@/lib/analytics'
+import { voiceParse } from '@/lib/api'
+
+/**
+ * Phase 8b — mic capture for Voice RFQ (mobile, expo-audio; expo-av was
+ * removed in Expo SDK 55). Record (≤60s) → playback + re-record → POST
+ * /api/v1/rfq/voice-parse. Never submits an RFQ — the parent pre-fills the
+ * normal form. All failures resolve to an inline message; the manual form
+ * below stays usable.
+ */
+
+const MAX_RECORD_MS = 60_000
+const MIME = 'audio/m4a'
+
+type Phase = 'idle' | 'recording' | 'review' | 'uploading'
+
+interface VoiceRfqRecorderProps {
+  onParsed: (data: any, durationMs: number) => void
+  onTranscriptOnly: (transcript: string, durationMs: number) => void
+}
+
+export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorderProps) {
+  const { t } = useI18n()
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
+  const player = useAudioPlayer()
+
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const [error, setError] = useState('')
+
+  const startedAtRef = useRef(0)
+  const durationRef = useRef(0)
+  const uriRef = useRef<string | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [])
+
+  async function start() {
+    setError('')
+    const perm = await AudioModule.requestRecordingPermissionsAsync()
+    if (!perm.granted) {
+      setError(t('voice.err_mic_denied') + ' ' + t('voice.type_instead'))
+      track('voice_rfq_failed', { surface: 'rfq_form', reason: 'mic_denied' })
+      return
+    }
+    try {
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true })
+      await recorder.prepareToRecordAsync()
+      recorder.record()
+    } catch {
+      setError(t('voice.err_unsupported') + ' ' + t('voice.type_instead'))
+      return
+    }
+    startedAtRef.current = Date.now()
+    setElapsedMs(0)
+    setPhase('recording')
+    track('voice_rfq_started', { surface: 'rfq_form' })
+    timerRef.current = setInterval(() => {
+      const ms = Date.now() - startedAtRef.current
+      setElapsedMs(ms)
+      if (ms >= MAX_RECORD_MS) void stop()
+    }, 200)
+  }
+
+  async function stop() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    try {
+      await recorder.stop()
+    } catch {}
+    durationRef.current = Math.min(Date.now() - startedAtRef.current, MAX_RECORD_MS)
+    uriRef.current = recorder.uri
+    if (uriRef.current) {
+      player.replace(uriRef.current)
+      setPhase('review')
+    } else {
+      setError(t('voice.err_transcribe') + ' ' + t('voice.type_instead'))
+      setPhase('idle')
+    }
+  }
+
+  function play() {
+    player.seekTo(0)
+    player.play()
+  }
+
+  async function send() {
+    const uri = uriRef.current
+    if (!uri) return
+    setPhase('uploading')
+    setError('')
+    const res = await voiceParse(uri, MIME, durationRef.current)
+    if (res.ok) {
+      track('voice_rfq_transcribed', {
+        surface: 'rfq_form',
+        original_language: res.data.parse?.original_language,
+        duration_ms: Math.round(durationRef.current),
+      })
+      track('voice_rfq_parsed', {
+        surface: 'rfq_form',
+        original_language: res.data.parse?.original_language,
+        uncertain: res.data.parse?.uncertain,
+        stub: res.data.stub,
+      })
+      onParsed(res.data, Math.round(durationRef.current))
+      setPhase('idle')
+      return
+    }
+    if (res.status === 429) setError(t('voice.err_rate_limited'))
+    else if (res.data?.error === 'audio_too_long') setError(t('voice.err_too_long'))
+    else if (res.data?.error === 'audio_too_large') setError(t('voice.err_too_large'))
+    else if (res.data?.error === 'transcription_empty') setError(t('voice.err_no_speech'))
+    else if (res.data?.error === 'parse_failed' && res.data?.transcript_english) {
+      onTranscriptOnly(res.data.transcript_english, Math.round(durationRef.current))
+      setPhase('idle')
+      track('voice_rfq_failed', { surface: 'rfq_form', reason: 'parse_failed_transcript_kept' })
+      return
+    } else setError(t('voice.err_transcribe'))
+    track('voice_rfq_failed', { surface: 'rfq_form', reason: res.data?.error ?? `http_${res.status}` })
+    setPhase('review')
+  }
+
+  const seconds = Math.floor(elapsedMs / 1000)
+  const remaining = Math.max(0, Math.ceil((MAX_RECORD_MS - elapsedMs) / 1000))
+
+  return (
+    <View className="rounded-xl border border-border bg-surface p-4">
+      <View className="flex-row items-center gap-2">
+        <Ionicons name="sparkles" size={16} color="#1B4D3E" />
+        <Text className="text-sm font-semibold text-foreground">{t('voice.intro_title')}</Text>
+      </View>
+      <Text className="mt-1 text-xs leading-4 text-foreground-secondary">{t('voice.intro_sub')}</Text>
+      {/* DPDP consent + no-retention fact (§Phase 8b v1.1) — shown before any recording. */}
+      <Text className="mt-1 text-[11px] leading-4 text-foreground-secondary opacity-80">{t('voice.consent_note')}</Text>
+
+      <View className="mt-3 flex-row flex-wrap items-center gap-3">
+        {phase === 'idle' && (
+          <TouchableOpacity
+            onPress={() => void start()}
+            className="flex-row items-center gap-2 rounded-xl bg-primary px-4 py-2.5"
+          >
+            <Ionicons name="mic" size={18} color="#fff" />
+            <Text className="font-semibold text-white">{t('voice.record_cta')}</Text>
+          </TouchableOpacity>
+        )}
+
+        {phase === 'recording' && (
+          <>
+            <TouchableOpacity
+              onPress={() => void stop()}
+              accessibilityLabel={t('voice.stop_cta')}
+              className="h-14 w-14 items-center justify-center rounded-full bg-danger"
+            >
+              <Ionicons name="square" size={20} color="#fff" />
+            </TouchableOpacity>
+            <View>
+              <Text className="text-sm font-semibold text-foreground">
+                {t('voice.recording')} · 0:{String(seconds).padStart(2, '0')}
+              </Text>
+              <Text className="text-xs text-foreground-secondary">
+                {t('voice.seconds_left', { s: remaining })}
+              </Text>
+            </View>
+          </>
+        )}
+
+        {phase === 'review' && (
+          <View className="w-full gap-2.5">
+            <View className="flex-row flex-wrap gap-2.5">
+              <TouchableOpacity
+                onPress={play}
+                className="flex-row items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5"
+              >
+                <Ionicons name="play" size={16} color="#1B4D3E" />
+                <Text className="font-medium text-foreground">0:{String(Math.round(durationRef.current / 1000)).padStart(2, '0')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void send()}
+                className="rounded-xl bg-primary px-4 py-2.5"
+              >
+                <Text className="font-semibold text-white">{t('voice.use_recording')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void start()}
+                className="flex-row items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5"
+              >
+                <Ionicons name="refresh" size={16} color="#1B4D3E" />
+                <Text className="font-medium text-foreground">{t('voice.re_record')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {phase === 'uploading' && (
+          <View className="flex-row items-center gap-2">
+            <ActivityIndicator color="#1B4D3E" />
+            <Text className="text-sm text-foreground-secondary">{t('voice.processing')}</Text>
+          </View>
+        )}
+      </View>
+
+      {error ? <Text className="mt-2.5 text-xs text-danger">{error}</Text> : null}
+    </View>
+  )
+}

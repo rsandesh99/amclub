@@ -67,6 +67,11 @@ export const limiters = {
   couponValidate: build(30, '1 m', 'rl:coupon-validate'),
   /** Admin mutations (suspend, resolve dispute, commission change, …) per user. */
   adminMutation: build(60, '1 m', 'rl:admin-mutation'),
+  /** Voice RFQ parse per user — every call hits PAID APIs (Sarvam + LLM).
+   *  Burst guard; pair with voiceParseHourly for the spend budget. */
+  voiceParse: build(3, '1 m', 'rl:voice-parse'),
+  /** Voice RFQ parse per user, hourly spend budget. */
+  voiceParseHourly: build(15, '1 h', 'rl:voice-parse-h'),
 } as const
 
 export interface RateLimitResult {

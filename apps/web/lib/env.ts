@@ -41,6 +41,15 @@ const serverEnvSchema = z.object({
   // no-op (allow all) so local/dev keeps working without Redis.
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+  // Voice RFQ (Phase 8b). Both vendors stub (log "would …", no paid call)
+  // when their key is unset. Model id is OpenRouter's namespace.
+  SARVAM_API_KEY: z.string().optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
+  VOICE_PARSE_MODEL: z.string().optional(),
+  // ai_invocations cost estimates (v1.1). Unset → cost_est_paise stays null
+  // for STT; OpenRouter conversion falls back to ₹88/USD.
+  SARVAM_COST_PAISE_PER_MIN: z.string().optional(),
+  OPENROUTER_USD_INR_PAISE: z.string().optional(),
   // Feature flags. 'true' enables; anything else (incl. unset) = OFF.
   // COUPONS_ENABLED gates the entire Phase-6 coupon path (see lib/flags.ts).
   COUPONS_ENABLED: z.string().optional(),

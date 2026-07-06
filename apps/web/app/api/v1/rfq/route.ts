@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
       budget_min_paise: d.budget_min_paise ?? null,
       budget_max_paise: d.budget_max_paise ?? null,
       needed_by: d.needed_by ?? null,
+      // Phase 8b — transcript + parse when the RFQ began as voice (quality
+      // review + training signal). Pure storage; matching is unaffected.
+      voice_meta: d.voice_meta ?? null,
       status: 'open',
       max_quotes: 7,
       quote_count: 0,
