@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
+import { recordHeartbeat } from '@/lib/jobs/heartbeat'
 import { getPaymentGateway } from '@/lib/payments'
 import { runPayouts } from '@/lib/payments/payout'
 
@@ -13,5 +14,6 @@ export async function GET(request: NextRequest) {
   const admin = await createAdminClient()
   const allScheduled = request.nextUrl.searchParams.get('all') === 'true'
   const result = await runPayouts(admin, getPaymentGateway(), { allScheduled })
+  await recordHeartbeat(admin, 'payouts', result as unknown as Record<string, unknown>)
   return NextResponse.json(result)
 }

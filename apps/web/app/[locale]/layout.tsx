@@ -11,6 +11,7 @@ import {
 } from 'next/font/google'
 import { routing } from '@/i18n/routing'
 import { PostHogProvider } from '@/components/providers/posthog'
+import { ToastProvider } from '@/components/ui/toast'
 import '@/app/globals.css'
 
 const inter = Inter({
@@ -102,7 +103,9 @@ export default async function LocaleLayout({
     >
       <body className="bg-background font-sans text-foreground antialiased">
         <NextIntlClientProvider messages={messages}>
-          <PostHogProvider>{children}</PostHogProvider>
+          <PostHogProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </PostHogProvider>
         </NextIntlClientProvider>
       </body>
     </html>

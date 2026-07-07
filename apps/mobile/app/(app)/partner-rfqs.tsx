@@ -5,7 +5,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { useI18n } from '@/lib/i18n'
 import { fetchMatchedRfqs } from '@/lib/api'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 export default function PartnerRfqsScreen() {
   const { t } = useI18n()
   const [rfqs, setRfqs] = useState<any[]>([])
@@ -41,4 +41,4 @@ export default function PartnerRfqsScreen() {
     </SafeAreaView>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

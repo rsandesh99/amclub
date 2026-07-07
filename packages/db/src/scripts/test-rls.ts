@@ -53,36 +53,6 @@ async function createTestUser(phone: string, role: 'msme' | 'provider') {
   return userId
 }
 
-async function getJwt(userId: string): Promise<string> {
-  const { data, error } = await admin.auth.admin.getUserById(userId)
-  if (error || !data.user) throw new Error('getUserById failed')
-  // Generate a short-lived token
-  const { data: session, error: err2 } = await admin.auth.admin.generateLink({
-    type: 'magiclink',
-    email: `${userId.slice(0, 8)}@test.amclub.internal`,
-  })
-  // We can't easily get a JWT without a real session. Instead, use SET LOCAL in raw SQL.
-  return userId // return userId; we'll use SET LOCAL approach
-}
-
-// Run a query as a specific authenticated user using Postgres SET LOCAL
-async function queryAs(userId: string, query: string): Promise<any[]> {
-  return db.unsafe(`
-    SET LOCAL role = 'authenticated';
-    SET LOCAL "request.jwt.claims" = '{"sub":"${userId}","role":"authenticated"}';
-    ${query}
-  `)
-}
-
-// Run a query as anonymous (no JWT)
-async function queryAnon(query: string): Promise<any[]> {
-  return db.unsafe(`
-    SET LOCAL role = 'anon';
-    SET LOCAL "request.jwt.claims" = '{"role":"anon"}';
-    ${query}
-  `)
-}
-
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 let msme1Id: string, msme2Id: string, provider1Id: string, provider2Id: string
@@ -107,14 +77,14 @@ async function setup() {
     VALUES (${msme1Id}, 'Test MSME 1', 'AP')
     RETURNING id
   `
-  msme1ProfileId = mp1.id
+  msme1ProfileId = mp1!['id']
 
   const [mp2] = await db`
     INSERT INTO msme_profiles (user_id, business_name, state)
     VALUES (${msme2Id}, 'Test MSME 2', 'MH')
     RETURNING id
   `
-  msme2ProfileId = mp2.id
+  msme2ProfileId = mp2!['id']
 
   // Provider profiles — one active, one pending_kyc
   const [pp1] = await db`
@@ -122,14 +92,14 @@ async function setup() {
     VALUES (${provider1Id}, 'Active Provider Ltd', 'Active Provider', ${'active-prov-t' + ts}, 'KA', 'active')
     RETURNING id
   `
-  provider1ProfileId = pp1.id
+  provider1ProfileId = pp1!['id']
 
   const [pp2] = await db`
     INSERT INTO provider_profiles (user_id, legal_name, display_name, slug, state, status)
     VALUES (${provider2Id}, 'Pending Provider Ltd', 'Pending Provider', ${'pending-prov-t' + ts}, 'TN', 'pending_kyc')
     RETURNING id
   `
-  provider2ProfileId = pp2.id
+  provider2ProfileId = pp2!['id']
 
   // Get a category id
   const [cat] = await db`SELECT id FROM categories LIMIT 1`
@@ -138,17 +108,17 @@ async function setup() {
   // Packages: one active (from active provider), one draft (from active provider), one from pending provider
   const [pkg1] = await db`
     INSERT INTO packages (provider_id, category_id, slug, title_i18n, scope_included, deliverables, price_paise, delivery_days, status)
-    VALUES (${provider1ProfileId}, ${cat.id}, ${'pkg-active-' + ts}, '{"en":"Active Package"}', '["scope"]', '["deliverable"]', 69900, 7, 'active')
+    VALUES (${provider1ProfileId}, ${cat['id']}, ${'pkg-active-' + ts}, '{"en":"Active Package"}', '["scope"]', '["deliverable"]', 69900, 7, 'active')
     RETURNING id
   `
-  package1Id = pkg1.id
+  package1Id = pkg1!['id']
 
   const [pkg2] = await db`
     INSERT INTO packages (provider_id, category_id, slug, title_i18n, scope_included, deliverables, price_paise, delivery_days, status)
-    VALUES (${provider1ProfileId}, ${cat.id}, ${'pkg-draft-' + ts}, '{"en":"Draft Package"}', '["scope"]', '["deliverable"]', 49900, 5, 'draft')
+    VALUES (${provider1ProfileId}, ${cat['id']}, ${'pkg-draft-' + ts}, '{"en":"Draft Package"}', '["scope"]', '["deliverable"]', 49900, 5, 'draft')
     RETURNING id
   `
-  package2Id = pkg2.id
+  package2Id = pkg2!['id']
 
   // Order belonging to msme1 (not msme2)
   const [ord] = await db`
@@ -156,15 +126,15 @@ async function setup() {
     VALUES (${'AMC-TEST-' + ts}, ${msme1ProfileId}, ${provider1ProfileId}, 'package', 'Test Order', '{}', 69900, 12582, 82482, 1000, 6990, 62910, 7, 'placed')
     RETURNING id
   `
-  order1Id = ord.id
+  order1Id = ord!['id']
 
   // RFQ and matches: rfq from msme1, matched to provider1 (not provider2)
   const [rfq] = await db`
     INSERT INTO rfqs (msme_id, category_id, title, details, expires_at)
-    VALUES (${msme1ProfileId}, ${cat.id}, 'Test RFQ', '{}', now() + interval '72 hours')
+    VALUES (${msme1ProfileId}, ${cat['id']}, 'Test RFQ', '{}', now() + interval '72 hours')
     RETURNING id
   `
-  rfq1Id = rfq.id
+  rfq1Id = rfq!['id']
 
   await db`
     INSERT INTO rfq_matches (rfq_id, provider_id)
@@ -218,7 +188,7 @@ async function runTests() {
     await tx.unsafe(`SET LOCAL role = 'anon'; SET LOCAL "request.jwt.claims" = '{"role":"anon"}';`)
     const rows = await tx.unsafe(`SELECT id, status FROM packages WHERE id IN ('${package1Id}', '${package2Id}')`)
     assert(rows.length === 1, 'anon sees exactly 1 package (the active one)')
-    assert(rows[0]?.status === 'active', 'the visible package has status=active')
+    assert(rows[0]?.['status'] === 'active', 'the visible package has status=active')
   })
 
   // ── T4: Provider reads only rfq_matches for their own provider_id ──────────

@@ -18,7 +18,8 @@
     "verified": "Verified",
     "promoted": "Promoted",
     "top_rated": "Top Rated",
-    "sign_out": "Sign out"
+    "sign_out": "Sign out",
+    "not_found": "Not found"
   },
   "locale": {
     "switch": "Switch language",
@@ -105,7 +106,8 @@
     "orders_done": "orders done",
     "saved": "Saved",
     "save": "Save",
-    "saved_empty": "You haven't saved any providers yet."
+    "saved_empty": "You haven't saved any providers yet.",
+    "faqs": "FAQs"
   },
   "tabs": {
     "home": "Home",

@@ -1,6 +1,6 @@
 import {
   pgTable, uuid, text, boolean, integer, timestamp, jsonb, bigint,
-  unique, primaryKey, check,
+  unique, primaryKey, check, index,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { users, msmeProfiles, providerProfiles } from './identity'

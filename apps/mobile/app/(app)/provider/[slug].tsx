@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n'
 import { fetchProvider, getSavedProviderIds, toggleSaved } from '@/lib/api'
 import { pickI18n, initials, formatINR, computePricing } from '@/lib/format'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 export default function ProviderScreen() {
   const { t, locale } = useI18n()
   const { slug } = useLocalSearchParams<{ slug: string }>()
@@ -49,7 +49,7 @@ export default function ProviderScreen() {
   if (!data?.provider) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-background">
-        <Text className="text-foreground-secondary">Not found</Text>
+        <Text className="text-foreground-secondary">{t('common.not_found')}</Text>
       </SafeAreaView>
     )
   }
@@ -158,4 +158,4 @@ export default function ProviderScreen() {
     </SafeAreaView>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [master, main, develop]
 
 env:
   # Stub env vars so Next.js build doesn't fail on missing vars in CI.
@@ -16,7 +16,7 @@ env:
 
 jobs:
   ci:
-    name: Lint · Typecheck · Build
+    name: Lint · Typecheck · Test · Build
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -41,8 +41,11 @@ jobs:
       - name: Typecheck (all packages)
         run: pnpm turbo run typecheck
 
-      - name: Lint (web)
-        run: pnpm turbo run lint --filter=@amclub/web
+      - name: Lint (all packages)
+        run: pnpm turbo run lint
+
+      - name: Unit tests (shared — money, state machines, masking)
+        run: pnpm --filter @amclub/shared test
 
       - name: Build (web)
         run: pnpm turbo run build --filter=@amclub/web

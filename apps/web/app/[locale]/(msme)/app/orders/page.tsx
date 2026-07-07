@@ -5,18 +5,27 @@ import { Link } from '@/i18n/navigation'
 import { getSessionUser } from '@/lib/auth/session'
 import { listMyOrders } from '@/lib/orders/queries'
 import { Badge } from '@/components/ui/badge'
+import { ProcessingBanner } from '@/components/orders/ProcessingBanner'
 import { formatINR } from '@/lib/format'
 
-export default async function MsmeOrdersPage() {
+export default async function MsmeOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ processing?: string }>
+}) {
   const user = await getSessionUser()
   if (!user) redirect('/login?next=/app/orders')
   const t = await getTranslations('orders')
   const orders = await listMyOrders(user.id, 'msme')
+  const { processing } = await searchParams
 
   const tInvoices = await getTranslations('invoices')
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
+      {/* Post-payment handoff: the webhook creates the order, so it may not be
+          in `orders` yet — the banner polls until it appears (B1). */}
+      {processing === '1' && <ProcessingBanner initialCount={orders.length} />}
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-bold">{t('my_orders')}</h1>
         <Link href="/app/invoices" className="text-sm font-medium text-primary hover:underline">

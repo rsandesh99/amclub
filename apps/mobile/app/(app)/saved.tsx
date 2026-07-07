@@ -7,7 +7,7 @@ import { getSavedProviderIds } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { initials } from '@/lib/format'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 export default function SavedScreen() {
   const { t } = useI18n()
   const [providers, setProviders] = useState<any[]>([])
@@ -75,4 +75,4 @@ export default function SavedScreen() {
     </SafeAreaView>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

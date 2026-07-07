@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
+import { recordHeartbeat } from '@/lib/jobs/heartbeat'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,5 +22,7 @@ export async function GET(request: NextRequest) {
     console.error('[cron/rfq-expire]', error)
     return NextResponse.json({ error: 'failed' }, { status: 500 })
   }
-  return NextResponse.json({ expired: data?.length ?? 0 })
+  const result = { expired: data?.length ?? 0 }
+  await recordHeartbeat(admin, 'rfq-expire', result)
+  return NextResponse.json(result)
 }

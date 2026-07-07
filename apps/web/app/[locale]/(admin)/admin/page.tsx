@@ -9,6 +9,15 @@ import { formatINR } from '@/lib/format'
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const daysAgoISO = (d: number) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10)
 
+// Expected beats per vercel.json schedules; stale = ~2 missed runs + slack.
+const CRON_JOBS = [
+  { name: 'auto-cancel', staleAfterMs: 3 * 3600_000 },
+  { name: 'auto-accept', staleAfterMs: 3 * 3600_000 },
+  { name: 'rfq-expire', staleAfterMs: 3 * 3600_000 },
+  { name: 'reconcile', staleAfterMs: 14 * 3600_000 },
+  { name: 'payouts', staleAfterMs: 26 * 3600_000 },
+]
+
 export default function AdminDashboardPage() {
   const t = useTranslations('admin_ops')
   const [from, setFrom] = useState(daysAgoISO(30))
@@ -81,6 +90,28 @@ export default function AdminDashboardPage() {
               ))}
             </Panel>
           </div>
+
+          {/* Cron liveness (B3) — a job that stops beating turns red here. */}
+          <Panel title={t('jobs_title')}>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {CRON_JOBS.map(({ name, staleAfterMs }) => {
+                const hb = (data.cronHeartbeats ?? []).find((x: any) => x.name === name)
+                const ageMs = hb ? Date.now() - new Date(hb.last_ok_at).getTime() : Infinity
+                const stale = ageMs > staleAfterMs
+                return (
+                  <div key={name} className={`flex items-center justify-between rounded-button border px-3 py-2 text-sm ${stale ? 'border-danger/40 bg-danger/5' : 'border-border'}`}>
+                    <span className="font-medium">{name}</span>
+                    <span className={stale ? 'font-semibold text-danger' : 'text-foreground-secondary'}>
+                      {hb
+                        ? new Date(hb.last_ok_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST'
+                        : t('jobs_never')}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-xs text-foreground-secondary">{t('jobs_hint')}</p>
+          </Panel>
 
           {/* §7.3 liquidity matrix */}
           <Panel title={t('liquidity')}>

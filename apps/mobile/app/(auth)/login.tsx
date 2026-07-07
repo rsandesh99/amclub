@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
+import { LocaleToggle } from '@/components/LocaleToggle'
 import { normalisePhone, isEmail, signInWithGoogle, routeForRoles } from '@/lib/auth'
 
 type Method = 'phone' | 'email'
@@ -75,6 +76,9 @@ export default function LoginScreen() {
             <Text className="mt-2 text-base text-foreground-secondary text-center">
               {step === 'input' ? t('auth.sign_in_title') : t('auth.enter_otp')}
             </Text>
+            <View className="mt-4">
+              <LocaleToggle />
+            </View>
           </View>
 
           {step === 'input' ? (

@@ -46,6 +46,41 @@ describe('computeOrderAmounts', () => {
     expect(a.totalPaise).toBe(100000)
     expect(DEFAULT_GST_BPS).toBe(1800)
   })
+
+  it('stacks a flat coupon after the percentage discount', () => {
+    const a = computeOrderAmounts({
+      pricePaise: 100_000,
+      discountBps: 1000,
+      commissionBps: 1000,
+      extraDiscountPaise: 5_000,
+    })
+    expect(a.discountPaise).toBe(15_000) // 10,000 pkg + 5,000 coupon
+    expect(a.taxablePaise).toBe(85_000)
+  })
+
+  it('clamps discounts so taxable never goes negative', () => {
+    const a = computeOrderAmounts({
+      pricePaise: 10_000,
+      discountBps: 9000,
+      commissionBps: 1000,
+      extraDiscountPaise: 50_000,
+    })
+    expect(a.discountPaise).toBe(10_000)
+    expect(a.taxablePaise).toBe(0)
+    expect(a.totalPaise).toBe(0)
+    expect(a.providerEarningPaise).toBe(0)
+  })
+
+  it('ignores a negative extra discount', () => {
+    const a = computeOrderAmounts({
+      pricePaise: 10_000,
+      discountBps: 0,
+      commissionBps: 1000,
+      extraDiscountPaise: -5_000,
+    })
+    expect(a.discountPaise).toBe(0)
+    expect(a.taxablePaise).toBe(10_000)
+  })
 })
 
 describe('computeRefundPaise — policy matrix (§9.2)', () => {

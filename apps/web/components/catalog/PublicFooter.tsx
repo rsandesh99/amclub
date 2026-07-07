@@ -50,6 +50,26 @@ export async function PublicFooter() {
                 {t('catalog.browse_services')}
               </Link>
             </li>
+            <li>
+              <Link href="/help" className="hover:text-primary">
+                {t('legal.help_link')}
+              </Link>
+            </li>
+            <li>
+              <Link href="/terms" className="hover:text-primary">
+                {t('legal.terms_title')}
+              </Link>
+            </li>
+            <li>
+              <Link href="/privacy" className="hover:text-primary">
+                {t('legal.privacy_title')}
+              </Link>
+            </li>
+            <li>
+              <Link href="/refund-policy" className="hover:text-primary">
+                {t('legal.refund_title')}
+              </Link>
+            </li>
           </ul>
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
   PAYOUT_RELEASE_STATUSES,
   DISPUTABLE_STATUSES,
   isValidPayoutTransition,
+  isValidRfqTransition,
 } from '../state-machines'
 
 describe('order state machine (§3.7)', () => {
@@ -81,5 +82,21 @@ describe('payout state machine', () => {
     expect(isValidPayoutTransition('scheduled', 'held')).toBe(true)
     expect(isValidPayoutTransition('processing', 'held')).toBe(true)
     expect(isValidPayoutTransition('held', 'scheduled')).toBe(true)
+  })
+})
+
+describe('rfq state machine', () => {
+  it('canonical paths: open → quoted → accepted; open → expired/cancelled', () => {
+    expect(isValidRfqTransition('open', 'quoted')).toBe(true)
+    expect(isValidRfqTransition('quoted', 'accepted')).toBe(true)
+    expect(isValidRfqTransition('open', 'expired')).toBe(true)
+    expect(isValidRfqTransition('open', 'cancelled')).toBe(true)
+    expect(isValidRfqTransition('quoted', 'expired')).toBe(true)
+  })
+
+  it('accepted/expired/cancelled are terminal', () => {
+    expect(isValidRfqTransition('accepted', 'open')).toBe(false)
+    expect(isValidRfqTransition('expired', 'open')).toBe(false)
+    expect(isValidRfqTransition('cancelled', 'quoted')).toBe(false)
   })
 })

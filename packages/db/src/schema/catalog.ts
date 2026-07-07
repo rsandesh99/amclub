@@ -4,7 +4,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import { users, providerProfiles } from './identity'
+import { providerProfiles } from './identity'
 
 // tsvector custom type (trigger-maintained, GIN-indexed)
 const tsvector = customType<{ data: string }>({

@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
+import { recordHeartbeat } from '@/lib/jobs/heartbeat'
 import { autoAcceptOrder } from '@/lib/orders/transitions'
 
 export const dynamic = 'force-dynamic'
@@ -23,5 +24,7 @@ export async function GET(request: NextRequest) {
   for (const order of due ?? []) {
     if (await autoAcceptOrder(admin, order)) completed++
   }
-  return NextResponse.json({ checked: due?.length ?? 0, completed })
+  const result = { checked: due?.length ?? 0, completed }
+  await recordHeartbeat(admin, 'auto-accept', result)
+  return NextResponse.json(result)
 }

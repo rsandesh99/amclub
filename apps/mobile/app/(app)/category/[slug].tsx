@@ -27,7 +27,9 @@ export default function CategoryScreen() {
     [slug],
   )
 
-  useEffect(() => { run('rating', false) }, [run])
+  // Deferred so run()'s setState stays off the effect's synchronous path
+  // (react-hooks/set-state-in-effect); run is also the filter-chip handler.
+  useEffect(() => { void Promise.resolve().then(() => run('rating', false)) }, [run])
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>

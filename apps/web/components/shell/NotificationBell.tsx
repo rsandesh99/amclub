@@ -23,8 +23,10 @@ export function NotificationBell({ href }: { href: string }) {
       } catch { /* ignore */ }
     }
     poll()
-    const t = setInterval(poll, 60_000)
-    return () => { alive = false; clearInterval(t) }
+    const t = setInterval(poll, 30_000)
+    // Catch up immediately when the user returns to the tab.
+    window.addEventListener('focus', poll)
+    return () => { alive = false; clearInterval(t); window.removeEventListener('focus', poll) }
   }, [])
 
   return (

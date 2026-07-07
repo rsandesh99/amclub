@@ -1,6 +1,6 @@
 import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
@@ -11,12 +11,13 @@ export default function NotificationsScreen() {
   const [items, setItems] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(true)
 
-  const load = useCallback(async () => {
-    const d = await fetchNotifications()
-    setItems(d.notifications)
-    setLoading(false)
+  useEffect(() => {
+    // .then keeps setState off the effect's synchronous path (react-hooks/set-state-in-effect).
+    fetchNotifications().then((d) => {
+      setItems(d.notifications)
+      setLoading(false)
+    })
   }, [])
-  useEffect(() => { load() }, [load])
 
   async function open(n: NotificationItem) {
     if (!n.read_at) {

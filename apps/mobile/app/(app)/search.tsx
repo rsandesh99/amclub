@@ -25,8 +25,10 @@ export default function SearchScreen() {
     setLoading(false)
   }, [])
 
+  // Deferred so run()'s setState stays off the effect's synchronous path
+  // (react-hooks/set-state-in-effect); run is also the submit handler.
   useEffect(() => {
-    run(params.query ?? '', 'rating', false)
+    void Promise.resolve().then(() => run(params.query ?? '', 'rating', false))
   }, [params.query, run])
 
   return (

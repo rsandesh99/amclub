@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -12,6 +13,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const { id } = use(params)
   const t = useTranslations('admin_ops')
   const router = useRouter()
+  const { toast } = useToast()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -27,8 +29,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     setBusy(true)
     const res = await fetch(`/api/v1/admin/orders/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setBusy(false)
-    if (res.ok) await load()
-    else { const d = await res.json().catch(() => ({})); alert(typeof d.error === 'string' ? d.error : 'Failed') }
+    if (res.ok) { await load(); toast(t('action_done'), 'success') }
+    else { const d = await res.json().catch(() => ({})); toast(typeof d.error === 'string' ? d.error : t('action_failed'), 'error') }
   }
   function manualRefund() {
     const r = window.prompt(t('refund_amount'))

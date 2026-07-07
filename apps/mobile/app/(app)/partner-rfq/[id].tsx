@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n'
 import { fetchRfq, submitQuote } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 export default function ProviderRfqScreen() {
   const { t } = useI18n()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -19,7 +19,8 @@ export default function ProviderRfqScreen() {
   const [error, setError] = useState('')
 
   const load = useCallback(async () => { const d = await fetchRfq(id); setRfq(d?.rfq ?? null); setLoading(false) }, [id])
-  useEffect(() => { load() }, [load])
+  // Deferred: keeps setState off the effect's synchronous path.
+  useEffect(() => { void Promise.resolve().then(load) }, [load])
 
   async function submit() {
     setError('')
@@ -74,4 +75,4 @@ export default function ProviderRfqScreen() {
     </SafeAreaView>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

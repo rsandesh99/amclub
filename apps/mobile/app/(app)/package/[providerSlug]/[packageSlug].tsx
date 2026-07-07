@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, ActivityIndicator, TouchableOpacity, Alert } from 'react-native'
+import { ScrollView, Text, View, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useState, useEffect } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -8,7 +8,7 @@ import { fetchPackage } from '@/lib/api'
 import { pickI18n } from '@/lib/format'
 import { PriceBlock } from '@/components/PriceBlock'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 export default function PackageScreen() {
   const { t, locale } = useI18n()
   const { providerSlug, packageSlug } = useLocalSearchParams<{ providerSlug: string; packageSlug: string }>()
@@ -29,7 +29,7 @@ export default function PackageScreen() {
   if (!data?.pkg) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-background">
-        <Text className="text-foreground-secondary">Not found</Text>
+        <Text className="text-foreground-secondary">{t('common.not_found')}</Text>
       </SafeAreaView>
     )
   }
@@ -99,7 +99,7 @@ export default function PackageScreen() {
         {/* FAQs */}
         {(pkg.faqs ?? []).length > 0 && (
           <View>
-            <Text className="mb-2 text-base font-bold text-foreground">FAQs</Text>
+            <Text className="mb-2 text-base font-bold text-foreground">{t('catalog.faqs')}</Text>
             {pkg.faqs.map((f: any, i: number) => (
               <View key={i} className="mb-2">
                 <Text className="text-sm font-medium text-foreground">{f.q}</Text>
@@ -123,4 +123,4 @@ export default function PackageScreen() {
     </SafeAreaView>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

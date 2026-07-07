@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n'
 import { fetchOrder, transitionOrder, fetchOrderReview, submitReview, replyReview } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 // Returns action keys; labels come from t(`order_actions.${action}`).
 function actionsFor(role: string, status: string): string[] {
   if (role === 'provider') {
@@ -36,7 +36,9 @@ export default function OrderScreen() {
     setLoading(false)
   }, [id])
 
-  useEffect(() => { load() }, [load])
+  // Deferred so load()'s setState stays off the effect's synchronous path
+  // (react-hooks/set-state-in-effect); load also refreshes after actions.
+  useEffect(() => { void Promise.resolve().then(load) }, [load])
 
   async function act(action: string) {
     setBusy(true)
@@ -47,7 +49,7 @@ export default function OrderScreen() {
   }
 
   if (loading) return <SafeAreaView className="flex-1 items-center justify-center bg-background"><ActivityIndicator size="large" color="#1B4D3E" /></SafeAreaView>
-  if (!data?.order) return <SafeAreaView className="flex-1 items-center justify-center bg-background"><Text className="text-foreground-secondary">Not found</Text></SafeAreaView>
+  if (!data?.order) return <SafeAreaView className="flex-1 items-center justify-center bg-background"><Text className="text-foreground-secondary">{t('common.not_found')}</Text></SafeAreaView>
 
   const o = data.order
   const actions = actionsFor(data.viewerRole, o.status)
@@ -125,7 +127,8 @@ function ReviewBlock({ orderId }: { orderId: string }) {
     const d = await fetchOrderReview(orderId)
     setReview(d.review); setCanReview(!!d.canReview); setIsProvider(!!d.isProvider)
   }, [orderId])
-  useEffect(() => { load() }, [load])
+  // Deferred: keeps setState off the effect's synchronous path.
+  useEffect(() => { void Promise.resolve().then(load) }, [load])
 
   async function send() {
     if (rating < 1) { Alert.alert(t('reviews.pick_rating')); return }
@@ -199,4 +202,4 @@ function ReviewBlock({ orderId }: { orderId: string }) {
     </View>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

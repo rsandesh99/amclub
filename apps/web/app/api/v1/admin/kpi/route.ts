@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   const admin = await createAdminClient()
 
-  const [ordersRes, sessionsRes, rfqsRes, disputesRes, providersRes, provCatsRes, catsRes] = await Promise.all([
+  const [ordersRes, sessionsRes, rfqsRes, disputesRes, providersRes, provCatsRes, catsRes, heartbeatsRes] = await Promise.all([
     admin.from('orders').select('status, total_paise, commission_paise, msme_id').gte('created_at', from).lte('created_at', to),
     admin.from('checkout_sessions').select('id', { count: 'exact', head: true }).gte('created_at', from).lte('created_at', to),
     admin.from('rfqs').select('status').gte('created_at', from).lte('created_at', to),
@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
     admin.from('provider_profiles').select('id, state, status').is('deleted_at', null),
     admin.from('provider_categories').select('provider_id, category_id'),
     admin.from('categories').select('id, slug, name_i18n'),
+    // Cron liveness (STATUS_AUDIT B3) — dead crons must be visible, not silent.
+    admin.from('cron_heartbeats').select('name, last_ok_at, last_result'),
   ])
 
   const orders = (ordersRes.data ?? []) as any[]
@@ -94,6 +96,7 @@ export async function GET(request: NextRequest) {
     topCategories,
     topStates,
     liquidityMatrix: { categories: Object.keys(matrix).sort(), states: [...new Set(Object.values(matrix).flatMap((m) => Object.keys(m)))].sort(), matrix },
+    cronHeartbeats: heartbeatsRes.data ?? [],
   })
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

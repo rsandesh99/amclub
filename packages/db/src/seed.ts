@@ -193,7 +193,6 @@ const CATEGORIES = [
 
 // ─── Provider definitions (20 providers) ──────────────────────────────────────
 
-const STATES = ['AP', 'TS', 'KA', 'TN', 'MH', 'GJ', 'RJ', 'UP', 'DL', 'WB']
 const CITIES: Record<string, string> = {
   AP: 'Vijayawada', TS: 'Hyderabad', KA: 'Bengaluru', TN: 'Chennai',
   MH: 'Pune', GJ: 'Ahmedabad', RJ: 'Jaipur', UP: 'Lucknow', DL: 'Delhi', WB: 'Kolkata',
@@ -329,7 +328,7 @@ async function main() {
         sort_order = EXCLUDED.sort_order
       RETURNING id
     `
-    categoryIds[cat.slug] = row.id
+    categoryIds[cat.slug] = row!['id']
   }
   console.log(`  ✓ ${CATEGORIES.length} categories upserted`)
 
@@ -345,7 +344,7 @@ async function main() {
     // Check if user already exists (idempotency)
     const existing = await db`SELECT id FROM users WHERE phone = ${phone} LIMIT 1`
     if (existing.length > 0) {
-      userId = existing[0].id
+      userId = existing[0]!['id']
     } else {
       userId = await createAuthUser(phone, p.name)
       await db`
@@ -374,7 +373,7 @@ async function main() {
       ON CONFLICT (slug) DO UPDATE SET status = EXCLUDED.status, avg_rating = EXCLUDED.avg_rating
       RETURNING id
     `
-    const ppId = pp.id
+    const ppId = pp!['id']
     providerProfileIds.push(ppId)
 
     // provider_categories
@@ -403,7 +402,7 @@ async function main() {
     const p = PROVIDERS[i]!
     const ppId = providerProfileIds[i]!
     const catId = categoryIds[p.category]!
-    const pkgs = getPackages(p.category, (i % 3) + 1)
+    const pkgs = getPackages(p.category, (i % 3) + 1) ?? []
 
     for (const pkg of pkgs) {
       const slug = `${p.slug}-pkg-${pkgs.indexOf(pkg) + 1}`
@@ -440,7 +439,7 @@ async function main() {
     let userId: string
     const existing = await db`SELECT id FROM users WHERE phone = ${phone} LIMIT 1`
     if (existing.length > 0) {
-      userId = existing[0].id
+      userId = existing[0]!['id']
     } else {
       userId = await createAuthUser(phone, m.business)
       await db`
@@ -471,10 +470,10 @@ async function main() {
   const [msmeTotal] = await db`SELECT count(*)::int AS n FROM msme_profiles`
 
   console.log('\n✅ Seed complete:')
-  console.log(`   categories     = ${catCount?.n}`)
-  console.log(`   packages       = ${pkgTotal?.n}`)
-  console.log(`   providers      = ${provTotal?.n}`)
-  console.log(`   msme_profiles  = ${msmeTotal?.n}`)
+  console.log(`   categories     = ${catCount?.['n']}`)
+  console.log(`   packages       = ${pkgTotal?.['n']}`)
+  console.log(`   providers      = ${provTotal?.['n']}`)
+  console.log(`   msme_profiles  = ${msmeTotal?.['n']}`)
 
   await db.end()
 }

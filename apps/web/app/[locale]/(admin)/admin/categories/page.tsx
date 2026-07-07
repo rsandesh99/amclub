@@ -46,7 +46,7 @@ export default function AdminCategoriesPage() {
     const res = await fetch('/api/v1/admin/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setBusy(null)
     if (res.ok) { setSlug(''); setNameEn(''); setNameHi(''); setCreds(''); await load() }
-    else { const d = await res.json().catch(() => ({})); setError(typeof d.error === 'string' ? d.error : 'Failed') }
+    else { const d = await res.json().catch(() => ({})); setError(typeof d.error === 'string' ? d.error : t('action_failed')) }
   }
 
   return (

@@ -117,6 +117,11 @@ export function CheckoutClient({
           // Redirect is cosmetic; the order appears once the webhook fires.
           router.push('/app/orders?processing=1')
         },
+        modal: {
+          // Buyer closed the sheet without paying — say so instead of leaving
+          // them staring at an unchanged page (B1). Nothing was charged.
+          ondismiss: () => setError(t('payment_cancelled')),
+        },
       })
       rzp.open()
     } catch (e: unknown) {

@@ -65,7 +65,12 @@ export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app' }: AuthPa
       ) : (
         <>
           {method === 'phone' ? (
-            <PhoneStep requestOtp={requestOtp} captchaReady={captchaReady} onSuccess={(p) => { setPhone(p); setStep('otp') }} />
+            <PhoneStep
+              requestOtp={requestOtp}
+              captchaReady={captchaReady}
+              onSuccess={(p) => { setPhone(p); setStep('otp') }}
+              onSwitchToEmail={() => setMethod('email')}
+            />
           ) : (
             <EmailStep requestOtp={requestOtp} captchaReady={captchaReady} onSuccess={(e) => { setEmail(e); setStep('otp') }} />
           )}
@@ -85,6 +90,22 @@ export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app' }: AuthPa
           </div>
 
           <GoogleButton redirectTo={googleRedirectTo} className="w-full" />
+
+          {/* DPDP consent + contract formation line (B2) — every auth surface. */}
+          <p className="text-center text-xs leading-relaxed text-foreground-secondary">
+            {t.rich('consent_line', {
+              terms: (chunks) => (
+                <a href="/terms" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-primary">
+                  {chunks}
+                </a>
+              ),
+              privacy: (chunks) => (
+                <a href="/privacy" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-primary">
+                  {chunks}
+                </a>
+              ),
+            })}
+          </p>
         </>
       )}
 

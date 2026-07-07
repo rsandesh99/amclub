@@ -16,9 +16,12 @@ interface PhoneStepProps {
   captchaReady?: boolean
   emailField?: boolean
   onEmailChange?: (email: string) => void
+  /** SMS delivery can fail outright (provider unconfigured/down) — offer the
+   *  email path instead of a dead end (B4-prep). */
+  onSwitchToEmail?: () => void
 }
 
-export function PhoneStep({ onSuccess, requestOtp, captchaReady = true, emailField, onEmailChange }: PhoneStepProps) {
+export function PhoneStep({ onSuccess, requestOtp, captchaReady = true, emailField, onEmailChange, onSwitchToEmail }: PhoneStepProps) {
   const t = useTranslations('auth')
   const tErr = useTranslations('errors')
 
@@ -26,9 +29,11 @@ export function PhoneStep({ onSuccess, requestOtp, captchaReady = true, emailFie
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [sendFailed, setSendFailed] = useState(false)
 
   async function handleSend() {
     setError('')
+    setSendFailed(false)
     const parsed = phoneSchema.safeParse(phone.replace(/\s/g, ''))
     if (!parsed.success) {
       setError(tErr('invalid_phone'))
@@ -43,6 +48,8 @@ export function PhoneStep({ onSuccess, requestOtp, captchaReady = true, emailFie
 
     if (!result.ok) {
       setError(tErr(result.code === 'rate_limited' ? 'rate_limited' : result.code === 'captcha_failed' ? 'captcha_failed' : 'otp_send_failed'))
+      // Only a hard send failure suggests the SMS rail itself is the problem.
+      setSendFailed(result.code !== 'rate_limited' && result.code !== 'captcha_failed')
       return
     }
 
@@ -86,6 +93,16 @@ export function PhoneStep({ onSuccess, requestOtp, captchaReady = true, emailFie
             autoComplete="email"
           />
         </div>
+      )}
+
+      {sendFailed && onSwitchToEmail && (
+        <button
+          type="button"
+          onClick={onSwitchToEmail}
+          className="-mt-2 text-left text-sm font-medium text-primary underline underline-offset-2 hover:no-underline"
+        >
+          {t('sms_trouble_hint')}
+        </button>
       )}
 
       <Button onClick={handleSend} loading={loading} disabled={!captchaReady} className="w-full">

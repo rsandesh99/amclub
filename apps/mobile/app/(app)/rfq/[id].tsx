@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n'
 import { fetchRfq, acceptQuote, fetchQuoteMessages, sendQuoteMessage } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 const CARD_W = Math.min(Dimensions.get('window').width - 48, 340)
 
 export default function BuyerRfqScreen() {
@@ -18,7 +18,8 @@ export default function BuyerRfqScreen() {
   const [thread, setThread] = useState<string | null>(null)
 
   const load = useCallback(async () => { const d = await fetchRfq(id); setRfq(d?.rfq ?? null); setLoading(false) }, [id])
-  useEffect(() => { load() }, [load])
+  // Deferred: keeps setState off the effect's synchronous path.
+  useEffect(() => { void Promise.resolve().then(load) }, [load])
 
   async function accept(quoteId: string) {
     setAccepting(quoteId)
@@ -106,4 +107,4 @@ function Thread({ quoteId }: { quoteId: string }) {
     </View>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

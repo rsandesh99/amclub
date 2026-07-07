@@ -29,7 +29,15 @@ export function NotificationCenter() {
       if (res.ok) setItems((await res.json()).notifications ?? [])
     } finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    // Keep the list fresh while the page is open (H4) — new notifications
+    // otherwise only appeared after a full reload.
+    const t = setInterval(load, 30_000)
+    window.addEventListener('focus', load)
+    return () => { clearInterval(t); window.removeEventListener('focus', load) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function markRead(id?: string) {
     await fetch('/api/v1/notifications/read', {

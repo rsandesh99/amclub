@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n'
 import { fetchPackage, createCheckout, simulatePay } from '@/lib/api'
 import { pickI18n, computePricing, formatINR } from '@/lib/format'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 export default function CheckoutScreen() {
   const { t, locale } = useI18n()
   const { packageId, providerSlug, packageSlug } = useLocalSearchParams<{ packageId: string; providerSlug?: string; packageSlug?: string }>()
@@ -20,7 +20,8 @@ export default function CheckoutScreen() {
     if (providerSlug && packageSlug) {
       fetchPackage(providerSlug, packageSlug).then((d) => { setPkg(d?.pkg ? { ...d.pkg, id: packageId } : null); setLoading(false) })
     } else {
-      setLoading(false)
+      // Deferred: keeps setState off the effect's synchronous path.
+      void Promise.resolve().then(() => setLoading(false))
     }
   }, [providerSlug, packageSlug, packageId])
 
@@ -91,4 +92,4 @@ function Row({ label, value }: { label: string; value: string }) {
     </View>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

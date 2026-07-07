@@ -34,7 +34,7 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
     })
     const d = await res.json()
     setBusy(false)
-    if (!res.ok) { setError(typeof d.error === 'string' ? d.error : 'Failed'); return }
+    if (!res.ok) { setError(typeof d.error === 'string' ? d.error : t('action_failed')); return }
     await load()
   }
 

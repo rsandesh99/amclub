@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
 import { fetchUnreadCount } from '@/lib/api'
+import { LocaleToggle } from '@/components/LocaleToggle'
 import { CATEGORY_LIST } from '@amclub/shared'
 
 export default function HomeScreen() {
@@ -36,6 +37,7 @@ export default function HomeScreen() {
             <Text className="text-sm text-foreground-secondary">{t('msme_home.subtitle')}</Text>
           </View>
           <View className="flex-row items-center gap-2">
+            <LocaleToggle />
             <TouchableOpacity onPress={() => router.push('/notifications' as never)} className="relative rounded-lg border border-gray-200 p-2">
               <Ionicons name="notifications-outline" size={18} color="#5C645C" />
               {unread > 0 && (
