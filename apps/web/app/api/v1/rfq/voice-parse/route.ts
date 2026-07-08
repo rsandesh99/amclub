@@ -5,6 +5,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { getTranscriber, getParser } from '@/lib/voice'
+import { VendorHttpError, classifyVendorFailure } from '@/lib/voice/types'
 import { transcriberVendorTag } from '@/lib/voice/sarvam'
 import { parserVendorTag } from '@/lib/voice/parser'
 import {
@@ -102,8 +103,17 @@ export async function POST(request: NextRequest) {
       costEstPaise: null,
       inputBytes: audio.size,
       error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
+      // Full vendor response — the 500-char error slice truncated the Sarvam
+      // allowed-format list during the 2026-07-08 diagnosis. Never lose it.
+      ...(e instanceof VendorHttpError
+        ? { meta: { vendor_status: e.status, vendor_body: e.body.slice(0, 4000), mime: audio.type } }
+        : { meta: { mime: audio.type } }),
     })
-    return NextResponse.json({ error: 'transcription_failed' }, { status: 502 })
+    // `cause` lets the client show honest copy: quota vs busy vs plain failure.
+    return NextResponse.json(
+      { error: 'transcription_failed', cause: classifyVendorFailure(e) },
+      { status: 502 },
+    )
   }
   if (!transcript) return NextResponse.json({ error: 'transcription_empty' }, { status: 422 })
 
@@ -141,9 +151,15 @@ export async function POST(request: NextRequest) {
       costEstPaise: null,
       inputBytes: transcript.length,
       error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
+      ...(e instanceof VendorHttpError
+        ? { meta: { vendor_status: e.status, vendor_body: e.body.slice(0, 4000) } }
+        : {}),
     })
     // The transcript is still useful — let the client fall back to manual
     // entry with the text pre-filled rather than dead-ending.
-    return NextResponse.json({ error: 'parse_failed', transcript_english: transcript }, { status: 502 })
+    return NextResponse.json(
+      { error: 'parse_failed', cause: classifyVendorFailure(e), transcript_english: transcript },
+      { status: 502 },
+    )
   }
 }

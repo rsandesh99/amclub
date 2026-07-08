@@ -284,6 +284,9 @@
     "stub_note": "(Demo mode: AI keys not configured — sample output.)",
     "gateway_gate_note": "Voice needs a free account, so your request reaches verified providers. Create one and speak your requirement there.",
     "gateway_gate_cta": "Create free account",
-    "consent_note": "By recording, you agree your voice is sent to a transcription service to fill this form. The audio is not stored after processing."
+    "consent_note": "By recording, you agree your voice is sent to a transcription service to fill this form. The audio is not stored after processing.",
+    "err_stt": "We couldn't hear you clearly. Try again from a quieter spot, speaking close to the phone.",
+    "err_busy": "Our understanding service is busy right now — please type your requirement below, or try voice again in a minute.",
+    "err_quota": "Voice input is temporarily unavailable. Please type your requirement below — everything else works normally."
   }
 }

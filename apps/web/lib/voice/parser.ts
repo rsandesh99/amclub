@@ -9,6 +9,7 @@ import {
   type VoiceParse,
 } from '@amclub/shared'
 import { INDIAN_STATES } from '@/lib/constants/india'
+import { VendorHttpError } from './types'
 import type { ParseResult, RequirementParser } from './types'
 
 /**
@@ -94,8 +95,10 @@ class OpenRouterParser implements RequirementParser {
       }),
     })
     if (!res.ok) {
+      // 402 = no prepaid credits, 429 = rate/quota — classified for the user
+      // and captured in full for ai_invocations.
       const body = await res.text().catch(() => '')
-      throw new Error(`openrouter ${res.status}: ${body.slice(0, 200)}`)
+      throw new VendorHttpError('openrouter', res.status, body)
     }
     const d = (await res.json()) as {
       id?: string

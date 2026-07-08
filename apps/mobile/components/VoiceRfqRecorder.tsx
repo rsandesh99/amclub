@@ -130,10 +130,13 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorde
     else if (res.data?.error === 'parse_failed' && res.data?.transcript_english) {
       onTranscriptOnly(res.data.transcript_english, Math.round(durationRef.current))
       setPhase('idle')
-      track('voice_rfq_failed', { surface: 'rfq_form', reason: 'parse_failed_transcript_kept' })
+      track('voice_rfq_failed', { surface: 'rfq_form', reason: 'parse_failed_transcript_kept', cause: res.data?.cause })
       return
-    } else setError(t('voice.err_transcribe'))
-    track('voice_rfq_failed', { surface: 'rfq_form', reason: res.data?.error ?? `http_${res.status}` })
+    } else if (res.data?.cause === 'quota') setError(t('voice.err_quota'))
+    else if (res.data?.cause === 'busy') setError(t('voice.err_busy'))
+    else if (res.data?.error === 'transcription_failed') setError(t('voice.err_stt'))
+    else setError(t('voice.err_transcribe'))
+    track('voice_rfq_failed', { surface: 'rfq_form', reason: res.data?.error ?? `http_${res.status}`, cause: res.data?.cause })
     setPhase('review')
   }
 

@@ -4,13 +4,17 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Mic, Square, RotateCcw, Loader2, Sparkles } from 'lucide-react'
 import type { VoiceParseResponse } from '@amclub/shared'
+import { startWavRecording, type WavRecorderHandle } from '@/lib/voice/wav-recorder'
 
 /**
- * Phase 8b — mic capture for Voice RFQ (web). MediaRecorder → review
- * (playback + re-record) → POST /api/v1/rfq/voice-parse. Never submits an
- * RFQ; the parent receives the parse and pre-fills the normal form. Every
- * failure (mic denied, too long, rate-limited, vendor down) resolves to an
- * inline message — the manual form below stays usable throughout.
+ * Phase 8b — mic capture for Voice RFQ (web). Web-Audio WAV capture → review
+ * (playback + re-record) → POST /api/v1/rfq/voice-parse. WAV (not
+ * MediaRecorder WebM) because Sarvam's REST API rejects WebM and WebM blobs
+ * carry Chromium's infinite-duration metadata bug (2026-07-08 prod incident).
+ * Never submits an RFQ; the parent receives the parse and pre-fills the
+ * normal form. Every failure (mic denied, too long, rate-limited, vendor
+ * quota/outage) resolves to an inline message — the manual form below stays
+ * usable throughout.
  */
 
 export const MAX_RECORD_MS = 60_000
@@ -29,14 +33,6 @@ interface VoiceRfqRecorderProps {
 
 type Phase = 'idle' | 'recording' | 'review' | 'uploading'
 
-function pickMimeType(): string {
-  if (typeof MediaRecorder === 'undefined') return ''
-  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']) {
-    if (MediaRecorder.isTypeSupported(t)) return t
-  }
-  return ''
-}
-
 export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfqRecorderProps) {
   const t = useTranslations('voice')
 
@@ -44,8 +40,9 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
   const [elapsedMs, setElapsedMs] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<BlobPart[]>([])
+  const recorderRef = useRef<WavRecorderHandle | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const stoppingRef = useRef(false)
   const blobRef = useRef<Blob | null>(null)
   const durationRef = useRef(0)
   const startedAtRef = useRef(0)
@@ -55,7 +52,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
-      recorderRef.current?.stream.getTracks().forEach((tr) => tr.stop())
+      streamRef.current?.getTracks().forEach((tr) => tr.stop())
       if (audioUrl) URL.revokeObjectURL(audioUrl)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,7 +60,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
 
   async function start() {
     setError(null)
-    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    if (typeof AudioContext === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setError(t('err_unsupported'))
       return
     }
@@ -75,42 +72,54 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
       track('voice_rfq_failed', { surface: 'rfq_form', reason: 'mic_denied' })
       return
     }
-    const mimeType = pickMimeType()
-    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-    chunksRef.current = []
-    rec.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data)
-    }
-    rec.onstop = () => {
+    try {
+      recorderRef.current = await startWavRecording(stream)
+    } catch {
       stream.getTracks().forEach((tr) => tr.stop())
-      const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' })
+      setError(t('err_unsupported'))
+      return
+    }
+    streamRef.current = stream
+    stoppingRef.current = false
+    startedAtRef.current = Date.now()
+    setElapsedMs(0)
+    setPhase('recording')
+    track('voice_rfq_started', { surface: 'rfq_form' })
+    timerRef.current = setInterval(() => {
+      const ms = Date.now() - startedAtRef.current
+      setElapsedMs(ms)
+      if (ms >= MAX_RECORD_MS) void stop()
+    }, 200)
+  }
+
+  async function stop() {
+    if (stoppingRef.current) return
+    stoppingRef.current = true
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    const rec = recorderRef.current
+    recorderRef.current = null
+    streamRef.current?.getTracks().forEach((tr) => tr.stop())
+    streamRef.current = null
+    if (!rec) return
+    try {
+      // Duration comes from the ENCODED SAMPLE COUNT (and the wall-clock timer
+      // caps recording) — never from blob metadata, so the Chromium
+      // infinite-duration bug cannot reach the server-side 60s check.
+      const { blob, durationMs } = await rec.stop()
       blobRef.current = blob
-      durationRef.current = Math.min(Date.now() - startedAtRef.current, MAX_RECORD_MS)
+      durationRef.current = Math.min(durationMs, MAX_RECORD_MS)
       setAudioUrl((old) => {
         if (old) URL.revokeObjectURL(old)
         return URL.createObjectURL(blob)
       })
       setPhase('review')
+    } catch {
+      setError(t('err_unsupported'))
+      setPhase('idle')
     }
-    recorderRef.current = rec
-    startedAtRef.current = Date.now()
-    setElapsedMs(0)
-    setPhase('recording')
-    track('voice_rfq_started', { surface: 'rfq_form' })
-    rec.start()
-    timerRef.current = setInterval(() => {
-      const ms = Date.now() - startedAtRef.current
-      setElapsedMs(ms)
-      if (ms >= MAX_RECORD_MS) stop()
-    }, 200)
-  }
-
-  function stop() {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
   }
 
   function reRecord() {
@@ -129,8 +138,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
     setError(null)
     try {
       const form = new FormData()
-      const ext = blob.type.includes('mp4') ? 'm4a' : 'webm'
-      form.append('audio', blob, `recording.${ext}`)
+      form.append('audio', blob, 'recording.wav')
       form.append('duration_ms', String(Math.round(durationRef.current)))
       const res = await fetch('/api/v1/rfq/voice-parse', { method: 'POST', body: form })
       const d = await res.json().catch(() => ({}))
@@ -160,10 +168,21 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
         // Transcript survived — hand it over so the form is still pre-filled.
         onTranscriptOnly(d.transcript_english, Math.round(durationRef.current))
         setPhase('idle')
-        track('voice_rfq_failed', { surface: 'rfq_form', reason: 'parse_failed_transcript_kept' })
+        track('voice_rfq_failed', {
+          surface: 'rfq_form',
+          reason: 'parse_failed_transcript_kept',
+          cause: d.cause,
+        })
         return
-      } else setError(t('err_transcribe'))
-      track('voice_rfq_failed', { surface: 'rfq_form', reason: d.error ?? `http_${res.status}` })
+      } else if (d.cause === 'quota') setError(t('err_quota'))
+      else if (d.cause === 'busy') setError(t('err_busy'))
+      else if (d.error === 'transcription_failed') setError(t('err_stt'))
+      else setError(t('err_transcribe'))
+      track('voice_rfq_failed', {
+        surface: 'rfq_form',
+        reason: d.error ?? `http_${res.status}`,
+        cause: d.cause,
+      })
       setPhase('review')
     } catch {
       setError(t('err_transcribe'))
@@ -201,7 +220,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
           <>
             <button
               type="button"
-              onClick={stop}
+              onClick={() => void stop()}
               aria-label={t('stop_cta')}
               className="relative inline-flex h-14 w-14 items-center justify-center rounded-full bg-danger text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2"
             >
@@ -225,7 +244,24 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
         {phase === 'review' && audioUrl && (
           <div className="flex w-full flex-col gap-2.5">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption -- voice memo, no caption source */}
-            <audio controls src={audioUrl} className="w-full" />
+            <audio
+              controls
+              src={audioUrl}
+              className="w-full"
+              onLoadedMetadata={(e) => {
+                // Defensive: WAV headers carry a real duration, but if a
+                // browser still reports Infinity (Chromium blob bug), force it
+                // to compute one by seeking past the end and snapping back.
+                const el = e.currentTarget
+                if (el.duration === Infinity) {
+                  el.currentTime = 1e101
+                  el.ontimeupdate = () => {
+                    el.ontimeupdate = null
+                    el.currentTime = 0
+                  }
+                }
+              }}
+            />
             <div className="flex flex-wrap gap-2.5">
               <button
                 type="button"

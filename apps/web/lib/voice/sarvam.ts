@@ -1,4 +1,5 @@
 import 'server-only'
+import { VendorHttpError } from './types'
 import type { Transcriber, TranscriptionResult, VoiceAudio } from './types'
 
 /**
@@ -34,7 +35,7 @@ class SarvamTranscriber implements Transcriber {
     })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      throw new Error(`sarvam ${res.status}: ${body.slice(0, 200)}`)
+      throw new VendorHttpError('sarvam', res.status, body)
     }
     const d = (await res.json()) as {
       request_id?: string
