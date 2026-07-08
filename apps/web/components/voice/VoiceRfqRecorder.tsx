@@ -17,7 +17,10 @@ import { startWavRecording, type WavRecorderHandle } from '@/lib/voice/wav-recor
  * usable throughout.
  */
 
-export const MAX_RECORD_MS = 60_000
+// Sarvam's REST tier hard-rejects clips >30s ("use the batch API") — proven
+// with a real 47s clip against prod, 2026-07-08. Batch API is the upgrade
+// path if 30s proves too short in the field.
+export const MAX_RECORD_MS = 30_000
 
 export interface VoiceVendorTag {
   stt: string

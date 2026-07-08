@@ -261,7 +261,7 @@
   },
   "voice": {
     "intro_title": "Speak your requirement",
-    "intro_sub": "Say what you need in Telugu, Tamil, Hindi or English — we will fill the form for you. Up to 60 seconds.",
+    "intro_sub": "Say what you need in Telugu, Tamil, Hindi or English — we will fill the form for you. Up to 30 seconds.",
     "record_cta": "Tap to speak",
     "stop_cta": "Stop recording",
     "recording": "Listening…",
@@ -272,7 +272,7 @@
     "err_unsupported": "Voice input isn't supported on this browser.",
     "err_mic_denied": "We couldn't access your microphone.",
     "err_rate_limited": "Too many voice requests — please wait a minute and try again.",
-    "err_too_long": "The recording is longer than 60 seconds.",
+    "err_too_long": "The recording is longer than 30 seconds.",
     "err_too_large": "The recording is too large.",
     "err_no_speech": "We couldn't hear anything in the recording.",
     "err_transcribe": "We couldn't process the recording.",

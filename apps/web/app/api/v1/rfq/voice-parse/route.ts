@@ -28,7 +28,8 @@ import {
 export const maxDuration = 60
 
 const MAX_AUDIO_BYTES = 3 * 1024 * 1024
-const MAX_DURATION_MS = 60_000
+// Sarvam REST tier rejects >30s clips (verified against prod 2026-07-08).
+const MAX_DURATION_MS = 30_000
 const ALLOWED_MIME = /^audio\/(webm|ogg|opus|mp4|m4a|x-m4a|aac|mpeg|mp3|wav|x-wav|3gpp)(;.*)?$/i
 
 export async function POST(request: NextRequest) {

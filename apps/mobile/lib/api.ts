@@ -163,11 +163,12 @@ export async function createRfq(body: {
  *  RFQ. Content-Type is left to fetch so RN sets the multipart boundary. */
 export async function voiceParse(fileUri: string, mimeType: string, durationMs: number) {
   const form = new FormData()
-  form.append('audio', {
-    uri: fileUri,
-    name: mimeType.includes('m4a') || mimeType.includes('mp4') ? 'recording.m4a' : 'recording.webm',
-    type: mimeType,
-  } as unknown as Blob)
+  const name = mimeType.includes('wav')
+    ? 'recording.wav'
+    : mimeType.includes('aac')
+      ? 'recording.aac'
+      : 'recording.m4a'
+  form.append('audio', { uri: fileUri, name, type: mimeType } as unknown as Blob)
   form.append('duration_ms', String(Math.round(durationMs)))
   const res = await fetch(`${API_URL}/api/v1/rfq/voice-parse`, {
     method: 'POST',

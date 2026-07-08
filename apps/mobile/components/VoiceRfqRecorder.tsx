@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Platform, Text, TouchableOpacity, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import {
   AudioModule,
-  RecordingPresets,
+  AudioQuality,
+  IOSOutputFormat,
   setAudioModeAsync,
   useAudioPlayer,
   useAudioRecorder,
+  type RecordingOptions,
 } from 'expo-audio'
 import { useI18n } from '@/lib/i18n'
 import { track } from '@/lib/analytics'
@@ -20,8 +22,31 @@ import { voiceParse } from '@/lib/api'
  * below stays usable.
  */
 
-const MAX_RECORD_MS = 60_000
-const MIME = 'audio/m4a'
+// Sarvam's REST tier hard-rejects clips >30s (verified against prod 2026-07-08).
+const MAX_RECORD_MS = 30_000
+
+// Sarvam rejects audio/m4a (the expo-audio preset default) but accepts
+// audio/aac and audio/wav — full allowed list captured in ai_invocations on
+// 2026-07-08. Android records AAC-ADTS; iOS records 16-bit PCM WAV.
+const MIME = Platform.OS === 'ios' ? 'audio/wav' : 'audio/aac'
+const RECORDING_OPTIONS: RecordingOptions = {
+  extension: Platform.OS === 'ios' ? '.wav' : '.aac',
+  sampleRate: 16_000,
+  numberOfChannels: 1,
+  bitRate: 128_000,
+  android: {
+    outputFormat: 'aac_adts',
+    audioEncoder: 'aac',
+  },
+  ios: {
+    outputFormat: IOSOutputFormat.LINEARPCM,
+    audioQuality: AudioQuality.HIGH,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {}, // native app — web capture handled by apps/web's WAV recorder
+}
 
 type Phase = 'idle' | 'recording' | 'review' | 'uploading'
 
@@ -32,7 +57,7 @@ interface VoiceRfqRecorderProps {
 
 export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorderProps) {
   const { t } = useI18n()
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
+  const recorder = useAudioRecorder(RECORDING_OPTIONS)
   const player = useAudioPlayer()
 
   const [phase, setPhase] = useState<Phase>('idle')
