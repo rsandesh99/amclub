@@ -44,7 +44,10 @@ Output shape:
 Rules:
 - description_english: a clean 1-3 sentence restatement of the requirement, keeping concrete facts (business type, city, quantities, deadlines).
 - If the text does not clearly fit one category, or is vague/off-topic, set category_slug=null, specialization=null and uncertain=true. NEVER guess.
-- uncertain=false only when the category is unambiguous.
+- The bar for uncertain=false is a CONCRETE, ACTIONABLE service request: the speaker names (or unmistakably describes) a specific task a provider could quote — "file my GST returns", "need 15 tailors", "register our trademark".
+- A topic hint is NOT enough. Complaints, musings, or requests to "explain/fix/sort out" an unspecified problem ("staff situation is bad", "a notice came, please help", "get the paperwork sorted", "do something online") are uncertain=true with category_slug=null, even when the general domain seems guessable. A wrong prefill costs the user more than an empty form.
+- Examples of MUST-be-uncertain inputs: "there was some problem with the tax people last month, my cousin said talk to someone" → {"category_slug": null, "specialization": null, "uncertain": true}; "business needs to grow, what all services do you have" → {"category_slug": null, "specialization": null, "uncertain": true}.
+- uncertain=false only when the category is unambiguous AND the request is concrete.
 - specialization must come from the chosen category's list above; otherwise null.
 - state: map cities to their state (e.g. Guntur→AP, Coimbatore→TN, Indore→MP). null if none mentioned.`
 
