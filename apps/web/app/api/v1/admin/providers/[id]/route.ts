@@ -68,6 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const admin = await createAdminClient()
   const { data: before } = await admin.from('provider_profiles').select('status, capacity_paused, slug').eq('id', id).maybeSingle()
   if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const providerSlug = (before as { slug?: string }).slug
 
   let after: Record<string, unknown> = {}
   try {
@@ -98,25 +99,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // Emergency-takedown cache-bust (Phase 8 §7): suspension must not wait out
-  // ISR revalidate windows. Purge every rendered instance of the provider's
-  // public pages + the listings that may include them; the next request
-  // re-renders from the DB, where the provider is already suspended.
-  // Both path spellings are purged — Next matches revalidatePath('page')
-  // against the app-paths key, and route-group inclusion has varied across
-  // releases; the extra calls are free.
-  if (d.action === 'suspend' || d.action === 'reactivate') {
-    for (const p of [
-      '/[locale]/(public)/p/[providerSlug]',
-      '/[locale]/p/[providerSlug]',
-      '/[locale]/(public)/p/[providerSlug]/[packageSlug]',
-      '/[locale]/p/[providerSlug]/[packageSlug]',
-      '/[locale]/(public)/services/[category]',
-      '/[locale]/services/[category]',
-      '/[locale]/(public)/services',
-      '/[locale]/services',
-    ]) {
-      revalidatePath(p, 'page')
+  // ISR revalidate windows. Vercel's distributed ISR cache only honours
+  // LITERAL paths (pattern-form revalidatePath purges the local route cache
+  // but not the edge — verified empirically: the pattern-only version left
+  // the suspended page serving for the full 5s window). So purge the exact
+  // URLs: the provider page, each of its packages, and the listings that can
+  // contain it — per locale ('' = default-locale as-needed prefix).
+  if ((d.action === 'suspend' || d.action === 'reactivate') && providerSlug) {
+    const [{ data: pkgs }, { data: cats }] = await Promise.all([
+      admin.from('packages').select('slug').eq('provider_id', id).is('deleted_at', null),
+      admin.from('provider_categories').select('category:categories(slug)').eq('provider_id', id),
+    ])
+    const locales = ['', '/hi', '/te', '/ta']
+    const paths: string[] = []
+    for (const l of locales) {
+      paths.push(`${l}/p/${providerSlug}`, `${l}/services`)
+      for (const p of pkgs ?? []) paths.push(`${l}/p/${providerSlug}/${p.slug}`)
+      for (const c of cats ?? []) {
+        const slug = (c.category as { slug?: string } | null)?.slug
+        if (slug) paths.push(`${l}/services/${slug}`)
+      }
     }
+    for (const p of paths) revalidatePath(p)
+    // Belt-and-braces for self-hosted runtimes where patterns DO work.
+    revalidatePath('/[locale]/(public)/p/[providerSlug]', 'page')
+    revalidatePath('/[locale]/(public)/p/[providerSlug]/[packageSlug]', 'page')
   }
 
   await writeAudit(admin, request, {
