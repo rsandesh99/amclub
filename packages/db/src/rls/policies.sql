@@ -250,8 +250,12 @@ DROP POLICY IF EXISTS "orders: admin all" ON orders;
 CREATE POLICY "orders: admin all" ON orders
   FOR ALL USING (has_role('admin') OR has_role('ops'));
 
--- order_safe_view: masks buyer phone from provider until order is accepted
-CREATE OR REPLACE VIEW order_safe_view AS
+-- order_safe_view: masks buyer phone from provider until order is accepted.
+-- DROP first: the view is `o.*`, so any new orders column shifts the column
+-- list and CREATE OR REPLACE errors (42P16) — found by the Phase 8 restore
+-- drill, where the freshly-migrated schema had a column live's view lacked.
+DROP VIEW IF EXISTS order_safe_view;
+CREATE VIEW order_safe_view AS
   SELECT
     o.*,
     CASE

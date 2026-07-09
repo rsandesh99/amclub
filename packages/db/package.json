@@ -17,6 +17,7 @@
     "db:apply-rls": "tsx src/scripts/apply-rls.ts",
     "db:seed": "tsx src/seed.ts",
     "db:test-rls": "tsx src/scripts/test-rls.ts",
+    "db:bootstrap": "tsx src/scripts/bootstrap.ts",
     "db:setup": "pnpm db:migrate && pnpm db:apply-rls && pnpm db:seed",
     "lint": "eslint src"
   },
