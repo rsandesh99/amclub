@@ -49,6 +49,11 @@ coverage/
 a11y-report.json
 test-results/
 
+# Load testing — live fixtures/tokens, never committed
+loadtest/.ctx.json
+loadtest/.probe.wav
+loadtest/*.summary.json
+
 # Sentry
 .sentryclirc
 
