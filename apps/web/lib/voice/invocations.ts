@@ -16,6 +16,8 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
 export interface AiInvocationInput {
   userId: string
+  /** Telemetry bucket; defaults to the voice pipeline. */
+  feature?: 'voice_rfq' | 'voice_eval' | undefined
   step: 'stt' | 'parse'
   vendor: string
   status: 'ok' | 'error' | 'stub'
@@ -50,7 +52,7 @@ export async function logAiInvocation(admin: Admin, row: AiInvocationInput): Pro
   try {
     const { error } = await admin.from('ai_invocations').insert({
       user_id: row.userId,
-      feature: 'voice_rfq',
+      feature: row.feature ?? 'voice_rfq',
       step: row.step,
       vendor: row.vendor,
       status: row.status,
