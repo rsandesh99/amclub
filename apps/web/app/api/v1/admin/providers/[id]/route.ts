@@ -110,7 +110,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       admin.from('packages').select('slug').eq('provider_id', id).is('deleted_at', null),
       admin.from('provider_categories').select('category:categories(slug)').eq('provider_id', id),
     ])
-    const locales = ['', '/hi', '/te', '/ta']
+    // '' = the public URL for the default locale; '/en' = the INTERNAL path
+    // the middleware rewrites it to (as-needed prefixing) — the Data/Route
+    // caches are keyed on the rewritten path, so both must be purged.
+    const locales = ['', '/en', '/hi', '/te', '/ta']
     const paths: string[] = []
     for (const l of locales) {
       paths.push(`${l}/p/${providerSlug}`, `${l}/services`)
