@@ -74,7 +74,8 @@
     "provider_cta_title": "क्या आप सेवा प्रदाता हैं?",
     "provider_cta_desc": "AMClub से जुड़ें और पास के MSMEs से सत्यापित लीड्स पाएं।",
     "provider_cta_btn": "प्रदाता बनें",
-    "explore_categories": "श्रेणियां देखें"
+    "explore_categories": "श्रेणियां देखें",
+    "hero_eyebrow": "{pct}% तक की छूट"
   },
   "catalog": {
     "off": "छूट",
@@ -107,7 +108,9 @@
     "saved": "सहेजा गया",
     "save": "सहेजें",
     "saved_empty": "आपने अभी तक कोई प्रदाता नहीं सहेजा है।",
-    "faqs": "सामान्य प्रश्न"
+    "faqs": "सामान्य प्रश्न",
+    "state_filter": "राज्य",
+    "all_states": "सभी राज्य"
   },
   "tabs": {
     "home": "होम",

@@ -74,7 +74,8 @@
     "provider_cta_title": "Are you a service provider?",
     "provider_cta_desc": "Join AMClub to get verified leads from MSMEs near you.",
     "provider_cta_btn": "Become a provider",
-    "explore_categories": "Explore categories"
+    "explore_categories": "Explore categories",
+    "hero_eyebrow": "Up to {pct}% off"
   },
   "catalog": {
     "off": "OFF",
@@ -107,7 +108,9 @@
     "saved": "Saved",
     "save": "Save",
     "saved_empty": "You haven't saved any providers yet.",
-    "faqs": "FAQs"
+    "faqs": "FAQs",
+    "state_filter": "State",
+    "all_states": "All states"
   },
   "tabs": {
     "home": "Home",

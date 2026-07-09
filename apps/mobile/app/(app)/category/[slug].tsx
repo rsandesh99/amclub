@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
 import { searchCatalog, type CatalogResult, type SearchParams } from '@/lib/api'
 import { ResultCard } from '@/components/ResultCard'
+import { ErrorState } from '@/components/ErrorState'
 import { CATEGORY_LIST } from '@amclub/shared'
 
 export default function CategoryScreen() {
@@ -16,11 +17,13 @@ export default function CategoryScreen() {
   const [verifiedOnly, setVerifiedOnly] = useState(false)
   const [results, setResults] = useState<CatalogResult[]>([])
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
 
   const run = useCallback(
     async (s: SearchParams['sort'], v: boolean) => {
       setLoading(true)
       const r = await searchCatalog({ category: slug, sort: s, verifiedOnly: v, limit: 24 })
+      setFailed(!r.ok)
       setResults(r.results)
       setLoading(false)
     },
@@ -69,6 +72,8 @@ export default function CategoryScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#1B4D3E" />
         </View>
+      ) : failed ? (
+        <ErrorState onRetry={() => run(sort, verifiedOnly)} />
       ) : results.length === 0 ? (
         <View className="flex-1 items-center justify-center px-8">
           <Text className="text-center text-sm text-foreground-secondary">{t('catalog.no_results')}</Text>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, Text, TouchableOpacity, View } from 'react-native'
+import { AccessibilityInfo, ActivityIndicator, Animated, Platform, Text, TouchableOpacity, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import {
   AudioModule,
@@ -13,6 +13,7 @@ import {
 import { useI18n } from '@/lib/i18n'
 import { track } from '@/lib/analytics'
 import { voiceParse } from '@/lib/api'
+import { colors } from '@/lib/theme'
 
 /**
  * Phase 8b — mic capture for Voice RFQ (mobile, expo-audio; expo-av was
@@ -69,11 +70,32 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorde
   const uriRef = useRef<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Live-recording pulse ring (spec parity with web); disabled under the OS
+  // reduce-motion setting, matching web's motion-safe: gating.
+  const pulse = useRef(new Animated.Value(0)).current
+  const reduceMotionRef = useRef(false)
+
   useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then((v) => { reduceMotionRef.current = v })
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (phase !== 'recording' || reduceMotionRef.current) {
+      pulse.setValue(0)
+      return undefined
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [phase, pulse])
 
   async function start() {
     setError('')
@@ -171,7 +193,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorde
   return (
     <View className="rounded-xl border border-border bg-surface p-4">
       <View className="flex-row items-center gap-2">
-        <Ionicons name="sparkles" size={16} color="#1B4D3E" />
+        <Ionicons name="sparkles" size={16} color={colors.primary} />
         <Text className="text-sm font-semibold text-foreground">{t('voice.intro_title')}</Text>
       </View>
       <Text className="mt-1 text-xs leading-4 text-foreground-secondary">{t('voice.intro_sub')}</Text>
@@ -184,20 +206,31 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorde
             onPress={() => void start()}
             className="flex-row items-center gap-2 rounded-xl bg-primary px-4 py-2.5"
           >
-            <Ionicons name="mic" size={18} color="#fff" />
+            <Ionicons name="mic" size={18} color={colors.white} />
             <Text className="font-semibold text-white">{t('voice.record_cta')}</Text>
           </TouchableOpacity>
         )}
 
         {phase === 'recording' && (
           <>
-            <TouchableOpacity
-              onPress={() => void stop()}
-              accessibilityLabel={t('voice.stop_cta')}
-              className="h-14 w-14 items-center justify-center rounded-full bg-danger"
-            >
-              <Ionicons name="square" size={20} color="#fff" />
-            </TouchableOpacity>
+            <View className="h-14 w-14 items-center justify-center">
+              {/* pulse ring behind the stop button */}
+              <Animated.View
+                pointerEvents="none"
+                className="absolute h-14 w-14 rounded-full bg-danger/30"
+                style={{
+                  transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.55] }) }],
+                  opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+                }}
+              />
+              <TouchableOpacity
+                onPress={() => void stop()}
+                accessibilityLabel={t('voice.stop_cta')}
+                className="h-14 w-14 items-center justify-center rounded-full bg-danger"
+              >
+                <Ionicons name="square" size={20} color={colors.white} />
+              </TouchableOpacity>
+            </View>
             <View>
               <Text className="text-sm font-semibold text-foreground">
                 {t('voice.recording')} · 0:{String(seconds).padStart(2, '0')}
@@ -216,7 +249,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorde
                 onPress={play}
                 className="flex-row items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5"
               >
-                <Ionicons name="play" size={16} color="#1B4D3E" />
+                <Ionicons name="play" size={16} color={colors.primary} />
                 <Text className="font-medium text-foreground">0:{String(Math.round(durationRef.current / 1000)).padStart(2, '0')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -229,7 +262,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorde
                 onPress={() => void start()}
                 className="flex-row items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5"
               >
-                <Ionicons name="refresh" size={16} color="#1B4D3E" />
+                <Ionicons name="refresh" size={16} color={colors.primary} />
                 <Text className="font-medium text-foreground">{t('voice.re_record')}</Text>
               </TouchableOpacity>
             </View>
@@ -238,7 +271,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorde
 
         {phase === 'uploading' && (
           <View className="flex-row items-center gap-2">
-            <ActivityIndicator color="#1B4D3E" />
+            <ActivityIndicator color={colors.primary} />
             <Text className="text-sm text-foreground-secondary">{t('voice.processing')}</Text>
           </View>
         )}

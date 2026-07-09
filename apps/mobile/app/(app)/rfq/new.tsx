@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { createRfq } from '@/lib/api'
 import { track } from '@/lib/analytics'
 import { VoiceRfqRecorder } from '@/components/VoiceRfqRecorder'
+import { colors } from '@/lib/theme'
 
 export default function NewRfqScreen() {
   const { t, locale } = useI18n()
@@ -137,7 +138,7 @@ export default function NewRfqScreen() {
               </View>
             ) : (
               <View className="mt-2 flex-row items-center gap-1.5">
-                <Ionicons name="mic-outline" size={14} color="#B45309" />
+                <Ionicons name="mic-outline" size={14} color={colors.warning} />
                 <Text className="flex-1 text-xs font-medium text-warning">{t('voice.uncertain_note')}</Text>
               </View>
             )}

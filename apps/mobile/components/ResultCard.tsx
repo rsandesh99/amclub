@@ -1,8 +1,9 @@
-import { View, Text, TouchableOpacity } from 'react-native'
+import { View, Text } from 'react-native'
 import { router } from 'expo-router'
 import { useI18n } from '@/lib/i18n'
 import { pickI18n, initials } from '@/lib/format'
 import { PriceBlock } from './PriceBlock'
+import { PressableCard } from './ui/PressableCard'
 import type { CatalogResult } from '@/lib/api'
 
 // Professional credential kind → display label (acronyms; locale-agnostic).
@@ -17,9 +18,8 @@ export function ResultCard({ result }: { result: CatalogResult }) {
   const credentialLabel = result.headlineCredential ? CREDENTIAL_LABEL[result.headlineCredential] : null
 
   return (
-    <TouchableOpacity
+    <PressableCard
       onPress={() => router.push(`/package/${result.providerSlug}/${result.packageSlug}` as never)}
-      activeOpacity={0.85}
       className="gap-3 rounded-xl border border-border bg-surface p-4"
     >
       <View className="flex-row items-center gap-3">
@@ -73,6 +73,6 @@ export function ResultCard({ result }: { result: CatalogResult }) {
           memberExtraDiscountBps={result.memberExtraDiscountBps}
         />
       </View>
-    </TouchableOpacity>
+    </PressableCard>
   )
 }

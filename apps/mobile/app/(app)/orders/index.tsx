@@ -6,15 +6,19 @@ import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
 import { fetchMyOrders, type OrderListItem } from '@/lib/api'
 import { formatINR } from '@/lib/format'
+import { ErrorState } from '@/components/ErrorState'
 
 export default function OrdersScreen() {
   const { t } = useI18n()
   const [orders, setOrders] = useState<OrderListItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    setOrders(await fetchMyOrders('msme'))
+    const r = await fetchMyOrders('msme')
+    setFailed(!r.ok)
+    setOrders(r.orders)
     setLoading(false)
   }, [])
 
@@ -34,6 +38,8 @@ export default function OrdersScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#1B4D3E" />
         </View>
+      ) : failed ? (
+        <ErrorState onRetry={() => void load()} />
       ) : orders.length === 0 ? (
         <View className="flex-1 items-center justify-center gap-3 px-8">
           <Ionicons name="cube-outline" size={40} color="#9CA3AF" />

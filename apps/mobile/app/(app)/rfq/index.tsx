@@ -4,17 +4,21 @@ import { useState, useCallback } from 'react'
 import { useFocusEffect, router } from 'expo-router'
 import { useI18n } from '@/lib/i18n'
 import { fetchMyRfqs } from '@/lib/api'
+import { ErrorState } from '@/components/ErrorState'
 
- 
+
 export default function MyRfqsScreen() {
   const { t } = useI18n()
   const [rfqs, setRfqs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
 
-  useFocusEffect(useCallback(() => {
+  const load = useCallback(() => {
     setLoading(true)
-    fetchMyRfqs().then((r) => { setRfqs(r); setLoading(false) })
-  }, []))
+    fetchMyRfqs().then((r) => { setFailed(!r.ok); setRfqs(r.rfqs as any[]); setLoading(false) })
+  }, [])
+
+  useFocusEffect(useCallback(() => { load() }, [load]))
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -26,6 +30,8 @@ export default function MyRfqsScreen() {
       </View>
       {loading ? (
         <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#1B4D3E" /></View>
+      ) : failed ? (
+        <ErrorState onRetry={load} />
       ) : rfqs.length === 0 ? (
         <View className="flex-1 items-center justify-center gap-3 px-8">
           <Text className="text-center text-sm text-foreground-secondary">{t('rfq.no_rfqs')}</Text>

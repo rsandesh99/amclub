@@ -53,16 +53,18 @@ jobs:
           # Disable Sentry source-map upload in CI — no auth token
           SENTRY_AUTH_TOKEN: ""
 
-      - name: Export (mobile — bundle check only)
-        run: pnpm --filter=@amclub/mobile expo export --platform android --output-dir /tmp/mobile-export
-        continue-on-error: true  # Mobile export requires more setup; don't block CI in Phase 0
+      - name: Export (mobile — bundle check, BLOCKING since Phase 8 §4)
+        # NB: `exec` is required — `pnpm --filter x expo` looks for an "expo"
+        # SCRIPT, finds none, and exits 0 without bundling anything (the
+        # Phase 0 version of this step never actually ran).
+        run: pnpm --filter @amclub/mobile exec expo export --platform android --output-dir /tmp/mobile-export
 
   a11y:
     name: Accessibility (axe — public surfaces)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Report-only until proven green in CI, then flipped to blocking (Phase 8 §1).
-    continue-on-error: true
+    # BLOCKING since run 29016513054 went green (Phase 8 §1 rollout:
+    # report-only first, flip once green).
 
     env:
       # Public client values (they ship in every browser bundle) — set as repo

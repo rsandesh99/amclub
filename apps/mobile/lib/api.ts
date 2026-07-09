@@ -37,6 +37,8 @@ export interface CatalogResult {
 }
 
 export interface SearchResponse {
+  /** false = network/server failure — show ErrorState + retry, NOT an empty state. */
+  ok: boolean
   results: CatalogResult[]
   total: number
   nextOffset: number | null
@@ -61,9 +63,14 @@ export async function searchCatalog(params: SearchParams): Promise<SearchRespons
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') qs.set(k, String(v))
   }
-  const res = await fetch(`${API_URL}/api/v1/catalog/search?${qs.toString()}`)
-  if (!res.ok) return { results: [], total: 0, nextOffset: null }
-  return res.json()
+  try {
+    const res = await fetch(`${API_URL}/api/v1/catalog/search?${qs.toString()}`)
+    if (!res.ok) return { ok: false, results: [], total: 0, nextOffset: null }
+    return { ok: true, ...(await res.json()) }
+  } catch {
+    // Airplane mode / DNS failure — distinguishable from a true empty catalog.
+    return { ok: false, results: [], total: 0, nextOffset: null }
+  }
 }
 
 export async function fetchProvider(slug: string) {
@@ -132,11 +139,15 @@ export interface OrderListItem {
 }
 
 /** The signed-in buyer's orders (newest first). Bearer-authed. */
-export async function fetchMyOrders(role: 'msme' | 'provider' = 'msme'): Promise<OrderListItem[]> {
-  const res = await fetch(`${API_URL}/api/v1/orders?role=${role}`, { headers: await authHeaders() })
-  if (!res.ok) return []
-  const d = await res.json().catch(() => ({}))
-  return d.orders ?? []
+export async function fetchMyOrders(role: 'msme' | 'provider' = 'msme'): Promise<{ ok: boolean; orders: OrderListItem[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/orders?role=${role}`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, orders: [] }
+    const d = await res.json().catch(() => ({}))
+    return { ok: true, orders: d.orders ?? [] }
+  } catch {
+    return { ok: false, orders: [] }
+  }
 }
 
 // ── RFQ (Phase 5) — same /api/v1 the web uses, Bearer-authed ───────────────────
@@ -178,10 +189,14 @@ export async function voiceParse(fileUri: string, mimeType: string, durationMs: 
   return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
 }
 
-export async function fetchMyRfqs() {
-  const res = await fetch(`${API_URL}/api/v1/rfq/mine`, { headers: await authHeaders() })
-  if (!res.ok) return []
-  return (await res.json()).rfqs ?? []
+export async function fetchMyRfqs(): Promise<{ ok: boolean; rfqs: unknown[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/rfq/mine`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, rfqs: [] }
+    return { ok: true, rfqs: (await res.json()).rfqs ?? [] }
+  } catch {
+    return { ok: false, rfqs: [] }
+  }
 }
 
 export async function fetchRfq(rfqId: string) {
@@ -266,10 +281,14 @@ export interface NotificationItem {
   created_at: string
 }
 
-export async function fetchNotifications(): Promise<{ notifications: NotificationItem[]; unread: number }> {
-  const res = await fetch(`${API_URL}/api/v1/notifications`, { headers: await authHeaders() })
-  if (!res.ok) return { notifications: [], unread: 0 }
-  return res.json()
+export async function fetchNotifications(): Promise<{ ok: boolean; notifications: NotificationItem[]; unread: number }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/notifications`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, notifications: [], unread: 0 }
+    return { ok: true, ...(await res.json()) }
+  } catch {
+    return { ok: false, notifications: [], unread: 0 }
+  }
 }
 
 export async function fetchUnreadCount(): Promise<number> {

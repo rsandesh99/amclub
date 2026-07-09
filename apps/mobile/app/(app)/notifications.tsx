@@ -5,19 +5,27 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
 import { fetchNotifications, markNotificationRead, type NotificationItem } from '@/lib/api'
+import { ErrorState } from '@/components/ErrorState'
 
 export default function NotificationsScreen() {
   const { t, locale } = useI18n()
   const [items, setItems] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
 
-  useEffect(() => {
+  function load() {
+    setLoading(true)
     // .then keeps setState off the effect's synchronous path (react-hooks/set-state-in-effect).
     fetchNotifications().then((d) => {
+      setFailed(!d.ok)
       setItems(d.notifications)
       setLoading(false)
     })
-  }, [])
+  }
+
+  // Deferred so load()'s setState stays off the effect's synchronous path
+  // (react-hooks/set-state-in-effect); load is also the retry handler.
+  useEffect(() => { void Promise.resolve().then(load) }, [])
 
   async function open(n: NotificationItem) {
     if (!n.read_at) {
@@ -46,6 +54,8 @@ export default function NotificationsScreen() {
 
       {loading ? (
         <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#1B4D3E" /></View>
+      ) : failed ? (
+        <ErrorState onRetry={load} />
       ) : items.length === 0 ? (
         <View className="flex-1 items-center justify-center gap-2 px-8">
           <Text className="text-4xl">🔔</Text>

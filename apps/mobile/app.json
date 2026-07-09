@@ -46,7 +46,8 @@
         {
           "microphonePermission": "AMClub uses the microphone so you can speak your service requirement instead of typing it."
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

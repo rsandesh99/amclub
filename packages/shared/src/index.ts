@@ -13,5 +13,8 @@ export * from './rfq'
 // Voice RFQ specialization vocabulary (Phase 8b)
 export * from './specializations'
 
+// Indian state / UT codes (shared by web + mobile filters, wizards, DB columns)
+export * from './states'
+
 // Zod schemas and derived TypeScript types
 export * from './schemas/index'

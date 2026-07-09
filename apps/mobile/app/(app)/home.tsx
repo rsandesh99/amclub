@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
 import { fetchUnreadCount } from '@/lib/api'
 import { LocaleToggle } from '@/components/LocaleToggle'
+import { HeroBanner } from '@/components/HeroBanner'
 import { CATEGORY_LIST } from '@amclub/shared'
 
 export default function HomeScreen() {
@@ -71,6 +72,9 @@ export default function HomeScreen() {
             <Text className="text-xs font-semibold text-white">{t('catalog.search_btn')}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* CMS hero (MOBILE_PARITY §3) — same /api/v1/cms/banners content as web */}
+        <HeroBanner />
 
         {/* Category grid */}
         <View className="gap-3">
