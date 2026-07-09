@@ -85,7 +85,7 @@ export default async function MsmeHomePage() {
             <p className="text-sm font-medium">{t('no_orders_title')}</p>
             <p className="mt-1 text-xs text-foreground-secondary">{t('no_orders_subtitle')}</p>
             <Link href="/services">
-              <Button variant="secondary" size="sm" className="mt-4">{t('explore_cta')}</Button>
+              <Button variant="secondary" className="mt-4">{t('explore_cta')}</Button>
             </Link>
           </div>
         ) : (

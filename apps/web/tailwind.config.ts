@@ -28,11 +28,11 @@ const config: Config = {
         'success-soft': '#E5F2EC',
         'warning-soft': '#F5EBDD',
         'danger-soft': '#F8E8E8',
-        success: '#1E8E5A', // positive/completed (green family)
+        success: '#14724A', // positive/completed (green family) — ≥4.5:1 on success-soft
         // Verification blue — badges/ticks ONLY. `verified` is the semantic name;
-        // `trust` kept as an alias for existing usages.
-        trust: '#1A6FBF',
-        verified: '#1A6FBF',
+        // `trust` kept as an alias for existing usages. ≥4.5:1 on verified-soft.
+        trust: '#155C9E',
+        verified: '#155C9E',
         // Destructive/hard-error red — never decorative. `destructive` is the
         // semantic name; `danger` kept as an alias.
         danger: {
@@ -45,7 +45,7 @@ const config: Config = {
         },
         // Caution/pending (under-review, external waits). Distinct from accent.
         warning: {
-          DEFAULT: '#B45309',
+          DEFAULT: '#92400E', // ≥4.5:1 on warning-soft and /10 tints (a11y AA)
           foreground: '#FFFFFF',
         },
         background: '#FAFAF7',

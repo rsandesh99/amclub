@@ -143,8 +143,8 @@ export function CheckoutClient({
           <Row label={t('taxable')} value={formatINR(dispTaxable)} />
           <Row label={t('gst')} value={formatINR(dispGst)} />
           <div className="flex items-center justify-between border-t border-border pt-2 text-base font-bold">
-            <span>{t('total')}</span>
-            <span className="font-display text-primary">{formatINR(dispTotal)}</span>
+            <dt>{t('total')}</dt>
+            <dd className="font-display text-primary">{formatINR(dispTotal)}</dd>
           </div>
         </dl>
       </div>

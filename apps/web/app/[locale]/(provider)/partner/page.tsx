@@ -63,7 +63,7 @@ export default async function PartnerDashboardPage() {
         <div className="rounded-card border border-primary/30 bg-primary/5 p-4">
           <p className="text-sm font-medium text-primary">{t('onboarding_cta')}</p>
           <Link href="/partner/onboarding">
-            <Button size="sm" className="mt-3">{t('complete_onboarding')}</Button>
+            <Button className="mt-3">{t('complete_onboarding')}</Button>
           </Link>
         </div>
       )}

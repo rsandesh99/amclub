@@ -32,7 +32,7 @@ export default function AdminOrdersPage() {
       <h1 className="font-display text-2xl font-bold">{t('orders_title')}</h1>
       <div className="flex flex-wrap gap-2">
         <form onSubmit={(e) => { e.preventDefault(); load() }}><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('orders_search')} className="rounded-button border border-border bg-background p-2 text-sm" /></form>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-button border border-border bg-background p-2 text-sm">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label={t('status')} className="rounded-button border border-border bg-background p-2 text-sm">
           {STATUSES.map((s) => <option key={s} value={s}>{s || t('all')}</option>)}
         </select>
       </div>

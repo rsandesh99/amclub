@@ -24,7 +24,7 @@ export default async function MyRfqsPage() {
           <h1 className="font-display text-2xl font-bold">{t('list_title')}</h1>
           <p className="mt-1 text-sm text-foreground-secondary">{t('list_subtitle')}</p>
         </div>
-        <Link href="/app/rfq/new"><Button size="sm">{t('post_cta')}</Button></Link>
+        <Link href="/app/rfq/new"><Button>{t('post_cta')}</Button></Link>
       </div>
 
       {rfqs.length === 0 ? (
@@ -32,7 +32,7 @@ export default async function MyRfqsPage() {
           <ClipboardList className="h-10 w-10 text-foreground-secondary" />
           <p className="text-sm font-medium">{t('no_rfqs_title')}</p>
           <p className="text-sm text-foreground-secondary">{t('no_rfqs_body')}</p>
-          <Link href="/app/rfq/new"><Button variant="secondary" size="sm" className="mt-2">{t('post_cta')}</Button></Link>
+          <Link href="/app/rfq/new"><Button variant="secondary" className="mt-2">{t('post_cta')}</Button></Link>
         </div>
       ) : (
         <ul className="space-y-3">

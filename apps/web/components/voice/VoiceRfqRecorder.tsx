@@ -205,7 +205,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
       </div>
       <p className="mt-1 text-[13px] leading-[1.45] text-foreground-secondary">{t('intro_sub')}</p>
       {/* DPDP consent + no-retention fact (§Phase 8b v1.1) — shown before any recording. */}
-      <p className="mt-1 text-[11.5px] leading-[1.45] text-foreground-secondary/80">{t('consent_note')}</p>
+      <p className="mt-1 text-[11.5px] leading-[1.45] text-foreground-secondary">{t('consent_note')}</p>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         {phase === 'idle' && (

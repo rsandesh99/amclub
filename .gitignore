@@ -46,6 +46,8 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+a11y-report.json
+test-results/
 
 # Sentry
 .sentryclirc

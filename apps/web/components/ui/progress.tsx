@@ -18,14 +18,21 @@ export function Progress({ value, max = 100, className, label }: ProgressProps) 
           <span>{Math.round(pct)}%</span>
         </div>
       )}
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+      {/* Without a label the bar is decorative (steps/headings carry the info);
+          exposing an unnamed progressbar role is an axe `serious`. */}
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted" aria-hidden={label ? undefined : true}>
         <div
           className="h-full rounded-full bg-primary transition-all duration-300"
           style={{ width: `${pct}%` }}
-          role="progressbar"
-          aria-valuenow={value}
-          aria-valuemin={0}
-          aria-valuemax={max}
+          {...(label
+            ? {
+                role: 'progressbar' as const,
+                'aria-label': label,
+                'aria-valuenow': value,
+                'aria-valuemin': 0,
+                'aria-valuemax': max,
+              }
+            : {})}
         />
       </div>
     </div>

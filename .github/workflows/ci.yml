@@ -56,3 +56,50 @@ jobs:
       - name: Export (mobile — bundle check only)
         run: pnpm --filter=@amclub/mobile expo export --platform android --output-dir /tmp/mobile-export
         continue-on-error: true  # Mobile export requires more setup; don't block CI in Phase 0
+
+  a11y:
+    name: Accessibility (axe — public surfaces)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Report-only until proven green in CI, then flipped to blocking (Phase 8 §1).
+    continue-on-error: true
+
+    env:
+      # Public client values (they ship in every browser bundle) — set as repo
+      # Actions variables so CI pages render real catalog data. Public-only
+      # scan: no service-role key in CI; authenticated surfaces are scanned
+      # locally via the same script (see docs/A11Y.md).
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --filter @amclub/web exec playwright install --with-deps chromium
+
+      - name: Build (web)
+        run: pnpm turbo run build --filter=@amclub/web
+        env:
+          SENTRY_AUTH_TOKEN: ""
+
+      - name: Start server & run axe scan
+        run: |
+          pnpm --filter @amclub/web start &
+          for i in $(seq 1 60); do curl -sf http://localhost:3000 >/dev/null && break; sleep 2; done
+          cd apps/web && A11Y_ENFORCE=1 BASE_URL=http://localhost:3000 npx tsx scripts/a11y-scan.ts

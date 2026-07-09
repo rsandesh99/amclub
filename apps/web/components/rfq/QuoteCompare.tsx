@@ -35,8 +35,8 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
           <p className="text-sm font-medium">{t('rescue_title')}</p>
           <p className="mt-1 text-xs text-foreground-secondary">{t('rescue_body')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link href="/app/rfq/new"><Button size="sm">{t('rebroadcast')}</Button></Link>
-            <Link href="/services"><Button size="sm" variant="outline">{t('browse_providers')}</Button></Link>
+            <Link href="/app/rfq/new"><Button>{t('rebroadcast')}</Button></Link>
+            <Link href="/services"><Button variant="outline">{t('browse_providers')}</Button></Link>
           </div>
         </div>
       </div>
@@ -120,12 +120,12 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {!decided && q.status === 'submitted' && (
-                <Button size="sm" onClick={() => accept(q.id)} loading={accepting === q.id}>
+                <Button onClick={() => accept(q.id)} loading={accepting === q.id}>
                   {accepting === q.id ? t('accepting') : t('accept_quote')}
                 </Button>
               )}
               {q.status === 'accepted' && <span className="inline-flex items-center gap-1 text-xs font-medium text-success"><ShieldCheck className="h-3.5 w-3.5" />{t('status_accepted')}</span>}
-              <Button size="sm" variant="ghost" onClick={() => setThreadFor(threadFor === q.id ? null : q.id)}>
+              <Button variant="ghost" onClick={() => setThreadFor(threadFor === q.id ? null : q.id)}>
                 <MessageSquare className="mr-1 h-4 w-4" />{t('message_label')}
               </Button>
             </div>
@@ -183,7 +183,7 @@ function MessageThread({ quote }: { quote: QuoteForBuyer }) {
       </div>
       <div className="mt-2 flex gap-2">
         <input value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={t('message_placeholder')} className="flex-1 rounded-button border border-border bg-surface px-3 py-1.5 text-sm focus:border-primary focus:outline-none" />
-        <Button size="sm" onClick={send} loading={sending}>{t('send')}</Button>
+        <Button onClick={send} loading={sending}>{t('send')}</Button>
       </div>
     </div>
   )

@@ -252,8 +252,9 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
 
       {/* Category */}
       <div className="flex flex-col gap-1.5">
-        <Label>{t('pick_category')}</Label>
+        <Label htmlFor="rfq-category">{t('pick_category')}</Label>
         <Select
+          id="rfq-category"
           value={s.categorySlug}
           onChange={(e) => {
             markEdited('category')

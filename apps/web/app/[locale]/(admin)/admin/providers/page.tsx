@@ -33,7 +33,7 @@ export default function AdminProvidersPage() {
         <form onSubmit={(e) => { e.preventDefault(); load() }} className="flex gap-2">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('providers_search')} className="rounded-button border border-border bg-background p-2 text-sm" />
         </form>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-button border border-border bg-background p-2 text-sm">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label={t('status')} className="rounded-button border border-border bg-background p-2 text-sm">
           {STATUSES.map((s) => <option key={s} value={s}>{s || t('all')}</option>)}
         </select>
       </div>

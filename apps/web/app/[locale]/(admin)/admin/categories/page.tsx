@@ -87,12 +87,13 @@ export default function AdminCategoriesPage() {
                         type="number"
                         defaultValue={(c.commission_bps / 100).toString()}
                         onChange={(e) => setEdits((p) => ({ ...p, [c.id]: e.target.value }))}
+                        aria-label={`${t('commission_pct')} — ${c.slug}`}
                         className="w-20 rounded-button border border-border bg-background p-1.5 text-sm"
                       />
                       <Button size="sm" variant="outline" onClick={() => saveCommission(c.id)} loading={busy === c.id} disabled={edits[c.id] === undefined}>{t('save')}</Button>
                     </div>
                   </td>
-                  <td className="p-3"><button onClick={() => toggleActive(c.id, !c.is_active)} disabled={busy === c.id}>{c.is_active ? '🟢' : '⚪'}</button></td>
+                  <td className="p-3"><button onClick={() => toggleActive(c.id, !c.is_active)} disabled={busy === c.id} aria-label={`${t('active')} — ${c.slug}`} aria-pressed={c.is_active}>{c.is_active ? '🟢' : '⚪'}</button></td>
                 </tr>
               ))}
             </tbody>

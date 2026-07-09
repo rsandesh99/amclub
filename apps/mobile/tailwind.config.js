@@ -14,9 +14,9 @@ module.exports = {
           DEFAULT: '#F4A300',
           foreground: '#1A1D1A',
         },
-        success: '#1E8E5A',
-        trust: '#1A6FBF',
-        verified: '#1A6FBF', // verification badges ONLY
+        success: '#14724A', // ≥4.5:1 on success-soft (kept in sync with web a11y pass)
+        trust: '#155C9E',
+        verified: '#155C9E', // verification badges ONLY
         danger: {
           DEFAULT: '#C73E3E',
           foreground: '#FFFFFF',
@@ -26,7 +26,7 @@ module.exports = {
           foreground: '#FFFFFF',
         },
         warning: {
-          DEFAULT: '#B45309',
+          DEFAULT: '#92400E',
           foreground: '#FFFFFF',
         },
         background: '#FAFAF7',

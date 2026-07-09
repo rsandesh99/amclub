@@ -116,7 +116,8 @@ export default function AdminDashboardPage() {
           {/* §7.3 liquidity matrix */}
           <Panel title={t('liquidity')}>
             {lm.categories.length === 0 ? <Empty label={t('no_supply')} /> : (
-              <div className="overflow-x-auto">
+              // Keyboard users must be able to scroll the wide matrix (axe: scrollable-region-focusable).
+              <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('liquidity')}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-foreground-secondary">
