@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
-import type { OrderAmounts } from '@amclub/shared'
+import { isValidGstin, type OrderAmounts } from '@amclub/shared'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -172,7 +172,12 @@ export function CheckoutClient({
         {gstOpen && (
           <div className="mt-3 space-y-1.5">
             <Label htmlFor="gstin">{t('gstin')}</Label>
-            <Input id="gstin" value={gstin} onChange={(e) => setGstin(e.target.value)} placeholder="29ABCDE1234F1Z5" />
+            <Input id="gstin" value={gstin} onChange={(e) => setGstin(e.target.value)} placeholder="27AAPFU0939F1ZV" />
+            {/* Checksum hint only — the server stays the authority (§7 audit M8).
+                Shown once 15 chars are typed so we never nag mid-entry. */}
+            {gstin.trim().length >= 15 && !isValidGstin(gstin.trim()) && (
+              <p className="text-xs font-medium text-warning" role="status">{t('gstin_check_hint')}</p>
+            )}
           </div>
         )}
       </div>

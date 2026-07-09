@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const d = parsed.data
 
   const admin = await createAdminClient()
-  const { data: before } = await admin.from('provider_profiles').select('status, capacity_paused').eq('id', id).maybeSingle()
+  const { data: before } = await admin.from('provider_profiles').select('status, capacity_paused, slug').eq('id', id).maybeSingle()
   if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   let after: Record<string, unknown> = {}
@@ -94,6 +95,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
   } catch (e) {
     return serverError('[admin/providers action]', e)
+  }
+
+  // Emergency-takedown cache-bust (Phase 8 §7): suspension must not wait out
+  // ISR revalidate windows. Purge every rendered instance of the provider's
+  // public pages + the listings that may include them; the next request
+  // re-renders from the DB, where the provider is already suspended.
+  if (d.action === 'suspend' || d.action === 'reactivate') {
+    revalidatePath('/[locale]/(public)/p/[providerSlug]', 'page')
+    revalidatePath('/[locale]/(public)/p/[providerSlug]/[packageSlug]', 'page')
+    revalidatePath('/[locale]/(public)/services/[category]', 'page')
+    revalidatePath('/[locale]/(public)/services', 'page')
   }
 
   await writeAudit(admin, request, {

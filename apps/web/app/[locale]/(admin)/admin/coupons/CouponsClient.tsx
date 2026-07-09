@@ -127,7 +127,7 @@ export function CouponsClient() {
                   <td className="p-3 font-mono font-medium">{c.code}</td>
                   <td className="p-3">{fmtValue(c)}{c.max_discount_paise ? ` (≤₹${c.max_discount_paise / 100})` : ''}</td>
                   <td className="p-3">{c.used_count}{c.usage_limit ? `/${c.usage_limit}` : ''}</td>
-                  <td className="p-3">{new Date(c.valid_to).toLocaleDateString('en-IN')}</td>
+                  <td className="p-3">{new Date(c.valid_to).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
                   <td className="p-3">{c.is_active ? '🟢' : '⚪'}</td>
                 </tr>
               ))}

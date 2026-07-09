@@ -9,6 +9,7 @@ const ITEMS = [
   { href: '/admin/providers', key: 'providers' },
   { href: '/admin/msmes', key: 'msmes' },
   { href: '/admin/orders', key: 'orders' },
+  { href: '/admin/payouts', key: 'payouts' },
   { href: '/admin/disputes', key: 'disputes' },
   { href: '/admin/verifications', key: 'verifications' },
   { href: '/admin/categories', key: 'categories' },

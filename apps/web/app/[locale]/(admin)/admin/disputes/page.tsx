@@ -46,7 +46,7 @@ export default function AdminDisputesPage() {
               <Link href={`/admin/disputes/${d.id}` as '/admin/disputes'} className="flex items-center justify-between rounded-card border border-border bg-surface p-4 hover:border-primary/40">
                 <div>
                   <p className="text-sm font-medium">{d.order?.order_number} · {d.order?.title}</p>
-                  <p className="text-xs text-foreground-secondary">{d.reason} · {new Date(d.created_at).toLocaleDateString('en-IN')}</p>
+                  <p className="text-xs text-foreground-secondary">{d.reason} · {new Date(d.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold">{formatINR(Number(d.order?.total_paise ?? 0))}</p>

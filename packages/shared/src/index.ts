@@ -16,5 +16,8 @@ export * from './specializations'
 // Indian state / UT codes (shared by web + mobile filters, wizards, DB columns)
 export * from './states'
 
+// GSTIN format + mod-36 checksum validation
+export * from './gstin'
+
 // Zod schemas and derived TypeScript types
 export * from './schemas/index'

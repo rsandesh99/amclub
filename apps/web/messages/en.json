@@ -111,7 +111,8 @@
     "processing_title": "Payment received — finishing up…",
     "processing_body": "Your order is being confirmed and will appear below in a few seconds.",
     "processing_slow_title": "Your payment is safe",
-    "processing_slow_body": "Confirmation is taking longer than usual. Your order will appear here shortly — no need to pay again. If it has not appeared in 15 minutes, contact support@amclub.in."
+    "processing_slow_body": "Confirmation is taking longer than usual. Your order will appear here shortly — no need to pay again. If it has not appeared in 15 minutes, contact support@amclub.in.",
+    "gstin_check_hint": "This GSTIN does not pass the checksum — please re-check it. You can still continue; we validate again at payment."
   },
   "orders": {
     "my_orders": "My orders",
@@ -765,7 +766,8 @@
     "orders": "Orders",
     "disputes": "Disputes",
     "categories": "Categories",
-    "audit": "Audit log"
+    "audit": "Audit log",
+    "payouts": "Payouts"
   },
   "admin_reviews": {
     "title": "Flagged reviews",
@@ -928,7 +930,17 @@
     "jobs_never": "never ran",
     "jobs_hint": "Red = no successful run within the expected window. Check CRON_SECRET in Vercel and the cron logs.",
     "action_done": "Done.",
-    "action_failed": "Action failed. Please try again."
+    "action_failed": "Action failed. Please try again.",
+    "payouts_title": "Payout monitor",
+    "payouts_empty": "No payouts in this state.",
+    "amount": "Amount",
+    "scheduled_for": "Scheduled / paid",
+    "payout_scheduled": "Scheduled",
+    "payout_processing": "Processing",
+    "payout_paid": "Paid",
+    "payout_failed": "Failed",
+    "payout_held": "Held",
+    "payout_retried": "Payout rescheduled — the next payout run will pick it up."
   },
   "gateway": {
     "meta_title": "AMClub — Verified business services for MSMEs",
