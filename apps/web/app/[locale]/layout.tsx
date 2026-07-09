@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getMessages, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
@@ -12,7 +12,13 @@ import {
 import { routing } from '@/i18n/routing'
 import { PostHogProvider } from '@/components/providers/posthog'
 import { ToastProvider } from '@/components/ui/toast'
+import { PwaManager } from '@/components/pwa/PwaManager'
 import '@/app/globals.css'
+
+// PWA chrome color (Phase 8 §5) — matches manifest theme_color.
+export const viewport: Viewport = {
+  themeColor: '#1B4D3E',
+}
 
 const inter = Inter({
   subsets: ['latin'],
@@ -106,6 +112,7 @@ export default async function LocaleLayout({
           <PostHogProvider>
             <ToastProvider>{children}</ToastProvider>
           </PostHogProvider>
+          <PwaManager />
         </NextIntlClientProvider>
       </body>
     </html>

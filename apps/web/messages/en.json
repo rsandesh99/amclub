@@ -25,7 +25,8 @@
     "dev_mode": "Dev mode",
     "na": "N/A",
     "add": "Add",
-    "remove": "Remove"
+    "remove": "Remove",
+    "offline_banner": "You’re offline — showing what we last saw. Reconnect to refresh."
   },
   "listings": {
     "title": "My listings",
