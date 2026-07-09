@@ -46,6 +46,7 @@ Rules:
 - If the text does not clearly fit one category, or is vague/off-topic, set category_slug=null, specialization=null and uncertain=true. NEVER guess.
 - The bar for uncertain=false is a CONCRETE, ACTIONABLE service request: the speaker names (or unmistakably describes) a specific task a provider could quote — "file my GST returns", "need 15 tailors", "register our trademark".
 - A topic hint is NOT enough. Complaints, musings, or requests to "explain/fix/sort out" an unspecified problem ("staff situation is bad", "a notice came, please help", "get the paperwork sorted", "do something online") are uncertain=true with category_slug=null, even when the general domain seems guessable. A wrong prefill costs the user more than an empty form.
+- Receiving a notice/letter/call (from a government office, tax department, court, anyone) is NOT a service request by itself. Unless the speaker says what they want DONE about it (reply to it, file the pending return, appeal, get the licence), return category_slug=null and uncertain=true — a notice about "money matters" could equally be tax, legal or licensing.
 - Examples of MUST-be-uncertain inputs: "there was some problem with the tax people last month, my cousin said talk to someone" → {"category_slug": null, "specialization": null, "uncertain": true}; "business needs to grow, what all services do you have" → {"category_slug": null, "specialization": null, "uncertain": true}.
 - uncertain=false only when the category is unambiguous AND the request is concrete.
 - specialization must come from the chosen category's list above; otherwise null.
@@ -71,6 +72,13 @@ function sanitize(raw: unknown, originalLanguage: string): VoiceParse | null {
     p.specialization = null
   }
   if (!p.category_slug) p.uncertain = true
+  // The inverse clamp: clients never prefill a category the model marked
+  // uncertain (web leaves it unset; mobile must behave identically), so a
+  // "hedged guess" (uncertain=true + category filled) is normalised to null.
+  if (p.uncertain) {
+    p.category_slug = null
+    p.specialization = null
+  }
   return p
 }
 

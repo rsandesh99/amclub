@@ -67,13 +67,21 @@ async function makeRemoteParser(): Promise<{ parseFn: ParseFn; cleanup: () => Pr
   const token = s.session!.access_token
   return {
     parseFn: async (text, lang) => {
-      const res = await fetch(`${BASE}/api/v1/admin/voice-parse-text`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ text, lang }),
-      })
-      if (!res.ok) throw new Error(`endpoint ${res.status}: ${(await res.text()).slice(0, 200)}`)
-      return res.json()
+      // One retry on 5xx — a transient vendor flake must not fail a golden.
+      for (let attempt = 0; ; attempt++) {
+        const res = await fetch(`${BASE}/api/v1/admin/voice-parse-text`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ text, lang }),
+        })
+        if (res.ok) return res.json()
+        const body = (await res.text()).slice(0, 200)
+        if (res.status >= 500 && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 2000))
+          continue
+        }
+        throw new Error(`endpoint ${res.status}: ${body}`)
+      }
     },
     cleanup: async () => {
       await admin.from('ai_invocations').delete().eq('user_id', data.user.id)

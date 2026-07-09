@@ -74,29 +74,30 @@ async function main() {
     created.msmeId = msme!.id
 
     // ── 1. Emergency takedown <5s ─────────────────────────────────────────────
+    // Disappearance is judged by CONTENT, not status code: the page streams
+    // (loading.tsx boundary) so the 200 is committed before notFound() throws —
+    // a suspended provider serves the not-found UI with HTTP 200 (soft-404).
     const pageUrl = `${BASE}/p/${slug}`
-    const before = await fetch(pageUrl)
-    check('provider page live pre-suspension', before.status === 200, `GET /p/${slug} → ${before.status}`)
+    const marker = 'P8 Prov'
+    const beforeBody = await (await fetch(pageUrl)).text()
+    check('provider page live pre-suspension', beforeBody.includes(marker), `GET /p/${slug} shows provider`)
 
     const susp = await api(adminUser.token, `/api/v1/admin/providers/${provider!.id}`, { action: 'suspend', reason: 'phase8 verify' })
-    // The criterion is "<5s public disappearance" — poll until 404 or 5s.
     const t0 = Date.now()
     let gone = 0
-    let lastStatus = 0
     while (Date.now() - t0 < 5000) {
-      const r = await fetch(pageUrl)
-      lastStatus = r.status
-      if (r.status === 404) { gone = Date.now() - t0; break }
+      const body = await (await fetch(pageUrl)).text()
+      if (!body.includes(marker)) { gone = Date.now() - t0; break }
       await new Promise((res) => setTimeout(res, 400))
     }
     check(
       'public page gone <5s after suspend',
       susp.ok && gone > 0,
-      `suspend=${susp.status}, 404 after ${gone || '>5000'}ms (last=${lastStatus})`,
+      `suspend=${susp.status}, provider vanished after ${gone || '>5000'}ms`,
     )
     const react = await api(adminUser.token, `/api/v1/admin/providers/${provider!.id}`, { action: 'reactivate' })
-    const restored = await fetch(pageUrl)
-    check('reactivate restores the page', react.ok && restored.status === 200, `→ ${restored.status}`)
+    const restoredBody = await (await fetch(pageUrl)).text()
+    check('reactivate restores the page', react.ok && restoredBody.includes(marker), 'provider visible again')
 
     // ── 2. Payout monitor + retry ─────────────────────────────────────────────
     const co = await api(buyer.token, '/api/v1/checkout', { packageId: pkg!.id, idempotencyKey: crypto.randomUUID() })
