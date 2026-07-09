@@ -32,7 +32,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
@@ -71,7 +71,6 @@ jobs:
       # locally via the same script (see docs/A11Y.md).
       NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
-      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
       NEXT_PUBLIC_APP_URL: http://localhost:3000
 
     steps:
@@ -84,7 +83,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # supabase-js realtime needs native WebSocket → Node 22+.
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
@@ -96,10 +96,15 @@ jobs:
       - name: Build (web)
         run: pnpm turbo run build --filter=@amclub/web
         env:
+          # Build-time placeholder only. The scan step must NOT see it, or the
+          # scanner switches to full-auth mode and fails against a fake key.
+          SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
           SENTRY_AUTH_TOKEN: ""
 
       - name: Start server & run axe scan
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key # server boot env-check only
         run: |
           pnpm --filter @amclub/web start &
           for i in $(seq 1 60); do curl -sf http://localhost:3000 >/dev/null && break; sleep 2; done
-          cd apps/web && A11Y_ENFORCE=1 BASE_URL=http://localhost:3000 npx tsx scripts/a11y-scan.ts
+          cd apps/web && A11Y_ENFORCE=1 SUPABASE_SERVICE_ROLE_KEY= BASE_URL=http://localhost:3000 npx tsx scripts/a11y-scan.ts
