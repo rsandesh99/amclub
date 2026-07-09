@@ -101,11 +101,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // ISR revalidate windows. Purge every rendered instance of the provider's
   // public pages + the listings that may include them; the next request
   // re-renders from the DB, where the provider is already suspended.
+  // Both path spellings are purged — Next matches revalidatePath('page')
+  // against the app-paths key, and route-group inclusion has varied across
+  // releases; the extra calls are free.
   if (d.action === 'suspend' || d.action === 'reactivate') {
-    revalidatePath('/[locale]/(public)/p/[providerSlug]', 'page')
-    revalidatePath('/[locale]/(public)/p/[providerSlug]/[packageSlug]', 'page')
-    revalidatePath('/[locale]/(public)/services/[category]', 'page')
-    revalidatePath('/[locale]/(public)/services', 'page')
+    for (const p of [
+      '/[locale]/(public)/p/[providerSlug]',
+      '/[locale]/p/[providerSlug]',
+      '/[locale]/(public)/p/[providerSlug]/[packageSlug]',
+      '/[locale]/p/[providerSlug]/[packageSlug]',
+      '/[locale]/(public)/services/[category]',
+      '/[locale]/services/[category]',
+      '/[locale]/(public)/services',
+      '/[locale]/services',
+    ]) {
+      revalidatePath(p, 'page')
+    }
   }
 
   await writeAudit(admin, request, {
