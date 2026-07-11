@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import { ShieldCheck } from 'lucide-react'
 import { useRouter } from '@/i18n/navigation'
 import { RevealHeader } from './RevealHeader'
+import { RevealFooter } from './RevealFooter'
 import { catKey, EXP_KEY } from './constants'
 import type { ProviderDraft } from './draft'
 import type { AppLocale } from '@/i18n/routing'
@@ -46,7 +47,7 @@ export function RevealPartner({ answers, onStartOver, onSelectLocale, track }: R
   }
 
   return (
-    <div className="gw-fade-fast absolute inset-0 overflow-y-auto overscroll-contain bg-background">
+    <div className="gw-fade-fast absolute inset-0 flex flex-col overflow-y-auto overscroll-contain bg-background">
       <RevealHeader
         label={t('partner_label')}
         onStartOver={onStartOver}
@@ -108,6 +109,8 @@ export function RevealPartner({ answers, onStartOver, onSelectLocale, track }: R
           ))}
         </div>
       </main>
+
+      <RevealFooter />
     </div>
   )
 }

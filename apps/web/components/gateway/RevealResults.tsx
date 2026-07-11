@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Check,
@@ -15,6 +15,7 @@ import { useRouter } from '@/i18n/navigation'
 import { ResultCard } from '@/components/catalog/ResultCard'
 import { Link } from '@/i18n/navigation'
 import { RevealHeader } from './RevealHeader'
+import { RevealFooter } from './RevealFooter'
 import { fetchGatewayResults, type GatewayResults } from './search'
 import { catKey, BAND_KEY } from './constants'
 import { saveBuyerDraft, type BuyerDraft } from './draft'
@@ -37,8 +38,6 @@ export function RevealResults({ answers, onStartOver, onSelectLocale, track }: R
   const t = useTranslations('gateway')
   const tv = useTranslations('voice')
   const router = useRouter()
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  const listRef = useRef<HTMLDivElement | null>(null)
 
   const [data, setData] = useState<GatewayResults | null>(null)
   const [failed, setFailed] = useState(false)
@@ -67,13 +66,18 @@ export function RevealResults({ answers, onStartOver, onSelectLocale, track }: R
   const title = stateName ? t('serving', { experts, state: stateName }) : experts
   const hasDraft = Boolean(answers.cat || answers.state || answers.biz || answers.band)
 
-  function scrollToList() {
-    if (!scrollRef.current || !listRef.current) return
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    scrollRef.current.scrollTo({
-      top: listRef.current.offsetTop - 84,
-      behavior: reduced ? 'auto' : 'smooth',
-    })
+  // Browse-and-buy path: route to the real (shell'd) catalog listing filtered by
+  // the wizard's category + state — symmetric with the RFQ card. Falls back to
+  // the state-filtered or all-services listing when a step was skipped.
+  const browseHref = answers.cat
+    ? `/services/${answers.cat}${answers.state ? `?state=${answers.state}` : ''}`
+    : answers.state
+      ? `/services?state=${answers.state}`
+      : '/services'
+
+  function goBrowse() {
+    track('gateway_browse_clicked', { category: answers.cat, state: answers.state })
+    router.push(browseHref)
   }
 
   function toggleRfq() {
@@ -95,7 +99,7 @@ export function RevealResults({ answers, onStartOver, onSelectLocale, track }: R
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2'
 
   return (
-    <div ref={scrollRef} className="gw-fade-fast absolute inset-0 overflow-y-auto overscroll-contain bg-background">
+    <div className="gw-fade-fast absolute inset-0 flex flex-col overflow-y-auto overscroll-contain bg-background">
       <RevealHeader onStartOver={onStartOver} onSelectLocale={onSelectLocale} />
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-[22px] px-4 pb-[88px] pt-6 sm:px-10 sm:pb-24 sm:pt-9">
@@ -121,7 +125,7 @@ export function RevealResults({ answers, onStartOver, onSelectLocale, track }: R
         </div>
 
         <div className="gw-rise grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3.5" style={{ animationDelay: '200ms' }}>
-          <button type="button" onClick={scrollToList} className={`${actionCard} border-border`}>
+          <button type="button" onClick={goBrowse} className={`${actionCard} border-border`}>
             <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-button bg-primary-soft text-primary">
               <IndianRupee className="h-[22px] w-[22px]" aria-hidden />
             </span>
@@ -261,7 +265,7 @@ export function RevealResults({ answers, onStartOver, onSelectLocale, track }: R
           </div>
         )}
 
-        <div ref={listRef} className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
           {data?.results.map((r, i) => (
             <div key={r.packageId} className="gw-rise" style={{ animationDelay: `${300 + i * 60}ms` }}>
               <ResultCard result={r} />
@@ -284,6 +288,8 @@ export function RevealResults({ answers, onStartOver, onSelectLocale, track }: R
           </div>
         )}
       </main>
+
+      <RevealFooter />
     </div>
   )
 }

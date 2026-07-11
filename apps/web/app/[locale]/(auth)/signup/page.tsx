@@ -15,7 +15,7 @@ export default async function SignupPage({
   return (
     <Card>
       <CardHeader>
-        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white font-bold text-lg">A</div>
+        <Link href="/" aria-label={tAuth('home')} className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-bold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">A</Link>
         <CardTitle>{t('page_title')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">

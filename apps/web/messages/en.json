@@ -289,6 +289,7 @@
     "sign_in": "Sign in",
     "sign_up": "Sign up",
     "sign_out": "Sign out",
+    "home": "AMClub home",
     "phone_label": "Mobile number",
     "phone_placeholder": "10-digit mobile number",
     "phone_hint": "We'll send a 6-digit OTP",

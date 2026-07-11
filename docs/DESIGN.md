@@ -818,7 +818,7 @@ RLS-by-default, service-role key server-only · signed URLs for all private file
 ## Appendix A — Canonical event names (analytics, PostHog)
 
 `search_performed · listing_viewed · provider_viewed · package_viewed · checkout_started · payment_succeeded/failed · rfq_created · quote_submitted/viewed/accepted · order_accepted/delivered/completed/disputed · review_submitted · provider_signup_started/kyc_submitted/approved · language_switched`
-Gateway funnel (Phase 8a): `gateway_viewed · gateway_door_chosen · gateway_wizard_step_viewed · gateway_wizard_step_answered · gateway_wizard_step_skipped · gateway_wizard_completed · gateway_results_viewed · gateway_rfq_opened · gateway_rfq_submitted · gateway_provider_wizard_completed · gateway_provider_application_submitted` (props: `door, step, field, value, prefilled`).
+Gateway funnel (Phase 8a): `gateway_viewed · gateway_door_chosen · gateway_wizard_step_viewed · gateway_wizard_step_answered · gateway_wizard_step_skipped · gateway_wizard_completed · gateway_results_viewed · gateway_browse_clicked · gateway_rfq_opened · gateway_rfq_submitted · gateway_provider_wizard_completed · gateway_provider_application_submitted` (props: `door, step, field, value, prefilled, category, state`).
 
 Voice RFQ funnel (Phase 8b): `voice_rfq_started · voice_rfq_transcribed · voice_rfq_parsed · voice_rfq_edited · voice_rfq_submitted · voice_rfq_failed` (props: `surface ('rfq_form'|'gateway'), original_language, uncertain, duration_ms, field` — `voice_rfq_edited` fires once per corrected field; `voice_rfq_submitted` marks an RFQ created with voice_meta attached).
 Every event carries: `role, state, category_id, locale, device`. These power the §1.9 funnel — instrument in the same PR as the feature, not after.
