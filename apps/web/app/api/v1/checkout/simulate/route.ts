@@ -36,6 +36,14 @@ export async function POST(request: NextRequest) {
   if (!session?.razorpay_order_id) {
     return NextResponse.json({ error: 'Checkout session not found' }, { status: 404 })
   }
+  // Ownership: only the buyer who created the session may materialise it.
+  // Without this, any authenticated user knowing a session id could turn a
+  // stranger's pending checkout into a "paid" order (simulate mode only, but
+  // the check belongs here regardless — the admin client bypasses RLS).
+  const { data: msme } = await admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
+  if (!msme || session.msme_id !== msme.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   if (session.order_id) {
     return NextResponse.json({ orderId: session.order_id, alreadyPaid: true })
   }
