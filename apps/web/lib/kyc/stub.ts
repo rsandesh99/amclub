@@ -9,8 +9,9 @@
 import type { KycClient, GstinVerifyResult, BankVerifyResult } from './types'
 
 export const stubKycClient: KycClient = {
-  async verifyGstin(gstin: string): Promise<GstinVerifyResult> {
-    console.warn('[KYC STUB] verifyGstin called — not a real API call. GSTIN:', gstin)
+  async verifyGstin(_gstin: string): Promise<GstinVerifyResult> {
+    // Never log the GSTIN itself (PII in logs). Presence of the call is enough.
+    console.warn('[KYC STUB] verifyGstin called — not a real API call (no KYC_API_KEY).')
     await new Promise((r) => setTimeout(r, 600))
     return {
       verified: true,
@@ -24,7 +25,8 @@ export const stubKycClient: KycClient = {
   },
 
   async verifyBankAccount(params): Promise<BankVerifyResult> {
-    console.warn('[KYC STUB] verifyBankAccount called — not a real API call.', params.accountNumber, params.ifsc)
+    // Never log the account number / IFSC (financial PII in logs).
+    console.warn('[KYC STUB] verifyBankAccount called — not a real API call (no KYC_API_KEY).')
     await new Promise((r) => setTimeout(r, 800))
     return {
       verified: true,

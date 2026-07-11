@@ -161,6 +161,22 @@ async function main() {
       eq('phone/email NOT stored in cleartext', leaks, false)
       eq('message flagged redacted', stored?.redacted === true, true)
     }
+
+    // ── 6. RLS as last line — direct PostgREST with a real low-priv JWT ─────────
+    // Bypasses the app entirely: even if an app-layer owner check were missed,
+    // RLS must return zero rows for cross-tenant / crown-jewel reads.
+    console.log('RLS last line (direct PostgREST, low-priv JWT, no app):')
+    const asUser = (token: string) => createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } })
+    const bClient = asUser(buyerB.token)
+    eq('buyerB direct-reads A order → 0 rows', ((await bClient.from('orders').select('id').eq('id', orderA)).data ?? []).length, 0)
+    eq('buyerB direct-reads ANY bank account → 0 rows', ((await bClient.from('provider_bank_accounts').select('id')).data ?? []).length, 0)
+    eq('buyerB direct-reads A msme_profile → 0 rows', ((await bClient.from('msme_profiles').select('id').eq('id', msmeA!.id)).data ?? []).length, 0)
+    eq('buyerB direct-reads provider_verifications → 0 rows', ((await bClient.from('provider_verifications').select('id')).data ?? []).length, 0)
+    eq('buyerB direct-reads payments → 0 rows', ((await bClient.from('payments').select('id')).data ?? []).length, 0)
+    eq('buyerB direct-reads ai_invocations → 0 rows', ((await bClient.from('ai_invocations').select('id')).data ?? []).length, 0)
+    eq('buyerB direct-reads audit_logs → 0 rows', ((await bClient.from('audit_logs').select('id')).data ?? []).length, 0)
+    // Positive control: buyerB CAN read their own (empty) msme row by user.
+    eq('buyerB direct-reads OWN msme_profile → 1 row', ((await bClient.from('msme_profiles').select('id').eq('id', msmeB!.id)).data ?? []).length, 1)
   } finally {
     // Cleanup — children before parents; loud on error.
     const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {

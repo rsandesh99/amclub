@@ -48,9 +48,16 @@ export async function POST(request: NextRequest) {
   const isRealKey = authKey && !['<msg91-auth-key>', 'placeholder', ''].includes(authKey)
 
   if (!isRealKey) {
-    // Dev: log to console (visible in terminal / Vercel logs)
-    console.warn(`[SMS HOOK DEV] To: ${phone} | Message: ${message}`)
-    return NextResponse.json({ success: true, dev: true })
+    // The OTP + phone must NEVER reach production logs (account-takeover risk if
+    // log access leaks). Only echo it to the console in local/dev; in production
+    // an unset MSG91 key means SMS cannot be delivered — fail loudly WITHOUT the
+    // OTP so login breaks visibly instead of silently logging credentials.
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`[SMS HOOK DEV] To: ${phone} | Message: ${message}`)
+      return NextResponse.json({ success: true, dev: true })
+    }
+    console.error('[SMS HOOK] MSG91_AUTH_KEY not configured — OTP not delivered.')
+    return NextResponse.json({ error: 'SMS delivery not configured' }, { status: 500 })
   }
 
   // Production: send via MSG91
