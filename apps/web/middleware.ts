@@ -8,14 +8,11 @@ const nextIntl = createNextIntlMiddleware(routing)
 // Locale prefix stripper built from the single source of truth in i18n/routing.
 const LOCALE_RE = new RegExp(`^/(${LOCALE_PREFIX_PATTERN})(/|$)`)
 
-// Routes requiring authentication — matched against the path AFTER stripping the locale prefix
+// Routes requiring authentication — matched against the path AFTER stripping the locale prefix.
+// Role-level gating (provider/admin) deliberately does NOT live here: checking
+// DB roles in middleware would add a round-trip to every request, so the
+// (provider)/(admin) layouts enforce roles server-side instead.
 const PROTECTED_PREFIXES = ['/app', '/partner/onboarding', '/partner/earnings', '/partner/listings', '/partner/rfqs', '/partner/orders', '/partner/profile', '/admin']
-
-// Routes that require the provider role specifically (not just auth)
-const PROVIDER_PREFIXES = ['/partner/onboarding', '/partner/earnings', '/partner/listings', '/partner/rfqs', '/partner/orders', '/partner/profile']
-
-// Routes that require admin/ops role
-const ADMIN_PREFIXES = ['/admin']
 
 function stripLocale(pathname: string): string {
   return pathname.replace(LOCALE_RE, '/').replace(/\/$/, '') || '/'

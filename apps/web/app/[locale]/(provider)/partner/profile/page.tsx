@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
+import { Link } from '@/i18n/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { Badge } from '@/components/ui/badge'
@@ -50,12 +51,12 @@ export default async function ProviderProfilePage() {
       </div>
 
       {isActive && (
-        <a
-          href={`/p/${profile.slug}`}
+        <Link
+          href={`/p/${profile.slug}` as '/app'}
           className="inline-block text-sm font-medium text-primary hover:underline"
         >
           {t('view_public_page')} →
-        </a>
+        </Link>
       )}
 
       <ProviderProfileForm initial={initial} />
