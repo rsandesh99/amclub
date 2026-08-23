@@ -19,3 +19,12 @@ export const COUPONS_ENABLED = process.env['COUPONS_ENABLED'] === 'true'
  * "Confident Marketplace" landing page unchanged.
  */
 export const GATEWAY_ENABLED = process.env['GATEWAY_ENABLED'] !== 'false'
+
+/**
+ * PAYOUT_AUTO_RELEASE — founder control gate on provider payouts (launch
+ * decision, 2026-08-23). Default OFF: every payout is created 'held' and money
+ * can only move after an admin explicitly releases it from /admin/payouts,
+ * having checked the delivered work. Set PAYOUT_AUTO_RELEASE=true to restore
+ * the automatic buyer-acceptance → T+2 → cron flow once trust is established.
+ */
+export const PAYOUT_AUTO_RELEASE = process.env['PAYOUT_AUTO_RELEASE'] === 'true'

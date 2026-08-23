@@ -40,10 +40,13 @@ export function makeRazorpayGateway(keyId: string, keySecret: string): PaymentGa
     },
 
     async createTransfer({ linkedAccountId, amountPaise, notes }): Promise<GatewayTransfer> {
-      // Route transfer needs an activated account + linked account id.
+      // Route transfer needs an activated account + linked account id. With a
+      // REAL gateway a missing linked account must FAIL (payout → 'failed',
+      // visible in /admin/payouts) — never silently simulate a "paid" state
+      // while the money stays in the platform account. Simulation belongs to
+      // the mock gateway only.
       if (!linkedAccountId) {
-        // Simulate until Route is activated / provider account is linked.
-        return { razorpayTransferId: `trf_sim_${Date.now()}`, amountPaise, status: 'created', simulated: true }
+        throw new Error('route_account_missing: provider has no Razorpay Route linked account')
       }
       /* eslint-disable @typescript-eslint/no-explicit-any */
       const transfer = await (rzp as any).transfers.create({

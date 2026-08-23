@@ -9,6 +9,7 @@ import {
 } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { getPaymentGateway } from '@/lib/payments'
+import { PAYOUT_AUTO_RELEASE } from '@/lib/flags'
 import { generateInvoices } from '@/lib/invoices/generate'
 import { notifyOrderTransition, notifyAutoCancelled, notifyAutoAccepted } from '@/lib/notifications/events'
 
@@ -80,7 +81,14 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
     admin.from('provider_profiles').select('status').eq('id', order.provider_id).maybeSingle(),
     admin.from('provider_bank_accounts').select('penny_drop_verified').eq('provider_id', order.provider_id).maybeSingle(),
   ])
-  const held = Boolean(dispute) || provider?.status === 'suspended' || !bank?.penny_drop_verified
+  // Founder control gate: unless PAYOUT_AUTO_RELEASE=true, EVERY payout is
+  // created 'held' — money moves only when an admin explicitly releases it
+  // from /admin/payouts after checking the delivered work.
+  const held =
+    !PAYOUT_AUTO_RELEASE ||
+    Boolean(dispute) ||
+    provider?.status === 'suspended' ||
+    !bank?.penny_drop_verified
 
   const scheduledFor = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().slice(0, 10) // T+2
   await admin.from('payouts').upsert(

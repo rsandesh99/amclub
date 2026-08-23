@@ -42,11 +42,25 @@ export async function runPayouts(
       .eq('provider_id', p.provider_id)
       .maybeSingle()
 
-    const transfer = await gateway.createTransfer({
-      linkedAccountId: bank?.razorpay_route_account_id ?? null,
-      amountPaise: p.amount_paise,
-      notes: { order_id: p.order_id },
-    })
+    let transfer
+    try {
+      transfer = await gateway.createTransfer({
+        linkedAccountId: bank?.razorpay_route_account_id ?? null,
+        amountPaise: p.amount_paise,
+        notes: { order_id: p.order_id },
+      })
+    } catch (e) {
+      // Transfer failed (e.g. no Route linked account, Route error). Mark the
+      // payout 'failed' so it surfaces in /admin/payouts for retry — never
+      // leave it stuck in 'processing' or pretend it was paid.
+      console.error('[runPayouts] transfer failed for payout', p.id, e)
+      await admin
+        .from('payouts')
+        .update({ status: 'failed', updated_at: new Date().toISOString() })
+        .eq('id', p.id)
+        .eq('status', 'processing')
+      continue
+    }
     if (transfer.simulated) simulated = true
 
     await admin
