@@ -31,7 +31,9 @@ function LoginInner() {
     // the quick profile first.
     const { isNew, destination } = await resolvePostAuthRoute()
     if (isNew) {
-      router.push('/signup?complete=1')
+      // Honor provider intent: someone auth-walled on their way to /partner/*
+      // gets the PROVIDER wizard, not the buyer one (mirrors the OAuth callback).
+      router.push(next?.startsWith('/partner') ? '/partner/onboarding' : '/signup?complete=1')
     } else {
       router.push(next ?? destination)
     }
@@ -54,7 +56,7 @@ function LoginInner() {
         </p>
         <p className="text-center text-xs text-foreground-secondary">
           {t('for_providers')}{' '}
-          <Link href="/partner/signup" className="text-primary underline underline-offset-2 hover:no-underline">
+          <Link href="/partner/onboarding" className="text-primary underline underline-offset-2 hover:no-underline">
             {t('register_as_provider')}
           </Link>
         </p>

@@ -9,6 +9,8 @@ interface Me {
   authenticated: boolean
   fullName: string | null
   roles: string[]
+  hasMsmeProfile?: boolean
+  hasProviderProfile?: boolean
 }
 
 /**
@@ -23,7 +25,7 @@ export function PublicHeaderAccount() {
 
   useEffect(() => {
     let active = true
-    fetch('/api/v1/profile/me')
+    fetch('/api/v1/profile/me', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d: Me | null) => {
         if (!active) return
@@ -43,8 +45,8 @@ export function PublicHeaderAccount() {
       <AccountMenu
         name={me.fullName}
         context="public"
-        isMsme={roles.includes('msme')}
-        isProvider={roles.includes('provider')}
+        hasMsme={me.hasMsmeProfile ?? roles.includes('msme')}
+        hasProvider={me.hasProviderProfile ?? roles.includes('provider')}
         isAdmin={roles.includes('admin') || roles.includes('ops')}
       />
     )

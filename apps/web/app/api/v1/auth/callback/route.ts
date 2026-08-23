@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
   // Decide destination by profile existence.
   const [{ data: msme }, { data: provider }] = await Promise.all([
     admin.from('msme_profiles').select('id').eq('user_id', authUser.id).maybeSingle(),
-    admin.from('provider_profiles').select('id').eq('user_id', authUser.id).maybeSingle(),
+    admin.from('provider_profiles').select('id, status').eq('user_id', authUser.id).maybeSingle(),
   ])
 
   const wantsNext = safeNext(next)
@@ -80,7 +80,10 @@ export async function GET(request: NextRequest) {
     dest = '/admin/verifications'
   } else if (provider || msme) {
     // Returning user → honor a deep-link `next` if present, else role home.
-    dest = wantsNext ?? (provider ? '/partner' : '/app')
+    // Active providers → /partner; an applicant (pending/under_review) who
+    // also has a buyer profile keeps their buyer home.
+    const roleHome = provider && (provider.status === 'active' || !msme) ? '/partner' : '/app'
+    dest = wantsNext ?? roleHome
   } else {
     // Brand-new user → run the right wizard ONCE. `next` carries the intent.
     dest = next.startsWith('/partner') ? '/partner/onboarding' : '/signup?complete=1'

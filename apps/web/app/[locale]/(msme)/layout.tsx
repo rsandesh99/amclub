@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getSessionUser } from '@/lib/auth/session'
+import { getSessionUser, getMsmeProfile, getProviderProfile } from '@/lib/auth/session'
 import { AppShell } from '@/components/shell/AppShell'
 
 export default async function MsmeLayout({ children }: { children: React.ReactNode }) {
@@ -8,8 +8,16 @@ export default async function MsmeLayout({ children }: { children: React.ReactNo
     redirect('/login')
   }
 
+  const [msme, provider] = await Promise.all([getMsmeProfile(user.id), getProviderProfile(user.id)])
+
   return (
-    <AppShell context="msme" name={user.fullName} roles={user.roles}>
+    <AppShell
+      context="msme"
+      name={user.fullName}
+      roles={user.roles}
+      hasMsmeProfile={Boolean(msme)}
+      hasProviderProfile={Boolean(provider)}
+    >
       {children}
     </AppShell>
   )

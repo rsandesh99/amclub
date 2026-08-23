@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { serverError } from '@/lib/api/errors'
+import { revalidateProviderCatalog } from '@/lib/catalog/revalidate'
 
 const bodySchema = z.object({
   action: z.enum(['approve', 'reject']),
@@ -69,6 +70,15 @@ export async function POST(
   if (verErr) {
     console.error('[admin/verifications POST] verification update:', verErr)
     // Non-fatal — provider_profiles.status is the source of truth
+  }
+
+  // Approval/rejection flips public visibility — purge the ISR cache NOW so
+  // the provider's pages appear (or vanish) in seconds, not after the ISR
+  // window (C6: approvals previously served the cached 404 for up to 1h).
+  try {
+    await revalidateProviderCatalog(admin, providerId)
+  } catch (e) {
+    console.error('[admin/verifications POST] cache purge:', e)
   }
 
   // Audit log — Phase 6 will wire real notifications

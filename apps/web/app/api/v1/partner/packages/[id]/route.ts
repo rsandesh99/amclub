@@ -17,16 +17,24 @@ async function ownPackage(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   packageId: string,
-) {
+): Promise<{ ok: boolean; providerSlug?: string; packageSlug?: string; categorySlug?: string }> {
   const { data } = await supabase
     .from('packages')
-    .select('id, provider:provider_profiles!inner(user_id)')
+    .select('id, slug, category:categories(slug), provider:provider_profiles!inner(user_id, slug)')
     .eq('id', packageId)
     .maybeSingle()
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const ownerId = (data as any)?.provider?.user_id
+  if (!data || ownerId !== userId) return { ok: false }
+  // Slugs so every mutation can purge the exact public pages it affects
+  // (/p/{provider}, /p/{provider}/{package}, /services/{category}).
+  return {
+    ok: true,
+    providerSlug: (data as any)?.provider?.slug,
+    packageSlug: (data as any)?.slug,
+    categorySlug: (data as any)?.category?.slug,
+  }
   /* eslint-enable @typescript-eslint/no-explicit-any */
-  return Boolean(data) && ownerId === userId
 }
 
 export async function PATCH(
@@ -45,7 +53,8 @@ export async function PATCH(
   const d = parsed.data
 
   const supabase = await createClient()
-  if (!(await ownPackage(supabase, user.id, id))) {
+  const own = await ownPackage(supabase, user.id, id)
+  if (!own.ok) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
@@ -67,7 +76,15 @@ export async function PATCH(
   }
 
   if (error) return serverError('[partner/packages PATCH]', error)
-  revalidateCatalog({ categorySlug: d.category_slug })
+  revalidateCatalog({
+    categorySlug: d.category_slug,
+    ...(own.providerSlug ? { providerSlug: own.providerSlug } : {}),
+    ...(own.packageSlug ? { packageSlug: own.packageSlug } : {}),
+  })
+  // Category may have CHANGED in this edit — purge the old one too.
+  if (own.categorySlug && own.categorySlug !== d.category_slug) {
+    revalidateCatalog({ categorySlug: own.categorySlug })
+  }
   return NextResponse.json({ id, status: d.status })
 }
 
@@ -87,12 +104,17 @@ export async function POST(
   if (!parsed.success) return NextResponse.json({ error: 'Invalid status' }, { status: 422 })
 
   const supabase = await createClient()
-  if (!(await ownPackage(supabase, user.id, id))) {
+  const own = await ownPackage(supabase, user.id, id)
+  if (!own.ok) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
   const { error } = await supabase.from('packages').update({ status: parsed.data.status }).eq('id', id)
   if (error) return serverError('[partner/packages POST status]', error)
-  revalidateCatalog({})
+  revalidateCatalog({
+    ...(own.categorySlug ? { categorySlug: own.categorySlug } : {}),
+    ...(own.providerSlug ? { providerSlug: own.providerSlug } : {}),
+    ...(own.packageSlug ? { packageSlug: own.packageSlug } : {}),
+  })
   return NextResponse.json({ id, status: parsed.data.status })
 }
 
@@ -105,7 +127,8 @@ export async function DELETE(
   const { id } = await params
 
   const supabase = await createClient()
-  if (!(await ownPackage(supabase, user.id, id))) {
+  const own = await ownPackage(supabase, user.id, id)
+  if (!own.ok) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
   // Soft delete (§2.5 rule 4) — never hard-delete provider content.
@@ -114,6 +137,10 @@ export async function DELETE(
     .update({ status: 'removed', deleted_at: new Date().toISOString() })
     .eq('id', id)
   if (error) return serverError('[partner/packages DELETE]', error)
-  revalidateCatalog({})
+  revalidateCatalog({
+    ...(own.categorySlug ? { categorySlug: own.categorySlug } : {}),
+    ...(own.providerSlug ? { providerSlug: own.providerSlug } : {}),
+    ...(own.packageSlug ? { packageSlug: own.packageSlug } : {}),
+  })
   return NextResponse.json({ id, deleted: true })
 }

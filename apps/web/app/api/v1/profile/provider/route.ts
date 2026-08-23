@@ -120,9 +120,19 @@ export async function POST(request: NextRequest) {
   // 3. Upsert provider_profiles. Generate a unique slug on first create.
   const { data: existing } = await admin
     .from('provider_profiles')
-    .select('id, slug')
+    .select('id, slug, status')
     .eq('user_id', user.id)
     .maybeSingle()
+
+  // Re-registration guard: only brand-new applicants and rejected reapplicants
+  // may (re)submit. Without this, an approved provider re-running onboarding
+  // would reset themselves to under_review and wipe every verification badge.
+  if (existing && existing.status !== 'rejected' && existing.status !== 'pending_kyc') {
+    return NextResponse.json(
+      { error: 'Provider profile already exists. Edit it from your partner dashboard instead.' },
+      { status: 409 },
+    )
+  }
 
   const slug = existing?.slug ?? `${slugify(d.displayName)}-${randomSuffix()}`
 

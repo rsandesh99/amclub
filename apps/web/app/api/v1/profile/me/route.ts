@@ -26,14 +26,19 @@ export async function GET() {
       ? 'provider'
       : 'msme'
 
-  return NextResponse.json({
-    authenticated: true,
-    id: userId,
-    fullName: u?.full_name ?? null,
-    role: primaryRole,
-    roles,
-    hasMsmeProfile: !!msme,
-    hasProviderProfile: !!provider,
-    providerStatus: provider?.status ?? null,
-  })
+  return NextResponse.json(
+    {
+      authenticated: true,
+      id: userId,
+      fullName: u?.full_name ?? null,
+      role: primaryRole,
+      roles,
+      hasMsmeProfile: !!msme,
+      hasProviderProfile: !!provider,
+      providerStatus: provider?.status ?? null,
+    },
+    // Role/profile state drives routing — a heuristically-cached stale answer
+    // right after becoming a provider (or signing out) misroutes the client.
+    { headers: { 'Cache-Control': 'private, no-store' } },
+  )
 }

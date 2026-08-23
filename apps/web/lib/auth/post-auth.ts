@@ -11,10 +11,15 @@ export interface PostAuthRoute {
 }
 
 export async function resolvePostAuthRoute(): Promise<PostAuthRoute> {
-  const res = await fetch('/api/v1/profile/me')
+  const res = await fetch('/api/v1/profile/me', { cache: 'no-store' })
   const d = await res.json().catch(() => ({}))
   if (d.role === 'admin' || d.role === 'ops') return { isNew: false, destination: '/admin/verifications' }
-  if (d.hasProviderProfile) return { isNew: false, destination: '/partner' }
+  // Active providers → /partner; a buyer whose provider application is still
+  // pending/under_review keeps landing on their buyer home.
+  if (d.hasProviderProfile && (d.providerStatus === 'active' || !d.hasMsmeProfile)) {
+    return { isNew: false, destination: '/partner' }
+  }
   if (d.hasMsmeProfile) return { isNew: false, destination: '/app' }
+  if (d.hasProviderProfile) return { isNew: false, destination: '/partner' }
   return { isNew: true, destination: '/app' }
 }

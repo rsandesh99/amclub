@@ -78,14 +78,16 @@ export async function middleware(request: NextRequest) {
         // Own-row reads under RLS; a missing row simply yields null.
         const [{ data: u }, { data: provider }, { data: msme }] = await Promise.all([
           supabase.from('users').select('roles').eq('id', user.id).maybeSingle(),
-          supabase.from('provider_profiles').select('id').eq('user_id', user.id).maybeSingle(),
+          supabase.from('provider_profiles').select('id, status').eq('user_id', user.id).maybeSingle(),
           supabase.from('msme_profiles').select('id').eq('user_id', user.id).maybeSingle(),
         ])
         const roles: string[] = u?.roles ?? []
+        // Active providers land on /partner; a buyer who merely APPLIED to be a
+        // provider (pending/under_review/rejected) keeps their buyer home.
         const destination =
           roles.includes('admin') || roles.includes('ops')
             ? '/admin/verifications'
-            : provider
+            : provider && (provider.status === 'active' || !msme)
               ? '/partner'
               : msme
                 ? '/app'
@@ -113,7 +115,10 @@ export async function middleware(request: NextRequest) {
 
   if (!user) {
     const loginUrl = new URL(`${localePrefix}/login`, request.url)
-    loginUrl.searchParams.set('next', request.nextUrl.pathname)
+    // Locale-STRIPPED path: the login page pushes `next` through the next-intl
+    // router, which re-prefixes the active locale — a raw /hi/... here would
+    // become /hi/hi/... and 404.
+    loginUrl.searchParams.set('next', path)
     return NextResponse.redirect(loginUrl)
   }
 

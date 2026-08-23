@@ -751,7 +751,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             <h2 className="text-xl font-semibold">{t('under_review_title')}</h2>
             <p className="mt-2 text-sm text-foreground-secondary max-w-sm">{t('under_review_body')}</p>
           </div>
-          <Button onClick={() => router.push('/partner')} className="w-full max-w-xs">
+          <Button onClick={() => router.push('/services')} className="w-full max-w-xs">
             {t('browse_as_msme')}
           </Button>
         </div>

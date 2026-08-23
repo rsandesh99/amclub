@@ -12,14 +12,16 @@ export type ShellContext = 'msme' | 'provider' | 'admin' | 'public'
 interface AccountMenuProps {
   name: string | null
   context: ShellContext
-  isMsme: boolean
-  isProvider: boolean
+  /** PROFILE existence, not role flags — every provider signup also gets the
+   *  'msme' role, so roles overstate which surfaces actually exist. */
+  hasMsme: boolean
+  hasProvider: boolean
   isAdmin: boolean
 }
 
 /** Avatar dropdown: profile, role switch / become-provider, help, sign out.
  *  Shared across every logged-in surface (and the public header when logged in). */
-export function AccountMenu({ name, context, isMsme, isProvider, isAdmin }: AccountMenuProps) {
+export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: AccountMenuProps) {
   const t = useTranslations('shell')
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
@@ -55,7 +57,12 @@ export function AccountMenu({ name, context, isMsme, isProvider, isAdmin }: Acco
   }
 
   const initial = (name ?? '?').charAt(0).toUpperCase()
-  const profileHref = context === 'provider' ? '/partner/profile' : '/app/profile'
+  // Providers without a buyer profile must never be sent into /app/* — the
+  // MSME pages bounce them through /signup?complete=1 (a confusing two-hop).
+  const profileHref =
+    context === 'provider' || (context === 'public' && hasProvider && !hasMsme)
+      ? '/partner/profile'
+      : '/app/profile'
 
   return (
     <div ref={ref} className="relative">
@@ -87,18 +94,21 @@ export function AccountMenu({ name, context, isMsme, isProvider, isAdmin }: Acco
             <MenuLink href={profileHref} icon={User} label={t('profile')} onClick={() => setOpen(false)} />
           )}
 
-          {/* Role switching / become a provider */}
-          {context === 'msme' && isProvider && (
+          {/* Role switching / become a provider — driven by PROFILE existence. */}
+          {context === 'msme' && hasProvider && (
             <MenuLink href="/partner" icon={Briefcase} label={t('provider_dashboard')} onClick={() => setOpen(false)} />
           )}
-          {context === 'msme' && !isProvider && (
+          {context === 'msme' && !hasProvider && (
             <MenuLink href="/partner/onboarding" icon={Briefcase} label={t('become_provider')} onClick={() => setOpen(false)} />
           )}
-          {context === 'provider' && isMsme && (
+          {(context === 'provider' || context === 'admin') && hasMsme && (
             <MenuLink href="/app" icon={Home} label={t('msme_home')} onClick={() => setOpen(false)} />
           )}
+          {context === 'provider' && !hasMsme && (
+            <MenuLink href="/signup?complete=1" icon={Home} label={t('setup_buyer')} onClick={() => setOpen(false)} />
+          )}
           {context === 'public' && (
-            <MenuLink href={isProvider ? '/partner' : '/app'} icon={Home} label={t('dashboard')} onClick={() => setOpen(false)} />
+            <MenuLink href={hasProvider ? '/partner' : '/app'} icon={Home} label={t('dashboard')} onClick={() => setOpen(false)} />
           )}
           {isAdmin && context !== 'admin' && (
             <MenuLink href="/admin/verifications" icon={Shield} label={t('admin_panel')} onClick={() => setOpen(false)} />

@@ -57,6 +57,7 @@ export default async function MsmeHomePage() {
           [
             { label: t('browse_services'), href: '/services', icon: '🔍' },
             { label: t('post_rfq'), href: '/app/rfq/new', icon: '📋' },
+            { label: t('my_rfqs'), href: '/app/rfq', icon: '📨' },
             { label: t('my_orders'), href: '/app/orders', icon: '📦' },
             { label: t('saved'), href: '/app/saved', icon: '❤️' },
           ] as { label: string; href: string; icon: string }[]

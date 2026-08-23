@@ -13,15 +13,21 @@ export function AppShell({
   context,
   name,
   roles,
+  hasMsmeProfile,
+  hasProviderProfile,
   children,
 }: {
   context: ShellContext
   name: string | null
   roles: string[]
+  /** PROFILE existence (not roles) — every provider signup also carries the
+   *  'msme' role, so role flags overstate what surfaces actually exist. */
+  hasMsmeProfile?: boolean
+  hasProviderProfile?: boolean
   children: React.ReactNode
 }) {
-  const isMsme = roles.includes('msme')
-  const isProvider = roles.includes('provider')
+  const hasMsme = hasMsmeProfile ?? roles.includes('msme')
+  const hasProvider = hasProviderProfile ?? roles.includes('provider')
   const isAdmin = roles.includes('admin') || roles.includes('ops')
 
   const homeHref = context === 'provider' ? '/partner' : context === 'admin' ? '/admin/verifications' : '/app'
@@ -39,8 +45,10 @@ export function AppShell({
             {/* Jurisdiction is a buyer-discovery control — shown in the MSME shell. */}
             {context === 'msme' && <JurisdictionSelector className="hidden sm:inline-flex" />}
             <LanguageSwitcher />
-            <NotificationBell href={notificationsHref} />
-            <AccountMenu name={name} context={context} isMsme={isMsme} isProvider={isProvider} isAdmin={isAdmin} />
+            {/* The bell links into the msme/provider notification centres — an
+                admin clicking it would be dropped out of the admin shell. */}
+            {context !== 'admin' && <NotificationBell href={notificationsHref} />}
+            <AccountMenu name={name} context={context} hasMsme={hasMsme} hasProvider={hasProvider} isAdmin={isAdmin} />
           </div>
         </div>
       </header>
