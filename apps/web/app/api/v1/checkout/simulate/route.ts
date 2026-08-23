@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { getPaymentGateway } from '@/lib/payments'
 import { materializeFromCapture } from '@/lib/payments/materialize'
+import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 
 const bodySchema = z.object({ checkoutSessionId: z.string().uuid() })
 
@@ -22,6 +23,11 @@ export async function POST(request: NextRequest) {
 
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // F9: same per-user cap as /checkout — this is the only materialisation-
+  // adjacent endpoint, it must not be free to hammer.
+  const rl = await enforce(limiters.checkout, `checkout:${userId}`)
+  if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)

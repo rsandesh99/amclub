@@ -23,6 +23,28 @@ export async function materializeFromCapture(
   admin: Awaited<ReturnType<typeof createAdminClient>>,
   capture: CaptureInput,
 ): Promise<{ orderId: string | null; error?: string }> {
+  // F5 (defence-in-depth): the captured amount must equal the FROZEN session
+  // total. Orders are built from frozen amounts regardless, but a mismatch
+  // means someone paid a different amount than the session was created for —
+  // refuse to materialise and surface it loudly instead of quietly building
+  // an order the payment doesn't cover.
+  const { data: session } = await admin
+    .from('checkout_sessions')
+    .select('total_paise')
+    .eq('razorpay_order_id', capture.razorpayOrderId)
+    .maybeSingle()
+  if (session && Number(session.total_paise) !== Number(capture.amountPaise)) {
+    console.error(
+      '[materializeFromCapture] AMOUNT MISMATCH: session total',
+      session.total_paise,
+      'vs captured',
+      capture.amountPaise,
+      'for razorpay order',
+      capture.razorpayOrderId,
+    )
+    return { orderId: null, error: 'amount_mismatch' }
+  }
+
   const { data, error } = await admin.rpc('materialize_order', {
     p_razorpay_order_id: capture.razorpayOrderId,
     p_razorpay_payment_id: capture.razorpayPaymentId,

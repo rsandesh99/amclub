@@ -8,17 +8,33 @@ import { serverError } from '@/lib/api/errors'
 
 const i18nText = z.object({ en: z.string().trim().min(1).max(200), hi: z.string().trim().max(200).optional() })
 
+// F4 (SECURITY_AUDIT): banner links render as raw hrefs on public pages, so a
+// javascript:/data: scheme here — z.string().url() accepts them — would be
+// persistent XSS on every visitor if an admin account is ever phished.
+// Allowlist: https:// absolute, or a same-site relative path ('/x', not '//x').
+const safeHref = z
+  .string()
+  .trim()
+  .max(300)
+  .refine((v) => /^https:\/\/[^\s]+$/i.test(v) || (v.startsWith('/') && !v.startsWith('//')), {
+    message: 'must be an https:// URL or a site-relative path',
+  })
+const safeImageUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => /^https:\/\/[^\s]+$/i.test(v), { message: 'must be an https:// URL' })
+
 const createSchema = z
   .object({
     slot: z.string().trim().min(1).max(40),
     variant: z.enum(['image', 'hero']).default('image'),
-    imageUrl: z.string().url().optional(),
-    link: z.string().url().optional(),
+    imageUrl: safeImageUrl.optional(),
+    link: safeHref.optional(),
     headline: i18nText.optional(),
     subline: i18nText.optional(),
     ctaLabel: i18nText.optional(),
-    // Relative path (/services) or absolute URL — not validated as URL.
-    ctaHref: z.string().trim().max(300).optional(),
+    ctaHref: safeHref.optional(),
     discountPct: z.number().int().min(0).max(100).optional(),
     locale: z.enum(['en', 'hi']).nullable().optional(),
     startsAt: z.string().datetime().nullable().optional(),

@@ -3,11 +3,15 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
+import { ORDER_STATUSES } from '@amclub/shared'
 import { formatINR } from '@/lib/format'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const STATUSES = ['', 'placed', 'accepted', 'in_progress', 'delivered', 'completed', 'disputed', 'resolved_refund', 'resolved_partial', 'resolved_release', 'refunded', 'auto_cancelled']
+// '' = no filter. Derived from the canonical enum (§2.5 rule 8) — the old
+// hand-typed list was missing requirements_submitted/revision_requested/
+// cancelled_by_buyer/reviewed, so admins couldn't filter on them.
+const STATUSES = ['', ...ORDER_STATUSES]
 
 export default function AdminOrdersPage() {
   const t = useTranslations('admin_ops')

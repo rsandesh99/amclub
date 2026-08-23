@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { PAYOUT_RELEASE_STATUSES } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
@@ -27,7 +28,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   ])
 
   const earningsPaise = (orders ?? [])
-    .filter((o) => o.status === 'completed' || o.status === 'resolved_release' || o.status === 'resolved_partial')
+    .filter((o) => (PAYOUT_RELEASE_STATUSES as readonly string[]).includes(o.status))
     .reduce((s, o) => s + Number(o.provider_earning_paise), 0)
 
   // Never expose gstin/pan/bank in the API payload.
@@ -49,6 +50,13 @@ const bodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('reactivate') }),
   z.object({ action: z.literal('set_capacity_pause'), paused: z.boolean() }),
   z.object({ action: z.literal('set_badge'), kind: z.string().trim().min(1).max(40), grant: z.boolean() }),
+  // Razorpay Route linked-account id (acc_...) — created in the Razorpay
+  // dashboard per provider, then recorded here. Payout transfers require it;
+  // without this action no production code could ever write the column.
+  z.object({
+    action: z.literal('set_route_account'),
+    routeAccountId: z.string().trim().regex(/^acc_[A-Za-z0-9]{6,}$/, 'must be a Razorpay account id (acc_...)'),
+  }),
 ])
 
 /** POST — ops actions: suspend/reactivate, force capacity pause, assign/revoke a verification badge. */
@@ -83,6 +91,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     } else if (d.action === 'set_capacity_pause') {
       await admin.from('provider_profiles').update({ capacity_paused: d.paused, updated_at: new Date().toISOString() }).eq('id', id)
       after = { capacity_paused: d.paused }
+    } else if (d.action === 'set_route_account') {
+      // Requires an existing bank row (created at onboarding) — the Route
+      // account is Razorpay's handle for that same bank account.
+      const { data: bank } = await admin
+        .from('provider_bank_accounts')
+        .select('id')
+        .eq('provider_id', id)
+        .maybeSingle()
+      if (!bank) {
+        return NextResponse.json({ error: 'Provider has no bank account on file yet' }, { status: 409 })
+      }
+      await admin
+        .from('provider_bank_accounts')
+        .update({ razorpay_route_account_id: d.routeAccountId, updated_at: new Date().toISOString() })
+        .eq('id', bank.id)
+      after = { razorpay_route_account_id: d.routeAccountId }
     } else {
       // set_badge — assign (manually_approved) or revoke (rejected) a verification.
       const newStatus = d.grant ? 'manually_approved' : 'rejected'

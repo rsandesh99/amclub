@@ -1,11 +1,13 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
+import { PAYOUT_RELEASE_STATUSES, type OrderStatus } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const COMPLETED = ['completed', 'reviewed', 'resolved_release', 'resolved_partial']
+// "Value delivered" states = the payout-release set plus post-review (§2.5 rule 8).
+const COMPLETED: readonly OrderStatus[] = [...PAYOUT_RELEASE_STATUSES, 'reviewed']
 
 /**
  * Operating dashboard metrics (A5). Financial metrics + funnels are computed
