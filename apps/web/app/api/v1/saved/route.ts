@@ -21,17 +21,23 @@ async function getMsmeId(
   return data?.id ?? null
 }
 
+// Per-user data — must never be cacheable by shared intermediaries.
+const NO_STORE = { 'Cache-Control': 'private, no-store' }
+
 /** List the current MSME's saved provider ids. (cookie or Bearer auth) */
 export async function GET() {
   const { supabase, userId } = await getAuthedSupabase()
-  if (!userId) return NextResponse.json({ providerIds: [] })
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: NO_STORE })
   const msmeId = await getMsmeId(supabase, userId)
-  if (!msmeId) return NextResponse.json({ providerIds: [] })
+  if (!msmeId) return NextResponse.json({ providerIds: [] }, { headers: NO_STORE })
   const { data } = await supabase
     .from('saved_providers')
     .select('provider_id')
     .eq('msme_id', msmeId)
-  return NextResponse.json({ providerIds: (data ?? []).map((r) => r.provider_id) })
+  return NextResponse.json(
+    { providerIds: (data ?? []).map((r) => r.provider_id) },
+    { headers: NO_STORE },
+  )
 }
 
 /** Toggle a saved provider. RLS saved_providers owner-all enforces ownership. */

@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { SearchX, FileText } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
+import { INDIAN_STATES } from '@amclub/shared'
 import { searchPackages } from '@/lib/catalog/queries'
 import type { SearchFilters } from '@/lib/catalog/types'
 import { ResultCard } from './ResultCard'
@@ -53,15 +54,28 @@ export async function CatalogResults({
   }
 
   if (results.length === 0) {
+    // Human state name, not the ISO code ("Mizoram", never "MZ").
+    const stateName =
+      stateLabel ??
+      (filters.state ? INDIAN_STATES.find((s) => s.value === filters.state)?.label : undefined)
+    // "No providers match your filters" is a lie when no filters are applied —
+    // an unfiltered empty catalog means providers are still onboarding.
+    const unfilteredEmpty = !hasNarrowing && !filters.query
     return (
       <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-surface px-6 py-16 text-center shadow-resting">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-foreground-secondary">
           <SearchX className="h-7 w-7" />
         </div>
         <h3 className="text-md font-semibold">
-          {stateLabel ? t('empty_in_state', { state: stateLabel }) : t('empty_no_results')}
+          {stateName
+            ? t('empty_in_state', { state: stateName })
+            : unfilteredEmpty
+              ? t('empty_catalog_title')
+              : t('empty_no_results')}
         </h3>
-        <p className="max-w-sm text-sm text-foreground-secondary">{t('empty_relax_hint')}</p>
+        <p className="max-w-sm text-sm text-foreground-secondary">
+          {unfilteredEmpty ? t('empty_catalog_hint') : t('empty_relax_hint')}
+        </p>
         <Link
           href="/signup"
           className="mt-2 inline-flex items-center gap-2 rounded-button bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-primary/90 hover:shadow-hover active:shadow-pressed motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"

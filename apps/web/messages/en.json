@@ -227,6 +227,8 @@
     "widened_notice": "No providers matched all your filters yet — showing available providers in this field instead.",
     "empty_in_state": "No providers yet in {state}",
     "empty_no_results": "No providers match your filters",
+    "empty_catalog_title": "Verified providers are onboarding",
+    "empty_catalog_hint": "New experts are joining AMClub right now and services go live daily. Check back shortly — or post your requirement and verified providers will send you quotes.",
     "empty_relax_hint": "Try relaxing your filters, or post a requirement and let verified providers come to you.",
     "empty_post_rfq": "Post a requirement instead",
     "about": "About",

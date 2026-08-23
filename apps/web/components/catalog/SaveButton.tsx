@@ -26,10 +26,11 @@ export function SaveButton({
   useEffect(() => {
     let active = true
     fetch('/api/v1/saved')
-      .then((r) => (r.ok ? r.json() : { providerIds: [] }))
-      .then((d: { providerIds?: string[] }) => {
+      // 401 = signed out (the endpoint auth-gates); ok = signed in.
+      .then(async (r) => ({ ok: r.ok, d: r.ok ? await r.json() : { providerIds: [] } }))
+      .then(({ ok, d }: { ok: boolean; d: { providerIds?: string[] } }) => {
         if (!active) return
-        setAuthed(Array.isArray(d.providerIds))
+        setAuthed(ok && Array.isArray(d.providerIds))
         setSaved(Boolean(d.providerIds?.includes(providerId)))
       })
       .catch(() => {})

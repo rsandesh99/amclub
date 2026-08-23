@@ -6,7 +6,10 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 export async function GET() {
   const { userId } = await getAuthedSupabase()
   if (!userId) {
-    return NextResponse.json({ authenticated: false }, { status: 401 })
+    return NextResponse.json(
+      { authenticated: false },
+      { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+    )
   }
 
   // Read via admin (server-side, already authenticated) so it works for a fresh
