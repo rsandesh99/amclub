@@ -4,7 +4,9 @@
  * number (that stays on the detail page / behind verification). KYC kinds
  * (gstin/pan/bank) are not "headline" credentials.
  */
-export const PROFESSIONAL_CREDENTIAL_KINDS = ['icai', 'icsi', 'bar_council', 'ca', 'credential'] as const
+export const PROFESSIONAL_CREDENTIAL_KINDS = [
+  'icai', 'icsi', 'bar_council', 'icmai', 'gstp', 'dsa', 'ca', 'credential',
+] as const
 
 /** Pick the highest-priority professional credential kind from a set, or null. */
 export function headlineCredentialKind(kinds: readonly string[]): string | null {

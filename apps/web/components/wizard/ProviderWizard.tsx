@@ -11,7 +11,12 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { INDIAN_STATES } from '@/lib/constants/india'
-import { CATEGORY_LIST, categoriesNeedingCredentialUpload } from '@amclub/shared'
+import {
+  CATEGORY_LIST,
+  categoriesRequiringCredential,
+  statutoryOptionsForCategory,
+  isStatutoryCredential,
+} from '@amclub/shared'
 import { loadProviderDraft } from '@/components/gateway/draft'
 
 type Step = 'auth' | 'business' | 'kyc' | 'bank' | 'submit' | 'under_review'
@@ -23,12 +28,23 @@ const MAX_CATEGORIES = 5
 // stale verification flags shouldn't linger).
 const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+interface CredentialUpload {
+  url: string
+  name: string
+  /** Statutory credential type (ca/cs/cma/adv/gstp/dsa) for this category. */
+  kind?: string
+  /** Membership / enrolment / registration number for that credential. */
+  number?: string
+}
+
 interface Draft {
   phone: string
   email: string
   legalName: string
   displayName: string
   about: string
+  yearsExperience: string
+  website: string
   gstin: string
   gstinVerified: boolean
   gstinStub: boolean
@@ -42,15 +58,21 @@ interface Draft {
   bankHolder: string
   bankVerified: boolean
   bankStub: boolean
-  credentialUploads: Record<string, { url: string; name: string }>
+  credentialUploads: Record<string, CredentialUpload>
+  /** Credential type picked per category BEFORE the document is uploaded. */
+  credentialKinds: Record<string, string>
+  /** Credential number typed per category BEFORE the document is uploaded. */
+  credentialNumbers: Record<string, string>
 }
 
 const EMPTY: Draft = {
   phone: '', email: '', legalName: '', displayName: '', about: '',
+  yearsExperience: '', website: '',
   gstin: '', gstinVerified: false, gstinStub: false, pan: '',
   categorySlugs: [], stateCode: '', city: '', languages: ['en'],
   bankIfsc: '', bankAccount: '', bankHolder: '',
   bankVerified: false, bankStub: false, credentialUploads: {},
+  credentialKinds: {}, credentialNumbers: {},
 }
 
 interface ProviderWizardProps {
@@ -61,6 +83,9 @@ interface ProviderWizardProps {
 export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   const t = useTranslations('provider_signup')
   const tCommon = useTranslations('common')
+  // Credential type labels live in the gateway namespace (translated in all 4
+  // locales) — reuse them instead of duplicating.
+  const tGw = useTranslations('gateway')
   const router = useRouter()
 
   const [step, setStep] = useState<Step>(skipAuth ? 'business' : 'auth')
@@ -92,16 +117,36 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
     } catch {}
   }, [])
 
-  // Phase 8a — seed category + state from the gateway's partner mini-wizard
-  // when this wizard has no answer of its own yet (own draft always wins).
+  // Phase 8a — seed category, state, experience and declared credential from
+  // the gateway's partner mini-wizard when this wizard has no answer of its own
+  // yet (own draft always wins).
   useEffect(() => {
     const gw = loadProviderDraft()
     if (!gw) return
-    setDraft((d) => ({
-      ...d,
-      categorySlugs: d.categorySlugs.length > 0 ? d.categorySlugs : gw.cat ? [gw.cat] : [],
-      stateCode: d.stateCode || (gw.state ?? ''),
-    }))
+    setDraft((d) => {
+      const categorySlugs =
+        d.categorySlugs.length > 0 ? d.categorySlugs : gw.cat ? [gw.cat] : []
+      // Pre-select the credential TYPE the visitor declared at the gateway for
+      // the category it was declared against (statutory credentials only —
+      // firm/freelancer have no per-category credential row).
+      const credentialKinds = { ...d.credentialKinds }
+      if (
+        gw.cat &&
+        gw.cred &&
+        !credentialKinds[gw.cat] &&
+        isStatutoryCredential(gw.cred) &&
+        statutoryOptionsForCategory(gw.cat).includes(gw.cred)
+      ) {
+        credentialKinds[gw.cat] = gw.cred
+      }
+      return {
+        ...d,
+        categorySlugs,
+        stateCode: d.stateCode || (gw.state ?? ''),
+        yearsExperience: d.yearsExperience || (gw.exp ?? ''),
+        credentialKinds,
+      }
+    })
   }, [])
 
   // Persist draft on change. NEVER store the bank account number in localStorage
@@ -137,11 +182,17 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
     kyc: t('step_kyc'), bank: t('step_bank'), submit: t('step_submit'), under_review: t('step_submit'),
   }
 
-  // Credential gating (§3.3/§5): only categories whose required_credentials need
-  // an uploaded document (icai/bar_council/…) — gstin/pan are API-verified.
-  const credsNeededSlugs = categoriesNeedingCredentialUpload(draft.categorySlugs)
+  // Credential gating: categories where listing requires a statutory
+  // credential (type + membership number + certificate document). GSTIN/PAN
+  // are API-verified separately.
+  const credsNeededSlugs = categoriesRequiringCredential(draft.categorySlugs)
   const credsRequired = credsNeededSlugs.length > 0
-  const credsComplete = credsNeededSlugs.every((slug) => !!draft.credentialUploads[slug])
+  const credsComplete = credsNeededSlugs.every(
+    (slug) =>
+      !!draft.credentialUploads[slug] &&
+      !!draft.credentialKinds[slug] &&
+      !!draft.credentialNumbers[slug]?.trim(),
+  )
 
   async function verifyGstin() {
     if (!draft.gstin) return
@@ -236,6 +287,8 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
           legalName: draft.legalName,
           displayName: draft.displayName,
           about: draft.about,
+          yearsExperience: draft.yearsExperience || undefined,
+          website: draft.website.trim() || undefined,
           gstin: draft.gstin,
           pan: draft.pan,
           categorySlugs: draft.categorySlugs,
@@ -246,7 +299,18 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
           bankAccount: draft.bankAccount,
           bankHolder: draft.bankHolder,
           bankVerified: draft.bankVerified,
-          credentialUploads: draft.credentialUploads,
+          // Fold the per-category credential type + number into each upload so
+          // the server can write precise verification rows (kind + value).
+          credentialUploads: Object.fromEntries(
+            Object.entries(draft.credentialUploads).map(([slug, u]) => [
+              slug,
+              {
+                ...u,
+                kind: draft.credentialKinds[slug],
+                number: draft.credentialNumbers[slug]?.trim(),
+              },
+            ]),
+          ),
         }),
       })
       if (!res.ok) {
@@ -392,6 +456,35 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
                 <Input id="city" placeholder="City" value={draft.city} onChange={(e) => update({ city: e.target.value })} />
               </div>
             </div>
+            <div className="flex gap-3">
+              <div className="flex-1 flex flex-col gap-1.5">
+                <Label htmlFor="yearsExp">{t('experience_label')}</Label>
+                <Select
+                  id="yearsExp"
+                  value={draft.yearsExperience}
+                  onChange={(e) => update({ yearsExperience: e.target.value })}
+                  placeholder={t('experience_placeholder')}
+                >
+                  <option value="0-2">{t('exp_0_2')}</option>
+                  <option value="3-9">{t('exp_3_9')}</option>
+                  <option value="10+">{t('exp_10p')}</option>
+                </Select>
+              </div>
+              <div className="flex-1 flex flex-col gap-1.5">
+                <Label htmlFor="website">
+                  {t('website_label')}{' '}
+                  <span className="text-foreground-secondary font-normal">({tCommon('optional')})</span>
+                </Label>
+                <Input
+                  id="website"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://…"
+                  value={draft.website}
+                  onChange={(e) => update({ website: e.target.value })}
+                />
+              </div>
+            </div>
             <div className="flex flex-col gap-1.5">
               <Label>{t('languages_label')}</Label>
               <div className="flex gap-2">
@@ -472,17 +565,49 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
                 credsNeededSlugs.map((slug) => {
                   const cat = CATEGORY_LIST.find((c) => c.slug === slug)
                   const uploaded = draft.credentialUploads[slug]
+                  const kindOptions = statutoryOptionsForCategory(slug)
+                  const pickedKind = draft.credentialKinds[slug] ?? ''
+                  const number = draft.credentialNumbers[slug] ?? ''
                   return (
-                    <div key={slug} className="flex items-center justify-between rounded-button border border-border p-3">
-                      <div>
+                    <div key={slug} className="flex flex-col gap-3 rounded-button border border-border p-3">
+                      <div className="flex items-center justify-between">
                         <p className="text-sm font-medium">{cat?.name_i18n.en}</p>
-                        {uploaded ? (
-                          <p className="text-xs text-success mt-0.5">{t('credential_uploaded', { name: uploaded.name })}</p>
+                        {uploaded && pickedKind && number.trim() ? (
+                          <p className="text-xs text-success">{t('credential_uploaded', { name: uploaded.name })}</p>
                         ) : (
-                          <p className="text-xs text-warning mt-0.5">{t('credential_required_badge')}</p>
+                          <p className="text-xs text-warning">{t('credential_required_badge')}</p>
                         )}
                       </div>
-                      <label className="cursor-pointer">
+                      <div className="flex gap-3">
+                        <div className="flex-1 flex flex-col gap-1.5">
+                          <Label htmlFor={`credkind-${slug}`}>{t('credential_kind_label')}</Label>
+                          <Select
+                            id={`credkind-${slug}`}
+                            value={pickedKind}
+                            onChange={(e) =>
+                              update({ credentialKinds: { ...draft.credentialKinds, [slug]: e.target.value } })
+                            }
+                            placeholder={t('credential_kind_placeholder')}
+                          >
+                            {kindOptions.map((o) => (
+                              <option key={o} value={o}>{tGw(`cred_${o}` as 'cred_ca')}</option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="flex-1 flex flex-col gap-1.5">
+                          <Label htmlFor={`crednum-${slug}`}>{t('credential_number_label')}</Label>
+                          <Input
+                            id={`crednum-${slug}`}
+                            placeholder={t('credential_number_placeholder')}
+                            value={number}
+                            maxLength={40}
+                            onChange={(e) =>
+                              update({ credentialNumbers: { ...draft.credentialNumbers, [slug]: e.target.value } })
+                            }
+                          />
+                        </div>
+                      </div>
+                      <label className="cursor-pointer self-start">
                         <input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
@@ -493,7 +618,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
                           }}
                         />
                         <span className={`inline-flex h-9 items-center rounded-button border px-3 text-xs font-medium transition-colors ${uploaded ? 'border-success/40 text-success' : 'border-primary text-primary hover:bg-primary/10'}`}>
-                          {uploadingFor === slug ? '…' : uploaded ? 'Re-upload' : t('credential_upload')}
+                          {uploadingFor === slug ? '…' : uploaded ? t('credential_reupload') : t('credential_upload')}
                         </span>
                       </label>
                     </div>

@@ -1,7 +1,12 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { categoriesNeedingCredentialUpload } from '@amclub/shared'
+import {
+  categoriesRequiringCredential,
+  statutoryOptionsForCategory,
+  CREDENTIAL_VERIFICATION_KIND,
+  type CredentialOption,
+} from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser, upsertUserRow } from '@/lib/auth/session'
 import { encryptColumn } from '@/lib/crypto'
@@ -11,6 +16,10 @@ const credentialUploadSchema = z.object({
   url: z.string().optional(),
   path: z.string().optional(),
   name: z.string().optional(),
+  /** Statutory credential type (wizard option id, e.g. 'ca', 'adv'). */
+  kind: z.string().max(20).optional(),
+  /** Membership / enrolment / registration number for that credential. */
+  number: z.string().trim().max(64).optional(),
 })
 
 const bodySchema = z.object({
@@ -19,6 +28,8 @@ const bodySchema = z.object({
   legalName: z.string().min(2),
   displayName: z.string().min(2),
   about: z.string().max(2000).optional(),
+  yearsExperience: z.enum(['0-2', '3-9', '10+']).optional(),
+  website: z.string().url().max(200).optional(),
   gstin: z.string().optional(),
   pan: z.string().optional(),
   categorySlugs: z.array(z.string()).min(1).max(5),
@@ -56,14 +67,26 @@ export async function POST(request: NextRequest) {
 
   const d = parsed.data
 
-  // §3.3/§5 — categories that require a credential document must have one
-  // uploaded before submit (defense-in-depth; the wizard also gates this).
-  const missingCreds = categoriesNeedingCredentialUpload(d.categorySlugs).filter(
-    (slug) => !d.credentialUploads[slug]?.url && !d.credentialUploads[slug]?.path,
-  )
+  // §3.3/§5 — categories that require a statutory credential must have the
+  // credential type, its number, AND the document before submit
+  // (defense-in-depth; the wizard also gates this).
+  const missingCreds = categoriesRequiringCredential(d.categorySlugs).filter((slug) => {
+    const u = d.credentialUploads[slug]
+    return !u || (!u.url && !u.path) || !u.kind || !u.number
+  })
   if (missingCreds.length > 0) {
     return NextResponse.json(
-      { error: 'Required credential documents are missing for your selected categories', missing: missingCreds },
+      { error: 'Required credential details (type, number, document) are missing for your selected categories', missing: missingCreds },
+      { status: 422 },
+    )
+  }
+  // A claimed credential type must be one this category actually accepts.
+  const invalidKind = Object.entries(d.credentialUploads).find(
+    ([slug, u]) => u.kind && !(statutoryOptionsForCategory(slug) as readonly string[]).includes(u.kind),
+  )
+  if (invalidKind) {
+    return NextResponse.json(
+      { error: `Credential type "${invalidKind[1].kind}" is not accepted for category "${invalidKind[0]}"` },
       { status: 422 },
     )
   }
@@ -129,6 +152,20 @@ export async function POST(request: NextRequest) {
   }
   const providerId = profile.id
 
+  // Best-effort depth fields (migration 0015). Deliberately a separate update
+  // so a database that hasn't run 0015 yet fails THIS write with a logged
+  // error while the submission itself still succeeds.
+  if (d.yearsExperience || d.website) {
+    const { error: depthErr } = await admin
+      .from('provider_profiles')
+      .update({
+        ...(d.yearsExperience ? { years_experience: d.yearsExperience } : {}),
+        ...(d.website ? { website: d.website } : {}),
+      })
+      .eq('id', providerId)
+    if (depthErr) console.error('[profile/provider POST] depth fields (run migration 0015?):', depthErr)
+  }
+
   // 4. Category links (replace existing set)
   await admin.from('provider_categories').delete().eq('provider_id', providerId)
   const catRows = Array.from(slugToId.values()).map((category_id) => ({
@@ -156,10 +193,16 @@ export async function POST(request: NextRequest) {
     verifications.push({ provider_id: providerId, kind: 'pan', value: d.pan, document_url: null, status: 'pending' })
   }
   for (const [categorySlug, upload] of Object.entries(d.credentialUploads)) {
+    // Canonical professional-body kind (icai/icsi/bar_council/…) so badges,
+    // credential-first cards, and the search RPC's headline credential all
+    // recognise the row. `value` carries the membership number when given —
+    // that is what the admin verifies against the issuing body's register.
+    const canonicalKind =
+      (upload.kind && CREDENTIAL_VERIFICATION_KIND[upload.kind as CredentialOption]) || 'credential'
     verifications.push({
       provider_id: providerId,
-      kind: 'credential',
-      value: categorySlug,
+      kind: canonicalKind,
+      value: upload.number?.trim() || categorySlug,
       document_url: upload.url ?? upload.path ?? null,
       status: 'pending',
     })

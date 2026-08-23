@@ -51,6 +51,9 @@ export const providerProfiles = pgTable('provider_profiles', {
   state: text('state').notNull(),
   city: text('city'),
   languages: text('languages').array().default(sql`'{en}'`).notNull(),
+  // '0-2' | '3-9' | '10+' — self-declared at onboarding (0015)
+  yearsExperience: text('years_experience'),
+  website: text('website'),
   // pending_kyc | under_review | active | suspended | rejected
   status: text('status').default('pending_kyc').notNull(),
   avgRating: text('avg_rating').default('0.0').notNull(), // stored as text; cast numeric(2,1) in migration

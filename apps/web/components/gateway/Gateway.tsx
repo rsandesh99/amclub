@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from 'next-intl'
 import { usePostHog } from 'posthog-js/react'
 import { usePathname, useRouter } from '@/i18n/navigation'
+import { credentialOptionsForCategory } from '@amclub/shared'
 import { useCardTilt } from './useCardTilt'
 import { IntroDoors } from './IntroDoors'
 import { WizardBuyer } from './WizardBuyer'
@@ -182,6 +183,11 @@ export function Gateway() {
   function answerProvider(field: 'cat' | 'cred' | 'exp' | 'state', value: string) {
     if (picked) return
     const answers = { ...provider, [field]: value } as ProviderDraft
+    // Changing category invalidates a previously picked credential — the new
+    // category's step-1 options may not include it.
+    if (field === 'cat' && answers.cred && !credentialOptionsForCategory(value).includes(answers.cred)) {
+      delete answers.cred
+    }
     setProvider(answers)
     saveProviderDraft(answers)
     track('gateway_wizard_step_answered', { door: 'provider', step: step + 1, field, value })
@@ -311,6 +317,7 @@ export function Gateway() {
                   <WizardProvider
                     step={step}
                     picked={picked}
+                    category={provider.cat ?? null}
                     onAnswer={answerProvider}
                     onBack={back}
                   />

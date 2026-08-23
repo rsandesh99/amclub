@@ -503,7 +503,8 @@ CREATE POLICY "cms_banners: admin all" ON cms_banners
 REVOKE SELECT ON provider_profiles FROM anon, authenticated;
 GRANT SELECT (
   id, user_id, legal_name, display_name, slug, about, logo_url,
-  state, city, languages, status, avg_rating, review_count, completed_orders,
+  state, city, languages, years_experience, website, status,
+  avg_rating, review_count, completed_orders,
   median_response_minutes, capacity_paused, top_rated,
   created_at, updated_at, deleted_at
 ) ON provider_profiles TO anon, authenticated;

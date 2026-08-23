@@ -28,7 +28,6 @@ export const catKey = (slug: string) => slug.replace(/-/g, '_')
 
 export const BIZ_OPTIONS = ['manufacturing', 'trade', 'services'] as const
 export const BAND_OPTIONS = ['1-9', '10-49', '50-249'] as const
-export const CRED_OPTIONS = ['ca', 'cs', 'adv', 'firm'] as const
 export const EXP_OPTIONS = ['0-2', '3-9', '10+'] as const
 
 /** message-key suffixes for value enums whose values aren't key-safe. */

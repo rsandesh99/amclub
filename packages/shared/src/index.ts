@@ -7,6 +7,10 @@ export * from './money'
 // Category taxonomy
 export * from './categories'
 
+// Per-category professional credential model (wizard options, statutory gating,
+// canonical provider_verifications.kind mapping)
+export * from './credentials'
+
 // RFQ template fields + contact masking
 export * from './rfq'
 

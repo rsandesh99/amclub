@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { CATEGORY_SLUGS } from '@amclub/shared'
+import { CATEGORY_SLUGS, CREDENTIAL_OPTIONS } from '@amclub/shared'
 
 /**
  * Gateway draft profiles (Phase 8a). Written progressively as the visitor
@@ -37,7 +37,7 @@ export type BuyerDraft = z.infer<typeof buyerDraftSchema>
 export const providerDraftSchema = z
   .object({
     cat: categorySchema,
-    cred: z.enum(['ca', 'cs', 'adv', 'firm']),
+    cred: z.enum(CREDENTIAL_OPTIONS),
     exp: z.enum(['0-2', '3-9', '10+']),
     state: stateSchema,
   })
