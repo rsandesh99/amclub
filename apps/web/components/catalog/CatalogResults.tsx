@@ -24,7 +24,33 @@ export async function CatalogResults({
 }) {
   const t = await getTranslations('catalog')
   const offset = filters.offset ?? 0
-  const { results, total } = await searchPackages({ ...filters, limit: PAGE_SIZE })
+  let { results, total } = await searchPackages({ ...filters, limit: PAGE_SIZE })
+
+  // Widen-instead-of-empty: when narrowing filters (state, price, rating,
+  // language, verified) exclude everyone, fall back to the same field
+  // (category + text query) and say so, rather than showing a dead end.
+  // Only on the first page — a deep-pagination empty page is not "no results".
+  let widened = false
+  const hasNarrowing =
+    filters.state !== undefined ||
+    filters.minPrice !== undefined ||
+    filters.maxPrice !== undefined ||
+    filters.minRating !== undefined ||
+    filters.language !== undefined ||
+    filters.verifiedOnly !== undefined
+  if (results.length === 0 && hasNarrowing && offset === 0) {
+    const relaxed = await searchPackages({
+      ...(filters.query ? { query: filters.query } : {}),
+      ...(filters.categorySlug ? { categorySlug: filters.categorySlug } : {}),
+      ...(filters.sort ? { sort: filters.sort } : {}),
+      limit: PAGE_SIZE,
+    })
+    if (relaxed.results.length > 0) {
+      results = relaxed.results
+      total = relaxed.total
+      widened = true
+    }
+  }
 
   if (results.length === 0) {
     return (
@@ -56,11 +82,18 @@ export async function CatalogResults({
     return qs ? `${basePath}?${qs}` : basePath
   }
 
-  const hasPrev = offset > 0
-  const hasNext = offset + results.length < total
+  // Widened results are a first-page fallback view; its pagination links would
+  // re-run the original (empty) filtered search, so suppress them.
+  const hasPrev = !widened && offset > 0
+  const hasNext = !widened && offset + results.length < total
 
   return (
     <div className="space-y-6">
+      {widened && (
+        <div className="rounded-button border border-border bg-muted px-4 py-3 text-sm text-foreground-secondary">
+          {t('widened_notice')}
+        </div>
+      )}
       <p className="text-sm text-foreground-secondary">{t('results_count', { count: total })}</p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {results.map((r) => (

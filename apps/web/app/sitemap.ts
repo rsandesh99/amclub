@@ -4,6 +4,10 @@ import { CATEGORY_SLUGS } from '@amclub/shared'
 import { getSiteUrl } from '@/lib/site-url'
 import { routing } from '@/i18n/routing'
 
+// Regenerate hourly so newly approved providers (and takedowns) reach the
+// sitemap without needing a deploy. Metadata routes are build-static otherwise.
+export const revalidate = 3600
+
 const BASE = getSiteUrl()
 
 // Build a localized URL: en is unprefixed, hi is /hi (localePrefix: 'as-needed').

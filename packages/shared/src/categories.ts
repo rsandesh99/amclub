@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Canonical 8-category taxonomy for AMClub V1. §1.10.
  * commission_bps: basis points (1000 = 10%). Configurable per-category in DB;
  * these are the launch defaults used for seeding and display.
@@ -31,7 +31,7 @@ export interface CategoryMeta {
 export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
   'company-registrations': {
     slug: 'company-registrations',
-    commission_bps: 1000,
+    commission_bps: 500,
     required_credentials: ['gstin'],
     icon: 'building-2',
     name_i18n: {
@@ -45,7 +45,7 @@ export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
   },
   'tax-accounting': {
     slug: 'tax-accounting',
-    commission_bps: 1000,
+    commission_bps: 500,
     required_credentials: ['icai'],
     icon: 'calculator',
     name_i18n: {
@@ -59,7 +59,7 @@ export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
   },
   legal: {
     slug: 'legal',
-    commission_bps: 1200,
+    commission_bps: 500,
     required_credentials: ['bar_council'],
     icon: 'scale',
     name_i18n: {
@@ -73,7 +73,7 @@ export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
   },
   'hr-staffing': {
     slug: 'hr-staffing',
-    commission_bps: 1000,
+    commission_bps: 500,
     required_credentials: [],
     icon: 'users',
     name_i18n: {
@@ -87,7 +87,7 @@ export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
   },
   'finance-facilitation': {
     slug: 'finance-facilitation',
-    commission_bps: 800,
+    commission_bps: 500,
     required_credentials: [],
     icon: 'landmark',
     name_i18n: {
@@ -101,7 +101,7 @@ export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
   },
   'digital-marketing': {
     slug: 'digital-marketing',
-    commission_bps: 1000,
+    commission_bps: 500,
     required_credentials: [],
     icon: 'megaphone',
     name_i18n: {
@@ -115,7 +115,7 @@ export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
   },
   'web-tech': {
     slug: 'web-tech',
-    commission_bps: 1000,
+    commission_bps: 500,
     required_credentials: [],
     icon: 'code-2',
     name_i18n: {
@@ -129,7 +129,7 @@ export const CATEGORIES: Record<CategorySlug, CategoryMeta> = {
   },
   'government-licensing': {
     slug: 'government-licensing',
-    commission_bps: 1000,
+    commission_bps: 500,
     required_credentials: [],
     icon: 'file-badge',
     name_i18n: {

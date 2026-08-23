@@ -143,6 +143,13 @@ export function PackageWizard({
   const discountB = Math.round(Number(draft.discountPct || '0') * 100)
   const memberB = Math.round(Number(draft.memberPct || '0') * 100)
 
+  // Platform commission for the selected category (bps → %), shown wherever the
+  // provider sets or reviews their rate. Falls back to the 5% launch default.
+  const commissionBps =
+    CATEGORY_LIST.find((c) => c.slug === draft.categorySlug)?.commission_bps ?? 500
+  const commissionPct =
+    Number.isInteger(commissionBps / 100) ? String(commissionBps / 100) : (commissionBps / 100).toFixed(1)
+
   return (
     <div className="mx-auto max-w-2xl">
       <Progress value={progress} label={t(`step_${step}` as 'step_basics')} className="mb-6" />
@@ -283,6 +290,10 @@ export function PackageWizard({
                 />
               </div>
             </div>
+            <p className="text-sm text-foreground-secondary">
+              {t('commission_note', { pct: commissionPct })}{' '}
+              <span className="text-xs text-foreground-secondary/70">{t('commission_subject')}</span>
+            </p>
             {priceP > 0 && (
               <div className="rounded-button border border-border bg-background p-3">
                 <p className="mb-1 text-xs text-foreground-secondary">{t('preview_price')}</p>
@@ -359,6 +370,10 @@ export function PackageWizard({
             <p className="text-sm text-foreground-secondary">
               {t('delivery_in', { days: Number(draft.deliveryDays || '0') })} ·{' '}
               {t('revisions_count', { count: Number(draft.revisionCount || '0') })}
+            </p>
+            <p className="text-xs text-foreground-secondary">
+              {t('commission_note', { pct: commissionPct })}{' '}
+              <span className="text-foreground-secondary/70">{t('commission_subject')}</span>
             </p>
           </div>
         )}
