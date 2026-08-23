@@ -401,7 +401,7 @@
     "gstin_verifying": "Verifying…",
     "gstin_verified": "✓ GSTIN verified",
     "gstin_failed": "Could not verify — check and retry",
-    "gstin_invalid_format": "That doesn't look like a valid GSTIN — it's 15 characters, like 36ABCDE1234F1Z5. Check for typos.",
+    "gstin_invalid_format": "That doesn't look like a valid GSTIN. Enter the 15-character GSTIN exactly as printed on your GST registration certificate.",
     "gstin_dev_stub": "Verified (dev stub — not a real API call)",
     "pan_label": "PAN",
     "pan_placeholder": "10-character PAN",

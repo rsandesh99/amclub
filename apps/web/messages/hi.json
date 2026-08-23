@@ -401,7 +401,7 @@
     "gstin_verifying": "सत्यापित हो रहा है…",
     "gstin_verified": "✓ GSTIN सत्यापित",
     "gstin_failed": "सत्यापन विफल — जाँचें और पुनः प्रयास करें",
-    "gstin_invalid_format": "यह मान्य GSTIN नहीं लगता — यह 15 अक्षरों का होता है, जैसे 36ABCDE1234F1Z5। टाइपिंग की गलती जाँचें।",
+    "gstin_invalid_format": "यह मान्य GSTIN नहीं लगता। अपने GST पंजीकरण प्रमाणपत्र पर छपा 15 अक्षरों का GSTIN ठीक वैसा ही दर्ज करें।",
     "gstin_dev_stub": "सत्यापित (डेव स्टब — वास्तविक API कॉल नहीं)",
     "pan_label": "PAN",
     "pan_placeholder": "10 अक्षरों का PAN",

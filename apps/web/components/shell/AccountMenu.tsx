@@ -37,6 +37,19 @@ export function AccountMenu({ name, context, isMsme, isProvider, isAdmin }: Acco
     setSigningOut(true)
     const supabase = createClient()
     await supabase.auth.signOut()
+    // Sign-out means session over: clear the gateway's saved mid-choreography
+    // position and wizard drafts, so `/` restarts at the two doors instead of
+    // resuming a stale half-finished application — and no PII (legal name,
+    // GSTIN) from the signup drafts lingers on a shared computer.
+    try {
+      window.sessionStorage.removeItem('amc_gateway_pos_v1')
+      window.localStorage.removeItem('amc_draft_profile_v1')
+      window.localStorage.removeItem('amc_provider_draft_v1')
+      window.localStorage.removeItem('amclub_provider_wizard_draft')
+      window.localStorage.removeItem('amclub_rfq_draft')
+    } catch {
+      /* storage unavailable — sign-out still proceeds */
+    }
     // Hard navigation clears all cached server state.
     window.location.href = '/'
   }
