@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { Link } from '@/i18n/navigation'
 import { getSessionUser, getMsmeProfile } from '@/lib/auth/session'
 import { listMyOrders } from '@/lib/orders/queries'
+import { BannerSlot } from '@/components/cms/BannerSlot'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +40,9 @@ export default async function MsmeHomePage() {
         </h1>
         <p className="mt-1 text-sm text-foreground-secondary">{t('subtitle')}</p>
       </div>
+
+      {/* CMS hero slot (campaigns/announcements) — same banners as mobile home. */}
+      <BannerSlot slot="hero" className="space-y-3 [&_.mx-auto]:px-0 [&_.mx-auto]:py-0" />
 
       {/* Profile completeness */}
       {profile.profileCompleteness < 80 && (

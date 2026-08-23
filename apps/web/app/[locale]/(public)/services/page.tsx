@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import type { Metadata } from 'next'
+import { BannerSlot } from '@/components/cms/BannerSlot'
 import { SearchBar } from '@/components/catalog/SearchBar'
 import { CategoryGrid } from '@/components/catalog/CategoryGrid'
 import { ListingControls } from '@/components/catalog/ListingControls'
@@ -24,6 +25,9 @@ export default async function ServicesPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
+      {/* CMS hero slot — the gateway replaced the old landing page, so /services
+          is now the public home for campaign banners. */}
+      <BannerSlot slot="hero" className="mb-6 space-y-3" />
       <div className="mb-6">
         <h1 className="font-display text-2xl font-bold">{t('all_services')}</h1>
         <p className="mt-1 text-sm text-foreground-secondary">{t('all_services_desc')}</p>
