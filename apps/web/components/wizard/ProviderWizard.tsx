@@ -16,6 +16,7 @@ import {
   categoriesRequiringCredential,
   statutoryOptionsForCategory,
   isStatutoryCredential,
+  isValidGstin,
 } from '@amclub/shared'
 import { loadProviderDraft } from '@/components/gateway/draft'
 
@@ -96,6 +97,9 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   const [bankLoading, setBankLoading] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
   const [uploadingFor, setUploadingFor] = useState<string | null>(null)
+  // Set on a failed "Continue" so each missing required field highlights red
+  // instead of one generic message leaving the user hunting.
+  const [triedContinue, setTriedContinue] = useState(false)
 
   // Restore draft on mount — only if it isn't stale (TTL). Note the bank account
   // number is never persisted (see below), so it comes back blank to re-enter.
@@ -196,6 +200,12 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
 
   async function verifyGstin() {
     if (!draft.gstin) return
+    // Format + checksum check BEFORE the paid API call, with a specific
+    // message — "could not verify" must mean the registry said no, not a typo.
+    if (!isValidGstin(draft.gstin)) {
+      setError(t('gstin_invalid_format'))
+      return
+    }
     setGstinLoading(true)
     setError('')
     try {
@@ -403,20 +413,20 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
           </div>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="legalName">{t('legal_name_label')}</Label>
-              <Input id="legalName" placeholder={t('legal_name_placeholder')} value={draft.legalName} onChange={(e) => update({ legalName: e.target.value })} />
+              <Label htmlFor="legalName">{t('legal_name_label')} <span className="text-danger">*</span></Label>
+              <Input id="legalName" placeholder={t('legal_name_placeholder')} value={draft.legalName} onChange={(e) => update({ legalName: e.target.value })} className={triedContinue && !draft.legalName.trim() ? 'border-danger' : ''} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="displayName">{t('display_name_label')}</Label>
-              <Input id="displayName" placeholder={t('display_name_placeholder')} value={draft.displayName} onChange={(e) => update({ displayName: e.target.value })} />
+              <Label htmlFor="displayName">{t('display_name_label')} <span className="text-danger">*</span></Label>
+              <Input id="displayName" placeholder={t('display_name_placeholder')} value={draft.displayName} onChange={(e) => update({ displayName: e.target.value })} className={triedContinue && !draft.displayName.trim() ? 'border-danger' : ''} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="about">{t('about_label')}</Label>
               <Textarea id="about" placeholder={t('about_placeholder')} value={draft.about} onChange={(e) => update({ about: e.target.value })} rows={4} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>{t('categories_label')}</Label>
-              <p className="text-xs text-foreground-secondary">
+              <Label>{t('categories_label')} <span className="text-danger">*</span></Label>
+              <p className={`text-xs ${triedContinue && draft.categorySlugs.length === 0 ? 'text-danger' : 'text-foreground-secondary'}`}>
                 {t('categories_hint')} · {t('categories_count', { n: draft.categorySlugs.length, max: MAX_CATEGORIES })}
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
@@ -446,8 +456,8 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             </div>
             <div className="flex gap-3">
               <div className="flex-1 flex flex-col gap-1.5">
-                <Label htmlFor="stateCode">{t('state_label')}</Label>
-                <Select id="stateCode" value={draft.stateCode} onChange={(e) => update({ stateCode: e.target.value })} placeholder="— Select state —">
+                <Label htmlFor="stateCode">{t('state_label')} <span className="text-danger">*</span></Label>
+                <Select id="stateCode" value={draft.stateCode} onChange={(e) => update({ stateCode: e.target.value })} placeholder="— Select state —" className={triedContinue && !draft.stateCode ? 'border-danger' : ''}>
                   {INDIAN_STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </Select>
               </div>
@@ -500,9 +510,11 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             <Button
               onClick={() => {
                 if (!draft.legalName.trim() || !draft.displayName.trim() || draft.categorySlugs.length === 0 || !draft.stateCode) {
+                  setTriedContinue(true)
                   setError(t('err_business_required'))
                   return
                 }
+                setTriedContinue(false)
                 setError('')
                 setStep('kyc')
               }}
@@ -524,7 +536,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
           <div className="flex flex-col gap-4">
             {/* GSTIN */}
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="gstin">{t('gstin_label')}</Label>
+              <Label htmlFor="gstin">{t('gstin_label')} <span className="text-danger">*</span></Label>
               <div className="flex gap-2">
                 <Input
                   id="gstin"
