@@ -1,4 +1,4 @@
-import { getLocale } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { getActiveBanners } from '@/lib/cms/queries'
 import { pickI18n } from '@/lib/format'
 import { HeroBanner } from './HeroBanner'
@@ -10,6 +10,7 @@ import { HeroBanner } from './HeroBanner'
  */
 export async function BannerSlot({ slot, className }: { slot: string; className?: string }) {
   const locale = await getLocale()
+  const t = await getTranslations('common')
   const banners = await getActiveBanners(slot, locale === 'hi' ? 'hi' : 'en')
   if (banners.length === 0) return null
 
@@ -33,10 +34,13 @@ export async function BannerSlot({ slot, className }: { slot: string; className?
           // eslint-disable-next-line @next/next/no-img-element
           <img src={b.imageUrl} alt="" className="w-full rounded-card object-cover shadow-resting" loading="lazy" />
         )
+        // The image is decorative (alt=""), so a wrapping link has no name of
+        // its own — give it one (axe link-name, serious).
+        const linkLabel = b.headline ? pickI18n(b.headline, locale) : t('promo_banner_link')
         return (
           <div key={b.id} className="mx-auto max-w-6xl px-4 py-4">
             {b.link ? (
-              <a href={b.link} className="block">{img}</a>
+              <a href={b.link} className="block" aria-label={linkLabel}>{img}</a>
             ) : (
               img
             )}

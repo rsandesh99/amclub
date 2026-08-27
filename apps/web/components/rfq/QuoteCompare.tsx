@@ -149,7 +149,11 @@ function MessageThread({ quote }: { quote: QuoteForBuyer }) {
 
   useEffect(() => {
     fetch(`/api/v1/quotes/${quote.id}/messages`)
-      .then((r) => (r.ok ? r.json() : { messages: [] }))
+      // Drain the body on every status — an unread response never finishes.
+      .then(async (r) => {
+        const d = await r.json().catch(() => null)
+        return r.ok && d ? d : { messages: [] }
+      })
       .then((d) => { setMessages(d.messages ?? []); setLoaded(true) })
       .catch(() => setLoaded(true))
   }, [quote.id])

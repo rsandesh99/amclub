@@ -26,7 +26,12 @@ export function PublicHeaderAccount() {
   useEffect(() => {
     let active = true
     fetch('/api/v1/profile/me', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
+      // Always drain the body — an unread (401) response keeps the request
+      // "in flight" in Chromium, so the page never reaches network-idle.
+      .then(async (r) => {
+        const d = (await r.json().catch(() => null)) as Me | null
+        return r.ok ? d : null
+      })
       .then((d: Me | null) => {
         if (!active) return
         setMe(d?.authenticated ? d : null)

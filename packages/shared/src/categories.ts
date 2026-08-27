@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canonical 8-category taxonomy for AMClub V1. §1.10.
  * commission_bps: basis points (1000 = 10%). Configurable per-category in DB;
  * these are the launch defaults used for seeding and display.

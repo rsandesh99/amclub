@@ -26,8 +26,12 @@ export function SaveButton({
   useEffect(() => {
     let active = true
     fetch('/api/v1/saved')
-      // 401 = signed out (the endpoint auth-gates); ok = signed in.
-      .then(async (r) => ({ ok: r.ok, d: r.ok ? await r.json() : { providerIds: [] } }))
+      // 401 = signed out (the endpoint auth-gates); ok = signed in. Drain the
+      // body either way — an unread response never reaches network-idle.
+      .then(async (r) => {
+        const d = await r.json().catch(() => null)
+        return { ok: r.ok, d: r.ok && d ? d : { providerIds: [] } }
+      })
       .then(({ ok, d }: { ok: boolean; d: { providerIds?: string[] } }) => {
         if (!active) return
         setAuthed(ok && Array.isArray(d.providerIds))

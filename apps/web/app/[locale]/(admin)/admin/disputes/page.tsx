@@ -18,7 +18,11 @@ export default function AdminDisputesPage() {
   useEffect(() => {
     setLoading(true)
     fetch(`/api/v1/admin/disputes${status ? `?status=${status}` : ''}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : { disputes: [] }))
+      // Drain the body on every status — an unread response never finishes.
+      .then(async (r) => {
+        const d = await r.json().catch(() => null)
+        return r.ok && d ? d : { disputes: [] }
+      })
       .then((d) => setDisputes(d.disputes ?? []))
       .finally(() => setLoading(false))
   }, [status])

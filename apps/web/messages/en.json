@@ -2,6 +2,7 @@
   "common": {
     "app_name": "AMClub",
     "tagline": "Every service your business needs. One platform. Verified. Transparent.",
+    "promo_banner_link": "View this offer",
     "loading": "Loading…",
     "error": "Something went wrong",
     "retry": "Try again",

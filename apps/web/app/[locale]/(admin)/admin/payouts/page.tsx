@@ -24,7 +24,11 @@ export default function AdminPayoutsPage() {
   const load = useCallback(() => {
     setLoading(true)
     fetch(`/api/v1/admin/payouts${status ? `?status=${status}` : ''}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : { payouts: [], counts: {} }))
+      // Drain the body on every status — an unread response never finishes.
+      .then(async (r) => {
+        const d = await r.json().catch(() => null)
+        return r.ok && d ? d : { payouts: [], counts: {} }
+      })
       .then((d) => { setPayouts(d.payouts ?? []); setCounts(d.counts ?? {}) })
       .finally(() => setLoading(false))
   }, [status])
