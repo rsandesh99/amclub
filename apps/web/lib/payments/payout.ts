@@ -59,14 +59,36 @@ export async function runPayouts(
         .update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('id', p.id)
         .eq('status', 'processing')
+      await admin.from('order_events').insert({
+        order_id: p.order_id,
+        actor_id: null,
+        event: 'payout_failed',
+        payload: {
+          payout_id: p.id,
+          amount_paise: p.amount_paise,
+          reason: e instanceof Error ? e.message.slice(0, 200) : 'transfer_failed',
+        },
+      })
       continue
     }
     if (transfer.simulated) simulated = true
 
+    const paidAt = new Date().toISOString()
     await admin
       .from('payouts')
-      .update({ status: 'paid', razorpay_transfer_id: transfer.razorpayTransferId, paid_at: new Date().toISOString() })
+      .update({ status: 'paid', razorpay_transfer_id: transfer.razorpayTransferId, paid_at: paidAt })
       .eq('id', p.id)
+    await admin.from('order_events').insert({
+      order_id: p.order_id,
+      actor_id: null,
+      event: 'payout_paid',
+      payload: {
+        payout_id: p.id,
+        amount_paise: p.amount_paise,
+        razorpay_transfer_id: transfer.razorpayTransferId,
+        simulated: Boolean(transfer.simulated),
+      },
+    })
     transferIds.push(transfer.razorpayTransferId)
     try { await notifyPayoutPaid(admin, p.provider_id, Number(p.amount_paise), p.order_id) } catch (e) { console.error('[notifyPayoutPaid]', e) }
   }

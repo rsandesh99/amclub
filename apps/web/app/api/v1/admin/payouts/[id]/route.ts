@@ -46,6 +46,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .eq('status', from) // optimistic guard against concurrent state change
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  await admin.from('order_events').insert({
+    order_id: payout.order_id,
+    actor_id: gate.userId,
+    event: 'payout_released',
+    payload: { payout_id: id, from_status: from, amount_paise: Number(payout.amount_paise) },
+  })
+
   // Settle immediately (release = pay now). A transfer failure marks the
   // payout 'failed' inside runPayouts — visible in the monitor for retry.
   const run = await runPayouts(admin, getPaymentGateway(), { orderId: payout.order_id })

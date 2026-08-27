@@ -148,6 +148,15 @@ async function main() {
   }
   const { count: invCount } = await admin.from('invoices').select('id', { count: 'exact', head: true }).eq('order_id', o1)
   check('two invoices generated (buyer + commission)', invCount === 2)
+  // Phase 1c — the payout decision is on the order timeline, with its reasons.
+  const { data: payoutEvents } = await admin.from('order_events').select('event, payload').eq('order_id', o1).in('event', ['payout_held', 'payout_scheduled'])
+  const pe = payoutEvents?.[0]
+  const reasons = ((pe?.payload as { reasons?: string[] } | null)?.reasons ?? [])
+  if (autoRelease) {
+    check("order_events has 'payout_scheduled'", payoutEvents?.length === 1 && pe?.event === 'payout_scheduled')
+  } else {
+    check("order_events has 'payout_held' with reasons=[approval_gate]", payoutEvents?.length === 1 && pe?.event === 'payout_held' && reasons.includes('approval_gate'))
+  }
 
   // Cron endpoints require the CRON_SECRET bearer in production. Without it in
   // the local env, skip those legs (the guard itself is verified elsewhere).

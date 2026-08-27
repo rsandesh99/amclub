@@ -15,7 +15,7 @@
  * silently store bank data with a default key.
  */
 import 'server-only'
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypto'
 
 const DEV_KEY_HEX = '0'.repeat(64) // 32 zero-bytes — DEV ONLY, never production
 
@@ -53,6 +53,15 @@ export function decryptColumn(encoded: string): string {
   const decipher = createDecipheriv('aes-256-gcm', key, iv)
   decipher.setAuthTag(authTag)
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
+}
+
+/**
+ * Keyed fingerprint (HMAC-SHA256 under the column key) for matching a value
+ * without storing it — e.g. "was THIS bank account verified?". A plain hash
+ * would be brute-forceable for low-entropy inputs like account numbers.
+ */
+export function fingerprintColumn(value: string): string {
+  return createHmac('sha256', getKey()).update(value, 'utf8').digest('hex')
 }
 
 /** Last 4 digits for display ("••••3456") without decrypting on read paths. */

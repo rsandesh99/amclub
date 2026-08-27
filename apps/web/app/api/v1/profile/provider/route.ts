@@ -9,7 +9,7 @@ import {
 } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser, upsertUserRow } from '@/lib/auth/session'
-import { encryptColumn } from '@/lib/crypto'
+import { encryptColumn, fingerprintColumn } from '@/lib/crypto'
 import { serverError } from '@/lib/api/errors'
 
 const credentialUploadSchema = z.object({
@@ -39,6 +39,8 @@ const bodySchema = z.object({
   bankIfsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/),
   bankAccount: z.string().min(9).max(18),
   bankHolder: z.string().min(2),
+  // Accepted for wire compatibility but IGNORED — penny_drop_verified is set
+  // from the server-recorded /kyc/verify-bank result (see bank section below).
   bankVerified: z.boolean().default(false),
   // Keyed by category slug → { url|path, name }
   credentialUploads: z.record(z.string(), credentialUploadSchema).default({}),
@@ -235,13 +237,29 @@ export async function POST(request: NextRequest) {
     console.error('[profile/provider POST] bank encryption — check COLUMN_ENCRYPTION_KEY:', e)
     return NextResponse.json({ error: 'bank_encryption_unconfigured' }, { status: 503 })
   }
+  // penny_drop_verified is SERVER-set: it requires a recorded /kyc/verify-bank
+  // success for this user + this exact account|IFSC within the last 24h from a
+  // real vendor (the dev stub never counts). d.bankVerified is deliberately
+  // ignored — a client flag must never be able to clear a payout hold.
+  const fingerprint = fingerprintColumn(`${d.bankAccount}|${d.bankIfsc}`)
+  const { data: bankVerification } = await admin
+    .from('bank_account_verifications')
+    .select('verified, stub')
+    .eq('user_id', user.id)
+    .eq('account_fingerprint', fingerprint)
+    .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const pennyDropVerified = Boolean(bankVerification?.verified) && !bankVerification?.stub
+
   const { error: bankErr } = await admin.from('provider_bank_accounts').upsert(
     {
       provider_id: providerId,
       account_number_enc: accountNumberEnc,
       ifsc: d.bankIfsc,
       account_holder: d.bankHolder,
-      penny_drop_verified: d.bankVerified,
+      penny_drop_verified: pennyDropVerified,
     },
     { onConflict: 'provider_id' },
   )

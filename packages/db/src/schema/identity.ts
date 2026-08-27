@@ -95,3 +95,20 @@ export const providerBankAccounts = pgTable('provider_bank_accounts', {
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
+
+// Server-side record of /kyc/verify-bank results (0016). The account number is
+// never stored — only a keyed fingerprint that onboarding matches against so
+// penny_drop_verified is set by the server, not the client. Service-role only.
+export const bankAccountVerifications = pgTable('bank_account_verifications', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id').notNull(),
+  accountFingerprint: text('account_fingerprint').notNull(),
+  ifsc: text('ifsc').notNull(),
+  accountHolder: text('account_holder').notNull(),
+  verified: boolean('verified').notNull(),
+  stub: boolean('stub').default(false).notNull(),
+  // 'surepass' | 'stub'
+  provider: text('provider').notNull(),
+  result: jsonb('result'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+})

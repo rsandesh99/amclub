@@ -84,23 +84,39 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
   // Founder control gate: unless PAYOUT_AUTO_RELEASE=true, EVERY payout is
   // created 'held' — money moves only when an admin explicitly releases it
   // from /admin/payouts after checking the delivered work.
-  const held =
-    !PAYOUT_AUTO_RELEASE ||
-    Boolean(dispute) ||
-    provider?.status === 'suspended' ||
-    !bank?.penny_drop_verified
+  const holdReasons = [
+    ...(!PAYOUT_AUTO_RELEASE ? ['approval_gate'] : []),
+    ...(dispute ? ['dispute_open'] : []),
+    ...(provider?.status === 'suspended' ? ['provider_suspended'] : []),
+    ...(!bank?.penny_drop_verified ? ['bank_unverified'] : []),
+  ]
+  const held = holdReasons.length > 0
 
   const scheduledFor = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().slice(0, 10) // T+2
-  await admin.from('payouts').upsert(
-    {
-      provider_id: order.provider_id,
-      order_id: order.id,
+  const { data: inserted } = await admin
+    .from('payouts')
+    .upsert(
+      {
+        provider_id: order.provider_id,
+        order_id: order.id,
+        amount_paise: order.provider_earning_paise,
+        status: held ? 'held' : 'scheduled',
+        scheduled_for: scheduledFor,
+      },
+      { onConflict: 'order_id', ignoreDuplicates: true },
+    )
+    .select('id')
+  // ignoreDuplicates returns rows only when this call created the payout, so
+  // the timeline event is written exactly once per order.
+  const payoutId = inserted?.[0]?.id
+  if (payoutId) {
+    await addEvent(admin, order.id, held ? 'payout_held' : 'payout_scheduled', null, {
+      payout_id: payoutId,
       amount_paise: order.provider_earning_paise,
-      status: held ? 'held' : 'scheduled',
       scheduled_for: scheduledFor,
-    },
-    { onConflict: 'order_id', ignoreDuplicates: true },
-  )
+      ...(held ? { reasons: holdReasons } : {}),
+    })
+  }
 }
 
 /** Issue a refund for an order via the gateway + refunds row (idempotent-ish). */
@@ -216,7 +232,19 @@ export async function applyTransition(
       { onConflict: 'order_id', ignoreDuplicates: true },
     )
     // Hold any scheduled payout.
-    await admin.from('payouts').update({ status: 'held' }).eq('order_id', orderId).eq('status', 'scheduled')
+    const { data: heldRows } = await admin
+      .from('payouts')
+      .update({ status: 'held' })
+      .eq('order_id', orderId)
+      .eq('status', 'scheduled')
+      .select('id, amount_paise')
+    if (heldRows && heldRows.length > 0) {
+      await addEvent(admin, orderId, 'payout_held', actor.userId, {
+        payout_id: heldRows[0]!.id,
+        amount_paise: heldRows[0]!.amount_paise,
+        reasons: ['dispute_open'],
+      })
+    }
   }
   if (action === 'cancel') {
     const refunded = await processRefund(admin, updated, from)

@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSessionUser } from '@/lib/auth/session'
 import { getKycClient } from '@/lib/kyc'
+import { createAdminClient } from '@/lib/supabase/server'
+import { fingerprintColumn } from '@/lib/crypto'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 
 const bodySchema = z.object({
@@ -29,6 +31,22 @@ export async function POST(request: NextRequest) {
 
   const kyc = getKycClient()
   const result = await kyc.verifyBankAccount(parsed.data)
+
+  // Persist the answer SERVER-side (keyed fingerprint, never the number) so
+  // onboarding can set penny_drop_verified from this record instead of a
+  // client-sent flag. Attempts are recorded whether or not they verified.
+  const admin = await createAdminClient()
+  const { error: recErr } = await admin.from('bank_account_verifications').insert({
+    user_id: user.id,
+    account_fingerprint: fingerprintColumn(`${parsed.data.accountNumber}|${parsed.data.ifsc}`),
+    ifsc: parsed.data.ifsc,
+    account_holder: parsed.data.holderName,
+    verified: result.verified,
+    stub: result.stub ?? false,
+    provider: result.stub ? 'stub' : 'surepass',
+    result: { accountHolderName: result.accountHolderName ?? null, error: result.error ?? null },
+  })
+  if (recErr) console.error('[kyc/verify-bank] could not record verification result:', recErr.message)
 
   if (!result.verified) {
     return NextResponse.json(

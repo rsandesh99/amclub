@@ -59,6 +59,8 @@ ALTER TABLE coupon_redemptions   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cms_banners          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quote_events         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bank_account_verifications ENABLE ROW LEVEL SECURITY;
 
 -- ─── users ────────────────────────────────────────────────────────────────────
 
@@ -231,6 +233,42 @@ CREATE POLICY "quotes: msme read own rfq" ON quotes
 DROP POLICY IF EXISTS "quotes: admin all" ON quotes;
 CREATE POLICY "quotes: admin all" ON quotes
   FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+-- ─── quote_events (0016) — append-only; read-only for every client role ──────
+
+DROP POLICY IF EXISTS "quote_events: provider read own" ON quote_events;
+CREATE POLICY "quote_events: provider read own" ON quote_events
+  FOR SELECT USING (
+    quote_id IN (
+      SELECT id FROM quotes
+      WHERE provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "quote_events: msme read own rfq" ON quote_events;
+CREATE POLICY "quote_events: msme read own rfq" ON quote_events
+  FOR SELECT USING (
+    quote_id IN (
+      SELECT q.id FROM quotes q
+      JOIN rfqs r ON r.id = q.rfq_id
+      WHERE r.msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "quote_events: admin read" ON quote_events;
+CREATE POLICY "quote_events: admin read" ON quote_events
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+DROP POLICY IF EXISTS "quote_events: admin insert" ON quote_events;
+CREATE POLICY "quote_events: admin insert" ON quote_events
+  FOR INSERT WITH CHECK (has_role('admin') OR has_role('ops'));
+
+-- No UPDATE/DELETE policies by design (append-only); grants revoked in 0016.
+REVOKE UPDATE, DELETE ON quote_events FROM anon, authenticated;
+
+-- ─── bank_account_verifications (0016) — service-role only, no policies ──────
+
+REVOKE ALL ON bank_account_verifications FROM anon, authenticated;
 
 -- ─── orders ───────────────────────────────────────────────────────────────────
 

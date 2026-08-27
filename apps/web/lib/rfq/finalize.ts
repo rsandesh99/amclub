@@ -1,6 +1,7 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
+import { addQuoteEvent, addQuoteEvents } from './events'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -38,6 +39,14 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
 
   // Accept the winning quote.
   await admin.from('quotes').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', quote.id)
+  // The acceptance is the buyer's paid checkout, recorded via the payment path
+  // (no interactive actor here) — attribute to system with the order as proof.
+  await addQuoteEvent(admin, {
+    quoteId: quote.id,
+    eventType: 'accepted',
+    reason: 'order_paid',
+    payload: { order_id: orderId, rfq_id: quote.rfq_id },
+  })
 
   // Politely decline the rest (still 'submitted').
   const { data: declined } = await admin
@@ -46,7 +55,16 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     .eq('rfq_id', quote.rfq_id)
     .eq('status', 'submitted')
     .neq('id', quote.id)
-    .select('provider_id')
+    .select('id, provider_id')
+  await addQuoteEvents(
+    admin,
+    (declined ?? []).map((q) => ({
+      quoteId: q.id,
+      eventType: 'auto_declined' as const,
+      reason: 'another_quote_accepted',
+      payload: { rfq_id: quote.rfq_id, accepted_quote_id: quote.id, order_id: orderId },
+    })),
+  )
 
   // Notify the winning provider, and the declined providers.
   const { data: winner } = await admin

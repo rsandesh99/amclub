@@ -177,6 +177,32 @@ async function main() {
     eq('buyerB direct-reads audit_logs → 0 rows', ((await bClient.from('audit_logs').select('id')).data ?? []).length, 0)
     // Positive control: buyerB CAN read their own (empty) msme row by user.
     eq('buyerB direct-reads OWN msme_profile → 1 row', ((await bClient.from('msme_profiles').select('id').eq('id', msmeB!.id)).data ?? []).length, 1)
+
+    // ── 7. Phase 1 tables: quote_events (append-only) + bank_account_verifications ──
+    console.log('Phase 1 tables (direct PostgREST):')
+    // REVOKEd grants surface as a PostgREST error; a missing policy surfaces as
+    // 0 rows. Either is a denial.
+    const deniedRows = (name: string, r: { data: unknown[] | null; error: { message: string } | null }) => {
+      const ok = Boolean(r.error) || (r.data ?? []).length === 0
+      console.log(`  ${ok ? '✓' : '✗ LEAK'} ${name} → ${r.error ? 'error: ' + r.error.message.slice(0, 60) : (r.data ?? []).length + ' rows'}`)
+      ok ? pass++ : fail++
+    }
+    if (quoteId) {
+      const aProv = asUser(provA.token)
+      const aBuyer = asUser(buyerA.token)
+      eq('provA direct-reads OWN quote_events → 1 row (submitted)', ((await aProv.from('quote_events').select('id').eq('quote_id', quoteId)).data ?? []).length, 1)
+      eq('buyerA direct-reads quote_events on OWN rfq → 1 row', ((await aBuyer.from('quote_events').select('id').eq('quote_id', quoteId)).data ?? []).length, 1)
+      deniedRows('buyerB direct-reads A’s quote_events', await bClient.from('quote_events').select('id').eq('quote_id', quoteId))
+      deniedRows('provB direct-reads A’s quote_events', await asUser(provB.token).from('quote_events').select('id').eq('quote_id', quoteId))
+      deniedRows('provA UPDATEs own quote_events (append-only)', await aProv.from('quote_events').update({ reason: 'tamper' }).eq('quote_id', quoteId).select('id'))
+      deniedRows('provA DELETEs own quote_events (append-only)', await aProv.from('quote_events').delete().eq('quote_id', quoteId).select('id'))
+      deniedRows('provA INSERTs a forged quote_event', await aProv.from('quote_events').insert({ quote_id: quoteId, event_type: 'accepted', actor: provA.uid }).select('id'))
+      eq('after tamper attempts: still exactly 1 event', ((await admin.from('quote_events').select('id').eq('quote_id', quoteId)).data ?? []).length, 1)
+    } else {
+      console.log('  (skipped quote_events checks — no quote id)')
+    }
+    deniedRows('buyerB direct-reads bank_account_verifications', await bClient.from('bank_account_verifications').select('id'))
+    deniedRows('provA direct-reads bank_account_verifications', await asUser(provA.token).from('bank_account_verifications').select('id'))
   } finally {
     // Cleanup — children before parents; loud on error.
     const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {

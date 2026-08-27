@@ -55,3 +55,20 @@ export const quotes = pgTable('quotes', {
 }, (table) => [
   unique('quotes_rfq_provider_uniq').on(table.rfqId, table.providerId),
 ])
+
+// Append-only lifecycle history for quotes (mirrors order_events); no updatedAt.
+// Written alongside every quotes.status mutation — the status column is untouched.
+export const quoteEvents = pgTable('quote_events', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'cascade' }).notNull(),
+  // submitted | declined | withdrawn | accepted | expired | auto_declined
+  eventType: text('event_type').notNull(),
+  // acting user id, or 'system' for cron/payment-driven events
+  actor: text('actor').default('system').notNull(),
+  reason: text('reason'),
+  payload: jsonb('payload'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [
+  index('quote_events_quote_idx').on(table.quoteId),
+  index('quote_events_type_idx').on(table.eventType),
+])

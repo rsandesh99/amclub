@@ -5,6 +5,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { createNotification } from '@/lib/notifications/create'
+import { addQuoteEvent } from '@/lib/rfq/events'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
 
@@ -75,6 +76,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     return serverError('[quote insert]', insErr)
   }
+  await addQuoteEvent(admin, {
+    quoteId: quote.id,
+    eventType: 'submitted',
+    actor: actor.userId,
+    payload: { rfq_id: rfqId, price_paise: d.price_paise, delivery_days: d.delivery_days },
+  })
 
   // Notify the buyer of the new quote.
   const { data: rfq } = await admin

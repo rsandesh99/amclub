@@ -117,6 +117,12 @@ export async function resolveDispute(
       },
       { onConflict: 'order_id' },
     )
+    await admin.from('order_events').insert({
+      order_id: order.id,
+      actor_id: actorUserId,
+      event: 'payout_scheduled',
+      payload: { amount_paise: providerPaidPaise, reason: 'dispute_resolution', resolution },
+    })
     try {
       await runPayouts(admin, getPaymentGateway(), { orderId: order.id })
     } catch (e) {
@@ -125,7 +131,19 @@ export async function resolveDispute(
   } else {
     // refund_full: provider owed nothing. Neutralise any held payout so it is
     // never picked up (cron only processes 'scheduled').
-    await admin.from('payouts').update({ status: 'failed', amount_paise: 0, updated_at: new Date().toISOString() }).eq('order_id', order.id)
+    const { data: voided } = await admin
+      .from('payouts')
+      .update({ status: 'failed', amount_paise: 0, updated_at: new Date().toISOString() })
+      .eq('order_id', order.id)
+      .select('id')
+    if (voided && voided.length > 0) {
+      await admin.from('order_events').insert({
+        order_id: order.id,
+        actor_id: actorUserId,
+        event: 'payout_voided',
+        payload: { payout_id: voided[0]!.id, reason: 'refund_full' },
+      })
+    }
   }
 
   // 4. Mark the dispute resolved (records the buyer refund as the resolution amount).
