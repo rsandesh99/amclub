@@ -8,6 +8,7 @@ import { requireAdmin } from '@/lib/auth/admin'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { writeAudit } from '@/lib/audit/log'
 import { serverError } from '@/lib/api/errors'
+import { decryptColumn, fingerprintColumn } from '@/lib/crypto'
 
 /** GET — full provider detail for ops: profile, verifications, listings, orders, earnings, reviews. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -19,12 +20,14 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { data: provider } = await admin.from('provider_profiles').select('*').eq('id', id).maybeSingle()
   if (!provider) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const [{ data: verifications }, { data: listings }, { data: orders }, { data: reviews }, { data: categories }] = await Promise.all([
+  const [{ data: verifications }, { data: listings }, { data: orders }, { data: reviews }, { data: categories }, { data: bank }] = await Promise.all([
     admin.from('provider_verifications').select('id, kind, value, status, verified_at').eq('provider_id', id),
     admin.from('packages').select('id, slug, title_i18n, price_paise, status').eq('provider_id', id).is('deleted_at', null),
     admin.from('orders').select('id, order_number, status, total_paise, provider_earning_paise, created_at').eq('provider_id', id).order('created_at', { ascending: false }).limit(50),
     admin.from('reviews').select('id, rating, text, status, created_at').eq('provider_id', id).order('created_at', { ascending: false }).limit(20),
     admin.from('provider_categories').select('category:categories(slug, name_i18n)').eq('provider_id', id),
+    // Status only — never the account number (encrypted) or IFSC.
+    admin.from('provider_bank_accounts').select('penny_drop_verified, razorpay_route_account_id').eq('provider_id', id).maybeSingle(),
   ])
 
   const earningsPaise = (orders ?? [])
@@ -42,6 +45,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     reviews: reviews ?? [],
     categories: categories ?? [],
     earningsPaise,
+    bank: bank
+      ? { onFile: true, pennyDropVerified: bank.penny_drop_verified, hasRouteAccount: Boolean(bank.razorpay_route_account_id) }
+      : { onFile: false, pennyDropVerified: false, hasRouteAccount: false },
   })
 }
 
@@ -56,6 +62,16 @@ const bodySchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('set_route_account'),
     routeAccountId: z.string().trim().regex(/^acc_[A-Za-z0-9]{6,}$/, 'must be a Razorpay account id (acc_...)'),
+  }),
+  // Manual bank verification (Phase 1g). Until KYC_API_KEY is a real vendor,
+  // every genuine provider lands at bank_unverified; this is the logged,
+  // reason-required way to clear (or revoke) that — recorded in
+  // bank_account_verifications with provider='admin_override' so it is never
+  // indistinguishable from a vendor penny-drop result.
+  z.object({
+    action: z.literal('set_bank_verified'),
+    verified: z.boolean(),
+    reason: z.string().trim().min(5).max(500),
   }),
 ])
 
@@ -107,6 +123,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ razorpay_route_account_id: d.routeAccountId, updated_at: new Date().toISOString() })
         .eq('id', bank.id)
       after = { razorpay_route_account_id: d.routeAccountId }
+    } else if (d.action === 'set_bank_verified') {
+      const { data: bank } = await admin
+        .from('provider_bank_accounts')
+        .select('id, account_number_enc, ifsc, account_holder, penny_drop_verified')
+        .eq('provider_id', id)
+        .maybeSingle()
+      if (!bank) {
+        return NextResponse.json({ error: 'Provider has no bank account on file yet' }, { status: 409 })
+      }
+      const { data: owner } = await admin.from('provider_profiles').select('user_id').eq('id', id).maybeSingle()
+      // Same keyed fingerprint onboarding uses, so the override row matches the
+      // account it clears (decrypt server-side; the number is never returned).
+      let fingerprint: string
+      try {
+        fingerprint = fingerprintColumn(`${decryptColumn(bank.account_number_enc)}|${bank.ifsc}`)
+      } catch (e) {
+        console.error('[admin/providers set_bank_verified] cannot fingerprint bank account:', e)
+        return NextResponse.json({ error: 'bank_encryption_unconfigured' }, { status: 503 })
+      }
+      const { error: recErr } = await admin.from('bank_account_verifications').insert({
+        user_id: owner?.user_id,
+        account_fingerprint: fingerprint,
+        ifsc: bank.ifsc,
+        account_holder: bank.account_holder,
+        verified: d.verified,
+        stub: false,
+        provider: 'admin_override',
+        result: { admin_id: gate.userId, reason: d.reason },
+      })
+      if (recErr) return serverError('[admin/providers set_bank_verified] record:', recErr)
+      await admin
+        .from('provider_bank_accounts')
+        .update({ penny_drop_verified: d.verified, updated_at: new Date().toISOString() })
+        .eq('id', bank.id)
+      after = { penny_drop_verified: d.verified, was: bank.penny_drop_verified, method: 'admin_override', reason: d.reason }
     } else {
       // set_badge — assign (manually_approved) or revoke (rejected) a verification.
       const newStatus = d.grant ? 'manually_approved' : 'rejected'

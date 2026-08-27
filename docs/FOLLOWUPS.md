@@ -22,3 +22,17 @@ whether withdrawal after a buyer message should be allowed.
 
 **Why deferred:** Phase 1 scope was event capture for statuses that already
 have writers; adding a provider-facing action is product scope.
+
+---
+
+## Real penny-drop vendor — LIVE-CUTOVER BLOCKER (logged 2026-08-27, Phase 1g)
+
+**Today:** `penny_drop_verified` is server-set from `/kyc/verify-bank`; the dev
+stub (no `KYC_API_KEY`) never counts. Genuine providers therefore land at
+`bank_unverified` and are cleared by the admin `set_bank_verified` override
+(reason required; `audit_logs` + `bank_account_verifications` with
+`provider = 'admin_override'`, always distinguishable from a vendor result).
+
+**Hard edge:** the override is fine while onboarding is manual. It must not be
+the norm at real-money volume — provision Surepass/Signzy (`KYC_API_KEY`)
+before live cutover. Tracked in ADR-003's cutover procedure.

@@ -16,6 +16,7 @@ const CRON_JOBS = [
   { name: 'rfq-expire', staleAfterMs: 3 * 3600_000 },
   { name: 'reconcile', staleAfterMs: 14 * 3600_000 },
   { name: 'payouts', staleAfterMs: 26 * 3600_000 },
+  { name: 'provider-stats', staleAfterMs: 26 * 3600_000 },
 ]
 
 export default function AdminDashboardPage() {

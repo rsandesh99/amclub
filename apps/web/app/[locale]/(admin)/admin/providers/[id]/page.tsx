@@ -39,6 +39,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
     if (reason && reason.trim()) act({ action: 'suspend', reason: reason.trim() })
   }
 
+  function setBankVerified(verified: boolean) {
+    const reason = window.prompt(t('bank_override_reason'))
+    if (reason && reason.trim().length >= 5) act({ action: 'set_bank_verified', verified, reason: reason.trim() })
+  }
+
   if (loading || !data) return <p className="text-sm text-foreground-secondary">{t('loading')}</p>
   const p = data.provider
 
@@ -63,6 +68,23 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
           <Button variant="outline" onClick={() => act({ action: 'set_capacity_pause', paused: !p.capacity_paused })} loading={busy}>
             {p.capacity_paused ? t('unpause') : t('pause')}
           </Button>
+        </div>
+        {/* Bank verification — manual override until the real penny-drop vendor is live (Phase 1g). */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <span className="text-sm">
+            {t('bank_label')}:{' '}
+            <span className={data.bank?.pennyDropVerified ? 'font-medium text-success' : 'font-medium text-warning'}>
+              {!data.bank?.onFile ? t('bank_none') : data.bank.pennyDropVerified ? t('bank_verified') : t('bank_unverified')}
+            </span>
+            {data.bank?.onFile && !data.bank.hasRouteAccount && (
+              <span className="ml-2 text-xs text-foreground-secondary">{t('bank_no_route')}</span>
+            )}
+          </span>
+          {data.bank?.onFile && (
+            data.bank.pennyDropVerified
+              ? <Button variant="outline" onClick={() => setBankVerified(false)} loading={busy}>{t('bank_revoke')}</Button>
+              : <Button variant="outline" onClick={() => setBankVerified(true)} loading={busy}>{t('bank_mark_verified')}</Button>
+          )}
         </div>
         <div className="flex items-end gap-2 border-t border-border pt-3">
           <label className="flex-1 text-xs">{t('badge')}

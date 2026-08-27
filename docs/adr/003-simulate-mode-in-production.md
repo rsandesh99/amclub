@@ -36,5 +36,13 @@ each of which exists in code:
 - Cutover procedure (one PR): remove the `rzp_live_` guard in
   `apps/web/lib/payments/index.ts`, set the four Razorpay env vars, register
   the live webhook, deploy, then confirm `/checkout/simulate` returns 400.
+- **Cutover blocker — real penny-drop vendor (added 2026-08-27, Phase 1g).**
+  `penny_drop_verified` is now server-set from a real `/kyc/verify-bank`
+  result; the dev stub never counts. Until `KYC_API_KEY` is a real Surepass/
+  Signzy key, every genuine provider sits at `bank_unverified` and the only way
+  to clear them is the admin `set_bank_verified` override (audit-logged,
+  `bank_account_verifications.provider = 'admin_override'`). That is acceptable
+  during manual onboarding; at real-money volume the override must be the
+  exception, so provisioning the vendor is a hard prerequisite of live cutover.
 - The F5 amount cross-check (captured amount must equal the frozen session
   total) applies to both simulate and webhook paths.

@@ -6,6 +6,7 @@
     { "path": "/api/v1/cron/auto-accept", "schedule": "30 * * * *" },
     { "path": "/api/v1/cron/rfq-expire", "schedule": "45 * * * *" },
     { "path": "/api/v1/cron/reconcile", "schedule": "15 */6 * * *" },
-    { "path": "/api/v1/cron/payouts", "schedule": "0 4 * * *" }
+    { "path": "/api/v1/cron/payouts", "schedule": "0 4 * * *" },
+    { "path": "/api/v1/cron/provider-stats", "schedule": "30 3 * * *" }
   ]
 }

@@ -15,12 +15,25 @@ import { config } from 'dotenv'
 import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
+import { createCipheriv, randomBytes } from 'crypto'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
 const ANON = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!
 const BASE = process.env['BASE_URL'] ?? 'https://amclub-web.vercel.app'
 const admin = createClient(URL_, SERVICE, { auth: { persistSession: false } })
+
+// Mirror of lib/crypto encryptColumn (AES-256-GCM, iv|tag|ct base64) so bank
+// fixtures carry a REAL ciphertext — the admin bank-override decrypts it to
+// fingerprint the account. Same key resolution as the server (.env.local).
+function encryptLikeServer(plaintext: string): string {
+  const hex = process.env['COLUMN_ENCRYPTION_KEY']
+  const key = Buffer.from(hex && /^[0-9a-fA-F]{64}$/.test(hex) ? hex : '0'.repeat(64), 'hex')
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+  return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString('base64')
+}
 
 const tag = `authz_${Date.now()}`
 let pass = 0
@@ -76,7 +89,7 @@ async function main() {
         state: 'KA', status: 'active', languages: ['en'],
       }).select('id').single()
       created.providerIds.push(p!.id)
-      await admin.from('provider_bank_accounts').insert({ provider_id: p!.id, account_number_enc: 'enc', ifsc: 'HDFC0000001', account_holder: label, penny_drop_verified: true })
+      await admin.from('provider_bank_accounts').insert({ provider_id: p!.id, account_number_enc: encryptLikeServer('123456789012'), ifsc: 'HDFC0000001', account_holder: label, penny_drop_verified: true })
       return p!.id
     }
     const provAId = await mkProvider(provA.uid, 'provA')
@@ -144,11 +157,30 @@ async function main() {
     const adminGets = ['/api/v1/admin/kpi', '/api/v1/admin/payouts', '/api/v1/admin/orders', '/api/v1/admin/providers', '/api/v1/admin/msmes', '/api/v1/admin/disputes', '/api/v1/admin/reviews', '/api/v1/admin/audit', '/api/v1/admin/categories', '/api/v1/admin/coupons', '/api/v1/admin/cms']
     for (const p of adminGets) denied(`GET ${p}`, (await api(buyerA.token, p, undefined, 'GET')).status)
     denied('POST /admin/providers/{provA} suspend', (await api(buyerA.token, `/api/v1/admin/providers/${provAId}`, { action: 'suspend', reason: 'x' })).status)
+    denied('POST /admin/providers/{provA} set_bank_verified (self, as provider)', (await api(provA.token, `/api/v1/admin/providers/${provAId}`, { action: 'set_bank_verified', verified: true, reason: 'I verified myself' })).status)
     denied('POST /admin/voice-parse-text', (await api(buyerA.token, '/api/v1/admin/voice-parse-text', { text: 'file my gst returns please' })).status)
     denied('POST /admin/payouts/{id} retry (fake id)', (await api(buyerA.token, `/api/v1/admin/payouts/${crypto.randomUUID()}`, { action: 'retry' })).status)
     denied('POST /admin/categories create', (await api(buyerA.token, '/api/v1/admin/categories', { slug: 'x-hack', nameI18n: { en: 'x', hi: 'x' }, commissionBps: 0, requiredCredentials: [] })).status)
     // Unauthenticated (no token) must also be denied.
     denied('anon GET /admin/kpi', (await api(null, '/api/v1/admin/kpi', undefined, 'GET')).status)
+
+    // ── 4b. Admin bank-verification override — positive control (Phase 1g) ────
+    // A real admin CAN clear a provider's bank hold, but only with a reason, and
+    // the act is recorded twice: audit_logs + bank_account_verifications with
+    // provider='admin_override' (never confusable with a vendor result).
+    console.log('Admin bank-verification override (positive control):')
+    const adminUser = await mkUser('admin', ['msme', 'admin'])
+    await admin.from('provider_bank_accounts').update({ penny_drop_verified: false }).eq('provider_id', provAId)
+    eq('override without a reason → 422', (await api(adminUser.token, `/api/v1/admin/providers/${provAId}`, { action: 'set_bank_verified', verified: true, reason: 'x' })).status, 422)
+    const ov = await api(adminUser.token, `/api/v1/admin/providers/${provAId}`, { action: 'set_bank_verified', verified: true, reason: 'Cancelled cheque verified on call (killtest)' })
+    eq('admin override with reason → 200', ov.status, 200)
+    const { data: bankAfter } = await admin.from('provider_bank_accounts').select('penny_drop_verified').eq('provider_id', provAId).maybeSingle()
+    eq('penny_drop_verified now true', bankAfter?.penny_drop_verified, true)
+    const { data: ovRows } = await admin.from('bank_account_verifications').select('provider, verified, stub, result').eq('user_id', provA.uid)
+    eq("bank_account_verifications row: provider='admin_override', verified, not stub", ovRows?.length === 1 && ovRows[0]!.provider === 'admin_override' && ovRows[0]!.verified === true && ovRows[0]!.stub === false, true)
+    eq('override row carries the reason', (ovRows?.[0]?.result as { reason?: string } | null)?.reason?.includes('Cancelled cheque'), true)
+    const { data: auditRows } = await admin.from('audit_logs').select('action').eq('actor_id', adminUser.uid).eq('entity_id', provAId).eq('action', 'provider_set_bank_verified')
+    eq('audit_logs has provider_set_bank_verified', (auditRows ?? []).length, 1)
 
     // ── 5. Contact-info redaction (phone-mask claim) ───────────────────────────
     if (quoteId) {
@@ -244,6 +276,7 @@ async function main() {
     }
     for (const mid of created.msmeIds) await del('msme', admin.from('msme_profiles').delete().eq('id', mid))
     for (const uid of created.users) {
+      await del('bankverifs', admin.from('bank_account_verifications').delete().eq('user_id', uid))
       await del('notif', admin.from('notifications').delete().eq('user_id', uid))
       await del('audit', admin.from('audit_logs').delete().eq('actor_id', uid))
       await del('users', admin.from('users').delete().eq('id', uid))

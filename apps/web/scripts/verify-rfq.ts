@@ -178,6 +178,10 @@ async function main() {
   console.log('\n🧹 cleanup…')
   const t = (p: PromiseLike<unknown>) => Promise.resolve(p).catch(() => {})
   for (const mid of created.msmeIds) {
+    // checkout_sessions.order_id references orders (no cascade) — drop the
+    // sessions FIRST or every order delete below fails silently and the whole
+    // chain (orders → quotes → providers → users) is left behind in prod.
+    await t(admin.from('checkout_sessions').delete().eq('msme_id', mid))
     const { data: orders } = await admin.from('orders').select('id').eq('msme_id', mid)
     for (const o of orders ?? []) {
       await t(admin.from('payouts').delete().eq('order_id', o.id))
