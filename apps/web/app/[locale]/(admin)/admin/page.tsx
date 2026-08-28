@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+import { Link } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -76,6 +77,14 @@ export default function AdminDashboardPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label={t('active_providers')} value={String(h.activeProviders)} />
             <Stat label={t('rfqs_accepted')} value={String(rq.rfqsAccepted)} />
+            {/* Phase 3b — the Route/bank worklist: fills at approval, empties as you link. */}
+            <Stat
+              label={t('payout_ready_tile')}
+              value={`${h.providersReady ?? 0} / ${h.activeProviders}`}
+              sub={h.providersNotReady > 0 ? t('payout_ready_todo', { n: h.providersNotReady }) : t('payout_ready_ok')}
+              tone={h.providersNotReady > 0 ? 'warning' : 'default'}
+              {...(h.providersNotReady > 0 ? { href: '/admin/providers?status=active&readiness=unready' } : {})}
+            />
           </div>
 
           {/* Top categories / states */}
@@ -147,14 +156,15 @@ export default function AdminDashboardPage() {
   )
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-card border border-border bg-surface p-4">
+function Stat({ label, value, sub, tone = 'default', href }: { label: string; value: string; sub?: string; tone?: 'default' | 'warning'; href?: string }) {
+  const body = (
+    <div className={`rounded-card border bg-surface p-4 ${tone === 'warning' ? 'border-warning/40' : 'border-border'} ${href ? 'transition-colors hover:border-primary/40' : ''}`}>
       <p className="text-xs text-foreground-secondary">{label}</p>
-      <p className="mt-1 font-display text-xl font-bold text-primary">{value}</p>
+      <p className={`mt-1 font-display text-xl font-bold ${tone === 'warning' ? 'text-warning' : 'text-primary'}`}>{value}</p>
       {sub && <p className="mt-0.5 text-[11px] text-foreground-secondary">{sub}</p>}
     </div>
   )
+  return href ? <Link href={href as '/admin/providers'}>{body}</Link> : body
 }
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (

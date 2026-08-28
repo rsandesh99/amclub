@@ -12,6 +12,8 @@ interface ProviderStatus {
 export default function PartnerScreen() {
   const { t } = useI18n()
   const [providerStatus, setProviderStatus] = useState<ProviderStatus['status']>(null)
+  // 'ready' | 'missing_route' | 'bank_unverified' | 'not_ready' | 'no_bank' | null (from /profile/me)
+  const [payoutReadiness, setPayoutReadiness] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -24,6 +26,7 @@ export default function PartnerScreen() {
         )
         const data = await res.json()
         setProviderStatus(data.providerStatus)
+        setPayoutReadiness(data.payoutReadiness ?? null)
       } catch {
         // ignore
       } finally {
@@ -68,6 +71,14 @@ export default function PartnerScreen() {
             <Text className="mt-1 text-xs text-yellow-700">
               {t('partner_home.under_review_desc')}
             </Text>
+          </View>
+        )}
+
+        {/* Phase 3b (ii) — payouts hold until our team links the Route account / verifies the bank. */}
+        {providerStatus === 'active' && payoutReadiness && payoutReadiness !== 'ready' && (
+          <View className="rounded-xl border border-yellow-300 bg-yellow-50 p-5">
+            <Text className="text-sm font-semibold text-yellow-800">{t('partner_home.payout_hold_title')}</Text>
+            <Text className="mt-1 text-xs text-yellow-700">{t('partner_home.payout_hold_desc')}</Text>
           </View>
         )}
 

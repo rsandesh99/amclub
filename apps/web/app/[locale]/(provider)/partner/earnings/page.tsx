@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
 import { Link } from '@/i18n/navigation'
 import { getSessionUser, getProviderProfile } from '@/lib/auth/session'
+import { createAdminClient } from '@/lib/supabase/server'
+import { getProviderReadiness } from '@/lib/payments/readiness-server'
 import { listMyOrders, listMyPayouts } from '@/lib/orders/queries'
 import { Badge } from '@/components/ui/badge'
 import { formatINR } from '@/lib/format'
@@ -26,9 +28,10 @@ export default async function PartnerEarningsPage() {
 
   const t = await getTranslations('earnings')
   const locale = await getLocale()
-  const [orders, payouts] = await Promise.all([
+  const [orders, payouts, { readiness }] = await Promise.all([
     listMyOrders(user.id, 'provider'),
     listMyPayouts(user.id),
+    getProviderReadiness(await createAdminClient(), profile.id),
   ])
 
   const completed = orders.filter((o) => o.status === 'completed')
@@ -61,6 +64,10 @@ export default async function PartnerEarningsPage() {
         ))}
       </div>
 
+      {/* Phase 3b (ii): payouts hold until our team finishes the Route/bank link — say so here, where the money is. */}
+      {profile.status === 'active' && readiness !== 'ready' && (
+        <p className="rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">{t('payout_hold_banner')}</p>
+      )}
       <p className="rounded-button bg-primary/5 px-3 py-2 text-xs text-foreground-secondary">{t('payout_note')}</p>
 
       <section>

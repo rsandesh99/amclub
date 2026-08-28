@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { getProviderReadiness } from '@/lib/payments/readiness-server'
 
 /** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
@@ -22,6 +23,9 @@ export async function GET() {
   ])
   const roles: string[] = u?.roles ?? ['msme']
 
+  // Phase 3b (ii): mobile shows the same payout-hold banner as web.
+  const payoutReadiness = provider ? (await getProviderReadiness(admin, provider.id)).readiness : null
+
   const primaryRole =
     roles.includes('admin') || roles.includes('ops')
       ? 'admin'
@@ -39,6 +43,7 @@ export async function GET() {
       hasMsmeProfile: !!msme,
       hasProviderProfile: !!provider,
       providerStatus: provider?.status ?? null,
+      payoutReadiness,
     },
     // Role/profile state drives routing — a heuristically-cached stale answer
     // right after becoming a provider (or signing out) misroutes the client.

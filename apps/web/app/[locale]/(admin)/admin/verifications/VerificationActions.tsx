@@ -6,6 +6,7 @@ import { useRouter } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/toast'
 
 interface VerificationActionsProps {
   providerId: string
@@ -15,6 +16,7 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
   const t = useTranslations('admin')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const { toast } = useToast()
   const [mode, setMode] = useState<'idle' | 'rejecting'>('idle')
   const [reason, setReason] = useState('')
   const [loading, setLoading] = useState<'approve' | 'reject' | null>(null)
@@ -33,9 +35,16 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, reason: reason.trim() || undefined }),
       })
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
         throw new Error(typeof d.error === 'string' ? d.error : t('action_failed'))
+      }
+      // Phase 3b (ii): approval goes through, but the approver hears — right
+      // now — that payouts will hold until the Route/bank work on the
+      // dashboard tile is done.
+      if (action === 'approve') {
+        if (d.readiness && d.readiness !== 'ready') toast(t('approved_not_ready'), 'error')
+        else toast(t('approved_ready'), 'success')
       }
       router.refresh()
     } catch (e: unknown) {

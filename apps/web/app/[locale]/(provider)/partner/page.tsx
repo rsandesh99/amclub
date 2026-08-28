@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { Link } from '@/i18n/navigation'
 import { getSessionUser, getProviderProfile } from '@/lib/auth/session'
+import { createAdminClient } from '@/lib/supabase/server'
+import { getProviderReadiness } from '@/lib/payments/readiness-server'
 import { listMyOrders } from '@/lib/orders/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,6 +21,11 @@ export default async function PartnerDashboardPage() {
   if (!profile) redirect('/partner/onboarding')
 
   const isUnderReview = profile.status !== 'active'
+  // Phase 3b (ii): an active provider whose payouts would hold sees why, here
+  // and on /partner/earnings, until our team finishes the Route/bank link.
+  const { readiness } = profile.status === 'active'
+    ? await getProviderReadiness(await createAdminClient(), profile.id)
+    : { readiness: 'ready' as const }
   const orders = await listMyOrders(user.id, 'provider')
   const activeCount = orders.filter((o) => ACTIVE_STATUSES.includes(o.status)).length
   const completedCount = orders.filter((o) => o.status === 'completed').length
@@ -31,6 +38,14 @@ export default async function PartnerDashboardPage() {
       {isUnderReview && (
         <div className="rounded-card border border-warning/30 bg-warning/10 p-4">
           <p className="text-sm text-warning">{t('under_review_banner')}</p>
+        </div>
+      )}
+      {!isUnderReview && readiness !== 'ready' && (
+        <div className="rounded-card border border-warning/30 bg-warning/10 p-4">
+          <p className="text-sm font-medium text-warning">{t('payout_hold_title')}</p>
+          <p className="mt-1 text-sm text-foreground-secondary">
+            {t('payout_hold_body', { what: t(`payout_hold_${readiness}` as 'payout_hold_missing_route') })}
+          </p>
         </div>
       )}
 

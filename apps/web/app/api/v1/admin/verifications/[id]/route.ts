@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { serverError } from '@/lib/api/errors'
 import { revalidateProviderCatalog } from '@/lib/catalog/revalidate'
+import { getProviderReadiness } from '@/lib/payments/readiness-server'
 
 const bodySchema = z.object({
   action: z.enum(['approve', 'reject']),
@@ -81,14 +82,19 @@ export async function POST(
     console.error('[admin/verifications POST] cache purge:', e)
   }
 
-  // Audit log — Phase 6 will wire real notifications
+  // Phase 3b (option ii): approval never waits on Razorpay paperwork, but the
+  // approver must see — at the moment of approval — that payouts will hold
+  // until the Route account is linked / bank verified. The same fact drives
+  // the admin dashboard "Payout-ready" tile, so it is the founder's checklist
+  // item from this instant, not something waiting on the provider.
+  const { readiness } = await getProviderReadiness(admin, providerId)
   if (action === 'approve') {
-    console.warn(`[admin/verifications] Provider ${providerId} approved by ${user.id}`)
+    console.warn(`[admin/verifications] Provider ${providerId} approved by ${user.id} — payout readiness: ${readiness}`)
   } else {
     console.warn(
       `[admin/verifications] Provider ${providerId} rejected by ${user.id}: ${reason}`,
     )
   }
 
-  return NextResponse.json({ success: true, status: newStatus })
+  return NextResponse.json({ success: true, status: newStatus, readiness })
 }

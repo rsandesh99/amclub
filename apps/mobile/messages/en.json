@@ -207,7 +207,9 @@
     "no_rfqs_title": "No open RFQs yet",
     "no_rfqs_desc": "When MSMEs post requirements in your category, they'll appear here.",
     "not_applied_title": "You haven't applied as a provider yet.",
-    "apply_btn": "Apply now"
+    "apply_btn": "Apply now",
+    "payout_hold_title": "Payouts on hold while we finish your payout setup",
+    "payout_hold_desc": "You can quote and take orders now. Money from completed orders is held safely until our team links your Razorpay payout account / verifies your bank. This was added to our checklist when you were approved — you will be notified when it is done."
   },
   "order": {
     "placed": "Order placed",

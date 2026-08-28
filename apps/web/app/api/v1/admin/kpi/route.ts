@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { PAYOUT_RELEASE_STATUSES, type OrderStatus } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
+import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -68,6 +69,15 @@ export async function GET(request: NextRequest) {
   // Supply liquidity (point-in-time): active providers, category × state matrix.
   const providers = (providersRes.data ?? []) as any[]
   const activeProviders = providers.filter((p) => p.status === 'active')
+  // Phase 3b — payout readiness of the ACTIVE supply: the founder's Route/bank
+  // worklist, filled the moment a provider is approved.
+  const activeIds = activeProviders.map((p) => p.id)
+  const { data: bankRows } = activeIds.length
+    ? await admin.from('provider_bank_accounts').select('provider_id, penny_drop_verified, razorpay_route_account_id').in('provider_id', activeIds)
+    : { data: [] as { provider_id: string; penny_drop_verified: boolean; razorpay_route_account_id: string | null }[] }
+  const bankByProvider = new Map((bankRows ?? []).map((b) => [b.provider_id, b]))
+  const providersReady = activeIds.filter((id) => payoutReadiness(bankFacts(bankByProvider.get(id))) === 'ready').length
+  const providersNotReady = activeIds.length - providersReady
   const provState = new Map(providers.map((p) => [p.id, { state: p.state, active: p.status === 'active' }]))
   const cats = (catsRes.data ?? []) as any[]
   const catById = new Map(cats.map((c) => [c.id, c]))
@@ -94,7 +104,7 @@ export async function GET(request: NextRequest) {
     financial: { gmvPaise, commissionPaise, takeRateBps, completedOrders, totalOrders },
     funnel: { checkoutSessions: sessions, ordersPlaced: totalOrders, conversionPct },
     rfq: { rfqsCreated, rfqsQuoted, rfqsAccepted, quoteResponseRatePct },
-    health: { disputeCount, disputeRatePct, repeatPurchaseRatePct, activeProviders: activeProviders.length },
+    health: { disputeCount, disputeRatePct, repeatPurchaseRatePct, activeProviders: activeProviders.length, providersReady, providersNotReady },
     topCategories,
     topStates,
     liquidityMatrix: { categories: Object.keys(matrix).sort(), states: [...new Set(Object.values(matrix).flatMap((m) => Object.keys(m)))].sort(), matrix },

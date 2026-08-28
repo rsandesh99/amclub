@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
@@ -13,9 +14,12 @@ const READINESS = ['', 'unready', 'ready', 'missing_route', 'bank_unverified', '
 
 export default function AdminProvidersPage() {
   const t = useTranslations('admin_ops')
+  // Deep-linkable filters: the dashboard's Payout-ready tile lands on
+  // ?status=active&readiness=unready — the Route/bank worklist.
+  const params = useSearchParams()
   const [q, setQ] = useState('')
-  const [status, setStatus] = useState('')
-  const [readiness, setReadiness] = useState('')
+  const [status, setStatus] = useState(params.get('status') ?? '')
+  const [readiness, setReadiness] = useState(params.get('readiness') ?? '')
   const [providers, setProviders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 

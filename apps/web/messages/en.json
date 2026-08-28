@@ -491,7 +491,9 @@
     "view_credential": "View",
     "bank_account": "Bank account",
     "bank_verified": "Bank verified",
-    "bank_unverified": "Bank unverified"
+    "bank_unverified": "Bank unverified",
+    "approved_not_ready": "Approved. Payouts will HOLD until you link their Razorpay Route account / verify the bank — it is on your dashboard worklist now.",
+    "approved_ready": "Approved — payout-ready."
   },
   "profile": {
     "completeness": "Profile completeness",
@@ -551,7 +553,13 @@
     "view_orders": "View orders",
     "complete_onboarding": "Complete onboarding",
     "onboarding_cta": "Finish your KYC to start receiving orders",
-    "view_reviews": "Reviews"
+    "view_reviews": "Reviews",
+    "payout_hold_title": "Your payouts are on hold while we finish your payout setup",
+    "payout_hold_body": "You can quote and take orders now. Money from completed orders is held safely until {what}. Our team completes this step — it was added to our checklist when your account was approved; you will be notified when it is done.",
+    "payout_hold_missing_route": "we link your Razorpay payout account",
+    "payout_hold_bank_unverified": "we verify your bank account",
+    "payout_hold_not_ready": "we verify your bank account and link your Razorpay payout account",
+    "payout_hold_no_bank": "your bank account is added and verified"
   },
   "shell": {
     "profile": "Profile & settings",
@@ -712,7 +720,8 @@
     "payout_held": "On hold",
     "no_payouts_title": "No payouts yet",
     "no_payouts_subtitle": "Payouts are released after an order is completed.",
-    "payout_note": "Payouts release only after a buyer accepts delivery (or after 72h auto-accept)."
+    "payout_note": "Payouts release only after a buyer accepts delivery (or after 72h auto-accept).",
+    "payout_hold_banner": "Payouts are on hold until our team finishes your payout setup (Razorpay payout account / bank verification). This was added to our checklist at approval — you will be notified when it is done."
   },
   "order": {
     "placed": "Order placed",
@@ -999,7 +1008,10 @@
     "hold_approval_gate": "awaiting release",
     "hold_dispute_open": "dispute open",
     "hold_provider_suspended": "provider suspended",
-    "hold_bank_unverified": "bank unverified"
+    "hold_bank_unverified": "bank unverified",
+    "payout_ready_tile": "Payout-ready providers",
+    "payout_ready_todo": "{n, plural, one {# active provider} other {# active providers}} need a Route account / bank check →",
+    "payout_ready_ok": "Every active provider can be paid"
   },
   "gateway": {
     "meta_title": "AMClub — Verified business services for MSMEs",

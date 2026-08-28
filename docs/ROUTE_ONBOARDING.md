@@ -36,6 +36,16 @@ Prerequisite: **Route is activated on the live Razorpay account** (Dashboard →
 - **With a KYC vendor provisioned (`KYC_API_KEY`)**: the provider's onboarding wizard already ran `/kyc/verify-bank`; `penny_drop_verified` is set server-side from that result. Nothing to do.
 - **Until the vendor is live (today):** confirm the account manually — ask the provider for a cancelled cheque / passbook image, check holder name + IFSC + last-4 against admin, then **Mark bank verified (manual)** with a reason that says what you checked. This is deliberately audited so a manual clearance is never confused with a vendor result.
 
+## When this work is triggered — at approval, by us (option ii, decided 2026-08-28)
+
+Approving a provider never waits on Razorpay paperwork; the provider becomes quotable immediately. In exchange, the **approval itself creates the ops task**:
+
+- the approve action returns the provider's readiness and the admin sees a warning toast ("Approved. Payouts will HOLD until you link…");
+- the admin dashboard tile **Payout-ready providers** counts every active provider who is not ready and links to `/admin/providers?status=active&readiness=unready` — that list is the worklist, filled the moment you approve;
+- the provider sees a banner on their dashboard and earnings page saying our team is completing the setup and that it was added to our checklist at approval.
+
+That banner is a promise made in our name: **work the tile the same day you approve**, so it is true.
+
 ## 4. Confirm readiness
 
 Provider detail should now show **Ready to pay**. Held payouts for that provider lose their readiness badge on `/admin/payouts`; release them from there when the delivered work has been checked (`PAYOUT_AUTO_RELEASE` stays off).

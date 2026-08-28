@@ -225,10 +225,35 @@ async function main() {
     eq('admin: invalid acc_ format → 422', (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, { action: 'set_route_account', routeAccountId: 'not-an-account' })).status, 422)
     const beforeRoute = ((await (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, undefined, 'GET')).json()) as { bank?: { readiness?: string } }).bank?.readiness
     eq('readiness before: missing_route (bank verified by override above)', beforeRoute, 'missing_route')
+    // Phase 3b (ii): approval proceeds AND surfaces unreadiness — to the approver
+    // (response + toast), the dashboard tile, and the provider (/profile/me).
+    // The verifications route is cookie-session only (getSessionUser), like the
+    // admin pages that call it — mint the admin's cookie jar for this call.
+    const adminJar: Record<string, string> = {}
+    const adminSsr = createServerClient(URL_, ANON, {
+      cookies: {
+        getAll() { return Object.entries(adminJar).map(([name, value]) => ({ name, value })) },
+        setAll(list) { for (const { name, value } of list) adminJar[name] = value },
+      },
+    })
+    await adminSsr.auth.signInWithPassword({ email: `${tag}_admin@killtest.amclub`, password: 'Test1234!' })
+    const adminCookie = Object.entries(adminJar).map(([n, v]) => `${n}=${v}`).join('; ')
+    const kpiBefore = (await (await api(adminUser.token, '/api/v1/admin/kpi', undefined, 'GET')).json()) as { health?: { providersNotReady?: number } }
+    const approveRes = await fetch(`${BASE}/api/v1/admin/verifications/${provCId}`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie: adminCookie }, body: JSON.stringify({ action: 'approve' }) })
+    const approveJson = (await approveRes.json().catch(() => ({}))) as { status?: string; readiness?: string }
+    eq('approve provC → 200 active, response carries readiness=missing_route', approveRes.status === 200 && approveJson.status === 'active' && approveJson.readiness === 'missing_route', true)
+    const kpi = (await (await api(adminUser.token, '/api/v1/admin/kpi', undefined, 'GET')).json()) as { health?: { providersNotReady?: number; providersReady?: number } }
+    eq('dashboard tile grows by exactly the newly approved unready provider', (kpi.health?.providersNotReady ?? 0) - (kpiBefore.health?.providersNotReady ?? 0), 1)
+    const meC = (await (await api(provC.token, '/api/v1/profile/me', undefined, 'GET')).json()) as { payoutReadiness?: string }
+    eq('provider /profile/me reports payoutReadiness=missing_route (banner source)', meC.payoutReadiness, 'missing_route')
     eq('admin: valid acc_ with note → 200', (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, { action: 'set_route_account', routeAccountId: 'acc_KILLTEST00001', reason: 'killtest link' })).status, 200)
     const detailAfter = (await (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, undefined, 'GET')).json()) as { bank?: { readiness?: string; routeAccountId?: string } }
     eq('readiness after: ready', detailAfter.bank?.readiness, 'ready')
     eq('detail exposes the Route id, not the account number', detailAfter.bank?.routeAccountId, 'acc_KILLTEST00001')
+    const meCAfter = (await (await api(provC.token, '/api/v1/profile/me', undefined, 'GET')).json()) as { payoutReadiness?: string }
+    eq('provider /profile/me flips to ready once linked (banner clears)', meCAfter.payoutReadiness, 'ready')
+    const kpiAfter = (await (await api(adminUser.token, '/api/v1/admin/kpi', undefined, 'GET')).json()) as { health?: { providersNotReady?: number } }
+    eq('dashboard tile shrinks back once the Route account is linked', (kpiAfter.health?.providersNotReady ?? 0) - (kpiBefore.health?.providersNotReady ?? 0), 0)
     const { data: routeAudit } = await admin.from('audit_logs').select('after').eq('actor_id', adminUser.uid).eq('entity_id', provCId ?? '').eq('action', 'provider_set_route_account')
     eq('audit_logs has provider_set_route_account with the note', routeAudit?.length === 1 && (routeAudit[0]!.after as { reason?: string }).reason === 'killtest link', true)
     const listReady = (await (await api(adminUser.token, '/api/v1/admin/providers?readiness=ready', undefined, 'GET')).json()) as { providers?: { id: string }[] }
