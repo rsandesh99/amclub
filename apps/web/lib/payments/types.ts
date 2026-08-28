@@ -26,6 +26,8 @@ export interface GatewayRefund {
   razorpayRefundId: string
   amountPaise: number
   status: string
+  /** Our deterministic key (rfnd_<order_id>) echoed back by the gateway. */
+  receipt?: string | null
 }
 
 export interface GatewayTransfer {
@@ -49,8 +51,14 @@ export interface PaymentGateway {
   createRefund(params: {
     razorpayPaymentId: string
     amountPaise: number
+    /** Deterministic per-order key (rfnd_<order_id>) stored as the gateway
+     *  receipt so a retry can find an already-created refund. */
+    receipt?: string
     notes?: Record<string, string>
   }): Promise<GatewayRefund>
+
+  /** Refunds the gateway already holds for a payment (retry-safety lookup). */
+  listRefunds(razorpayPaymentId: string): Promise<GatewayRefund[]>
 
   /** Razorpay Route transfer to a provider's linked account (payout). */
   createTransfer(params: {

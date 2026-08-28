@@ -20,6 +20,7 @@ export function RevealFooter() {
     { href: '/terms', label: t('legal.terms_title') },
     { href: '/privacy', label: t('legal.privacy_title') },
     { href: '/refund-policy', label: t('legal.refund_title') },
+    { href: '/grievance', label: t('legal.grievance_link') },
   ]
 
   return (

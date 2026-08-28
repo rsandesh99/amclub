@@ -23,5 +23,8 @@ export * from './states'
 // GSTIN format + mod-36 checksum validation
 export * from './gstin'
 
+// Legal documents: current versions (single source for pages, modal, acceptance rows)
+export * from './legal'
+
 // Zod schemas and derived TypeScript types
 export * from './schemas/index'

@@ -19,7 +19,7 @@ function url(locale: string, path: string) {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = []
 
-  const staticPaths = ['/', '/services']
+  const staticPaths = ['/', '/services', '/help', '/terms', '/privacy', '/refund-policy', '/grievance', '/provider-addendum']
   const categoryPaths = (await getCategories().catch(() => []))
     .map((c) => `/services/${c.slug}`)
   const fallbackCats = CATEGORY_SLUGS.map((s) => `/services/${s}`)

@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
+import { LegalGateModal } from '@/components/LegalGateModal'
 
 export default function AppLayout() {
   const { t } = useI18n()
@@ -29,6 +30,9 @@ export default function AppLayout() {
   }
 
   return (
+    <>
+    {/* Phase 2b — blocks the authenticated app until current-version legal docs are accepted. */}
+    <LegalGateModal />
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#1B4D3E',
@@ -91,5 +95,6 @@ export default function AppLayout() {
       <Tabs.Screen name="partner-rfq/[id]" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="notifications" options={{ href: null, headerShown: false }} />
     </Tabs>
+    </>
   )
 }

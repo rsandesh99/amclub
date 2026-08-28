@@ -3,6 +3,7 @@ import { LanguageSwitcher } from '@/components/catalog/LanguageSwitcher'
 import { JurisdictionSelector } from '@/components/catalog/JurisdictionSelector'
 import { NotificationBell } from './NotificationBell'
 import { AccountMenu, type ShellContext } from './AccountMenu'
+import { LegalGate } from '@/components/legal/LegalGate'
 
 /**
  * Shared chrome for every logged-in surface (MSME / provider / admin). One
@@ -53,6 +54,8 @@ export function AppShell({
         </div>
       </header>
       <main className="flex-1">{children}</main>
+      {/* Phase 2b — blocks the shell until current-version legal docs are accepted. */}
+      <LegalGate />
     </div>
   )
 }

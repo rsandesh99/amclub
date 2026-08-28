@@ -1,12 +1,15 @@
 import { getTranslations } from 'next-intl/server'
 import { Mail, MessageCircle, Clock, ShieldCheck, Wallet, RotateCcw } from 'lucide-react'
+import { Link } from '@/i18n/navigation'
+import { GRIEVANCE_OFFICER, GRIEVANCE_SLA, SUPPORT_CONTACT, whatsappHref } from '@/lib/legal/grievance'
 
 // Static — support content rarely changes.
 export const revalidate = 86400
 
-const SUPPORT_EMAIL = 'support@amclub.in'
-const SUPPORT_WHATSAPP = '+91 80000 00000'
-const GRIEVANCE_EMAIL = 'grievance@amclub.in'
+// Contact facts live in lib/legal/grievance.ts (one source for help/grievance/terms).
+const SUPPORT_EMAIL = SUPPORT_CONTACT.email
+const SUPPORT_WHATSAPP = SUPPORT_CONTACT.whatsapp
+const GRIEVANCE_EMAIL = GRIEVANCE_OFFICER.email
 
 export default async function HelpPage() {
   const t = await getTranslations('help')
@@ -35,7 +38,7 @@ export default async function HelpPage() {
           <span className="font-medium">{SUPPORT_EMAIL}</span>
         </a>
         <a
-          href={`https://wa.me/${SUPPORT_WHATSAPP.replace(/[^0-9]/g, '')}`}
+          href={whatsappHref(SUPPORT_CONTACT.whatsappE164)}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-3 text-sm text-foreground hover:text-primary"
@@ -64,13 +67,17 @@ export default async function HelpPage() {
 
       <section className="rounded-card border border-border bg-muted p-5">
         <h2 className="text-base font-semibold">{t('grievance_title')}</h2>
-        <p className="mt-1 text-sm text-foreground-secondary">{t('grievance_body')}</p>
+        <p className="mt-1 text-sm text-foreground-secondary">{t('grievance_body', { hours: GRIEVANCE_SLA.acknowledgeHours, days: GRIEVANCE_SLA.resolveDays })}</p>
+        <p className="mt-1 text-sm text-foreground">{GRIEVANCE_OFFICER.name} · {GRIEVANCE_OFFICER.designation}</p>
         <a
-          href={`mailto:${GRIEVANCE_EMAIL}`}
+          href={`mailto:`}
           className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
         >
           {GRIEVANCE_EMAIL}
         </a>
+        <Link href="/grievance" className="ml-3 inline-block text-sm font-medium text-primary hover:underline">
+          {t('grievance_link')}
+        </Link>
       </section>
     </div>
   )

@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, boolean, integer, timestamp, jsonb,
+  pgTable, uuid, text, boolean, integer, timestamp, jsonb, index,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
@@ -95,6 +95,21 @@ export const providerBankAccounts = pgTable('provider_bank_accounts', {
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
+
+// Append-only record of which legal document VERSION a user accepted (0017).
+// No updatedAt — a new acceptance is a new row. Written by the service role.
+export const termsAcceptances = pgTable('terms_acceptances', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  // terms | privacy | provider_addendum
+  doc: text('doc').notNull(),
+  version: text('version').notNull(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  // { ip, user_agent, locale, surface: 'web' | 'mobile' }
+  payload: jsonb('payload'),
+}, (table) => [
+  index('terms_acceptances_user_doc_idx').on(table.userId, table.doc),
+])
 
 // Server-side record of /kyc/verify-bank results (0016). The account number is
 // never stored — only a keyed fingerprint that onboarding matches against so

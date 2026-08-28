@@ -12,6 +12,9 @@ import { Select } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { loadBuyerDraft } from '@/components/gateway/draft'
+import { ConsentCheckbox } from '@/components/auth/ConsentCheckbox'
+import { acceptLegalDocs } from '@/lib/legal/client'
+import { BUYER_LEGAL_DOCS } from '@amclub/shared'
 
 type Step = 'auth' | 'profile' | 'business'
 
@@ -52,6 +55,11 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Phase 2b — explicit Terms + Privacy consent. Ticked on the auth step, or on
+  // the profile step for users who arrive already authenticated (Google/email
+  // → /signup?complete=1). Written to terms_acceptances right before the
+  // profile POST, which refuses without it.
+  const [consented, setConsented] = useState(false)
 
   // Phase 8a — prefill from the gateway wizard's draft profile (biz → sector,
   // state → stateCode; both enums match 1:1). Effect, not initial state:
@@ -85,9 +93,16 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
   }
 
   async function submitBusiness(skip = false) {
+    if (!consented) {
+      setError(tAuth('consent_required'))
+      return
+    }
     setLoading(true)
     setError('')
     try {
+      // Acceptance rows first — the profile endpoint is gated on them.
+      const legal = await acceptLegalDocs([...BUYER_LEGAL_DOCS], wizardState.preferredLocale)
+      if (!legal.ok) throw new Error(t('save_failed'))
       const res = await fetch('/api/v1/profile/msme', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,7 +139,11 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
             <h2 className="mb-1 text-xl font-semibold">{t('step1_title')}</h2>
             <p className="text-sm text-foreground-secondary">{t('step1_subtitle')}</p>
           </div>
-          <AuthPanel onAuthenticated={handleAuthenticated} googleRedirectTo="/signup?complete=1" />
+          <AuthPanel
+            onAuthenticated={handleAuthenticated}
+            googleRedirectTo="/signup?complete=1"
+            consent={{ checked: consented, onChange: setConsented }}
+          />
         </>
       )}
 
@@ -166,11 +185,17 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
                 <option value="hi">हिंदी</option>
               </Select>
             </div>
+            {/* Already-authenticated arrivals never saw the auth step — consent here. */}
+            {!consented && <ConsentCheckbox checked={consented} onChange={setConsented} id="legal-consent-profile" />}
             {error && <p className="text-sm text-danger">{error}</p>}
             <Button
               onClick={() => {
                 if (!wizardState.fullName.trim() || !wizardState.businessName.trim()) {
                   setError(t('err_name_business'))
+                  return
+                }
+                if (!consented) {
+                  setError(tAuth('consent_required'))
                   return
                 }
                 setError('')

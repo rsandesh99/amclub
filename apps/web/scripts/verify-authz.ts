@@ -186,6 +186,15 @@ async function main() {
     })
     await ssr.auth.signInWithPassword({ email: `${tag}_provC@killtest.amclub`, password: 'Test1234!' })
     const cookie = Object.entries(jar).map(([n, v]) => `${n}=${v}`).join('; ')
+    // Phase 2: provider signup is refused until Terms + Privacy + Addendum are on record.
+    const onbNoLegal = await fetch(`${BASE}/api/v1/profile/provider`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ legalName: 'C Co Marketing', displayName: 'C Co', categorySlugs: ['digital-marketing'], state: 'KA', languages: ['en'], bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: 'C Co Marketing' }),
+    })
+    eq('provider signup WITHOUT legal acceptance → 403 legal_acceptance_required', onbNoLegal.status === 403 && ((await onbNoLegal.json().catch(() => ({}))) as { error?: string }).error === 'legal_acceptance_required', true)
+    const legalC = await api(provC.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy', 'provider_addendum'], surface: 'web' })
+    eq('provC accepts terms+privacy+addendum → 200', legalC.status, 200)
     const onb = await fetch(`${BASE}/api/v1/profile/provider`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie },
@@ -263,6 +272,26 @@ async function main() {
     }
     deniedRows('buyerB direct-reads bank_account_verifications', await bClient.from('bank_account_verifications').select('id'))
     deniedRows('provA direct-reads bank_account_verifications', await asUser(provA.token).from('bank_account_verifications').select('id'))
+
+    // ── 8. Phase 2: terms_acceptances (append-only, self-read) + signup gate ──
+    console.log('Phase 2 — terms_acceptances + signup gate:')
+    const buyerC = await mkUser('buyerC', ['msme'])
+    const noLegal = await api(buyerC.token, '/api/v1/profile/msme', { fullName: 'C Buyer', businessName: 'C Buyer Co' })
+    eq('MSME signup WITHOUT acceptance → 403 legal_acceptance_required (API-level)', noLegal.status === 403 && ((await noLegal.json().catch(() => ({}))) as { error?: string }).error === 'legal_acceptance_required', true)
+    eq('legal/status lists terms+privacy as required', JSON.stringify((((await (await api(buyerC.token, '/api/v1/legal/status', undefined, 'GET')).json()) as { required?: string[] }).required ?? []).sort()), JSON.stringify(['privacy', 'terms']))
+    eq('accept terms+privacy → 200', (await api(buyerC.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })).status, 200)
+    const withLegal = await api(buyerC.token, '/api/v1/profile/msme', { fullName: 'C Buyer', businessName: 'C Buyer Co' })
+    eq('MSME signup AFTER acceptance → 200', withLegal.status, 200)
+    const { data: msmeC } = await admin.from('msme_profiles').select('id').eq('user_id', buyerC.uid).maybeSingle()
+    if (msmeC) created.msmeIds.push(msmeC.id)
+    const cClient = asUser(buyerC.token)
+    eq('buyerC direct-reads OWN terms_acceptances → 2 rows', ((await cClient.from('terms_acceptances').select('id').eq('user_id', buyerC.uid)).data ?? []).length, 2)
+    deniedRows('buyerB direct-reads C’s terms_acceptances', await bClient.from('terms_acceptances').select('id').eq('user_id', buyerC.uid))
+    deniedRows('buyerC UPDATEs own terms_acceptances (append-only)', await cClient.from('terms_acceptances').update({ version: '1999-01-01' }).eq('user_id', buyerC.uid).select('id'))
+    deniedRows('buyerC DELETEs own terms_acceptances (append-only)', await cClient.from('terms_acceptances').delete().eq('user_id', buyerC.uid).select('id'))
+    deniedRows('buyerC INSERTs a forged acceptance', await cClient.from('terms_acceptances').insert({ user_id: buyerC.uid, doc: 'provider_addendum', version: '2026-08-28' }).select('id'))
+    eq('after tamper attempts: still exactly 2 rows', ((await admin.from('terms_acceptances').select('id').eq('user_id', buyerC.uid)).data ?? []).length, 2)
+    eq('re-accepting is idempotent (written=[])', JSON.stringify((((await (await api(buyerC.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'] })).json()) as { written?: string[] }).written) ?? null), '[]')
   } finally {
     // Cleanup — children before parents; loud on error.
     const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {

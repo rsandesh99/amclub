@@ -140,7 +140,10 @@ export const refunds = pgTable('refunds', {
   amountPaise: bigint('amount_paise', { mode: 'number' }).notNull(),
   reason: text('reason'),
   razorpayRefundId: text('razorpay_refund_id').unique(),
+  // pending | processed — 'pending' is inserted BEFORE the gateway call (0017)
   status: text('status').default('pending').notNull(),
+  // Deterministic per order (rfnd_<order_id>); unique where not null (0017).
+  idempotencyKey: text('idempotency_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })

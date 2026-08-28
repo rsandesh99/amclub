@@ -61,6 +61,7 @@ ALTER TABLE audit_logs           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cms_banners          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quote_events         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bank_account_verifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE terms_acceptances    ENABLE ROW LEVEL SECURITY;
 
 -- ─── users ────────────────────────────────────────────────────────────────────
 
@@ -269,6 +270,19 @@ REVOKE UPDATE, DELETE ON quote_events FROM anon, authenticated;
 -- ─── bank_account_verifications (0016) — service-role only, no policies ──────
 
 REVOKE ALL ON bank_account_verifications FROM anon, authenticated;
+
+-- ─── terms_acceptances (0017) — append-only; self read + admin read ──────────
+
+DROP POLICY IF EXISTS "terms_acceptances: self read" ON terms_acceptances;
+CREATE POLICY "terms_acceptances: self read" ON terms_acceptances
+  FOR SELECT USING (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "terms_acceptances: admin read" ON terms_acceptances;
+CREATE POLICY "terms_acceptances: admin read" ON terms_acceptances
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- No INSERT/UPDATE/DELETE policies by design (service role writes; append-only).
+REVOKE UPDATE, DELETE ON terms_acceptances FROM anon, authenticated;
 
 -- ─── orders ───────────────────────────────────────────────────────────────────
 

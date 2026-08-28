@@ -64,7 +64,24 @@ async function main() {
   }
   check('redirect chain terminates (no infinite loop)', hops < 8, `[${hops} hops]`)
 
-  await admin.from('users').delete().eq('id', uid)
+  // ── Phase 2: the checkbox contract, enforced by the API not just the UI ──
+  const post = (p: string, body: unknown) =>
+    fetch(`${BASE}${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) })
+  const status0 = await (await fetch(`${BASE}/api/v1/legal/status`, { headers: { cookie } })).json() as { required?: string[] }
+  check('legal/status: new user must accept terms + privacy', JSON.stringify((status0.required ?? []).sort()) === JSON.stringify(['privacy', 'terms']), `[required=${JSON.stringify(status0.required)}]`)
+  const blocked = await post('/api/v1/profile/msme', { fullName: 'Loop Test', businessName: 'Loop Co' })
+  check('profile POST without acceptance → 403 legal_acceptance_required', blocked.status === 403, `[status ${blocked.status}]`)
+  const accepted = await post('/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  check('legal/accept (cookie session) → 200', accepted.status === 200, `[status ${accepted.status}]`)
+  const status1 = await (await fetch(`${BASE}/api/v1/legal/status`, { headers: { cookie } })).json() as { required?: string[] }
+  check('legal/status: nothing required after acceptance', (status1.required ?? []).length === 0, `[required=${JSON.stringify(status1.required)}]`)
+  const saved = await post('/api/v1/profile/msme', { fullName: 'Loop Test', businessName: 'Loop Co' })
+  check('profile POST after acceptance → 200', saved.status === 200, `[status ${saved.status}]`)
+  const { data: rows } = await admin.from('terms_acceptances').select('doc, version, payload').eq('user_id', uid)
+  check('2 acceptance rows with version + surface recorded', (rows ?? []).length === 2 && rows!.every((r) => r.version && (r.payload as { surface?: string })?.surface === 'web'))
+
+  await admin.from('msme_profiles').delete().eq('user_id', uid)
+  await admin.from('users').delete().eq('id', uid) // cascades terms_acceptances
   await admin.auth.admin.deleteUser(uid).catch(() => {})
 
   console.log(`\n${fail === 0 ? '✅ SIGNUP-LOOP FIXED' : '❌ STILL LOOPING'} — ${pass} passed, ${fail} failed\n`)

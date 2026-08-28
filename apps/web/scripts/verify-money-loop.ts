@@ -187,6 +187,27 @@ async function main() {
   const { data: payment2 } = await admin.from('payments').select('id').eq('order_id', o2).single()
   const { data: refund } = await admin.from('refunds').select('amount_paise').eq('payment_id', payment2!.id).maybeSingle()
   check('100% refund issued', Number(refund?.amount_paise) === Number(o2row!.total_paise))
+  const { data: refundRow } = await admin.from('refunds').select('status, idempotency_key, razorpay_refund_id').eq('payment_id', payment2!.id).maybeSingle()
+  check('refund row processed with deterministic key + gateway id', refundRow?.status === 'processed' && refundRow?.idempotency_key === `rfnd_${o2}` && Boolean(refundRow?.razorpay_refund_id))
+
+  // ── DC 6b (Phase 2f): refund replay — crash between our pending row and the gateway ──
+  console.log('\nDC6b — refund replay safety (insert-first, key-guarded):')
+  const o4 = await makePaidOrder(commissionBps)
+  const { data: o4row } = await admin.from('orders').select('total_paise').eq('id', o4).single()
+  const { data: pay4 } = await admin.from('payments').select('id').eq('order_id', o4).single()
+  // Simulate the crash: the pending row exists, the gateway was never called.
+  await admin.from('refunds').insert({ payment_id: pay4!.id, amount_paise: o4row!.total_paise, reason: 'cancellation', status: 'pending', idempotency_key: `rfnd_${o4}` })
+  const c4 = await transition(o4, 'cancel', buyerToken)
+  check('retry completes the PENDING refund → 200', c4.status === 200)
+  const { data: r4 } = await admin.from('refunds').select('status, razorpay_refund_id, idempotency_key').eq('payment_id', pay4!.id)
+  check('exactly ONE refund row: processed, keyed, with a gateway id', r4?.length === 1 && r4[0]!.status === 'processed' && r4[0]!.idempotency_key === `rfnd_${o4}` && Boolean(r4[0]!.razorpay_refund_id))
+  const { data: o4after } = await admin.from('orders').select('status').eq('id', o4).single()
+  check("order is 'refunded'", o4after?.status === 'refunded')
+  const c4b = await transition(o4, 'cancel', buyerToken)
+  const { count: r4count } = await admin.from('refunds').select('id', { count: 'exact', head: true }).eq('payment_id', pay4!.id)
+  check('replayed cancel rejected (409) and still ONE refund row', c4b.status === 409 && r4count === 1)
+  const { data: dup } = await admin.from('refunds').insert({ payment_id: pay4!.id, amount_paise: 1, status: 'pending', idempotency_key: `rfnd_${o4}` }).select('id')
+  check('a second row with the same key is impossible (unique index)', !dup || dup.length === 0)
 
   // ── DC 8: auto-accept after shortened timer ──
   console.log('\nDC8 — auto-accept job (shortened timer):')

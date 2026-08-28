@@ -3,6 +3,9 @@ import type { PaymentGateway, GatewayOrder, GatewayPayment, GatewayRefund, Gatew
 
 const rid = (prefix: string) => `${prefix}_${randomBytes(8).toString('hex')}`
 
+/** In-memory refund ledger per payment (process-local; enough for kill-tests). */
+const mockRefunds = new Map<string, GatewayRefund[]>()
+
 /**
  * Simulation gateway — used when real Razorpay keys aren't provided. It returns
  * plausible ids so the full order/webhook/refund/payout loop is exercisable
@@ -20,8 +23,18 @@ export const mockGateway: PaymentGateway = {
     return { razorpayOrderId: rid('order'), amountPaise, currency: 'INR', status: 'created' }
   },
 
-  async createRefund({ amountPaise }): Promise<GatewayRefund> {
-    return { razorpayRefundId: rid('rfnd'), amountPaise, status: 'processed' }
+  async createRefund({ razorpayPaymentId, amountPaise, receipt }): Promise<GatewayRefund> {
+    // Mirror the real gateway's receipt semantics so the retry path
+    // (listRefunds → match receipt) is exercised end-to-end in simulation.
+    const refund: GatewayRefund = { razorpayRefundId: rid('rfnd'), amountPaise, status: 'processed', receipt: receipt ?? null }
+    const list = mockRefunds.get(razorpayPaymentId) ?? []
+    list.push(refund)
+    mockRefunds.set(razorpayPaymentId, list)
+    return refund
+  },
+
+  async listRefunds(razorpayPaymentId: string): Promise<GatewayRefund[]> {
+    return mockRefunds.get(razorpayPaymentId) ?? []
   },
 
   async createTransfer({ amountPaise }): Promise<GatewayTransfer> {

@@ -142,24 +142,70 @@ export async function processRefund(
     .maybeSingle()
   if (!payment) return 0
 
-  // Don't double-refund.
-  const { data: existing } = await admin.from('refunds').select('id').eq('payment_id', payment.id).maybeSingle()
-  if (existing) return refundPaise
+  // Phase 2f — money truth. ONE refund per order, keyed deterministically, and
+  // the row is written BEFORE the gateway call (status 'pending'). A crash
+  // between the two therefore leaves a pending row; the retry finds it, asks
+  // the gateway for a refund carrying our receipt, and completes the row
+  // instead of creating a second refund. (Insert-first, key-guarded.)
+  const key = `rfnd_${order.id}`
+  const nowIso = new Date().toISOString()
+  let rowId: string
+  let amountPaise = refundPaise
+  const { data: existing } = await admin
+    .from('refunds')
+    .select('id, status, amount_paise')
+    .eq('payment_id', payment.id)
+    .maybeSingle()
+  if (existing) {
+    if (existing.status === 'processed') return Number(existing.amount_paise)
+    rowId = existing.id // pending from an earlier attempt → complete it
+    amountPaise = Number(existing.amount_paise)
+  } else {
+    const { data: inserted, error: insErr } = await admin
+      .from('refunds')
+      .insert({
+        payment_id: payment.id,
+        amount_paise: refundPaise,
+        reason: resolution ?? 'cancellation',
+        status: 'pending',
+        idempotency_key: key,
+      })
+      .select('id')
+      .single()
+    if (insErr || !inserted) {
+      // Unique-key race: a concurrent caller inserted first — re-read and defer to it.
+      const { data: again } = await admin
+        .from('refunds')
+        .select('id, status, amount_paise')
+        .eq('payment_id', payment.id)
+        .maybeSingle()
+      if (!again) throw new Error(`refund insert failed: ${insErr?.message ?? 'unknown'}`)
+      if (again.status === 'processed') return Number(again.amount_paise)
+      rowId = again.id
+      amountPaise = Number(again.amount_paise)
+    } else {
+      rowId = inserted.id
+    }
+  }
 
   const gateway = getPaymentGateway()
-  const r = await gateway.createRefund({
-    razorpayPaymentId: payment.razorpay_payment_id ?? `pay_sim_${order.id}`,
-    amountPaise: refundPaise,
-    notes: { order_id: order.id },
-  })
-  await admin.from('refunds').insert({
-    payment_id: payment.id,
-    amount_paise: refundPaise,
-    reason: resolution ?? 'cancellation',
-    razorpay_refund_id: r.razorpayRefundId,
-    status: 'processed',
-  })
-  return refundPaise
+  const razorpayPaymentId = payment.razorpay_payment_id ?? `pay_sim_${order.id}`
+  // Retry path: reuse a refund the gateway already created for this key.
+  const prior = (await gateway.listRefunds(razorpayPaymentId)).find((r) => r.receipt === key)
+  const r =
+    prior ??
+    (await gateway.createRefund({
+      razorpayPaymentId,
+      amountPaise,
+      receipt: key,
+      notes: { order_id: order.id },
+    }))
+  await admin
+    .from('refunds')
+    .update({ status: 'processed', razorpay_refund_id: r.razorpayRefundId, updated_at: nowIso })
+    .eq('id', rowId)
+    .eq('status', 'pending')
+  return amountPaise
 }
 
 /**

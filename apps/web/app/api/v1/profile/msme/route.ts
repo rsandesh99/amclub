@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { upsertUserRow } from '@/lib/auth/session'
 import { serverError } from '@/lib/api/errors'
+import { missingLegalDocs } from '@/lib/legal/acceptance'
 
 const bodySchema = z.object({
   fullName: z.string().min(2),
@@ -35,8 +36,16 @@ export async function POST(request: NextRequest) {
 
   const { fullName, businessName, sector, state, city, udyamNumber, gstin, preferredLocale } = parsed.data
 
-  // Create/refresh the users row (preserve existing roles — never clobber).
   const admin = await createAdminClient()
+
+  // Signup contract (Phase 2): no acceptance at the current Terms + Privacy
+  // versions → no profile. Enforced here, not only in the UI.
+  const missingLegal = await missingLegalDocs(admin, userId, false)
+  if (missingLegal.length > 0) {
+    return NextResponse.json({ error: 'legal_acceptance_required', required: missingLegal }, { status: 403 })
+  }
+
+  // Create/refresh the users row (preserve existing roles — never clobber).
   const { data: existingUser } = await admin.from('users').select('roles').eq('id', userId).maybeSingle()
   await upsertUserRow({
     id: userId,

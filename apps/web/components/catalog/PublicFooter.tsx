@@ -36,6 +36,11 @@ export async function PublicFooter() {
               </Link>
             </li>
             <li>
+              <Link href="/provider-addendum" className="hover:text-primary">
+                {t('legal.provider_addendum_title')}
+              </Link>
+            </li>
+            <li>
               <Link href="/login" className="hover:text-primary">
                 {t('auth.sign_in')}
               </Link>
@@ -68,6 +73,11 @@ export async function PublicFooter() {
             <li>
               <Link href="/refund-policy" className="hover:text-primary">
                 {t('legal.refund_title')}
+              </Link>
+            </li>
+            <li>
+              <Link href="/grievance" className="hover:text-primary">
+                {t('legal.grievance_link')}
               </Link>
             </li>
           </ul>

@@ -332,7 +332,9 @@
     "for_providers": "Service provider?",
     "register_as_provider": "Register your business",
     "consent_line": "By continuing, you agree to our <terms>Terms of Service</terms> and <privacy>Privacy Policy</privacy>.",
-    "sms_trouble_hint": "SMS not arriving? Continue with email instead →"
+    "sms_trouble_hint": "SMS not arriving? Continue with email instead →",
+    "consent_checkbox": "I agree to the <terms>Terms of Service</terms> and <privacy>Privacy Policy</privacy>.",
+    "consent_required": "Please agree to the Terms of Service and Privacy Policy to continue."
   },
   "msme_signup": {
     "page_title": "Create your AMClub account",
@@ -452,7 +454,9 @@
     "under_review_body": "We'll verify your credentials within 24 hours and notify you via SMS. You can browse the platform in the meantime.",
     "browse_as_msme": "Browse services",
     "draft_saved": "Draft saved",
-    "draft_restored": "Your previous draft has been restored"
+    "draft_restored": "Your previous draft has been restored",
+    "addendum_checkbox": "I have read and agree to the <terms>Terms of Service</terms>, <privacy>Privacy Policy</privacy> and <addendum>Provider Addendum</addendum>.",
+    "addendum_required": "Please accept the Terms, Privacy Policy and Provider Addendum to submit."
   },
   "admin": {
     "verifications_title": "Provider Verifications",
@@ -573,7 +577,8 @@
     "faq_refund": "If you cancel before a provider accepts, you're refunded in full. Other cases follow the refund policy shown at checkout.",
     "faq_verify": "Every provider is KYC- and credential-verified before their listings go live — look for the blue tick.",
     "grievance_title": "Grievance officer",
-    "grievance_body": "For unresolved complaints, write to our grievance officer. We acknowledge within 24 hours and aim to resolve within 15 days."
+    "grievance_body": "For unresolved complaints, write to our Grievance Officer. We acknowledge within {hours} hours and aim to resolve within {days} days.",
+    "grievance_link": "Grievance page & officer details →"
   },
   "not_found": {
     "title": "Page not found",
@@ -1126,9 +1131,8 @@
   "legal": {
     "help_link": "Help & support",
     "updated": "Last updated: {date}",
-    "contact_line": "Questions about this policy: support@amclub.in · Grievances: grievance@amclub.in",
+    "contact_line": "Questions about this policy: support@amclub.in · Grievances: grievance@amclub.in (acknowledged within 24 hours)",
     "terms_title": "Terms of Service",
-    "terms_updated": "7 July 2026",
     "terms_s1_h": "Who we are",
     "terms_s1_p": "AMClub is an online marketplace that connects micro, small and medium enterprises (MSMEs) with independent, verified service providers. AMClub facilitates discovery, ordering and payment; the professional service itself is delivered by the provider in their own name and on their own responsibility.",
     "terms_s2_h": "Your account",
@@ -1150,7 +1154,6 @@
     "terms_s10_h": "Governing law and changes",
     "terms_s10_p": "These terms are governed by the laws of India, with courts at Hyderabad, Telangana having jurisdiction. We may update these terms; continued use after an update constitutes acceptance.",
     "privacy_title": "Privacy Policy",
-    "privacy_updated": "7 July 2026",
     "privacy_s1_h": "What we collect",
     "privacy_s1_p": "Account details (name, phone, email), business details (business name, sector, state, GSTIN/Udyam where you provide them), your orders, requirements and quotes, and basic device/usage data.",
     "privacy_s2_h": "Why we collect it",
@@ -1166,7 +1169,7 @@
     "privacy_s7_h": "Your rights",
     "privacy_s7_p": "You may access, correct, export, or delete your data. Deletion requests are completed within 30 days, except records with statutory retention requirements.",
     "privacy_s8_h": "Grievances",
-    "privacy_s8_p": "Write to grievance@amclub.in. We acknowledge grievances within 48 hours and aim to resolve them within 30 days, in line with the Digital Personal Data Protection Act, 2023.",
+    "privacy_s8_p": "Write to our Grievance Officer at grievance@amclub.in or on the company line +91 83411 15455. We acknowledge every grievance within 24 hours and aim to resolve it within 15 days, in line with the Digital Personal Data Protection Act, the IT Rules 2021 and the Consumer Protection (E-Commerce) Rules 2020. The officer’s name, designation and postal address are published on our Grievance page.",
     "privacy_s9_h": "Updates",
     "privacy_s9_p": "We will post any changes to this policy on this page with an updated date above.",
     "refund_title": "Refund & Cancellation Policy",
@@ -1186,6 +1189,49 @@
     "refund_s7_h": "Disputes",
     "refund_s7_p": "Our operations team reviews disputes and can order a full refund, a partial refund, or release payment to the provider. Refunds are returned to your original payment method, typically within 5–7 business days.",
     "refund_s8_h": "How to cancel or raise a dispute",
-    "refund_s8_p": "Use the buttons on your order page, or write to support@amclub.in with your order number."
+    "refund_s8_p": "Use the buttons on your order page, or write to support@amclub.in with your order number.",
+    "grievance_link": "Grievance officer",
+    "provider_addendum_title": "Provider Addendum",
+    "provider_addendum_s1_h": "Payment protection (escrow)",
+    "provider_addendum_s1_p": "The buyer’s payment for your order is collected upfront and held by the platform’s payment partner. It is released to you after the buyer confirms the work is complete and the platform approves the release. If the buyer neither confirms nor raises a dispute within 3 days (72 hours) of your delivery, the order auto-completes as described in the Terms of Service and the same release process follows. Refunds and disputes are handled under the Refund & Cancellation Policy.",
+    "provider_addendum_s2_h": "AMC Score",
+    "provider_addendum_s2_p": "The platform computes a public reliability score for every provider from verified transaction events: how quickly you respond to requests, on-time delivery, completion confirmations by buyers, and dispute outcomes. These are the factors; the formula itself is not published. Your score accrues from your first order. You can see your own score before it is shown to buyers.",
+    "provider_addendum_s3_h": "Buyer rating",
+    "provider_addendum_s3_p": "Buyers are rated too, on objective service levels such as confirming delivery on time and payment behaviour, so that reliability is measured on both sides of every order.",
+    "provider_addendum_s4_h": "Responding to requests (auto-decline)",
+    "provider_addendum_s4_p": "When you are matched to a buyer’s request for quotes, you are expected to respond within the response window shown in the request. If you do not, the platform sends a courteous decline to the buyer on your behalf so they are not kept waiting. The first time this happens you will be notified.",
+    "provider_addendum_s5_h": "Use of your data",
+    "provider_addendum_s5_p": "Quote and transaction data may be used in anonymised, aggregated form to improve platform services. Photos and voice recordings you submit are stored and may be processed by automated (AI) systems for evidence, verification and service features. Our Privacy Policy governs all personal data."
+  },
+  "grievance": {
+    "title": "Grievance redressal",
+    "intro": "If something has gone wrong with an order, a quote, a provider or your data and our support team could not resolve it, you can raise a formal grievance with our Grievance Officer.",
+    "officer_heading": "Grievance Officer",
+    "whatsapp": "WhatsApp",
+    "commitments": "We acknowledge every grievance within {ackHours} hours and aim to resolve it within {resolveDays} days.",
+    "how_heading": "How to raise a grievance",
+    "how_body": "Email the Grievance Officer, or message the company line on WhatsApp. Include your order number or RFQ id, what happened, and what outcome you are seeking. You will receive an acknowledgement with a reference number.",
+    "email_subject": "Grievance — order/RFQ id:",
+    "cta_email": "Email the Grievance Officer",
+    "whatsapp_prefill": "Hello, I want to raise a grievance. Order/RFQ id: ",
+    "cta_whatsapp": "WhatsApp the company line",
+    "what_happens": "What happens next: we acknowledge within {ackHours} hours, investigate with both parties, and share a resolution within {resolveDays} days. If you are not satisfied, you may pursue the remedies available under the Consumer Protection Act, 2019.",
+    "see_also": "See also:",
+    "terms_link": "Terms of Service",
+    "privacy_link": "Privacy Policy",
+    "refund_link": "Refund & Cancellation Policy",
+    "help_link": "Help & support"
+  },
+  "legal_gate": {
+    "title": "Please review our updated terms",
+    "body": "To keep using AMClub, please accept the current version of the documents below. It takes one tap.",
+    "doc_terms": "Terms of Service",
+    "doc_privacy": "Privacy Policy",
+    "doc_provider_addendum": "Provider Addendum",
+    "updated_on": "updated {date}",
+    "accept": "I agree and continue",
+    "accepting": "Saving…",
+    "error": "Could not save your acceptance. Please try again.",
+    "sign_out": "Sign out instead"
   }
 }

@@ -57,7 +57,11 @@
     "verify_btn": "Verify OTP",
     "change_number": "Change number",
     "no_account": "New here?",
-    "have_account": "Already have an account?"
+    "have_account": "Already have an account?",
+    "consent_prefix": "I agree to the",
+    "consent_terms": "Terms of Service",
+    "consent_and": "and",
+    "consent_privacy": "Privacy Policy"
   },
   "msme_signup": {
     "step_profile_title": "Your profile",
@@ -232,7 +236,8 @@
     "invalid_gstin": "Enter a valid 15-character GSTIN",
     "invalid_udyam": "Enter a valid Udyam number (e.g. UDYAM-MH-01-0123456)",
     "payment_failed": "Payment didn't go through. No money was deducted — try again.",
-    "network": "Check your internet connection and try again."
+    "network": "Check your internet connection and try again.",
+    "consent_required": "Please agree to the Terms of Service and Privacy Policy to continue."
   },
   "order_actions": {
     "accept": "Accept order",
@@ -291,5 +296,15 @@
     "err_stt": "We couldn't hear you clearly. Try again from a quieter spot, speaking close to the phone.",
     "err_busy": "Our understanding service is busy right now — please type your requirement below, or try voice again in a minute.",
     "err_quota": "Voice input is temporarily unavailable. Please type your requirement below — everything else works normally."
+  },
+  "legal_gate": {
+    "title": "Please review our updated terms",
+    "body": "To keep using AMClub, please accept the current version of the documents below. It takes one tap.",
+    "doc_terms": "Terms of Service",
+    "doc_privacy": "Privacy Policy",
+    "doc_provider_addendum": "Provider Addendum",
+    "accept": "I agree and continue",
+    "error": "Could not save your acceptance. Please try again.",
+    "sign_out": "Sign out instead"
   }
 }

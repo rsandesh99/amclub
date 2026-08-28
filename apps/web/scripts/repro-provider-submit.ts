@@ -54,6 +54,14 @@ async function main() {
   const vbBody = await vb.json().catch(() => ({}))
   console.log(`[verify-bank] STATUS ${vb.status} — verified=${vbBody.verified} stub=${vbBody.stub}`)
 
+  // 1c) Accept Terms + Privacy + Provider Addendum (Phase 2 — the endpoint is gated).
+  const legal = await fetch(`${BASE}/api/v1/legal/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify({ docs: ['terms', 'privacy', 'provider_addendum'], surface: 'web', locale: 'en' }),
+  })
+  console.log(`[legal/accept] STATUS ${legal.status}`)
+
   // 2) Submit registration for a credential-requiring category, mirroring the wizard
   //    (credential TYPE + NUMBER + document are all required since 5950c74).
   const payload = {

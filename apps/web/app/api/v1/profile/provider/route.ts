@@ -11,6 +11,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser, upsertUserRow } from '@/lib/auth/session'
 import { encryptColumn, fingerprintColumn } from '@/lib/crypto'
 import { serverError } from '@/lib/api/errors'
+import { missingLegalDocs } from '@/lib/legal/acceptance'
 
 const credentialUploadSchema = z.object({
   url: z.string().optional(),
@@ -69,6 +70,14 @@ export async function POST(request: NextRequest) {
 
   const d = parsed.data
 
+  // Signup contract (Phase 2): Terms + Privacy + Provider Addendum must be on
+  // record at the current versions before a provider account is created.
+  const admin = await createAdminClient()
+  const missingDocs = await missingLegalDocs(admin, user.id, true)
+  if (missingDocs.length > 0) {
+    return NextResponse.json({ error: 'legal_acceptance_required', required: missingDocs }, { status: 403 })
+  }
+
   // §3.3/§5 — categories that require a statutory credential must have the
   // credential type, its number, AND the document before submit
   // (defense-in-depth; the wizard also gates this).
@@ -93,7 +102,6 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const admin = await createAdminClient()
 
   // 1. Ensure the user row carries the provider role
   const newRoles = Array.from(new Set([...(user.roles ?? ['msme']), 'provider']))

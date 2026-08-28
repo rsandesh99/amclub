@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { LegalArticle } from '@/components/legal/LegalArticle'
+import { GrievanceOfficerBlock } from '@/components/legal/GrievanceOfficerBlock'
 
 export const revalidate = 86400
 
@@ -9,5 +10,10 @@ export async function generateMetadata() {
 }
 
 export default function TermsPage() {
-  return <LegalArticle doc="terms" sections={10} />
+  return (
+    <LegalArticle doc="terms" sections={10}>
+      {/* Statutory officer block — same component as /grievance (one source). */}
+      <GrievanceOfficerBlock compact />
+    </LegalArticle>
+  )
 }

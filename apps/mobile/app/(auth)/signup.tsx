@@ -1,5 +1,5 @@
 import {
-  Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View,
+  Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useState } from 'react'
@@ -23,8 +23,19 @@ export default function SignupScreen() {
   const [fullName, setFullName] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [loading, setLoading] = useState(false)
+  // Phase 2b — explicit Terms + Privacy consent; blocks OTP/Google until ticked
+  // and is written to terms_acceptances (surface 'mobile') before the profile
+  // POST, which refuses without it.
+  const [agreed, setAgreed] = useState(false)
+
+  function requireConsent(): boolean {
+    if (agreed) return true
+    Alert.alert(t('errors.title'), t('errors.consent_required'))
+    return false
+  }
 
   async function sendOtp() {
+    if (!requireConsent()) return
     setLoading(true)
     try {
       if (method === 'phone') {
@@ -59,6 +70,7 @@ export default function SignupScreen() {
   }
 
   async function google() {
+    if (!requireConsent()) return
     setLoading(true)
     const res = await signInWithGoogle()
     setLoading(false)
@@ -72,6 +84,13 @@ export default function SignupScreen() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
+      // Acceptance rows first — /profile/msme is gated on them (403 otherwise).
+      const legal = await fetch(`${API_URL}/api/v1/legal/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ docs: ['terms', 'privacy'], surface: 'mobile' }),
+      })
+      if (!legal.ok) throw new Error(t('errors.generic'))
       const res = await fetch(`${API_URL}/api/v1/profile/msme`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
@@ -111,7 +130,19 @@ export default function SignupScreen() {
                   <TextInput className="text-base text-foreground" placeholder={t('auth.email_placeholder')} placeholderTextColor="#9CA3AF" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
                 </View>
               )}
-              <TouchableOpacity onPress={sendOtp} disabled={loading} className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}>
+              {/* Phase 2b — explicit consent checkbox (replaces the passive line). */}
+              <TouchableOpacity onPress={() => setAgreed((a) => !a)} accessibilityRole="checkbox" accessibilityState={{ checked: agreed }} className="flex-row items-start gap-3 rounded-xl border border-gray-200 bg-surface px-4 py-3">
+                <View className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${agreed ? 'border-primary bg-primary' : 'border-gray-400 bg-surface'}`}>
+                  {agreed && <Text className="text-xs font-bold text-white">✓</Text>}
+                </View>
+                <Text className="flex-1 text-sm leading-5 text-foreground">
+                  {t('auth.consent_prefix')}{' '}
+                  <Text className="text-primary underline" onPress={() => Linking.openURL(`${API_URL}/terms`)}>{t('auth.consent_terms')}</Text>
+                  {' '}{t('auth.consent_and')}{' '}
+                  <Text className="text-primary underline" onPress={() => Linking.openURL(`${API_URL}/privacy`)}>{t('auth.consent_privacy')}</Text>.
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={sendOtp} disabled={loading || !agreed} className={`rounded-xl py-4 items-center ${loading || !agreed ? 'bg-primary/60' : 'bg-primary'}`}>
                 <Text className="text-base font-semibold text-white">{loading ? t('common.loading') : t('auth.send_otp_btn')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setMethod((m) => (m === 'phone' ? 'email' : 'phone'))} className="items-center">

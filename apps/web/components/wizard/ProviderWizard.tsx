@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { acceptLegalDocs } from '@/lib/legal/client'
 import { useRouter } from '@/i18n/navigation'
 import { AuthPanel } from '@/components/auth/AuthPanel'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ import {
   statutoryOptionsForCategory,
   isStatutoryCredential,
   isValidGstin,
+  PROVIDER_LEGAL_DOCS,
 } from '@amclub/shared'
 import { loadProviderDraft } from '@/components/gateway/draft'
 
@@ -88,8 +90,14 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   // locales) — reuse them instead of duplicating.
   const tGw = useTranslations('gateway')
   const router = useRouter()
+  const locale = useLocale()
 
   const [step, setStep] = useState<Step>(skipAuth ? 'business' : 'auth')
+  // Phase 2b/2d — Terms+Privacy consent on the auth step; all three documents
+  // (incl. the Provider Addendum) on the submit step. Rows are written right
+  // before the profile POST, which refuses without them.
+  const [legalAccepted, setLegalAccepted] = useState(false)
+  const [addendumAccepted, setAddendumAccepted] = useState(false)
   const [draft, setDraft] = useState<Draft>({ ...EMPTY })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -285,9 +293,16 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   }
 
   async function submitForReview() {
+    if (!addendumAccepted) {
+      setError(t('addendum_required'))
+      return
+    }
     setLoading(true)
     setError('')
     try {
+      // Terms + Privacy + Provider Addendum rows first — the endpoint is gated.
+      const legal = await acceptLegalDocs([...PROVIDER_LEGAL_DOCS], locale)
+      if (!legal.ok) throw new Error(t('error_generic'))
       const res = await fetch('/api/v1/profile/provider', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -400,7 +415,11 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             <h2 className="mb-1 text-xl font-semibold">{t('step1_title')}</h2>
             <p className="text-sm text-foreground-secondary">{t('step1_subtitle')}</p>
           </div>
-          <AuthPanel onAuthenticated={handleAuthenticated} googleRedirectTo="/partner/onboarding" />
+          <AuthPanel
+            onAuthenticated={handleAuthenticated}
+            googleRedirectTo="/partner/onboarding"
+            consent={{ checked: legalAccepted, onChange: setLegalAccepted }}
+          />
         </>
       )}
 
@@ -724,13 +743,31 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
               </div>
             ))}
           </div>
+          {/* Phase 2b/2d — explicit acceptance covering all three documents (Google
+              arrivals skipped the auth-step checkbox; the addendum is provider-only). */}
+          <label htmlFor="provider-legal-consent" className="flex cursor-pointer items-start gap-3 rounded-button border border-border bg-surface px-3 py-2.5 text-sm leading-relaxed text-foreground">
+            <input
+              id="provider-legal-consent"
+              type="checkbox"
+              checked={addendumAccepted}
+              onChange={(e) => setAddendumAccepted(e.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 accent-primary"
+            />
+            <span>
+              {t.rich('addendum_checkbox', {
+                terms: (chunks) => <a href="/terms" target="_blank" rel="noopener" className="text-primary underline underline-offset-2 hover:no-underline">{chunks}</a>,
+                privacy: (chunks) => <a href="/privacy" target="_blank" rel="noopener" className="text-primary underline underline-offset-2 hover:no-underline">{chunks}</a>,
+                addendum: (chunks) => <a href="/provider-addendum" target="_blank" rel="noopener" className="text-primary underline underline-offset-2 hover:no-underline">{chunks}</a>,
+              })}
+            </span>
+          </label>
           {error && <p className="text-sm text-danger">{error}</p>}
           <div className="flex gap-3">
             <Button variant="ghost" onClick={goBack} disabled={loading} className="shrink-0">{tCommon('back')}</Button>
             <Button
               onClick={submitForReview}
               loading={loading}
-              disabled={!draft.gstinVerified || !credsComplete || !draft.bankVerified}
+              disabled={!draft.gstinVerified || !credsComplete || !draft.bankVerified || !addendumAccepted}
               className="flex-1"
             >
               {t('submit_btn')}

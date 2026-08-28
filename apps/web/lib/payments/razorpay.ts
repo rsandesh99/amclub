@@ -27,15 +27,31 @@ export function makeRazorpayGateway(keyId: string, keySecret: string): PaymentGa
       }
     },
 
-    async createRefund({ razorpayPaymentId, amountPaise, notes }): Promise<GatewayRefund> {
+    async createRefund({ razorpayPaymentId, amountPaise, receipt, notes }): Promise<GatewayRefund> {
       const refund = await rzp.payments.refund(razorpayPaymentId, {
         amount: amountPaise,
+        ...(receipt ? { receipt } : {}),
         notes: notes ?? {},
       })
       return {
         razorpayRefundId: refund.id,
         amountPaise: Number(refund.amount),
         status: refund.status,
+        receipt: refund.receipt ?? null,
+      }
+    },
+
+    async listRefunds(razorpayPaymentId: string): Promise<GatewayRefund[]> {
+      try {
+        const res = await rzp.payments.fetchMultipleRefund(razorpayPaymentId, { count: 100 })
+        return (res.items ?? []).map((r) => ({
+          razorpayRefundId: r.id,
+          amountPaise: Number(r.amount),
+          status: r.status,
+          receipt: r.receipt ?? null,
+        }))
+      } catch {
+        return []
       }
     },
 

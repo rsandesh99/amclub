@@ -7,6 +7,7 @@ import { EmailStep } from './EmailStep'
 import { OtpStep } from './OtpStep'
 import { GoogleButton } from './GoogleButton'
 import { Captcha, captchaEnabled } from './Captcha'
+import { ConsentCheckbox } from './ConsentCheckbox'
 import { sendOtp, type OtpChannel, type SendOtpResult } from '@/lib/auth/otp-client'
 
 /** Sends an OTP for the given identifier, returning a coarse result. Injected
@@ -18,6 +19,13 @@ interface AuthPanelProps {
   onAuthenticated: () => void
   /** Where Google OAuth returns the user after the callback exchange. */
   googleRedirectTo?: string
+  /**
+   * Signup surfaces: render the explicit consent checkbox (Phase 2b) instead
+   * of the passive line, and hold OTP/Google until it is ticked. Login leaves
+   * this unset — returning users are re-gated by LegalGate when a version
+   * changes.
+   */
+  consent?: { checked: boolean; onChange: (checked: boolean) => void }
 }
 
 /**
@@ -29,7 +37,7 @@ interface AuthPanelProps {
  * panel owns the Turnstile token: it's single-use, so we remount the widget
  * (via `captchaNonce`) after every send to get a fresh one.
  */
-export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app' }: AuthPanelProps) {
+export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app', consent }: AuthPanelProps) {
   const t = useTranslations('auth')
   const tCommon = useTranslations('common')
   const [method, setMethod] = useState<'phone' | 'email'>('phone')
@@ -39,7 +47,9 @@ export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app' }: AuthPa
 
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaNonce, setCaptchaNonce] = useState(0)
-  const captchaReady = !captchaEnabled() || !!captchaToken
+  const consentOk = !consent || consent.checked
+  // The send buttons already gate on captchaReady; consent rides the same gate.
+  const captchaReady = (!captchaEnabled() || !!captchaToken) && consentOk
 
   const requestOtp = useCallback<RequestOtp>(
     async (channel, identifier) => {
@@ -89,9 +99,15 @@ export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app' }: AuthPa
             <div className="h-px flex-1 bg-muted" />
           </div>
 
-          <GoogleButton redirectTo={googleRedirectTo} className="w-full" />
+          <div className={consentOk ? '' : 'pointer-events-none opacity-50'} aria-disabled={!consentOk}>
+            <GoogleButton redirectTo={googleRedirectTo} className="w-full" />
+          </div>
 
-          {/* DPDP consent + contract formation line (B2) — every auth surface. */}
+          {consent ? (
+            /* Signup: explicit, blocking consent (Phase 2b). */
+            <ConsentCheckbox checked={consent.checked} onChange={consent.onChange} />
+          ) : (
+          /* Login: DPDP consent + contract formation line (B2). */
           <p className="text-center text-xs leading-relaxed text-foreground-secondary">
             {t.rich('consent_line', {
               terms: (chunks) => (
@@ -106,6 +122,7 @@ export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app' }: AuthPa
               ),
             })}
           </p>
+          )}
         </>
       )}
 

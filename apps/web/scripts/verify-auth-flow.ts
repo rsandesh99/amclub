@@ -37,8 +37,12 @@ async function token(email: string): Promise<string> {
   return data.session.access_token
 }
 const me = (t: string) => fetch(`${BASE}/api/v1/profile/me`, { headers: { authorization: `Bearer ${t}` } })
-const saveMsme = (t: string, body: object) =>
-  fetch(`${BASE}/api/v1/profile/msme`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` }, body: JSON.stringify(body) })
+// Phase 2: profile creation is gated on Terms + Privacy acceptance — mirror the
+// wizard by accepting first (idempotent), then saving.
+const saveMsme = async (t: string, body: object) => {
+  await fetch(`${BASE}/api/v1/legal/accept`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` }, body: JSON.stringify({ docs: ['terms', 'privacy'], surface: 'web' }) })
+  return fetch(`${BASE}/api/v1/profile/msme`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` }, body: JSON.stringify(body) })
+}
 
 async function main() {
   console.log(`\nAuth-flow verification → ${BASE}\n`)
