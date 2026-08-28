@@ -30,7 +30,8 @@ let pass = 0, fail = 0
 const check = (name: string, cond: boolean) => { if (cond) { console.log(`  ✓ ${name}`); pass++ } else { console.log(`  ✗ ${name}`); fail++ } }
 
 const createdOrders: string[] = []
-let providerUserId = '', buyerUserId = '', providerId = '', msmeId = '', packageId = ''
+let providerUserId = '', buyerUserId = '', adminUserId = '', providerId = '', msmeId = '', packageId = ''
+let adminToken = ''
 
 async function makeUser(email: string, roles: string[]) {
   const { data, error } = await admin.auth.admin.createUser({ email, password: 'Test1234!', email_confirm: true })
@@ -49,7 +50,9 @@ async function setup() {
   const stamp = Date.now()
   const prov = await makeUser(`prov_${stamp}@killtest.amclub`, ['provider'])
   const buyer = await makeUser(`buyer_${stamp}@killtest.amclub`, ['msme'])
-  providerUserId = prov.id; buyerUserId = buyer.id
+  // Admin actor for dispute resolution + payout release (DC9/DC10).
+  const adm = await makeUser(`admin_${stamp}@killtest.amclub`, ['msme', 'admin'])
+  providerUserId = prov.id; buyerUserId = buyer.id; adminUserId = adm.id; adminToken = adm.token
 
   const { data: cat } = await admin.from('categories').select('id, commission_bps').limit(1).single()
 
@@ -209,6 +212,56 @@ async function main() {
   const { data: dup } = await admin.from('refunds').insert({ payment_id: pay4!.id, amount_paise: 1, status: 'pending', idempotency_key: `rfnd_${o4}` }).select('id')
   check('a second row with the same key is impossible (unique index)', !dup || dup.length === 0)
 
+  // ── DC 9 (F1): split resolution — provider transfer BEFORE buyer refund, replay-safe ──
+  console.log('\nDC9 — split dispute resolution (refund_partial): transfer-then-refund + replay:')
+  const o6 = await makePaidOrder(commissionBps)
+  await transition(o6, 'accept', providerToken)
+  await transition(o6, 'submit_requirements', buyerToken)
+  await transition(o6, 'start', providerToken)
+  await transition(o6, 'deliver', providerToken)
+  const disp = await fetch(`${BASE}/api/v1/orders/${o6}/transition`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${buyerToken}` }, body: JSON.stringify({ action: 'raise_dispute', disputeReason: 'killtest split' }) })
+  check('buyer raises dispute → 200 disputed', disp.status === 200)
+  const { data: d6 } = await admin.from('disputes').select('id').eq('order_id', o6).single()
+  const { data: o6row } = await admin.from('orders').select('total_paise, provider_earning_paise').eq('id', o6).single()
+  const total6 = Number(o6row!.total_paise), earning6 = Number(o6row!.provider_earning_paise)
+  const refund6 = Math.round(total6 * 0.4)
+  const expectedPaid6 = Math.round((earning6 * (total6 - refund6)) / total6)
+  const res6 = await fetch(`${BASE}/api/v1/admin/disputes/${d6!.id}/resolve`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` }, body: JSON.stringify({ resolution: 'refund_partial', amountPaise: refund6 }) })
+  check('admin resolves refund_partial (40%) → 200', res6.status === 200)
+  const { data: o6after } = await admin.from('orders').select('status').eq('id', o6).single()
+  const { data: pay6 } = await admin.from('payouts').select('status, amount_paise, razorpay_transfer_id, paid_at').eq('order_id', o6).maybeSingle()
+  const { data: pm6 } = await admin.from('payments').select('id').eq('order_id', o6).single()
+  const { data: rf6 } = await admin.from('refunds').select('status, amount_paise, razorpay_refund_id, created_at').eq('payment_id', pm6!.id)
+  check("order → 'resolved_partial'", o6after?.status === 'resolved_partial')
+  check(`provider transfer = retained share (${expectedPaid6}) and PAID`, pay6?.status === 'paid' && Number(pay6?.amount_paise) === expectedPaid6 && Boolean(pay6?.razorpay_transfer_id))
+  check(`buyer refund = ${refund6}, exactly one processed row`, rf6?.length === 1 && rf6[0]!.status === 'processed' && Number(rf6[0]!.amount_paise) === refund6 && Boolean(rf6[0]!.razorpay_refund_id))
+  check('ORDER: transfer paid BEFORE the refund was initiated (F1-safe)', Boolean(pay6?.paid_at) && Boolean(rf6?.[0]?.created_at) && new Date(pay6!.paid_at!).getTime() <= new Date(rf6![0]!.created_at).getTime())
+  // Replay the resolution: no second transfer, no second refund.
+  const res6b = await fetch(`${BASE}/api/v1/admin/disputes/${d6!.id}/resolve`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` }, body: JSON.stringify({ resolution: 'refund_partial', amountPaise: refund6 }) })
+  const { data: pay6b } = await admin.from('payouts').select('razorpay_transfer_id, amount_paise').eq('order_id', o6).maybeSingle()
+  const { count: rf6count } = await admin.from('refunds').select('id', { count: 'exact', head: true }).eq('payment_id', pm6!.id)
+  check('replayed resolve: same transfer id, same amount, still ONE refund row', (res6b.status === 200 || res6b.status === 409) && pay6b?.razorpay_transfer_id === pay6?.razorpay_transfer_id && Number(pay6b?.amount_paise) === expectedPaid6 && rf6count === 1)
+
+  // ── DC 10 (ADR-004): fee headroom guard — refuse loudly, never shrink ──
+  console.log('\nDC10 — fee headroom (ADR-004): a transfer that cannot absorb the fee FAILS loudly:')
+  // Commission 0 bps ⇒ the platform has no headroom for Razorpay's fee ⇒ the guard must refuse.
+  const o5 = await makePaidOrder(0)
+  await transition(o5, 'accept', providerToken)
+  await transition(o5, 'submit_requirements', buyerToken)
+  await transition(o5, 'start', providerToken)
+  await transition(o5, 'deliver', providerToken)
+  await transition(o5, 'accept_delivery', buyerToken)
+  const { data: p5 } = await admin.from('payouts').select('id, status, amount_paise').eq('order_id', o5).maybeSingle()
+  const { data: o5row } = await admin.from('orders').select('total_paise, provider_earning_paise').eq('id', o5).single()
+  check('zero-commission order: payout created, transfer = full provider earning', Boolean(p5) && Number(p5!.amount_paise) === Number(o5row!.provider_earning_paise))
+  const rel5 = await fetch(`${BASE}/api/v1/admin/payouts/${p5!.id}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` }, body: JSON.stringify({ action: 'retry' }) })
+  const rel5Json = await rel5.json().catch(() => ({}))
+  const { data: p5after } = await admin.from('payouts').select('status, amount_paise, razorpay_transfer_id').eq('id', p5!.id).single()
+  check('admin release → payout FAILED (not paid), amount untouched, no transfer id', rel5.status === 200 && rel5Json.status === 'failed' && p5after?.status === 'failed' && Number(p5after?.amount_paise) === Number(o5row!.provider_earning_paise) && !p5after?.razorpay_transfer_id)
+  const { data: ev5 } = await admin.from('order_events').select('payload').eq('order_id', o5).eq('event', 'payout_failed').maybeSingle()
+  const fee5 = (ev5?.payload as { reason?: string; fee?: { estimatedFeePaise?: number; commissionPaise?: number; reason?: string } } | null)
+  check("payout_failed event says fee_headroom with the numbers (fee > commission)", fee5?.reason === 'fee_headroom' && fee5?.fee?.reason === 'exceeds_commission' && (fee5?.fee?.estimatedFeePaise ?? 0) > (fee5?.fee?.commissionPaise ?? -1))
+
   // ── DC 8: auto-accept after shortened timer ──
   console.log('\nDC8 — auto-accept job (shortened timer):')
   const o3 = await makePaidOrder(commissionBps)
@@ -241,8 +294,9 @@ async function cleanup() {
   if (packageId) await admin.from('packages').delete().eq('id', packageId)
   if (providerId) { await admin.from('provider_bank_accounts').delete().eq('provider_id', providerId); await admin.from('provider_profiles').delete().eq('id', providerId) }
   if (msmeId) await admin.from('msme_profiles').delete().eq('id', msmeId)
-  for (const u of [providerUserId, buyerUserId]) {
+  for (const u of [providerUserId, buyerUserId, adminUserId]) {
     if (!u) continue
+    await admin.from('audit_logs').delete().eq('actor_id', u)
     await admin.from('users').delete().eq('id', u)
     await admin.auth.admin.deleteUser(u).catch(() => {})
   }

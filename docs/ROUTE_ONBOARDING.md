@@ -57,6 +57,8 @@ Provider detail should now show **Ready to pay**. Held payouts for that provider
 - [ ] **Route activation approved on the live Razorpay account** — without it, linked accounts cannot be created and every real payout fails.
 - [ ] **KYC vendor provisioned (`KYC_API_KEY`)** — until then every genuine provider is `bank_unverified` and clearing them is a manual, audited override; the override must not be the norm at real-money volume.
 - [ ] At least one provider fully **Ready to pay** and one test transfer settled before the first real order.
+- [ ] **Live-mode `acc_` ids only.** Linked accounts are per Razorpay mode; any id recorded while the dashboard was in test mode must be re-created in live mode and re-saved via *Save Route account* (a test-mode id fails loudly at transfer time).
+- [ ] **Fee headroom (ADR-004):** the platform bears gateway fees from its 5 %; `RAZORPAY_FEE_BPS` in Vercel matches the account's contracted rate (default 236 = 2 % + GST). A payout that would not fit fails loudly with the numbers.
 
 ## Follow-up (scoped, for the incoming developer): API-automated linked accounts
 

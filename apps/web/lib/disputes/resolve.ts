@@ -97,12 +97,10 @@ export async function resolveDispute(
     .eq('id', order.id)
     .eq('status', 'disputed')
 
-  // 2. Buyer refund via the proven engine (idempotent on the existing refunds row).
-  if (refundPaise > 0) {
-    await processRefund(admin, order, 'disputed', resolution, refundPaise)
-  }
-
-  // 3. Provider payout settlement.
+  // 2. Provider payout settlement — BEFORE the buyer refund. Razorpay Route
+  //    refuses a payment-linked transfer once a refund has been initiated on
+  //    that payment (F1), so on a split resolution the provider leg must go
+  //    first. The mock never shows this; live mode would have.
   if (providerPaidPaise > 0) {
     // Release the §9.2 hold + set the exact amount, then pay via the proven cron
     // path (gateway transfer). Upsert covers disputes raised pre-completion
@@ -144,6 +142,14 @@ export async function resolveDispute(
         payload: { payout_id: voided[0]!.id, reason: 'refund_full' },
       })
     }
+  }
+
+  // 3. Buyer refund via the proven engine (insert-first, key-guarded, idempotent).
+  //    Runs even if the transfer leg failed above: the buyer's refund never
+  //    waits on provider readiness; a later provider retry is visible as a
+  //    failed payout in /admin/payouts.
+  if (refundPaise > 0) {
+    await processRefund(admin, order, 'disputed', resolution, refundPaise)
   }
 
   // 4. Mark the dispute resolved (records the buyer refund as the resolution amount).

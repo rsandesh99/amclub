@@ -69,6 +69,8 @@ export default async function PartnerEarningsPage() {
         <p className="rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">{t('payout_hold_banner')}</p>
       )}
       <p className="rounded-button bg-primary/5 px-3 py-2 text-xs text-foreground-secondary">{t('payout_note')}</p>
+      {/* ADR-004 — providers never bear gateway charges. */}
+      <p className="rounded-button bg-primary/5 px-3 py-2 text-xs text-foreground-secondary">{t('fee_note')}</p>
 
       <section>
         <h2 className="mb-3 text-sm font-semibold">{t('payouts_title')}</h2>

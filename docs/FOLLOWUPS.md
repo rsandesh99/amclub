@@ -74,6 +74,39 @@ money-out path. ~3 days + a replay kill-test per event type.
 
 ---
 
+## Provider Addendum — add the fee-bearing sentence at the next version bump (logged 2026-08-28, ADR-004)
+
+Queue for `legal.provider_addendum_s1_p` (or a new §6) when
+`LEGAL_VERSIONS.provider_addendum` is next bumped: *"You receive your full
+quoted amount minus only AMC's 5% commission. All payment gateway charges are
+borne by AMC."* Provider-favourable, so no urgency and no forced re-acceptance
+now; it is already shown on `/partner/earnings` and `/help`.
+
+---
+
+## Route transfers: payment-linked vs direct, and live-mode account ids (logged 2026-08-28, pre-cutover money check)
+
+**Today:** `lib/payments/razorpay.ts` calls `transfers.create({ account, amount })`
+— a *direct* transfer from the platform's settled balance, **not** linked to
+the buyer's payment. Consequences at cutover: (1) transfers before Razorpay
+settles the payment (T+2/T+3) fail with insufficient balance; (2) the
+escrow story ("held by the payment partner") is only literally true with
+payment-linked transfers (`payments.transfer(paymentId, { transfers })`),
+which draw from the captured amount and honour Route's F1/F2 rules.
+**Founder decision needed** before switching: payment-linked transfers
+(recommended; requires threading `razorpay_payment_id` into `createTransfer`
+and keeping the transfer-then-refund order already adopted) vs staying direct
+(needs a balance-aware retry). Either way `payout.ts` stays the only path.
+
+**Account ids:** nothing in code assumes live-mode ids (the only check is the
+`acc_` format), but Razorpay linked accounts are **per mode** — an `acc_`
+created in test mode does not exist in live mode. Any test-mode id stored in
+`provider_bank_accounts.razorpay_route_account_id` must be replaced with the
+live-mode id at cutover (transfer would fail loudly otherwise; readiness
+cannot tell the two apart). Added to `docs/ROUTE_ONBOARDING.md` checklist.
+
+---
+
 ## Notification abstraction for WhatsApp (Gupshup/Interakt) — scope (logged 2026-08-28)
 
 **Today:** `lib/notifications/channels.ts` has SMS (MSG91, not billed until

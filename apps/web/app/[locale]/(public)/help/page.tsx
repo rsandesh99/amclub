@@ -18,6 +18,8 @@ export default async function HelpPage() {
     { icon: Wallet, body: t('faq_orders') },
     { icon: RotateCcw, body: t('faq_refund') },
     { icon: ShieldCheck, body: t('faq_verify') },
+    // ADR-004 — providers never bear gateway charges.
+    { icon: Wallet, body: t('faq_fees') },
   ]
 
   return (

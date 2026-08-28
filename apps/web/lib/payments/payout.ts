@@ -1,6 +1,7 @@
 import type { createAdminClient } from '@/lib/supabase/server'
 import type { PaymentGateway } from './types'
 import { notifyPayoutPaid } from '@/lib/notifications/events'
+import { assertFeeHeadroom, FeeHeadroomError } from './fees'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -44,6 +45,22 @@ export async function runPayouts(
 
     let transfer
     try {
+      // ADR-004 / F2 guard: the transfer is ALWAYS the provider's full amount;
+      // if Razorpay's fee would not fit inside the captured amount and inside
+      // our commission, refuse loudly (payout → failed with the numbers) —
+      // never shrink the provider's transfer to make room.
+      const { data: ord } = await admin
+        .from('orders')
+        .select('total_paise, commission_paise')
+        .eq('id', p.order_id)
+        .maybeSingle()
+      if (ord) {
+        assertFeeHeadroom({
+          transferPaise: Number(p.amount_paise),
+          capturedPaise: Number(ord.total_paise),
+          commissionPaise: Number(ord.commission_paise),
+        })
+      }
       transfer = await gateway.createTransfer({
         linkedAccountId: bank?.razorpay_route_account_id ?? null,
         amountPaise: p.amount_paise,
@@ -66,7 +83,8 @@ export async function runPayouts(
         payload: {
           payout_id: p.id,
           amount_paise: p.amount_paise,
-          reason: e instanceof Error ? e.message.slice(0, 200) : 'transfer_failed',
+          reason: e instanceof FeeHeadroomError ? 'fee_headroom' : e instanceof Error ? e.message.slice(0, 200) : 'transfer_failed',
+          ...(e instanceof FeeHeadroomError ? { fee: e.detail } : {}),
         },
       })
       continue
