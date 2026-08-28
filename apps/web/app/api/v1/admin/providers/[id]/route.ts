@@ -9,6 +9,7 @@ import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { writeAudit } from '@/lib/audit/log'
 import { serverError } from '@/lib/api/errors'
 import { decryptColumn, fingerprintColumn } from '@/lib/crypto'
+import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
 
 /** GET — full provider detail for ops: profile, verifications, listings, orders, earnings, reviews. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -45,9 +46,12 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     reviews: reviews ?? [],
     categories: categories ?? [],
     earningsPaise,
-    bank: bank
-      ? { onFile: true, pennyDropVerified: bank.penny_drop_verified, hasRouteAccount: Boolean(bank.razorpay_route_account_id) }
-      : { onFile: false, pennyDropVerified: false, hasRouteAccount: false },
+    // Phase 3a — readiness facts (the Route id is Razorpay's handle, not PII).
+    bank: {
+      ...bankFacts(bank),
+      routeAccountId: bank?.razorpay_route_account_id ?? null,
+      readiness: payoutReadiness(bankFacts(bank)),
+    },
   })
 }
 
@@ -62,6 +66,8 @@ const bodySchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('set_route_account'),
     routeAccountId: z.string().trim().regex(/^acc_[A-Za-z0-9]{6,}$/, 'must be a Razorpay account id (acc_...)'),
+    /** Optional note for the audit row (e.g. "linked in RZP dashboard 28 Aug"). */
+    reason: z.string().trim().max(500).optional(),
   }),
   // Manual bank verification (Phase 1g). Until KYC_API_KEY is a real vendor,
   // every genuine provider lands at bank_unverified; this is the logged,
@@ -122,7 +128,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .from('provider_bank_accounts')
         .update({ razorpay_route_account_id: d.routeAccountId, updated_at: new Date().toISOString() })
         .eq('id', bank.id)
-      after = { razorpay_route_account_id: d.routeAccountId }
+      after = { razorpay_route_account_id: d.routeAccountId, ...(d.reason ? { reason: d.reason } : {}) }
     } else if (d.action === 'set_bank_verified') {
       const { data: bank } = await admin
         .from('provider_bank_accounts')

@@ -2,8 +2,9 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
+import { bankFacts, payoutReadiness, READINESS_VALUES, type PayoutReadiness } from '@/lib/payments/readiness'
 
-/** GET — provider list/search/filter (status, state, category slug, q, minRating). */
+/** GET — provider list/search/filter (status, state, category slug, q, minRating, readiness). */
 export async function GET(request: NextRequest) {
   const gate = await requireAdmin()
   if (gate.error) return gate.error
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
   const q = sp.get('q')?.trim()
   const categorySlug = sp.get('category')
   const minRating = sp.get('minRating')
+  const readinessFilter = sp.get('readiness')
 
   const admin = await createAdminClient()
 
@@ -41,5 +43,24 @@ export async function GET(request: NextRequest) {
   if (providerIdFilter) query = query.in('id', providerIdFilter)
 
   const { data } = await query
-  return NextResponse.json({ providers: data ?? [] })
+  const rows = data ?? []
+
+  // Phase 3a — payout readiness per provider (status only; never the account number).
+  const ids = rows.map((r) => r.id)
+  const { data: banks } = ids.length
+    ? await admin.from('provider_bank_accounts').select('provider_id, penny_drop_verified, razorpay_route_account_id').in('provider_id', ids)
+    : { data: [] as { provider_id: string; penny_drop_verified: boolean; razorpay_route_account_id: string | null }[] }
+  const bankByProvider = new Map((banks ?? []).map((b) => [b.provider_id, b]))
+
+  let providers = rows.map((r) => {
+    const facts = bankFacts(bankByProvider.get(r.id))
+    return { ...r, readiness: payoutReadiness(facts) as PayoutReadiness, bank: facts }
+  })
+  if (readinessFilter && (READINESS_VALUES as readonly string[]).includes(readinessFilter)) {
+    providers = providers.filter((p) => p.readiness === readinessFilter)
+  } else if (readinessFilter === 'unready') {
+    providers = providers.filter((p) => p.readiness !== 'ready')
+  }
+
+  return NextResponse.json({ providers })
 }

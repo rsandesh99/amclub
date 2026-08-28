@@ -44,5 +44,12 @@ each of which exists in code:
   `bank_account_verifications.provider = 'admin_override'`). That is acceptable
   during manual onboarding; at real-money volume the override must be the
   exception, so provisioning the vendor is a hard prerequisite of live cutover.
+- **Cutover checklist (Phase 3d, 2026-08-28; procedure in
+  `docs/ROUTE_ONBOARDING.md`):**
+  - [ ] Route activation approved on the live Razorpay account.
+  - [ ] KYC vendor provisioned (`KYC_API_KEY`) — manual bank overrides stop
+        being the norm.
+  - [ ] Every active provider shows **Ready to pay** in `/admin/providers`
+        (Route id + verified bank), or is knowingly excluded.
 - The F5 amount cross-check (captured amount must equal the frozen session
   total) applies to both simulate and webhook paths.

@@ -7,15 +7,19 @@ import { PAYOUT_STATUSES } from '@amclub/shared'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /** Phase 8 §7 — payout monitor queue (the unmet P7 claim): every payout by
- *  state with order/provider context; failed|held rows get a retry action. */
+ *  state with order/provider context; failed|held rows get a retry action.
+ *  Phase 3a/3c: readiness badge on rows whose provider cannot be paid yet,
+ *  days-pending (oldest first for open statuses) + hold reasons. Default view
+ *  is 'held' — with PAYOUT_AUTO_RELEASE off that is the founder's worklist. */
 export default function AdminPayoutsPage() {
   const t = useTranslations('admin_ops')
   const { toast } = useToast()
-  const [status, setStatus] = useState<string>('failed')
+  const [status, setStatus] = useState<string>('held')
   const [payouts, setPayouts] = useState<any[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -85,6 +89,7 @@ export default function AdminPayoutsPage() {
                 <th className="p-3">{t('provider')}</th>
                 <th className="p-3">{t('amount')}</th>
                 <th className="p-3">{t('status')}</th>
+                <th className="p-3">{t('days_pending')}</th>
                 <th className="p-3">{t('scheduled_for')}</th>
                 <th className="p-3"></th>
               </tr>
@@ -99,9 +104,13 @@ export default function AdminPayoutsPage() {
                     <p className="max-w-[16rem] truncate text-xs text-foreground-secondary">{p.order?.title}</p>
                   </td>
                   <td className="p-3">
-                    {p.provider?.display_name}
+                    <Link href={`/admin/providers/${p.provider?.id}` as '/admin/providers'} className="hover:underline">{p.provider?.display_name}</Link>
                     {p.provider?.status !== 'active' && (
                       <span className="ml-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">{p.provider?.status}</span>
+                    )}
+                    {/* Phase 3a — a release tap on this row would FAIL: say so before the tap. */}
+                    {p.readiness !== 'ready' && (
+                      <p className="mt-1"><ReadinessBadge readiness={p.readiness} /></p>
                     )}
                   </td>
                   <td className="p-3 font-semibold">{formatINR(Number(p.amount_paise))}</td>
@@ -119,6 +128,21 @@ export default function AdminPayoutsPage() {
                     >
                       {t(`payout_${p.status}` as 'payout_failed')}
                     </span>
+                    {/* Phase 3c — why it is held (from the payout_held order_event). */}
+                    {p.hold_reasons?.length > 0 && (
+                      <p className="mt-1 flex flex-wrap gap-1">
+                        {p.hold_reasons.map((r: string) => (
+                          <span key={r} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground-secondary">{t(`hold_${r}` as 'hold_approval_gate')}</span>
+                        ))}
+                      </p>
+                    )}
+                  </td>
+                  <td className="p-3 text-sm">
+                    {p.days_pending == null ? '—' : (
+                      <span className={p.days_pending >= 7 ? 'font-semibold text-danger' : p.days_pending >= 3 ? 'font-semibold text-warning' : ''}>
+                        {t('days_n', { n: p.days_pending })}
+                      </span>
+                    )}
                   </td>
                   <td className="p-3 text-xs text-foreground-secondary">
                     {p.status === 'paid' ? fmtIST(p.paid_at) : fmtIST(p.scheduled_for)}

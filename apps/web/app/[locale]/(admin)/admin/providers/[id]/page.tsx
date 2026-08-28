@@ -6,8 +6,12 @@ import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+// Mirrors the API's acc_ validation so the button only enables on a valid id.
+const ROUTE_RE = /^acc_[A-Za-z0-9]{6,}$/
 
 export default function ProviderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -18,6 +22,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [badgeKind, setBadgeKind] = useState('')
+  const [routeId, setRouteId] = useState('')
+  const [routeReason, setRouteReason] = useState('')
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/v1/admin/providers/${id}`, { cache: 'no-store' })
@@ -69,22 +75,51 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
             {p.capacity_paused ? t('unpause') : t('pause')}
           </Button>
         </div>
-        {/* Bank verification — manual override until the real penny-drop vendor is live (Phase 1g). */}
-        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-          <span className="text-sm">
-            {t('bank_label')}:{' '}
-            <span className={data.bank?.pennyDropVerified ? 'font-medium text-success' : 'font-medium text-warning'}>
-              {!data.bank?.onFile ? t('bank_none') : data.bank.pennyDropVerified ? t('bank_verified') : t('bank_unverified')}
+        {/* Phase 3a — payout readiness: both facts, each with its action. */}
+        <div className="space-y-3 border-t border-border pt-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-semibold">{t('readiness')}:</span>
+            <ReadinessBadge readiness={data.bank?.readiness ?? 'no_bank'} />
+          </div>
+          {/* Fact 1 — bank verification (manual override until the real penny-drop vendor is live, Phase 1g). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm">
+              {t('bank_label')}:{' '}
+              <span className={data.bank?.pennyDropVerified ? 'font-medium text-success' : 'font-medium text-warning'}>
+                {!data.bank?.onFile ? t('bank_none') : data.bank.pennyDropVerified ? t('bank_verified') : t('bank_unverified')}
+              </span>
             </span>
-            {data.bank?.onFile && !data.bank.hasRouteAccount && (
-              <span className="ml-2 text-xs text-foreground-secondary">{t('bank_no_route')}</span>
+            {data.bank?.onFile && (
+              data.bank.pennyDropVerified
+                ? <Button variant="outline" onClick={() => setBankVerified(false)} loading={busy}>{t('bank_revoke')}</Button>
+                : <Button variant="outline" onClick={() => setBankVerified(true)} loading={busy}>{t('bank_mark_verified')}</Button>
             )}
-          </span>
-          {data.bank?.onFile && (
-            data.bank.pennyDropVerified
-              ? <Button variant="outline" onClick={() => setBankVerified(false)} loading={busy}>{t('bank_revoke')}</Button>
-              : <Button variant="outline" onClick={() => setBankVerified(true)} loading={busy}>{t('bank_mark_verified')}</Button>
-          )}
+          </div>
+          {/* Fact 2 — Razorpay Route linked account (existing set_route_account action; see docs/ROUTE_ONBOARDING.md). */}
+          <div className="flex flex-wrap items-end gap-2">
+            <span className="text-sm">
+              {t('route_label')}:{' '}
+              {data.bank?.hasRouteAccount
+                ? <span className="font-medium text-success">{data.bank.routeAccountId}</span>
+                : <span className="font-medium text-warning">{data.bank?.onFile ? t('route_missing') : t('bank_none')}</span>}
+            </span>
+            {data.bank?.onFile && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); if (ROUTE_RE.test(routeId.trim())) act({ action: 'set_route_account', routeAccountId: routeId.trim(), ...(routeReason.trim() ? { reason: routeReason.trim() } : {}) }) }}
+                className="flex flex-wrap items-end gap-2"
+              >
+                <label className="text-xs">{t('route_input_label')}
+                  <input value={routeId} onChange={(e) => setRouteId(e.target.value)} placeholder="acc_XXXXXXXXXXXXXX" spellCheck={false} className={`mt-1 w-56 rounded-button border bg-background p-2 font-mono text-sm ${routeId && !ROUTE_RE.test(routeId.trim()) ? 'border-danger' : 'border-border'}`} />
+                </label>
+                <label className="text-xs">{t('route_reason_label')}
+                  <input value={routeReason} onChange={(e) => setRouteReason(e.target.value)} placeholder={t('route_reason_placeholder')} className="mt-1 w-56 rounded-button border border-border bg-background p-2 text-sm" />
+                </label>
+                <Button type="submit" variant="outline" loading={busy} disabled={!ROUTE_RE.test(routeId.trim())}>
+                  {data.bank?.hasRouteAccount ? t('route_replace') : t('route_save')}
+                </Button>
+              </form>
+            )}
+          </div>
         </div>
         <div className="flex items-end gap-2 border-t border-border pt-3">
           <label className="flex-1 text-xs">{t('badge')}

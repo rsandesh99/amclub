@@ -219,6 +219,25 @@ async function main() {
     const { data: auditRows } = await admin.from('audit_logs').select('action').eq('actor_id', adminUser.uid).eq('entity_id', provCId ?? '').eq('action', 'provider_set_bank_verified')
     eq('audit_logs has provider_set_bank_verified', (auditRows ?? []).length, 1)
 
+    // ── 4c. Phase 3a — Route account via the admin UI path (same action) ──
+    console.log('Route account (set_route_account) — admin-only, validated, audited:')
+    denied('provC sets Route account on OWN row (provider)', (await api(provC.token, `/api/v1/admin/providers/${provCId}`, { action: 'set_route_account', routeAccountId: 'acc_SELFSERVE01' })).status)
+    eq('admin: invalid acc_ format → 422', (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, { action: 'set_route_account', routeAccountId: 'not-an-account' })).status, 422)
+    const beforeRoute = ((await (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, undefined, 'GET')).json()) as { bank?: { readiness?: string } }).bank?.readiness
+    eq('readiness before: missing_route (bank verified by override above)', beforeRoute, 'missing_route')
+    eq('admin: valid acc_ with note → 200', (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, { action: 'set_route_account', routeAccountId: 'acc_KILLTEST00001', reason: 'killtest link' })).status, 200)
+    const detailAfter = (await (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, undefined, 'GET')).json()) as { bank?: { readiness?: string; routeAccountId?: string } }
+    eq('readiness after: ready', detailAfter.bank?.readiness, 'ready')
+    eq('detail exposes the Route id, not the account number', detailAfter.bank?.routeAccountId, 'acc_KILLTEST00001')
+    const { data: routeAudit } = await admin.from('audit_logs').select('after').eq('actor_id', adminUser.uid).eq('entity_id', provCId ?? '').eq('action', 'provider_set_route_account')
+    eq('audit_logs has provider_set_route_account with the note', routeAudit?.length === 1 && (routeAudit[0]!.after as { reason?: string }).reason === 'killtest link', true)
+    const listReady = (await (await api(adminUser.token, '/api/v1/admin/providers?readiness=ready', undefined, 'GET')).json()) as { providers?: { id: string }[] }
+    eq('providers list readiness=ready filter includes provC', (listReady.providers ?? []).some((p) => p.id === provCId), true)
+    const listUnready = (await (await api(adminUser.token, '/api/v1/admin/providers?readiness=unready', undefined, 'GET')).json()) as { providers?: { id: string }[] }
+    eq('providers list readiness=unready filter excludes provC', (listUnready.providers ?? []).some((p) => p.id === provCId), false)
+    const payoutsView = await api(adminUser.token, '/api/v1/admin/payouts?status=held', undefined, 'GET')
+    eq('admin payouts view (held) renders with readiness/aging fields → 200', payoutsView.status, 200)
+
     // ── 5. Contact-info redaction (phone-mask claim) ───────────────────────────
     if (quoteId) {
       console.log('Contact-info redaction in quote thread:')
