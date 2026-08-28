@@ -15,6 +15,7 @@ import { config } from 'dotenv'
 import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
 import { createCipheriv, randomBytes } from 'crypto'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
@@ -170,16 +171,43 @@ async function main() {
     // provider='admin_override' (never confusable with a vendor result).
     console.log('Admin bank-verification override (positive control):')
     const adminUser = await mkUser('admin', ['msme', 'admin'])
-    await admin.from('provider_bank_accounts').update({ penny_drop_verified: false }).eq('provider_id', provAId)
-    eq('override without a reason → 422', (await api(adminUser.token, `/api/v1/admin/providers/${provAId}`, { action: 'set_bank_verified', verified: true, reason: 'x' })).status, 422)
-    const ov = await api(adminUser.token, `/api/v1/admin/providers/${provAId}`, { action: 'set_bank_verified', verified: true, reason: 'Cancelled cheque verified on call (killtest)' })
+    // Onboard a fresh provider THROUGH THE API (cookie session, like the
+    // wizard) so its bank row is encrypted with the SERVER's key — the
+    // override decrypts it to fingerprint the account, and a fixture encrypted
+    // with a local key can never be decrypted in prod. This also proves 1g on
+    // the deployed build: the client-sent bankVerified:true must be ignored.
+    const provC = await mkUser('provC', ['provider'])
+    const jar: Record<string, string> = {}
+    const ssr = createServerClient(URL_, ANON, {
+      cookies: {
+        getAll() { return Object.entries(jar).map(([name, value]) => ({ name, value })) },
+        setAll(list) { for (const { name, value } of list) jar[name] = value },
+      },
+    })
+    await ssr.auth.signInWithPassword({ email: `${tag}_provC@killtest.amclub`, password: 'Test1234!' })
+    const cookie = Object.entries(jar).map(([n, v]) => `${n}=${v}`).join('; ')
+    const onb = await fetch(`${BASE}/api/v1/profile/provider`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({
+        legalName: 'C Co Marketing', displayName: 'C Co', categorySlugs: ['digital-marketing'], state: 'KA', languages: ['en'],
+        bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: 'C Co Marketing', bankVerified: true,
+      }),
+    })
+    const provCId = ((await onb.json().catch(() => ({}))) as { providerId?: string }).providerId
+    if (provCId) created.providerIds.push(provCId)
+    eq('provC onboarded via API (bank encrypted server-side)', onb.status, 200)
+    const { data: bankC } = await admin.from('provider_bank_accounts').select('penny_drop_verified').eq('provider_id', provCId ?? '').maybeSingle()
+    eq('client bankVerified:true IGNORED → penny_drop_verified false (1g)', bankC?.penny_drop_verified, false)
+    eq('override without a reason → 422', (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, { action: 'set_bank_verified', verified: true, reason: 'x' })).status, 422)
+    const ov = await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, { action: 'set_bank_verified', verified: true, reason: 'Cancelled cheque verified on call (killtest)' })
     eq('admin override with reason → 200', ov.status, 200)
-    const { data: bankAfter } = await admin.from('provider_bank_accounts').select('penny_drop_verified').eq('provider_id', provAId).maybeSingle()
+    const { data: bankAfter } = await admin.from('provider_bank_accounts').select('penny_drop_verified').eq('provider_id', provCId ?? '').maybeSingle()
     eq('penny_drop_verified now true', bankAfter?.penny_drop_verified, true)
-    const { data: ovRows } = await admin.from('bank_account_verifications').select('provider, verified, stub, result').eq('user_id', provA.uid)
+    const { data: ovRows } = await admin.from('bank_account_verifications').select('provider, verified, stub, result').eq('user_id', provC.uid)
     eq("bank_account_verifications row: provider='admin_override', verified, not stub", ovRows?.length === 1 && ovRows[0]!.provider === 'admin_override' && ovRows[0]!.verified === true && ovRows[0]!.stub === false, true)
     eq('override row carries the reason', (ovRows?.[0]?.result as { reason?: string } | null)?.reason?.includes('Cancelled cheque'), true)
-    const { data: auditRows } = await admin.from('audit_logs').select('action').eq('actor_id', adminUser.uid).eq('entity_id', provAId).eq('action', 'provider_set_bank_verified')
+    const { data: auditRows } = await admin.from('audit_logs').select('action').eq('actor_id', adminUser.uid).eq('entity_id', provCId ?? '').eq('action', 'provider_set_bank_verified')
     eq('audit_logs has provider_set_bank_verified', (auditRows ?? []).length, 1)
 
     // ── 5. Contact-info redaction (phone-mask claim) ───────────────────────────
