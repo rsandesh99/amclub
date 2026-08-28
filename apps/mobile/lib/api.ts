@@ -211,7 +211,20 @@ export async function fetchMatchedRfqs() {
   return (await res.json()).rfqs ?? []
 }
 
-export async function submitQuote(rfqId: string, body: { price_paise: number; delivery_days: number; scope: string; message?: string }) {
+export async function submitQuote(
+  rfqId: string,
+  body: {
+    price_paise: number
+    delivery_days: number
+    scope: string
+    message?: string
+    // Phase 4b — optional terms; omit = "not stated"
+    gst_included?: boolean
+    transport_included?: boolean
+    valid_until?: string
+    advance_percent?: number
+  },
+) {
   const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quote`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },

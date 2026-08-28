@@ -163,7 +163,21 @@
     "already_quoted": "Already quoted.",
     "rfq_closed": "Closed to new quotes.",
     "err_quote": "Couldn't send quote.",
-    "your_quote": "Your quote"
+    "your_quote": "Your quote",
+    "terms_section": "Commercial terms",
+    "terms_optional_note": "optional",
+    "term_gst_q": "GST included?",
+    "term_transport_q": "Transport included?",
+    "term_gst": "GST",
+    "term_transport": "Transport",
+    "term_valid_until": "Valid until",
+    "term_advance": "Advance",
+    "term_advance_value": "{pct}% advance",
+    "term_yes": "Included",
+    "term_no": "Not included",
+    "term_not_stated_option": "Not stated",
+    "term_not_stated": "Not stated",
+    "term_not_stated_hint": "Not stated by the provider — ask before deciding."
   },
   "checkout": {
     "title": "Checkout",
@@ -209,7 +223,7 @@
     "not_applied_title": "You haven't applied as a provider yet.",
     "apply_btn": "Apply now",
     "payout_hold_title": "Payouts on hold while we finish your payout setup",
-    "payout_hold_desc": "You can quote and take orders now. Money from completed orders is held safely until our team links your Razorpay payout account / verifies your bank. This was added to our checklist when you were approved — you will be notified when it is done."
+    "payout_hold_desc": "Your payouts will be held until your bank account is verified and your Razorpay payout account is linked. Our team is completing this with you."
   },
   "order": {
     "placed": "Order placed",

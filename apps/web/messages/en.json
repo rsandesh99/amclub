@@ -493,7 +493,11 @@
     "bank_verified": "Bank verified",
     "bank_unverified": "Bank unverified",
     "approved_not_ready": "Approved. Payouts will HOLD until you link their Razorpay Route account / verify the bank — it is on your dashboard worklist now.",
-    "approved_ready": "Approved — payout-ready."
+    "approved_ready": "Approved — payout-ready.",
+    "not_ready_section_title": "Approved but not payout-ready",
+    "not_ready_section_body": "These providers are live and quotable; their payouts will hold until the Route account is linked and the bank is verified. Work this list the same day you approve.",
+    "not_ready_badge": "Approved · not payout-ready",
+    "open_provider": "Open provider →"
   },
   "profile": {
     "completeness": "Profile completeness",
@@ -554,8 +558,8 @@
     "complete_onboarding": "Complete onboarding",
     "onboarding_cta": "Finish your KYC to start receiving orders",
     "view_reviews": "Reviews",
-    "payout_hold_title": "Your payouts are on hold while we finish your payout setup",
-    "payout_hold_body": "You can quote and take orders now. Money from completed orders is held safely until {what}. Our team completes this step — it was added to our checklist when your account was approved; you will be notified when it is done.",
+    "payout_hold_title": "Payouts on hold until your payout setup is complete",
+    "payout_hold_body": "Your payouts will be held until your bank account is verified and your Razorpay payout account is linked. Our team is completing this with you.",
     "payout_hold_missing_route": "we link your Razorpay payout account",
     "payout_hold_bank_unverified": "we verify your bank account",
     "payout_hold_not_ready": "we verify your bank account and link your Razorpay payout account",
@@ -686,7 +690,22 @@
     "cap_reached": "This request already has the maximum number of quotes.",
     "err_quote": "Couldn't send your quote. Please try again.",
     "budget": "Budget",
-    "needed_by": "Needed by"
+    "needed_by": "Needed by",
+    "terms_section": "Commercial terms",
+    "terms_optional_note": "optional",
+    "terms_help": "Buyers compare quotes on these. Anything you leave blank is shown to them as \"not stated\".",
+    "term_gst_q": "Is GST included in the price?",
+    "term_transport_q": "Is transport / travel included?",
+    "term_gst": "GST",
+    "term_transport": "Transport",
+    "term_valid_until": "Quote valid until",
+    "term_advance": "Advance required",
+    "term_advance_value": "{pct}% advance",
+    "term_yes": "Included",
+    "term_no": "Not included",
+    "term_not_stated_option": "Not stated",
+    "term_not_stated": "Not stated",
+    "term_not_stated_hint": "Not stated by the provider — ask before deciding."
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -721,7 +740,7 @@
     "no_payouts_title": "No payouts yet",
     "no_payouts_subtitle": "Payouts are released after an order is completed.",
     "payout_note": "Payouts release only after a buyer accepts delivery (or after 72h auto-accept).",
-    "payout_hold_banner": "Payouts are on hold until our team finishes your payout setup (Razorpay payout account / bank verification). This was added to our checklist at approval — you will be notified when it is done."
+    "payout_hold_banner": "Your payouts will be held until your bank account is verified and your Razorpay payout account is linked. Our team is completing this with you."
   },
   "order": {
     "placed": "Order placed",
@@ -1011,7 +1030,8 @@
     "hold_bank_unverified": "bank unverified",
     "payout_ready_tile": "Payout-ready providers",
     "payout_ready_todo": "{n, plural, one {# active provider} other {# active providers}} need a Route account / bank check →",
-    "payout_ready_ok": "Every active provider can be paid"
+    "payout_ready_ok": "Every active provider can be paid",
+    "approved_not_ready_line": "Approved but not payout-ready — payouts for this provider will hold until both facts below are green."
   },
   "gateway": {
     "meta_title": "AMClub — Verified business services for MSMEs",

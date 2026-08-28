@@ -64,6 +64,8 @@ export default function BuyerRfqScreen() {
                 <Text className="text-xs text-foreground-secondary">{q.provider.avgRating > 0 ? `★ ${q.provider.avgRating.toFixed(1)} (${q.provider.reviewCount})` : t('rfq.status_open')} · {t('rfq.delivery_days', { days: q.deliveryDays })}</Text>
                 <Text className="mt-2 font-bold text-primary" style={{ fontSize: 20 }}>{formatINR(q.pricePaise)}</Text>
                 <Text className="mt-2 text-sm text-foreground" numberOfLines={6}>{q.scope}</Text>
+                {/* Phase 4c — stated terms; NULL renders the "not stated — ask" hint, never a blank. */}
+                <TermsBlock q={q} t={t} />
                 {!decided && q.status === 'submitted' && (
                   <TouchableOpacity onPress={() => accept(q.id)} disabled={!!accepting} className="mt-3 items-center rounded-lg bg-primary py-2.5">
                     {accepting === q.id ? <ActivityIndicator color="#fff" /> : <Text className="font-semibold text-white">{t('rfq.accept_quote')}</Text>}
@@ -81,6 +83,30 @@ export default function BuyerRfqScreen() {
     </SafeAreaView>
   )
 }
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function TermsBlock({ q, t }: { q: any; t: (k: string, p?: Record<string, string | number>) => string }) {
+  const yn = (v: boolean) => (v ? t('rfq.term_yes') : t('rfq.term_no'))
+  const rows: [string, string | null][] = [
+    [t('rfq.term_gst'), q.gstIncluded == null ? null : yn(q.gstIncluded)],
+    [t('rfq.term_transport'), q.transportIncluded == null ? null : yn(q.transportIncluded)],
+    [t('rfq.term_valid_until'), q.validUntil ?? null],
+    [t('rfq.term_advance'), q.advancePercent == null ? null : t('rfq.term_advance_value', { pct: q.advancePercent })],
+  ]
+  const anyMissing = rows.some(([, v]) => v == null)
+  return (
+    <View className="mt-2 rounded-lg border border-border bg-background p-2">
+      {rows.map(([label, value]) => (
+        <Text key={label} className="text-xs text-foreground">
+          <Text className="text-foreground-secondary">{label}: </Text>
+          {value ?? <Text className="italic text-foreground-secondary">{t('rfq.term_not_stated')}</Text>}
+        </Text>
+      ))}
+      {anyMissing && <Text className="mt-1 text-[11px] text-foreground-secondary">{t('rfq.term_not_stated_hint')}</Text>}
+    </View>
+  )
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function Thread({ quoteId }: { quoteId: string }) {
   const { t } = useI18n()

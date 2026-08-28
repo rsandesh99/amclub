@@ -36,3 +36,49 @@ stub (no `KYC_API_KEY`) never counts. Genuine providers therefore land at
 **Hard edge:** the override is fine while onboarding is manual. It must not be
 the norm at real-money volume — provision Surepass/Signzy (`KYC_API_KEY`)
 before live cutover. Tracked in ADR-003's cutover procedure.
+
+---
+
+## KYC vendor integration (Surepass/Signzy) — scope (logged 2026-08-28)
+
+**Today:** `lib/kyc/surepass.ts` exists behind `KYC_API_KEY`; without a real
+key the stub answers and never counts as verified. **Needed:** provision the
+key, confirm the GSTIN + bank penny-drop endpoints against the sandbox, record
+vendor request/response ids in `bank_account_verifications.result`, and add a
+kill-test that a vendor *failure* leaves `penny_drop_verified=false`.
+**Estimate:** 1–2 days once the account exists. Live-cutover blocker.
+
+---
+
+## Linked-account API automation (Razorpay Route) — scope (logged 2026-08-28)
+
+See `docs/ROUTE_ONBOARDING.md` → "Follow-up". `accounts.create` →
+`stakeholders.create` → `products.request` → document upload at admin
+approval, storing the `acc_…` via the existing `set_route_account` action so
+audit + readiness stay unchanged. Failures surface as *not ready*, never as a
+fake id. ~2–3 days incl. test-mode Route sandboxing.
+
+---
+
+## Refund / transfer settlement webhooks + money journal — Phase 5 remainder (logged 2026-08-28)
+
+**Today:** `refunds.status='processed'` and `payouts.status='paid'` are set
+when the API call returns, not when Razorpay settles; the webhook handler
+ignores `refund.*` and `transfer.*` events (Phase 0 §0d). **Needed:** handle
+`refund.processed` / `refund.failed` / `transfer.processed` / `transfer.failed`
+idempotently (same raw-body HMAC path), and add an insert-only `money_journal`
+(payment_captured, refund_created, refund_settled, transfer_created,
+transfer_settled, commission_earned) so the escrow balance is reconstructible
+at any timestamp from our own tables. Additive; `payout.ts` remains the only
+money-out path. ~3 days + a replay kill-test per event type.
+
+---
+
+## Notification abstraction for WhatsApp (Gupshup/Interakt) — scope (logged 2026-08-28)
+
+**Today:** `lib/notifications/channels.ts` has SMS (MSG91, not billed until
+go-live), email (Resend) and an in-app channel; WhatsApp is a stub behind
+`WHATSAPP_API_KEY`. **Needed:** one `sendTemplate(channel, template, vars)`
+abstraction with per-channel adapters and DLT/WhatsApp template ids in config,
+delivery-status callbacks recorded per notification, and a sandbox-delivered
+template as the done-criterion (§6 Phase 6). ~2 days after template approval.

@@ -15,7 +15,24 @@ export interface RfqListItem {
   expiresAt: string
 }
 
-export interface QuoteForBuyer {
+/** Phase 4 — optional commercial terms; null = "not stated" (UI shows a hint, never a blank). */
+export interface QuoteTerms {
+  gstIncluded: boolean | null
+  transportIncluded: boolean | null
+  validUntil: string | null
+  advancePercent: number | null
+}
+
+export function mapQuoteTerms(q: any): QuoteTerms {
+  return {
+    gstIncluded: q.gst_included ?? null,
+    transportIncluded: q.transport_included ?? null,
+    validUntil: q.valid_until ?? null,
+    advancePercent: q.advance_percent ?? null,
+  }
+}
+
+export interface QuoteForBuyer extends QuoteTerms {
   id: string
   status: string
   pricePaise: number
@@ -78,7 +95,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
 
   const { data: quotes } = await admin
     .from('quotes')
-    .select('id, status, price_paise, delivery_days, scope, message, created_at, provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state)')
+    .select('id, status, price_paise, delivery_days, scope, message, created_at, gst_included, transport_included, valid_until, advance_percent, provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state)')
     .eq('rfq_id', rfqId)
     .order('price_paise', { ascending: true })
 
@@ -90,6 +107,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
     quotes: (quotes ?? []).map((q: any) => ({
       id: q.id, status: q.status, pricePaise: Number(q.price_paise), deliveryDays: q.delivery_days,
       scope: q.scope, message: q.message, createdAt: q.created_at,
+      ...mapQuoteTerms(q),
       provider: {
         id: q.provider.id, displayName: q.provider.display_name, slug: q.provider.slug,
         avgRating: Number(q.provider.avg_rating ?? 0), reviewCount: q.provider.review_count ?? 0,
@@ -155,7 +173,7 @@ export interface RfqDetailForProvider {
   maxQuotes: number
   expiresAt: string
   canQuote: boolean
-  myQuote: { id: string; pricePaise: number; deliveryDays: number; scope: string; status: string } | null
+  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; status: string } & QuoteTerms) | null
 }
 
 /** RFQ detail for a matched provider; marks viewed_at on open. */
@@ -183,7 +201,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
 
   const { data: myQuote } = await admin
     .from('quotes')
-    .select('id, price_paise, delivery_days, scope, status')
+    .select('id, price_paise, delivery_days, scope, status, gst_included, transport_included, valid_until, advance_percent')
     .eq('rfq_id', rfqId)
     .eq('provider_id', actor.providerId)
     .maybeSingle()
@@ -197,7 +215,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
     categorySlug: r.category?.slug ?? null, quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at,
     canQuote: active && slotsLeft && notExpired && !myQuote,
-    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, status: (myQuote as any).status } : null,
+    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, status: (myQuote as any).status, ...mapQuoteTerms(myQuote) } : null,
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

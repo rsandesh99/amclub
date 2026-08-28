@@ -43,9 +43,7 @@ export default async function PartnerDashboardPage() {
       {!isUnderReview && readiness !== 'ready' && (
         <div className="rounded-card border border-warning/30 bg-warning/10 p-4">
           <p className="text-sm font-medium text-warning">{t('payout_hold_title')}</p>
-          <p className="mt-1 text-sm text-foreground-secondary">
-            {t('payout_hold_body', { what: t(`payout_hold_${readiness}` as 'payout_hold_missing_route') })}
-          </p>
+          <p className="mt-1 text-sm text-foreground-secondary">{t('payout_hold_body')}</p>
         </div>
       )}
 

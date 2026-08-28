@@ -64,6 +64,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       delivery_days: d.delivery_days,
       scope: d.scope,
       message: d.message ?? null,
+      // Phase 4b — optional terms; absent → NULL ("not stated").
+      gst_included: d.gst_included ?? null,
+      transport_included: d.transport_included ?? null,
+      valid_until: d.valid_until ?? null,
+      advance_percent: d.advance_percent ?? null,
       status: 'submitted',
     })
     .select('id')
@@ -80,7 +85,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     quoteId: quote.id,
     eventType: 'submitted',
     actor: actor.userId,
-    payload: { rfq_id: rfqId, price_paise: d.price_paise, delivery_days: d.delivery_days },
+    // History captures what was STATED at submission, including "not stated".
+    payload: {
+      rfq_id: rfqId,
+      price_paise: d.price_paise,
+      delivery_days: d.delivery_days,
+      gst_included: d.gst_included ?? null,
+      transport_included: d.transport_included ?? null,
+      valid_until: d.valid_until ?? null,
+      advance_percent: d.advance_percent ?? null,
+    },
   })
 
   // Notify the buyer of the new quote.

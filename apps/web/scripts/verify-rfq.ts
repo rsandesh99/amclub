@@ -9,6 +9,7 @@ import { config } from 'dotenv'
 import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
 
 const URL = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -91,6 +92,8 @@ async function main() {
   for (let i = 0; i < 8; i++) {
     const res = await api(matching[i]!.token, `/api/v1/rfq/${rfqId}/quote`, {
       price_paise: (5000 + i * 500) * 100, delivery_days: 5 + i, scope: `Full GST filing scope for month, includes reconciliation and challan (provider ${i}).`,
+      // Phase 4b: provider 1 states its terms; every other provider skips them (unchanged flow).
+      ...(i === 1 ? { gst_included: true, transport_included: false, valid_until: '2027-01-31', advance_percent: 25 } : {}),
     })
     if (i < 7) { const d = await res.json(); if (res.ok) quoteIds.push(d.quoteId) }
     else eighthStatus = res.status
@@ -124,6 +127,35 @@ async function main() {
   const { data: rfqFinal } = await admin.from('rfqs').select('status').eq('id', rfqId).single()
   check('4. Other quotes auto-declined; RFQ accepted', accepted === 1 && declined === 6 && rfqFinal!.status === 'accepted',
     `accepted=${accepted} declined=${declined} rfq=${rfqFinal!.status}`)
+
+  // ── Criterion 9 (Phase 4): optional quote terms — stored, in the event, rendered ─
+  // Provider ka1 quoted WITH terms above (see loop); ka0 quoted without.
+  const { data: termed } = await admin.from('quotes').select('id, gst_included, transport_included, valid_until, advance_percent').eq('id', quoteIds[1]!).single()
+  const { data: bare } = await admin.from('quotes').select('id, gst_included, transport_included, valid_until, advance_percent').eq('id', quoteIds[0]!).single()
+  const { data: termedEv } = await admin.from('quote_events').select('payload').eq('quote_id', quoteIds[1]!).eq('event_type', 'submitted').maybeSingle()
+  const evp = (termedEv?.payload ?? {}) as Record<string, unknown>
+  check('9a. quote WITH terms: stored + carried in the submitted event payload',
+    termed?.gst_included === true && termed?.transport_included === false && termed?.valid_until === '2027-01-31' && termed?.advance_percent === 25 &&
+    evp['gst_included'] === true && evp['transport_included'] === false && evp['valid_until'] === '2027-01-31' && evp['advance_percent'] === 25,
+    `row=${JSON.stringify({ g: termed?.gst_included, t: termed?.transport_included, v: termed?.valid_until, a: termed?.advance_percent })} event=${JSON.stringify({ g: evp['gst_included'], a: evp['advance_percent'] })}`)
+  check('9b. quote WITHOUT terms: all four NULL (untouched flow), event payload says so',
+    bare?.gst_included === null && bare?.transport_included === null && bare?.valid_until === null && bare?.advance_percent === null)
+  // Render: the buyer's compare page (cookie session) must show the values for the
+  // termed quote and the "not stated — ask" hint for the bare one, en + hi.
+  const jar: Record<string, string> = {}
+  const ssr = createServerClient(URL, ANON, { cookies: { getAll() { return Object.entries(jar).map(([name, value]) => ({ name, value })) }, setAll(list) { for (const { name, value } of list) jar[name] = value } } })
+  await ssr.auth.signInWithPassword({ email: `${tag}_buyer@killtest.amclub`, password: 'Test1234!' })
+  const cookie = Object.entries(jar).map(([n, v]) => `${n}=${v}`).join('; ')
+  // Only VISIBLE markup counts — next-intl inlines the full message bundle in a <script>.
+  const visible = (html: string) => html.replace(/<script[\s\S]*?<\/script>/g, '')
+  const enHtml = visible(await (await fetch(`${BASE}/app/rfq/${rfqId}`, { headers: { cookie } })).text())
+  const hiHtml = visible(await (await fetch(`${BASE}/hi/app/rfq/${rfqId}`, { headers: { cookie } })).text())
+  check('9c. compare page (en) renders stated terms + the not-stated hint',
+    enHtml.includes('25% advance') && enHtml.includes('Not stated by the provider — ask before deciding.') && enHtml.includes('31 Jan 2027'),
+    `advance=${enHtml.includes('25% advance')} hint=${enHtml.includes('Not stated by the provider')} date=${enHtml.includes('31 Jan 2027')}`)
+  check('9d. compare page (hi) renders stated terms + the not-stated hint',
+    hiHtml.includes('25% अग्रिम') && hiHtml.includes('प्रदाता ने नहीं बताया — तय करने से पहले पूछें।'),
+    `advance=${hiHtml.includes('25% अग्रिम')} hint=${hiHtml.includes('प्रदाता ने नहीं बताया')}`)
 
   // ── Criterion 8 (Phase 1): every status mutation left a quote_events row ────
   const { data: qev } = await admin.from('quote_events').select('quote_id, event_type, actor, reason').in('quote_id', quoteIds)

@@ -143,8 +143,18 @@ async function main() {
 
     // Give provider A a match + quote on rfq A, then B tries to accept it.
     await admin.from('rfq_matches').insert({ rfq_id: rfqA, provider_id: provAId }).select().maybeSingle()
-    const qRes = await api(provA.token, `/api/v1/rfq/${rfqA}/quote`, { price_paise: 400000, delivery_days: 5, scope: 'Full GST filing service scope here.' })
+    // Phase 4b — provA states its commercial terms (the optional fields).
+    const qRes = await api(provA.token, `/api/v1/rfq/${rfqA}/quote`, { price_paise: 400000, delivery_days: 5, scope: 'Full GST filing service scope here.', gst_included: true, transport_included: false, valid_until: '2027-03-31', advance_percent: 40 })
     const quoteId = (await qRes.json()).quoteId as string | undefined
+    eq('quote submit WITH optional terms → 200', qRes.status, 200)
+    if (quoteId) {
+      const { data: qRow } = await admin.from('quotes').select('gst_included, transport_included, valid_until, advance_percent').eq('id', quoteId).maybeSingle()
+      eq('terms stored on the quote row', JSON.stringify(qRow), JSON.stringify({ gst_included: true, transport_included: false, valid_until: '2027-03-31', advance_percent: 40 }))
+      const { data: qEv } = await admin.from('quote_events').select('payload').eq('quote_id', quoteId).eq('event_type', 'submitted').maybeSingle()
+      const ep = (qEv?.payload ?? {}) as Record<string, unknown>
+      eq('submitted event payload carries the terms', ep['advance_percent'] === 40 && ep['gst_included'] === true && ep['valid_until'] === '2027-03-31', true)
+      eq('advance_percent > 100 → 422', (await api(provB.token, `/api/v1/rfq/${rfqA}/quote`, { price_paise: 1000, delivery_days: 1, scope: 'y'.repeat(25), advance_percent: 150 })).status, 422)
+    }
     if (quoteId) {
       denied('buyerB accepts A’s quote via checkout', (await api(buyerB.token, '/api/v1/checkout', { quoteId, idempotencyKey: crypto.randomUUID() })).status)
       denied('outsider reads A’s quote thread', (await api(outsider.token, `/api/v1/quotes/${quoteId}/messages`, undefined, 'GET')).status)
@@ -246,12 +256,23 @@ async function main() {
     eq('dashboard tile grows by exactly the newly approved unready provider', (kpi.health?.providersNotReady ?? 0) - (kpiBefore.health?.providersNotReady ?? 0), 1)
     const meC = (await (await api(provC.token, '/api/v1/profile/me', undefined, 'GET')).json()) as { payoutReadiness?: string }
     eq('provider /profile/me reports payoutReadiness=missing_route (banner source)', meC.payoutReadiness, 'missing_route')
+    // Phase 4d — the banner itself, in the provider's dashboard response (cookie session).
+    const BANNER = 'Your payouts will be held until your bank account is verified and your Razorpay payout account is linked.'
+    // next-intl inlines the whole message bundle in a <script>; only VISIBLE
+    // markup counts, or every banner string would be "present" on every page.
+    const visible = (html: string) => html.replace(/<script[\s\S]*?<\/script>/g, '')
+    const dashUnready = visible(await (await fetch(`${BASE}/partner`, { headers: { cookie } })).text())
+    eq('unready ACTIVE provider: payout-hold banner present on /partner', dashUnready.includes(BANNER), true)
+    const dashHi = visible(await (await fetch(`${BASE}/hi/partner`, { headers: { cookie } })).text())
+    eq('…and in Hindi on /hi/partner', dashHi.includes('हमारी टीम यह आपके साथ मिलकर पूरा कर रही है'), true)
     eq('admin: valid acc_ with note → 200', (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, { action: 'set_route_account', routeAccountId: 'acc_KILLTEST00001', reason: 'killtest link' })).status, 200)
     const detailAfter = (await (await api(adminUser.token, `/api/v1/admin/providers/${provCId}`, undefined, 'GET')).json()) as { bank?: { readiness?: string; routeAccountId?: string } }
     eq('readiness after: ready', detailAfter.bank?.readiness, 'ready')
     eq('detail exposes the Route id, not the account number', detailAfter.bank?.routeAccountId, 'acc_KILLTEST00001')
     const meCAfter = (await (await api(provC.token, '/api/v1/profile/me', undefined, 'GET')).json()) as { payoutReadiness?: string }
     eq('provider /profile/me flips to ready once linked (banner clears)', meCAfter.payoutReadiness, 'ready')
+    const dashReady = visible(await (await fetch(`${BASE}/partner`, { headers: { cookie } })).text())
+    eq('ready provider: banner ABSENT on /partner (no manual dismissal)', dashReady.includes('Your payouts will be held until your bank account is verified'), false)
     const kpiAfter = (await (await api(adminUser.token, '/api/v1/admin/kpi', undefined, 'GET')).json()) as { health?: { providersNotReady?: number } }
     eq('dashboard tile shrinks back once the Route account is linked', (kpiAfter.health?.providersNotReady ?? 0) - (kpiBefore.health?.providersNotReady ?? 0), 0)
     const { data: routeAudit } = await admin.from('audit_logs').select('after').eq('actor_id', adminUser.uid).eq('entity_id', provCId ?? '').eq('action', 'provider_set_route_account')

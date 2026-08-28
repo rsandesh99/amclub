@@ -4,6 +4,7 @@ import { getSessionUser, getProviderProfile } from '@/lib/auth/session'
 import { getRfqForProvider } from '@/lib/rfq/queries'
 import { Badge } from '@/components/ui/badge'
 import { QuoteComposer } from '@/components/rfq/QuoteComposer'
+import { QuoteTermsRow } from '@/components/rfq/QuoteTermsRow'
 import { formatINR } from '@/lib/format'
 
 export default async function ProviderRfqPage({ params }: { params: Promise<{ id: string }> }) {
@@ -54,6 +55,7 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
           <p className="text-sm font-semibold text-success">{t('your_quote')}</p>
           <p className="mt-1 text-sm">{formatINR(rfq.myQuote.pricePaise)} · {t('delivery_days', { days: rfq.myQuote.deliveryDays })}</p>
           <p className="mt-2 whitespace-pre-wrap text-sm text-foreground-secondary">{rfq.myQuote.scope}</p>
+          <div className="mt-3"><QuoteTermsRow terms={rfq.myQuote} compact /></div>
         </div>
       ) : rfq.canQuote ? (
         <QuoteComposer rfqId={rfq.id} />

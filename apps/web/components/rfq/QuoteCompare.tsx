@@ -8,6 +8,7 @@ import { MessageSquare, Star, ShieldCheck } from 'lucide-react'
 import type { RfqDetailForBuyer, QuoteForBuyer } from '@/lib/rfq/queries'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { QuoteTermsRow } from './QuoteTermsRow'
 
 type Sort = 'price' | 'delivery' | 'rating'
 
@@ -117,6 +118,14 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
             </div>
 
             <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{q.scope}</p>
+
+            {/* Phase 4c — stated terms, with an explicit hint where the provider said nothing. */}
+            <div className="mt-3 rounded-button border border-border bg-muted/40 p-3">
+              <QuoteTermsRow terms={q} />
+              {(q.gstIncluded == null || q.transportIncluded == null || q.validUntil == null || q.advancePercent == null) && (
+                <p className="mt-2 text-xs text-foreground-secondary">{t('term_not_stated_hint')}</p>
+              )}
+            </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {!decided && q.status === 'submitted' && (

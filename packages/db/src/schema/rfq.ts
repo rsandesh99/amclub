@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, integer, timestamp, jsonb, bigint, date,
+  pgTable, uuid, text, integer, timestamp, jsonb, bigint, date, boolean,
   index, unique, primaryKey,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
@@ -48,6 +48,12 @@ export const quotes = pgTable('quotes', {
   deliveryDays: integer('delivery_days').notNull(),
   scope: text('scope').notNull(),
   message: text('message'),
+  // Phase 4a — optional commercial terms (0018). NULL = not stated.
+  gstIncluded: boolean('gst_included'),
+  transportIncluded: boolean('transport_included'),
+  validUntil: date('valid_until'),
+  // CHECK 0..100 when not null (quotes_advance_percent_range)
+  advancePercent: integer('advance_percent'),
   // submitted | withdrawn | accepted | declined | expired
   status: text('status').default('submitted').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),

@@ -179,6 +179,13 @@ export const quoteSchema = z.object({
   delivery_days: z.number().int().positive().max(365),
   scope: z.string().min(20).max(2000),
   message: z.string().max(500).optional(),
+  // Phase 4b — optional commercial terms. Omitted = "not stated" (NULL); the
+  // buyer sees a neutral "ask before deciding" hint, never a blank.
+  gst_included: z.boolean().optional(),
+  transport_included: z.boolean().optional(),
+  /** ISO date (YYYY-MM-DD). */
+  valid_until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').optional(),
+  advance_percent: z.number().int().min(0).max(100).optional(),
 })
 
 export type QuoteInput = z.infer<typeof quoteSchema>

@@ -15,6 +15,11 @@ export default function ProviderRfqScreen() {
   const [price, setPrice] = useState('')
   const [days, setDays] = useState('')
   const [scope, setScope] = useState('')
+  // Phase 4b — optional terms (null = not stated → not sent)
+  const [gst, setGst] = useState<boolean | null>(null)
+  const [transport, setTransport] = useState<boolean | null>(null)
+  const [validUntil, setValidUntil] = useState('')
+  const [advance, setAdvance] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -26,8 +31,17 @@ export default function ProviderRfqScreen() {
     setError('')
     const p = Math.round(Number(price) * 100), dd = Number(days)
     if (!p || p <= 0 || !dd || dd <= 0 || scope.trim().length < 20) { setError(t('rfq.required')); return }
+    const adv = advance.trim() === '' ? undefined : Number(advance)
+    if (adv !== undefined && (!Number.isInteger(adv) || adv < 0 || adv > 100)) { setError(t('rfq.term_advance') + ': 0–100'); return }
+    if (validUntil && !/^\d{4}-\d{2}-\d{2}$/.test(validUntil)) { setError(t('rfq.term_valid_until') + ': YYYY-MM-DD'); return }
     setBusy(true)
-    const res = await submitQuote(id, { price_paise: p, delivery_days: dd, scope: scope.trim() })
+    const res = await submitQuote(id, {
+      price_paise: p, delivery_days: dd, scope: scope.trim(),
+      ...(gst !== null ? { gst_included: gst } : {}),
+      ...(transport !== null ? { transport_included: transport } : {}),
+      ...(validUntil ? { valid_until: validUntil } : {}),
+      ...(adv !== undefined ? { advance_percent: adv } : {}),
+    })
     setBusy(false)
     if (!res.ok) { setError(res.data?.error === 'already_quoted' ? t('rfq.already_quoted') : res.data?.error === 'rfq_closed' ? t('rfq.rfq_closed') : t('rfq.err_quote')); return }
     router.back()
@@ -63,6 +77,14 @@ export default function ProviderRfqScreen() {
               <View className="flex-1 gap-1"><Text className="text-xs text-foreground-secondary">{t('rfq.quote_days')}</Text><TextInput value={days} onChangeText={setDays} keyboardType="numeric" className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" /></View>
             </View>
             <View className="gap-1"><Text className="text-xs text-foreground-secondary">{t('rfq.quote_scope')}</Text><TextInput value={scope} onChangeText={setScope} multiline style={{ minHeight: 80 }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" /></View>
+            {/* Phase 4b — optional terms; leaving them untouched submits exactly as before. */}
+            <Text className="text-xs font-medium text-foreground">{t('rfq.terms_section')} <Text className="font-normal text-foreground-secondary">· {t('rfq.terms_optional_note')}</Text></Text>
+            <TriRow label={t('rfq.term_gst_q')} value={gst} onChange={setGst} yes={t('rfq.term_yes')} no={t('rfq.term_no')} unset={t('rfq.term_not_stated_option')} />
+            <TriRow label={t('rfq.term_transport_q')} value={transport} onChange={setTransport} yes={t('rfq.term_yes')} no={t('rfq.term_no')} unset={t('rfq.term_not_stated_option')} />
+            <View className="flex-row gap-3">
+              <View className="flex-1 gap-1"><Text className="text-xs text-foreground-secondary">{t('rfq.term_valid_until')}</Text><TextInput value={validUntil} onChangeText={setValidUntil} placeholder="YYYY-MM-DD" placeholderTextColor="#9CA3AF" className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" /></View>
+              <View className="flex-1 gap-1"><Text className="text-xs text-foreground-secondary">{t('rfq.term_advance')}</Text><TextInput value={advance} onChangeText={setAdvance} keyboardType="numeric" placeholder="0–100" placeholderTextColor="#9CA3AF" className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" /></View>
+            </View>
             {error ? <Text className="text-sm text-danger">{error}</Text> : null}
             <TouchableOpacity onPress={submit} disabled={busy} className="items-center rounded-lg bg-primary py-2.5">
               {busy ? <ActivityIndicator color="#fff" /> : <Text className="font-semibold text-white">{t('rfq.submit_quote')}</Text>}
@@ -73,6 +95,23 @@ export default function ProviderRfqScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  )
+}
+
+/** Three-state chooser for an optional yes/no term: unset (not stated) / yes / no. */
+function TriRow({ label, value, onChange, yes, no, unset }: { label: string; value: boolean | null; onChange: (v: boolean | null) => void; yes: string; no: string; unset: string }) {
+  const opts: { v: boolean | null; l: string }[] = [{ v: null, l: unset }, { v: true, l: yes }, { v: false, l: no }]
+  return (
+    <View className="gap-1">
+      <Text className="text-xs text-foreground-secondary">{label}</Text>
+      <View className="flex-row gap-2">
+        {opts.map((o) => (
+          <TouchableOpacity key={String(o.v)} onPress={() => onChange(o.v)} className={`rounded-lg border px-3 py-1.5 ${value === o.v ? 'border-primary bg-primary/10' : 'border-border bg-background'}`}>
+            <Text className={`text-xs ${value === o.v ? 'font-semibold text-primary' : 'text-foreground'}`}>{o.l}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
   )
 }
  

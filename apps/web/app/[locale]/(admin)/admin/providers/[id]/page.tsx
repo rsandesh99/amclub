@@ -81,6 +81,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
             <span className="font-semibold">{t('readiness')}:</span>
             <ReadinessBadge readiness={data.bank?.readiness ?? 'no_bank'} />
           </div>
+          {/* Phase 4d — option (ii): approved (live, quotable) but payouts will hold. */}
+          {p.status === 'active' && data.bank?.readiness !== 'ready' && (
+            <p className="rounded-button border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">{t('approved_not_ready_line')}</p>
+          )}
           {/* Fact 1 — bank verification (manual override until the real penny-drop vendor is live, Phase 1g). */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm">

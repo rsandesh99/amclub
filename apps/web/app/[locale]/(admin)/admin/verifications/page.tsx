@@ -1,7 +1,10 @@
 import { getTranslations } from 'next-intl/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/badge'
+import { Link } from '@/i18n/navigation'
 import { VerificationActions } from './VerificationActions'
+import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
+import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
 
 interface ProviderRow {
   id: string
@@ -36,9 +39,31 @@ async function getPendingProviders() {
   return (data ?? []) as unknown as ProviderRow[]
 }
 
+/** Phase 4d (option ii) — active providers whose payouts will hold. One
+ *  definition (lib/payments/readiness.ts); this is the same list the
+ *  dashboard tile counts, shown where approvals happen. */
+async function getApprovedNotReady() {
+  const supabase = await createAdminClient()
+  const { data: active } = await supabase
+    .from('provider_profiles')
+    .select('id, legal_name, display_name, state, updated_at')
+    .eq('status', 'active')
+    .is('deleted_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(100)
+  const ids = (active ?? []).map((p) => p.id)
+  const { data: banks } = ids.length
+    ? await supabase.from('provider_bank_accounts').select('provider_id, penny_drop_verified, razorpay_route_account_id').in('provider_id', ids)
+    : { data: [] as { provider_id: string; penny_drop_verified: boolean; razorpay_route_account_id: string | null }[] }
+  const bankBy = new Map((banks ?? []).map((b) => [b.provider_id, b]))
+  return (active ?? [])
+    .map((p) => ({ ...p, readiness: payoutReadiness(bankFacts(bankBy.get(p.id))) }))
+    .filter((p) => p.readiness !== 'ready')
+}
+
 export default async function VerificationsPage() {
   const t = await getTranslations('admin')
-  const providers = await getPendingProviders()
+  const [providers, notReady] = await Promise.all([getPendingProviders(), getApprovedNotReady()])
 
   return (
     <div className="space-y-6">
@@ -46,6 +71,28 @@ export default async function VerificationsPage() {
         <h1 className="text-2xl font-bold">{t('verifications_title')}</h1>
         <p className="text-sm text-foreground-secondary mt-1">{t('verifications_subtitle')}</p>
       </div>
+
+      {notReady.length > 0 && (
+        <section className="rounded-card border border-warning/40 bg-warning/10 p-4">
+          <h2 className="text-sm font-semibold text-warning">{t('not_ready_section_title')} ({notReady.length})</h2>
+          <p className="mt-1 text-xs text-foreground-secondary">{t('not_ready_section_body')}</p>
+          <ul className="mt-3 space-y-2">
+            {notReady.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-button bg-surface px-3 py-2 text-sm">
+                <span>
+                  <span className="font-medium">{p.display_name}</span>
+                  <span className="text-foreground-secondary"> · {p.legal_name} · {p.state}</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <Badge variant="warning">{t('not_ready_badge')}</Badge>
+                  <ReadinessBadge readiness={p.readiness} />
+                  <Link href={`/admin/providers/${p.id}` as '/admin/providers'} className="text-xs font-medium text-primary hover:underline">{t('open_provider')}</Link>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {providers.length === 0 ? (
         <div className="rounded-card border border-border bg-surface p-12 text-center shadow-card">
