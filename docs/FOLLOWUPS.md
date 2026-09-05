@@ -28,6 +28,45 @@ verified against the live build (authz 116/0, money-loop 33/0, rfq 13/0,
 migrations 0 missing, te-render 25/0, zero residue). No Mart surface was built —
 that starts fresh with DESIGN.md + FRONTEND.md.
 
+## AMC Mart M0 — dark build landed (2026-09-05)
+
+M0 (MART_DESIGN.md §7) is built behind `MART_ENABLED` on branch
+`claude/new-github-repo-setup-ax25ub`: shared vocabulary + money math + state
+machines, staged migration 0022, `/api/v1/mart/*`, web surfaces (buyer,
+seller, admin, goods order workspace), mobile Mart tab. Evidence and the
+§1 discrepancy list: `docs/mart/SPINE_VERIFICATION.md`. Open items from it:
+
+- **Run the live suites** — `scripts/verify-mart.ts` (M0 acceptance; needs a
+  server with 0022 applied + `MART_ENABLED=true`) and `verify-mart-inert.ts`
+  + the four standard suites against prod (flag off). Not runnable from the
+  build sandbox (no Supabase). Deploy-blocking for the Launch Gate.
+- **`audit_logs` is append-only by convention only** — no `BEFORE UPDATE`
+  trigger / REVOKE (MART_DESIGN.md §1 claims DB-level). One-line migration
+  reusing `raise_append_only()`; services table, so a services phase.
+- **Fresh-bootstrap helper ordering** — FIXED (bootstrap prelude +
+  Supabase default-grant emulation in the shim); remove from the list above.
+- **Catalog Agent voice leg** — the wizard takes photos + typed description;
+  hook the Sarvam recorder (`VoiceRfqRecorder` is RFQ-specific today) so the
+  description can be spoken (FRONTEND.md §7).
+- **Goods notification copy** — goods actions reuse the nearest services
+  notification copy (`NOTIFY_AS` in `goods-transitions.ts`); write goods
+  copy (dispatched / delivered photo / return) in en/hi/te.
+- **Goods score-inputs view** (MART_DESIGN.md §4.5) — sibling of
+  `provider_score_inputs_v1` over goods events (on-time dispatch, delivery
+  confirmation, return rate) with the ≥3/≥5 gates. Events are emitted; the
+  view is not yet written.
+- **Provider-addendum goods schedule** — `LEGAL_VERSIONS.provider_addendum`
+  bump with the goods disclosure text (Launch Gate item 4; counsel).
+- **Founder decisions §9.1–9.5** — encode in `mart_categories` /
+  `mart_settings` (+ ADR): pool invoicing model, return windows + return
+  freight, goods commission, M1 pool categories + seed sellers, warranty
+  pass-through language.
+- **M1 pools** — tables + block-and-capture (report-first PSP verification),
+  Group-Buy Agent, WhatsApp pool cards; the state machine + capture predicate
+  are already in `packages/shared/src/mart/pools.ts` (tested).
+- **Mobile `tsconfig` strictness** — extends `expo/tsconfig.base`, not the
+  repo base; consider adding the four strict flags.
+
 ## Incoming developer — open items
 
 Each is deferred with intent, not forgotten. One-line scope; details in the
@@ -39,9 +78,9 @@ dated sections below where present.
 - **CI-driven migration apply** — retire hand-apply; a protected deploy step
   (Supabase CLI `db push`) with the DB credential as a CI secret, making
   RULES.md rule 2 mechanically enforced. (Section below.)
-- **Fresh-bootstrap helper ordering** — 0017/0021 inline RLS policies call
-  `auth_user_id()`/`has_role()` defined in policies.sql, which bootstrap runs
-  last; move helpers to an early migration or bootstrap prelude. (Section below.)
+- **Fresh-bootstrap helper ordering** — FIXED 2026-09-05 (Mart M0): bootstrap
+  runs policies.sql's helper-function section as a prelude. (Section below
+  kept for history.)
 - **0013/0014 policies.sql drift** — `ai_invocations`/`cron_heartbeats` enable
   RLS inline but were never mirrored into policies.sql (service-role-only, zero
   policies, so harmless today); mirror for consistency.
