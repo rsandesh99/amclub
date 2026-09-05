@@ -345,6 +345,156 @@ export async function replyReview(reviewId: string, reply: string) {
   return { ok: res.ok, data: await res.json().catch(() => ({})) }
 }
 
+// ── AMC Mart (goods mode) — dark build; the server gates every route on the
+// MART_ENABLED flag. Every money field below is server-computed paise: the
+// client renders them and never derives totals, GST or ITC (review-blocking).
+
+export interface MartCategory {
+  slug: string
+  nameI18n: { en: string; hi?: string; te?: string }
+  bisBlocked: boolean
+}
+
+export interface MartTier {
+  min_qty: number
+  unit_price_paise: number
+  unit_gst_paise: number
+  unit_incl_gst_paise: number
+  unit_after_itc_paise: number
+}
+
+export interface MartProduct {
+  id: string
+  name: string
+  description: string | null
+  categorySlug: string
+  hsnCode: string
+  gstRateBps: number
+  unit: string
+  images: string[]
+  imageUrls: string[]
+  minOrderQty: number
+  seller: { id: string; displayName: string; slug: string; city: string | null; state: string }
+  tiers: MartTier[]
+  /** The min_qty=1 (list) tier, or the lowest tier — null when unpriced. */
+  list: MartTier | null
+}
+
+export interface MartCategoriesResponse {
+  ok: boolean
+  categories: MartCategory[]
+}
+
+export async function fetchMartCategories(): Promise<MartCategoriesResponse> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/mart/categories`)
+    if (!res.ok) return { ok: false, categories: [] }
+    const d = await res.json().catch(() => ({}))
+    return { ok: true, categories: d.categories ?? [] }
+  } catch {
+    return { ok: false, categories: [] }
+  }
+}
+
+export interface MartSearchParams {
+  category?: string
+  query?: string
+  limit?: number
+  offset?: number
+}
+
+export interface MartSearchResponse {
+  /** false = network/server failure — show ErrorState + retry, NOT an empty state. */
+  ok: boolean
+  products: MartProduct[]
+  total: number
+  nextOffset: number | null
+}
+
+export async function searchMartProducts(params: MartSearchParams): Promise<MartSearchResponse> {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v))
+  }
+  try {
+    const res = await fetch(`${API_URL}/api/v1/mart/products?${qs.toString()}`)
+    if (!res.ok) return { ok: false, products: [], total: 0, nextOffset: null }
+    const d = await res.json().catch(() => ({}))
+    return { ok: true, products: d.products ?? [], total: d.total ?? 0, nextOffset: d.nextOffset ?? null }
+  } catch {
+    return { ok: false, products: [], total: 0, nextOffset: null }
+  }
+}
+
+/** ok:true + product:null = 404 (delisted); ok:false = network/server failure. */
+export async function fetchMartProduct(id: string): Promise<{ ok: boolean; product: MartProduct | null }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/mart/products/${encodeURIComponent(id)}`)
+    if (res.status === 404) return { ok: true, product: null }
+    if (!res.ok) return { ok: false, product: null }
+    const d = await res.json().catch(() => ({}))
+    return { ok: true, product: d.product ?? null }
+  } catch {
+    return { ok: false, product: null }
+  }
+}
+
+export interface GoodsDelivery {
+  contact_name: string
+  contact_phone: string
+  address: string
+  city: string
+  /** Two-letter state code, e.g. "AP". */
+  state: string
+  pincode: string
+  pickup: boolean
+}
+
+export type GoodsCheckoutErrorCode =
+  | 'product_unavailable'
+  | 'multiple_sellers'
+  | 'below_min_qty'
+  | 'category_blocked'
+  | 'no_tier'
+
+export interface GoodsCheckoutResponse {
+  checkoutSessionId: string
+  razorpayOrderId: string
+  amountPaise: number
+  simulated?: boolean
+  idempotent?: boolean
+  amounts?: { taxablePaise: number; gstPaise: number; totalPaise: number; afterItcPaise: number }
+  lineItems?: unknown[]
+  sellerName?: string
+  deliveryDays?: number
+}
+
+export type GoodsCheckoutResult =
+  | { ok: true; status: number; data: GoodsCheckoutResponse }
+  | { ok: false; status: number; errorCode: GoodsCheckoutErrorCode | null; data: Record<string, unknown> }
+
+/** POST /api/v1/mart/checkout — one seller per session; totals come back from
+ *  the server. status 0 = network failure (never throws into the UI). */
+export async function createGoodsCheckout(body: {
+  items: { product_id: string; qty: number }[]
+  delivery: GoodsDelivery
+}): Promise<GoodsCheckoutResult> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/mart/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ ...body, idempotencyKey: cryptoRandomUUID() }),
+    })
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (res.ok) return { ok: true, status: res.status, data: data as unknown as GoodsCheckoutResponse }
+    const err = data['error']
+    const code = err && typeof err === 'object' ? (err as { code?: unknown })['code'] : null
+    return { ok: false, status: res.status, errorCode: typeof code === 'string' ? (code as GoodsCheckoutErrorCode) : null, data }
+  } catch {
+    return { ok: false, status: 0, errorCode: null, data: {} }
+  }
+}
+
 function cryptoRandomUUID(): string {
   // RN lacks crypto.randomUUID in some runtimes — RFC4122 v4 fallback.
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {

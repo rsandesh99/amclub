@@ -10,6 +10,19 @@ export function formatINR(paise: number): string {
   return inr0.format(Math.round(paise / 100))
 }
 
+const inr2 = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+/** Paise-exact rendering for goods unit prices (₹8.50 per rod) — whole-rupee
+ *  amounts drop the decimals. Input is always server-computed paise. */
+export function formatINRExact(paise: number): string {
+  return paise % 100 === 0 ? inr0.format(paise / 100) : inr2.format(paise / 100)
+}
+
 export interface Pricing {
   listPaise: number
   discountedPaise: number

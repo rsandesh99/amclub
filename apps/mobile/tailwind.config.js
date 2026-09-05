@@ -37,6 +37,16 @@ module.exports = {
           DEFAULT: '#1A1D1A',
           secondary: '#5C645C',
         },
+        // AMC Mart — "Emerald & Brass" direction (additive; nothing above
+        // changes). Mirrored in lib/theme.ts for icon/shadow props.
+        emerald: {
+          DEFAULT: '#0E6B4F',
+          ink: '#0A2E22',
+        },
+        ivory: '#FCFAF3',
+        gold: '#C9A227', // ≥20px bold numerals, icons, borders, the one CTA — never small text
+        brass: '#B08D2A',
+        ink: '#14161A',
       },
       fontFamily: {
         sans: ['Inter', 'System'],

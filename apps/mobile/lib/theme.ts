@@ -22,6 +22,15 @@ export const colors = {
   foreground: '#1A1D1A',
   foregroundSecondary: '#5C645C',
   white: '#FFFFFF',
+  // AMC Mart — "Emerald & Brass" direction (additive; services tokens above
+  // are untouched). Gold is reserved for ≥20px bold numerals, icons and
+  // borders — never body-size text. Mirrors tailwind.config.js.
+  emerald: '#0E6B4F',
+  emeraldInk: '#0A2E22',
+  ivory: '#FCFAF3',
+  gold: '#C9A227',
+  brass: '#B08D2A',
+  ink: '#14161A',
 } as const
 
 /** ≈ web `shadow-resting` — cards at rest. Android: elevation; iOS: shadow. */
