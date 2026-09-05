@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { usePostHog } from 'posthog-js/react'
 import { useRouter } from '@/i18n/navigation'
 import { Mic } from 'lucide-react'
-import { voiceMetaSchema, type RfqTemplateField, type VoiceMeta, type VoiceParseResponse } from '@amclub/shared'
+import { voiceMetaSchema, rfqFieldLabel, type RfqTemplateField, type VoiceMeta, type VoiceParseResponse } from '@amclub/shared'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -86,7 +86,7 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
   }
 
   function label(f: RfqTemplateField): string {
-    return locale === 'hi' ? f.label_hi : f.label_en
+    return rfqFieldLabel(f, locale)
   }
 
   /** Phase 8b — the user corrected a voice-prefilled field: record it once

@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/i18n'
 import { fetchUnreadCount } from '@/lib/api'
 import { LocaleToggle } from '@/components/LocaleToggle'
 import { HeroBanner } from '@/components/HeroBanner'
-import { CATEGORY_LIST } from '@amclub/shared'
+import { CATEGORY_LIST, pickLocale } from '@amclub/shared'
 
 export default function HomeScreen() {
   const { t, locale } = useI18n()
@@ -90,7 +90,7 @@ export default function HomeScreen() {
                 <View className="h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                   <Ionicons name="cube-outline" size={20} color="#1B4D3E" />
                 </View>
-                <Text className="text-sm font-semibold text-foreground">{c.name_i18n[locale]}</Text>
+                <Text className="text-sm font-semibold text-foreground">{pickLocale(c.name_i18n, locale)}</Text>
               </TouchableOpacity>
             ))}
           </View>

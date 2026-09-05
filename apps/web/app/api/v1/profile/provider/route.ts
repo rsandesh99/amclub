@@ -5,6 +5,8 @@ import {
   categoriesRequiringCredential,
   statutoryOptionsForCategory,
   CREDENTIAL_VERIFICATION_KIND,
+  SUPPORTED_LOCALES,
+  PROVIDER_LANGUAGES,
   type CredentialOption,
 } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
@@ -25,7 +27,7 @@ const credentialUploadSchema = z.object({
 
 const bodySchema = z.object({
   fullName: z.string().min(2).optional(),
-  preferredLocale: z.enum(['en', 'hi']).default('en'),
+  preferredLocale: z.enum(SUPPORTED_LOCALES).default('en'),
   legalName: z.string().min(2),
   displayName: z.string().min(2),
   about: z.string().max(2000).optional(),
@@ -36,7 +38,8 @@ const bodySchema = z.object({
   categorySlugs: z.array(z.string()).min(1).max(5),
   state: z.string().min(2),
   city: z.string().optional(),
-  languages: z.array(z.string()).default(['en']),
+  // Spoken languages (product data) — PROVIDER_LANGUAGES, separate from UI locale.
+  languages: z.array(z.enum(PROVIDER_LANGUAGES)).default(['en']),
   bankIfsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/),
   bankAccount: z.string().min(9).max(18),
   bankHolder: z.string().min(2),

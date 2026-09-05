@@ -1,10 +1,12 @@
 import { Text, TouchableOpacity, View } from 'react-native'
 import { useI18n, type Locale } from '@/lib/i18n'
 
-/** EN / हिं pill toggle (STATUS_AUDIT H2). Choice persists via SecureStore. */
+/** EN / हिं / తె pill toggle (STATUS_AUDIT H2; S3.4 adds te). Choice persists
+ *  via SecureStore. te renders English for untranslated keys (deep fallback). */
 const OPTIONS: { value: Locale; label: string }[] = [
   { value: 'en', label: 'EN' },
   { value: 'hi', label: 'हिं' },
+  { value: 'te', label: 'తె' },
 ]
 
 export function LocaleToggle() {

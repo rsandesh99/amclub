@@ -9,6 +9,7 @@ import { createRfq } from '@/lib/api'
 import { track } from '@/lib/analytics'
 import { VoiceRfqRecorder } from '@/components/VoiceRfqRecorder'
 import { colors } from '@/lib/theme'
+import { rfqFieldLabel, pickLocale } from '@amclub/shared'
 
 export default function NewRfqScreen() {
   const { t, locale } = useI18n()
@@ -71,7 +72,7 @@ export default function NewRfqScreen() {
   async function submit() {
     setError('')
     if (!slug || title.trim().length < 10) { setError(t('rfq.required')); return }
-    for (const f of fields) if (f.required && !details[f.name]?.trim()) { setError((locale === 'hi' ? f.label_hi : f.label_en) + ': ' + t('rfq.required')); return }
+    for (const f of fields) if (f.required && !details[f.name]?.trim()) { setError(rfqFieldLabel(f, locale) + ': ' + t('rfq.required')); return }
     setLoading(true)
     const voiceMeta = voice
       ? {
@@ -106,7 +107,7 @@ export default function NewRfqScreen() {
   const voiceCategoryName = voice?.parse?.category_slug
     ? (() => {
         const c = cats.find((x) => x.slug === voice.parse.category_slug)
-        return c ? (c.name_i18n?.[locale] ?? c.name_i18n?.en) : voice.parse.category_slug
+        return c ? pickLocale(c.name_i18n, locale) : voice.parse.category_slug
       })()
     : null
 
@@ -153,7 +154,7 @@ export default function NewRfqScreen() {
           {cats.map((c) => (
             <TouchableOpacity key={c.slug} onPress={() => { markEdited('category'); setSlug(c.slug); setDetails(voice ? details : {}) }}
               className={`rounded-full border px-3 py-1.5 ${slug === c.slug ? 'border-primary bg-primary' : 'border-border'}`}>
-              <Text className={`text-xs font-medium ${slug === c.slug ? 'text-white' : 'text-foreground'}`}>{c.name_i18n?.[locale] ?? c.name_i18n?.en}</Text>
+              <Text className={`text-xs font-medium ${slug === c.slug ? 'text-white' : 'text-foreground'}`}>{pickLocale(c.name_i18n, locale)}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -162,7 +163,7 @@ export default function NewRfqScreen() {
           <>
             <Field label={t('rfq.title_label')} value={title} onChange={(v) => { markEdited('title'); setTitle(v) }} />
             {fields.map((f) => (
-              <Field key={f.name} label={(locale === 'hi' ? f.label_hi : f.label_en) + (f.required ? ' *' : '') + (f.options ? ` (${f.options.join(' / ')})` : '')}
+              <Field key={f.name} label={rfqFieldLabel(f, locale) + (f.required ? ' *' : '') + (f.options ? ` (${f.options.join(' / ')})` : '')}
                 value={details[f.name] ?? ''} onChange={(v) => setDetails((d) => ({ ...d, [f.name]: v }))} multiline={f.type === 'textarea'} />
             ))}
             <Field label={t('rfq.details_label')} value={details['additional_details'] ?? ''}

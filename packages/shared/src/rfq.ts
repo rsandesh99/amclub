@@ -12,6 +12,8 @@ export interface RfqTemplateField {
   type: RfqFieldType
   label_en: string
   label_hi: string
+  /** Optional Telugu label (S3.3). Renderers fall back label_te ?? label_en. */
+  label_te?: string
   required: boolean
   options?: string[]
   placeholder_en?: string
@@ -20,6 +22,19 @@ export interface RfqTemplateField {
 
 export interface RfqTemplate {
   fields: RfqTemplateField[]
+}
+
+/** Localized RFQ field label with en fallback (S3.3). te/hi are optional in
+ *  the data; a missing translation renders English, never a raw field name.
+ *  Accepts any field carrying label_* (RfqTemplateField or the catalog page's
+ *  looser RequirementField, whose labels are all optional). */
+export function rfqFieldLabel(
+  f: { name?: string; label_en?: string; label_hi?: string; label_te?: string },
+  locale: string,
+): string {
+  if (locale === 'te') return f.label_te ?? f.label_en ?? f.name ?? ''
+  if (locale === 'hi') return f.label_hi || f.label_en || f.name || ''
+  return f.label_en ?? f.name ?? ''
 }
 
 /** RFQ is still accepting quotes (provider can see/quote) — open or quoted. */

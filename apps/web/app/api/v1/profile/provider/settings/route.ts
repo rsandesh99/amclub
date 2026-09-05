@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { PROVIDER_LANGUAGES } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { serverError } from '@/lib/api/errors'
@@ -16,7 +17,8 @@ const bodySchema = z.object({
   displayName: z.string().min(2).max(80),
   about: z.string().max(2000).optional(),
   city: z.string().max(80).optional(),
-  languages: z.array(z.enum(['en', 'hi'])).min(1),
+  // Spoken languages (product data) — PROVIDER_LANGUAGES, separate from UI locale.
+  languages: z.array(z.enum(PROVIDER_LANGUAGES)).min(1),
   capacityPaused: z.boolean(),
 })
 

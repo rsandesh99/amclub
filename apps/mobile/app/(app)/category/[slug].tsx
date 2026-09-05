@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n'
 import { searchCatalog, type CatalogResult, type SearchParams } from '@/lib/api'
 import { ResultCard } from '@/components/ResultCard'
 import { ErrorState } from '@/components/ErrorState'
-import { CATEGORY_LIST } from '@amclub/shared'
+import { CATEGORY_LIST, pickLocale } from '@amclub/shared'
 
 export default function CategoryScreen() {
   const { t, locale } = useI18n()
@@ -36,13 +36,13 @@ export default function CategoryScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <Stack.Screen options={{ title: category?.name_i18n[locale] ?? '' }} />
+      <Stack.Screen options={{ title: pickLocale(category?.name_i18n, locale) }} />
       <View className="flex-row items-center gap-2 border-b border-gray-200 bg-surface px-4 py-3">
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#1A1D1A" />
         </TouchableOpacity>
         <Text className="flex-1 text-lg font-bold text-foreground" numberOfLines={1}>
-          {category?.name_i18n[locale] ?? ''}
+          {pickLocale(category?.name_i18n, locale)}
         </Text>
       </View>
 

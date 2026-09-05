@@ -3,8 +3,15 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { CHANNELS, type ChannelMessage, type ChannelResult } from './channels'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
-type I18n = { en: string; hi: string }
-type Locale = 'en' | 'hi'
+// te is optional: templates carry it only where translated; resolveText falls
+// back to en (never hi) for a te user with no te slot (S3.2).
+type I18n = { en: string; hi: string; te?: string }
+type Locale = 'en' | 'hi' | 'te'
+
+/** Pick the user's locale text, en fallback for any missing slot. */
+function resolveText(t: I18n, locale: Locale): string {
+  return t[locale] ?? t.en
+}
 
 export interface NotificationInput {
   userId: string
@@ -84,14 +91,15 @@ async function fanout(
   const tasks: Promise<ChannelResult>[] = []
   for (const userId of userIds) {
     const u = byId.get(userId)
-    const locale: Locale = u?.preferred_locale === 'hi' ? 'hi' : 'en'
+    const pl = u?.preferred_locale
+    const locale: Locale = pl === 'hi' || pl === 'te' ? pl : 'en'
     const msg: ChannelMessage = {
       toUserId: userId,
       email: u?.email ?? null,
       phone: u?.phone ?? null,
       locale,
-      title: base.titleI18n[locale],
-      body: base.bodyI18n[locale],
+      title: resolveText(base.titleI18n, locale),
+      body: resolveText(base.bodyI18n, locale),
       link: base.link ?? null,
       kind: base.kind,
     }

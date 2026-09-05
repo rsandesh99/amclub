@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { ORDER_STATUSES, RFQ_STATUSES, QUOTE_STATUSES, PAYOUT_STATUSES } from '../state-machines'
 import { CATEGORY_SLUGS } from '../categories'
+import { SUPPORTED_LOCALES, PROVIDER_LANGUAGES } from '../locales'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -56,8 +57,13 @@ export const otpVerifySchema = z.object({
 
 // ── User / profile ────────────────────────────────────────────────────────────
 
-export const localeSchema = z.enum(['en', 'hi'])
+// UI locale (app infrastructure) — derived from the single SUPPORTED_LOCALES.
+export const localeSchema = z.enum(SUPPORTED_LOCALES)
 export type Locale = z.infer<typeof localeSchema>
+
+// Spoken languages a provider declares (product data) — SEPARATE list by
+// founder decision; may diverge from the UI locale set (S3, call a).
+export const providerLanguageSchema = z.enum(PROVIDER_LANGUAGES)
 
 export const userRoleSchema = z.enum(['msme', 'provider', 'admin', 'ops'])
 export type UserRole = z.infer<typeof userRoleSchema>
@@ -93,7 +99,7 @@ export const providerOnboardingSchema = z.object({
     .optional(),
   state: z.string().min(2),
   city: z.string().min(2),
-  languages: z.array(localeSchema).min(1),
+  languages: z.array(providerLanguageSchema).min(1),
   category_slugs: z.array(z.enum(CATEGORY_SLUGS)).min(1),
 })
 

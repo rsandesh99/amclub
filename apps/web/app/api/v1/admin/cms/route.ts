@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { SUPPORTED_LOCALES } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
 import { getMaxDiscountPct } from '@/lib/cms/queries'
@@ -36,7 +37,7 @@ const createSchema = z
     ctaLabel: i18nText.optional(),
     ctaHref: safeHref.optional(),
     discountPct: z.number().int().min(0).max(100).optional(),
-    locale: z.enum(['en', 'hi']).nullable().optional(),
+    locale: z.enum(SUPPORTED_LOCALES).nullable().optional(),
     startsAt: z.string().datetime().nullable().optional(),
     endsAt: z.string().datetime().nullable().optional(),
   })

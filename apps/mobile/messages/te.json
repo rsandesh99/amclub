@@ -1,0 +1,6 @@
+{
+  "_comment": "Telugu (te) — partial locale (S3.4). Ships intentionally near-empty; every missing key deep-falls-back to en at runtime. Translations land in a separate non-code workstream, PENDING NATIVE REVIEW. locale.label is present so the picker renders తెలుగు.",
+  "locale": {
+    "label": "తెలుగు"
+  }
+}

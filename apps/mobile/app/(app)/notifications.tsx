@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
+import { pickLocale } from '@amclub/shared'
 import { fetchNotifications, markNotificationRead, type NotificationItem } from '@/lib/api'
 import { ErrorState } from '@/components/ErrorState'
 
@@ -71,8 +72,8 @@ export default function NotificationsScreen() {
             >
               {!n.read_at && <View className="mt-1.5 h-2 w-2 rounded-full bg-primary" />}
               <View className="flex-1">
-                <Text className="text-sm font-semibold text-foreground">{n.title_i18n?.[locale] ?? n.title_i18n?.en}</Text>
-                <Text className="text-sm text-foreground-secondary">{n.body_i18n?.[locale] ?? n.body_i18n?.en}</Text>
+                <Text className="text-sm font-semibold text-foreground">{pickLocale(n.title_i18n, locale)}</Text>
+                <Text className="text-sm text-foreground-secondary">{pickLocale(n.body_i18n, locale)}</Text>
                 <Text className="mt-1 text-xs text-foreground-secondary">{new Date(n.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</Text>
               </View>
             </TouchableOpacity>

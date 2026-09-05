@@ -1,0 +1,13 @@
+{
+ "authenticated": true,
+ "id": "<uid>",
+ "fullName": null,
+ "role": "msme",
+ "roles": [
+  "msme"
+ ],
+ "hasMsmeProfile": false,
+ "hasProviderProfile": false,
+ "providerStatus": null,
+ "payoutReadiness": null
+}

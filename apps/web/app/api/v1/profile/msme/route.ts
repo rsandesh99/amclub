@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { SUPPORTED_LOCALES } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { upsertUserRow } from '@/lib/auth/session'
@@ -16,7 +17,7 @@ const bodySchema = z.object({
   // §3.3 — optional at signup; nudged later for full RFQ access.
   udyamNumber: z.string().trim().optional(),
   gstin: z.string().trim().optional(),
-  preferredLocale: z.enum(['en', 'hi']).default('en'),
+  preferredLocale: z.enum(SUPPORTED_LOCALES).default('en'),
 })
 
 export async function POST(request: NextRequest) {

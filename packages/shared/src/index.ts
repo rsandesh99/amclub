@@ -26,6 +26,9 @@ export * from './gstin'
 // /api/v1/profile/me response contract (web + mobile)
 export * from './profile'
 
+// UI locale + provider spoken-language single sources of truth (S3)
+export * from './locales'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

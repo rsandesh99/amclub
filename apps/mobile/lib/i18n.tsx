@@ -7,15 +7,29 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import * as SecureStore from 'expo-secure-store'
+import { SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
 import en from '../messages/en.json'
 import hi from '../messages/hi.json'
+import te from '../messages/te.json'
 
-export type Locale = 'en' | 'hi'
+// UI locale derived from the shared single source of truth (S3.4).
+export type Locale = SupportedLocale
 
 type Messages = typeof en
 
-const MESSAGES: Record<Locale, Messages> = { en, hi }
+// te ships partial (grows as translation lands); resolution deep-falls back to
+// en key-by-key so a te user never sees a raw key name (S3.4). Cast te since
+// its partial JSON (plus a _comment) is not structurally the full Messages.
+const MESSAGES: Record<Locale, Partial<Messages>> = { en, hi, te: te as unknown as Partial<Messages> }
 const LOCALE_KEY = 'amc_locale'
+
+/** Walk a dotted key path in a message object; undefined if any segment missing. */
+function lookup(src: unknown, parts: string[]): string | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let value: any = src
+  for (const part of parts) value = value?.[part]
+  return typeof value === 'string' ? value : undefined
+}
 
 interface I18nContextValue {
   locale: Locale
@@ -31,7 +45,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     SecureStore.getItemAsync(LOCALE_KEY)
       .then((v) => {
-        if (v === 'en' || v === 'hi') setLocaleState(v)
+        if (v && (SUPPORTED_LOCALES as readonly string[]).includes(v)) setLocaleState(v as Locale)
       })
       .catch(() => {})
   }, [])
@@ -43,14 +57,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   function t(key: string, params?: Record<string, string | number>): string {
     const parts = key.split('.')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let value: any = MESSAGES[locale]
-    for (const part of parts) {
-      value = value?.[part]
-    }
-    let out = typeof value === 'string' ? value : key
-    if (params) for (const [k, v] of Object.entries(params)) out = out.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
-    return out
+    // Deep en fallback: try the active locale, then en, then the key itself —
+    // so a partial locale (te) renders English for untranslated keys, never a
+    // raw key name (S3.4).
+    const out = lookup(MESSAGES[locale], parts) ?? lookup(MESSAGES.en, parts) ?? key
+    let result = out
+    if (params) for (const [k, v] of Object.entries(params)) result = result.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
+    return result
   }
 
   return <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getTranslations, getLocale } from 'next-intl/server'
 import { Check, X, Clock, RefreshCw, BadgeCheck, FileText, ChevronRight } from 'lucide-react'
+import { rfqFieldLabel } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { Stars } from '@/components/catalog/Stars'
@@ -163,7 +164,7 @@ export default async function PackageDetailPage({
                   <li key={f.name} className="flex items-start gap-2 text-sm text-foreground-secondary">
                     <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-foreground-secondary" />
                     <span>
-                      {(locale === 'hi' && f.label_hi) || f.label_en || f.name}
+                      {rfqFieldLabel(f, locale) || f.name}
                       {f.required && <span className="text-danger"> *</span>}
                     </span>
                   </li>

@@ -15,7 +15,7 @@ export interface ChannelMessage {
   toUserId: string
   email: string | null
   phone: string | null
-  locale: 'en' | 'hi'
+  locale: 'en' | 'hi' | 'te'
   title: string
   body: string
   /** App-relative link, e.g. /app/orders/123. */
