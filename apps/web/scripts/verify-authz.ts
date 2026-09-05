@@ -364,41 +364,65 @@ async function main() {
     }
 
     // ── 4d. S2.2 gstin_verifications — server-set record + RLS + attest ───────
+    // Fresh fixtures: earlier sections hammered adminUser (S1.5 limiter probe)
+    // and provC (bank onboarding), so this section mints its own to avoid
+    // inheriting a spent rate-limit budget.
     console.log('S2.2 gstin_verifications:')
     {
-      const gv = await api(provC.token, '/api/v1/profile/provider/kyc/verify-gstin', { gstin: '29ABCDE1234F1Z5' })
+      const provD = await mkUser('provD', ['provider'])
+      const { data: ppD } = await admin.from('provider_profiles').insert({
+        user_id: provD.uid, legal_name: 'D Co', display_name: 'D Co', slug: `${tag}-provD`.replace(/_/g, '-'),
+        state: 'KA', status: 'active', languages: ['en'], gstin: '29AAAAA0000A1Z5',
+      }).select('id').single()
+      created.providerIds.push(ppD!.id)
+      const adminUser2 = await mkUser('admin2', ['msme', 'admin'])
+
+      // verify-gstin is cookie-session auth (getSessionUser), like the wizard —
+      // drive it with a cookie jar, not the Bearer token (which would 401).
+      const djar: Record<string, string> = {}
+      const dssr = createServerClient(URL_, ANON, {
+        cookies: {
+          getAll() { return Object.entries(djar).map(([name, value]) => ({ name, value })) },
+          setAll(list) { for (const { name, value } of list) djar[name] = value },
+        },
+      })
+      await dssr.auth.signInWithPassword({ email: `${tag}_provD@killtest.amclub`, password: 'Test1234!' })
+      const dcookie = Object.entries(djar).map(([n, v]) => `${n}=${v}`).join('; ')
+      const gv = await fetch(`${BASE}/api/v1/profile/provider/kyc/verify-gstin`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', cookie: dcookie },
+        body: JSON.stringify({ gstin: '29ABCDE1234F1Z5' }),
+      })
       eq('verify-gstin call → 200 (stub mode verifies)', gv.status, 200)
       const { data: rec } = await admin
         .from('gstin_verifications')
         .select('provider, verified, stub')
-        .eq('user_id', provC.uid)
+        .eq('user_id', provD.uid)
         .order('created_at', { ascending: false })
         .limit(1)
       eq('attempt recorded server-side', Boolean(rec?.[0]), true)
       eq("recorded provider is 'stub' or 'surepass' (never client-set)", rec?.[0] && ['stub', 'surepass'].includes(rec[0].provider), true)
 
-      const asProvC = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${provC.token}` } }, auth: { persistSession: false } })
-      const { data: own } = await asProvC.from('gstin_verifications').select('id')
+      const asProvD = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${provD.token}` } }, auth: { persistSession: false } })
+      const { data: own } = await asProvD.from('gstin_verifications').select('id')
       eq('provider self-reads own rows (≥1)', (own ?? []).length >= 1, true)
       const asBuyerB = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${buyerB.token}` } }, auth: { persistSession: false } })
       const { data: cross, error: crossErr } = await asBuyerB.from('gstin_verifications').select('id')
       const crossDenied = Boolean(crossErr) || (cross ?? []).length === 0
       console.log(`  ${crossDenied ? '✓' : '✗ LEAK'} cross-tenant read → ${crossErr ? 'error' : (cross ?? []).length + ' rows'}`)
       crossDenied ? pass++ : fail++
-      const forged = await asProvC.from('gstin_verifications').insert({ user_id: provC.uid, gstin: '29ABCDE1234F1Z5', verified: true, provider: 'surepass' })
+      const forged = await asProvD.from('gstin_verifications').insert({ user_id: provD.uid, gstin: '29ABCDE1234F1Z5', verified: true, provider: 'surepass' })
       const forgeDenied = Boolean(forged.error)
       console.log(`  ${forgeDenied ? '✓' : '✗ LEAK'} client INSERT denied → ${forged.error ? forged.error.message.slice(0, 60) : 'INSERTED'}`)
       forgeDenied ? pass++ : fail++
 
-      // Admin attest: give provA a GSTIN on file, attest, expect row + audit.
-      await admin.from('provider_profiles').update({ gstin: '29AAAAA0000A1Z5' }).eq('id', provAId)
-      denied('non-admin attest_gstin', (await api(provA.token, `/api/v1/admin/providers/${provAId}`, { action: 'attest_gstin', reason: 'self attest' })).status)
-      const attest = await api(adminUser.token, `/api/v1/admin/providers/${provAId}`, { action: 'attest_gstin', reason: 'verified on gst.gov.in pre-table' })
+      // Admin attest on provD (GSTIN already on file), fresh admin fixture.
+      denied('non-admin attest_gstin', (await api(provD.token, `/api/v1/admin/providers/${ppD!.id}`, { action: 'attest_gstin', reason: 'self attest' })).status)
+      const attest = await api(adminUser2.token, `/api/v1/admin/providers/${ppD!.id}`, { action: 'attest_gstin', reason: 'verified on gst.gov.in pre-table' })
       eq('admin attest_gstin → 200', attest.status, 200)
       const { data: att } = await admin
         .from('gstin_verifications')
         .select('provider, verified, gstin')
-        .eq('user_id', provA.uid)
+        .eq('user_id', provD.uid)
         .eq('provider', 'admin_attest')
         .limit(1)
       eq("attest row written with provider='admin_attest'", att?.[0]?.verified === true && att?.[0]?.gstin === '29AAAAA0000A1Z5', true)
@@ -406,12 +430,11 @@ async function main() {
         .from('audit_logs')
         .select('id')
         .eq('action', 'provider_attest_gstin')
-        .eq('entity_id', provAId)
+        .eq('entity_id', ppD!.id)
         .limit(1)
       eq('attest audit-logged', Boolean(aud?.[0]), true)
-      // Residue: gstin_verifications rows for kill-test users are removed by
-      // user-cascade on cleanup? user_id has no FK — delete explicitly.
-      await admin.from('gstin_verifications').delete().in('user_id', [provC.uid, provA.uid])
+      // Residue: gstin_verifications user_id has no FK — delete explicitly.
+      await admin.from('gstin_verifications').delete().in('user_id', [provD.uid])
     }
 
     // ── 5. Contact-info redaction (phone-mask claim) ───────────────────────────
