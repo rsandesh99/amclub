@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
+import type { ProfileMeResponse } from '@amclub/shared'
 
 interface ProviderStatus {
   status: 'under_review' | 'active' | 'rejected' | 'suspended' | null
@@ -24,8 +25,10 @@ export default function PartnerScreen() {
           `${process.env['EXPO_PUBLIC_API_URL'] ?? ''}/api/v1/profile/me`,
           { headers: { Authorization: `Bearer ${session.access_token}` } },
         )
-        const data = await res.json()
-        setProviderStatus(data.providerStatus)
+        // S2.3 — shared response contract (includes martEnabled; no mobile
+        // branch reads it yet by design).
+        const data = (await res.json()) as Partial<ProfileMeResponse>
+        setProviderStatus((data.providerStatus ?? null) as ProviderStatus['status'])
         setPayoutReadiness(data.payoutReadiness ?? null)
       } catch {
         // ignore

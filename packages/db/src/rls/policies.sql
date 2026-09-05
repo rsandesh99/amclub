@@ -284,6 +284,21 @@ CREATE POLICY "terms_acceptances: admin read" ON terms_acceptances
 -- No INSERT/UPDATE/DELETE policies by design (service role writes; append-only).
 REVOKE UPDATE, DELETE ON terms_acceptances FROM anon, authenticated;
 
+-- ─── gstin_verifications (0021) — self read + admin read; server-side writes ──
+
+ALTER TABLE gstin_verifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "gstin_verifications: self read" ON gstin_verifications;
+CREATE POLICY "gstin_verifications: self read" ON gstin_verifications
+  FOR SELECT USING (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "gstin_verifications: admin read" ON gstin_verifications;
+CREATE POLICY "gstin_verifications: admin read" ON gstin_verifications
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- No INSERT/UPDATE/DELETE policies by design (service role writes only).
+REVOKE INSERT, UPDATE, DELETE ON gstin_verifications FROM anon, authenticated;
+
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
 -- raise_append_only() is created in 0017 (bootstrap runs migrations first).

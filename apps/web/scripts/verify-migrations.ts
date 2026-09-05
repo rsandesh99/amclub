@@ -81,6 +81,12 @@ const MANIFEST: Entry[] = [
     triggers: [['order_events', 'order_events_no_update']],
     note: 'trigger + REVOKE; reuses raise_append_only() from 0017',
   },
+  {
+    file: '0020_order_kind_columns.sql',
+    views: ['order_safe_view', 'provider_score_inputs_v1'],
+    note: 'kind columns on orders + checkout_sessions (defaults, no writer); safe-view rebuild; score view kind-scoped',
+  },
+  { file: '0021_gstin_verifications.sql', tables: ['gstin_verifications'] },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

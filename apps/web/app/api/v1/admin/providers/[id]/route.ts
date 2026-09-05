@@ -79,6 +79,14 @@ const bodySchema = z.discriminatedUnion('action', [
     verified: z.boolean(),
     reason: z.string().trim().min(5).max(500),
   }),
+  // S2.2 — founder attestation that a provider's GSTIN was verified before
+  // gstin_verifications existed (no fabricated history; honest-override
+  // philosophy of the bank pattern). Writes a gstin_verifications row with
+  // provider='admin_attest' + an audit_logs row. Reason required.
+  z.object({
+    action: z.literal('attest_gstin'),
+    reason: z.string().trim().min(5).max(500),
+  }),
 ])
 
 /** POST — ops actions: suspend/reactivate, force capacity pause, assign/revoke a verification badge. */
@@ -164,6 +172,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ penny_drop_verified: d.verified, updated_at: new Date().toISOString() })
         .eq('id', bank.id)
       after = { penny_drop_verified: d.verified, was: bank.penny_drop_verified, method: 'admin_override', reason: d.reason }
+    } else if (d.action === 'attest_gstin') {
+      // S2.2 — attest the provider's on-file GSTIN as founder-verified.
+      const { data: prof } = await admin
+        .from('provider_profiles')
+        .select('user_id, gstin')
+        .eq('id', id)
+        .maybeSingle()
+      if (!prof?.gstin) {
+        return NextResponse.json({ error: 'Provider has no GSTIN on file' }, { status: 409 })
+      }
+      const { error: recErr } = await admin.from('gstin_verifications').insert({
+        user_id: prof.user_id,
+        gstin: prof.gstin,
+        verified: true,
+        stub: false,
+        provider: 'admin_attest',
+        result: { admin_id: gate.userId, reason: d.reason },
+      })
+      if (recErr) return serverError('[admin/providers attest_gstin] record:', recErr)
+      after = { gstin_attested: true, gstin: prof.gstin, reason: d.reason }
     } else {
       // set_badge — assign (manually_approved) or revoke (rejected) a verification.
       const newStatus = d.grant ? 'manually_approved' : 'rejected'

@@ -144,3 +144,19 @@ branch + production environment only.
 
 **Why deferred:** credential handling + pipeline design deserve their own
 review; hand-apply with the S1.4 preflight is safe at current cadence.
+
+---
+
+## Fresh-bootstrap ordering: inline migration policies use policies.sql helpers (logged 2026-09-05, Phase S2)
+
+**Today:** 0017 and 0021 create RLS policies inline that call auth_user_id()
+and has_role(), but those helper functions are defined in rls/policies.sql,
+which bootstrap.ts runs AFTER all migrations. On prod this is moot (helpers
+have existed since Phase 1); on a truly fresh bootstrap the inline policies
+would fail before policies.sql runs. Pre-existing pattern (0017); 0021
+follows it for consistency rather than forking mid-phase.
+
+**Needed:** move the two helper definitions into an early migration (or a
+0000-adjacent bootstrap-prelude file) so migrations are self-sufficient; or
+have bootstrap.ts create the helpers in its shim step. Verify with a scratch
+bootstrap run (pairs with the stale restore-drill item).

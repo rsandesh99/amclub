@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSessionUser } from '@/lib/auth/session'
 import { getKycClient } from '@/lib/kyc'
+import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 
 const bodySchema = z.object({
@@ -27,6 +28,27 @@ export async function POST(request: NextRequest) {
 
   const kyc = getKycClient()
   const result = await kyc.verifyGstin(parsed.data.gstin)
+
+  // S2.2 — record EVERY attempt (success or failure) server-side, mirroring
+  // /kyc/verify-bank: the goods activation gate consumes this table, never a
+  // client-sent flag. `result` stores GST-registry business facts only.
+  const admin = await createAdminClient()
+  const { error: recErr } = await admin.from('gstin_verifications').insert({
+    user_id: user.id,
+    gstin: parsed.data.gstin,
+    verified: result.verified,
+    stub: result.stub ?? false,
+    provider: result.stub ? 'stub' : 'surepass',
+    result: {
+      legalName: result.legalName ?? null,
+      tradeName: result.tradeName ?? null,
+      state: result.state ?? null,
+      registrationDate: result.registrationDate ?? null,
+      isActive: result.isActive ?? null,
+      error: result.error ?? null,
+    },
+  })
+  if (recErr) console.error('[kyc/verify-gstin] could not record verification result:', recErr.message)
 
   if (!result.verified) {
     return NextResponse.json(

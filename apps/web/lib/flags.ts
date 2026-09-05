@@ -28,3 +28,12 @@ export const GATEWAY_ENABLED = process.env['GATEWAY_ENABLED'] !== 'false'
  * the automatic buyer-acceptance → T+2 → cron flow once trust is established.
  */
 export const PAYOUT_AUTO_RELEASE = process.env['PAYOUT_AUTO_RELEASE'] === 'true'
+
+/**
+ * MART_ENABLED — master switch for the AMC Mart goods mode (S2.3; dark build).
+ * Default OFF. Follows the COUPONS_ENABLED pattern at every hook point:
+ * page-gate `notFound()`, nav filter, API hard-404, and — new for Mart —
+ * server-authoritative delivery to mobile via /api/v1/profile/me.martEnabled.
+ * No Mart surface exists yet; the flag and its delivery mechanism land first.
+ */
+export const MART_ENABLED = process.env['MART_ENABLED'] === 'true'

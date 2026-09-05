@@ -23,6 +23,9 @@ export * from './states'
 // GSTIN format + mod-36 checksum validation
 export * from './gstin'
 
+// /api/v1/profile/me response contract (web + mobile)
+export * from './profile'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

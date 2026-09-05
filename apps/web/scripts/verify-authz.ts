@@ -363,6 +363,57 @@ async function main() {
       eq('adminMutation limiter engages (429 under hammer)', saw429, true)
     }
 
+    // ── 4d. S2.2 gstin_verifications — server-set record + RLS + attest ───────
+    console.log('S2.2 gstin_verifications:')
+    {
+      const gv = await api(provC.token, '/api/v1/profile/provider/kyc/verify-gstin', { gstin: '29ABCDE1234F1Z5' })
+      eq('verify-gstin call → 200 (stub mode verifies)', gv.status, 200)
+      const { data: rec } = await admin
+        .from('gstin_verifications')
+        .select('provider, verified, stub')
+        .eq('user_id', provC.uid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      eq('attempt recorded server-side', Boolean(rec?.[0]), true)
+      eq("recorded provider is 'stub' or 'surepass' (never client-set)", rec?.[0] && ['stub', 'surepass'].includes(rec[0].provider), true)
+
+      const asProvC = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${provC.token}` } }, auth: { persistSession: false } })
+      const { data: own } = await asProvC.from('gstin_verifications').select('id')
+      eq('provider self-reads own rows (≥1)', (own ?? []).length >= 1, true)
+      const asBuyerB = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${buyerB.token}` } }, auth: { persistSession: false } })
+      const { data: cross, error: crossErr } = await asBuyerB.from('gstin_verifications').select('id')
+      const crossDenied = Boolean(crossErr) || (cross ?? []).length === 0
+      console.log(`  ${crossDenied ? '✓' : '✗ LEAK'} cross-tenant read → ${crossErr ? 'error' : (cross ?? []).length + ' rows'}`)
+      crossDenied ? pass++ : fail++
+      const forged = await asProvC.from('gstin_verifications').insert({ user_id: provC.uid, gstin: '29ABCDE1234F1Z5', verified: true, provider: 'surepass' })
+      const forgeDenied = Boolean(forged.error)
+      console.log(`  ${forgeDenied ? '✓' : '✗ LEAK'} client INSERT denied → ${forged.error ? forged.error.message.slice(0, 60) : 'INSERTED'}`)
+      forgeDenied ? pass++ : fail++
+
+      // Admin attest: give provA a GSTIN on file, attest, expect row + audit.
+      await admin.from('provider_profiles').update({ gstin: '29AAAAA0000A1Z5' }).eq('id', provAId)
+      denied('non-admin attest_gstin', (await api(provA.token, `/api/v1/admin/providers/${provAId}`, { action: 'attest_gstin', reason: 'self attest' })).status)
+      const attest = await api(adminUser.token, `/api/v1/admin/providers/${provAId}`, { action: 'attest_gstin', reason: 'verified on gst.gov.in pre-table' })
+      eq('admin attest_gstin → 200', attest.status, 200)
+      const { data: att } = await admin
+        .from('gstin_verifications')
+        .select('provider, verified, gstin')
+        .eq('user_id', provA.uid)
+        .eq('provider', 'admin_attest')
+        .limit(1)
+      eq("attest row written with provider='admin_attest'", att?.[0]?.verified === true && att?.[0]?.gstin === '29AAAAA0000A1Z5', true)
+      const { data: aud } = await admin
+        .from('audit_logs')
+        .select('id')
+        .eq('action', 'provider_attest_gstin')
+        .eq('entity_id', provAId)
+        .limit(1)
+      eq('attest audit-logged', Boolean(aud?.[0]), true)
+      // Residue: gstin_verifications rows for kill-test users are removed by
+      // user-cascade on cleanup? user_id has no FK — delete explicitly.
+      await admin.from('gstin_verifications').delete().in('user_id', [provC.uid, provA.uid])
+    }
+
     // ── 5. Contact-info redaction (phone-mask claim) ───────────────────────────
     if (quoteId) {
       console.log('Contact-info redaction in quote thread:')

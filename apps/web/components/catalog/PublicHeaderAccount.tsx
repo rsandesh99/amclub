@@ -3,15 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
+import type { ProfileMeResponse } from '@amclub/shared'
 import { AccountMenu } from '@/components/shell/AccountMenu'
 
-interface Me {
-  authenticated: boolean
-  fullName: string | null
-  roles: string[]
-  hasMsmeProfile?: boolean
-  hasProviderProfile?: boolean
-}
+// S2.3 — shared contract; Partial because the 401 body is {authenticated:false}.
+type Me = Partial<ProfileMeResponse> & { authenticated: boolean }
 
 /**
  * Client-side auth area for the (static) public header: shows the account menu
@@ -48,7 +44,7 @@ export function PublicHeaderAccount() {
     const roles = me.roles ?? []
     return (
       <AccountMenu
-        name={me.fullName}
+        name={me.fullName ?? null}
         context="public"
         hasMsme={me.hasMsmeProfile ?? roles.includes('msme')}
         hasProvider={me.hasProviderProfile ?? roles.includes('provider')}

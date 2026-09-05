@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import type { ProfileMeResponse } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { getProviderReadiness } from '@/lib/payments/readiness-server'
+import { MART_ENABLED } from '@/lib/flags'
 
 /** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
@@ -33,18 +35,22 @@ export async function GET() {
       ? 'provider'
       : 'msme'
 
+  const body: ProfileMeResponse = {
+    authenticated: true,
+    id: userId,
+    fullName: u?.full_name ?? null,
+    role: primaryRole,
+    roles,
+    hasMsmeProfile: !!msme,
+    hasProviderProfile: !!provider,
+    providerStatus: provider?.status ?? null,
+    payoutReadiness,
+    // S2.3 — server-authoritative Mart flag delivery (mobile cannot dark-toggle
+    // a build-time env; it reads this field). No client branches on it yet.
+    martEnabled: MART_ENABLED,
+  }
   return NextResponse.json(
-    {
-      authenticated: true,
-      id: userId,
-      fullName: u?.full_name ?? null,
-      role: primaryRole,
-      roles,
-      hasMsmeProfile: !!msme,
-      hasProviderProfile: !!provider,
-      providerStatus: provider?.status ?? null,
-      payoutReadiness,
-    },
+    body,
     // Role/profile state drives routing — a heuristically-cached stale answer
     // right after becoming a provider (or signing out) misroutes the client.
     { headers: { 'Cache-Control': 'private, no-store' } },
