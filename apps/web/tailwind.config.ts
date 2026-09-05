@@ -58,6 +58,25 @@ const config: Config = {
           DEFAULT: '#1A1D1A',
           secondary: '#5C645C', // muted text + disabled
         },
+        // ── AMC Mart / FRONTEND.md v2 "Emerald & Brass" tokens (§2.1) ───────
+        // ADDITIVE: the services palette above is untouched; these are used by
+        // Mart surfaces (behind MART_ENABLED) and by services pages only as
+        // each P1–P8 redesign phase lands. Contrast law: gold NEVER renders
+        // small text — ≥20px bold numerals, icons, hairlines, fills, gradients.
+        emerald: {
+          DEFAULT: '#0E6B4F', // primary actions, active states, brand core
+          ink: '#0A2E22', // body text on ivory (≥7:1), deep authority surfaces
+          deep: '#072B1F', // hero/celebration gradient start
+        },
+        ivory: '#FCFAF3', // warm paper background, sunlight-friendly
+        gold: {
+          DEFAULT: '#C9A227', // the metal — never flat; gradient stops below
+          bright: '#EDD27A',
+          deep: '#8C6D14',
+        },
+        brass: '#B08D2A', // hairlines, borders, dividers on ivory
+        ink: '#14161A', // numerals + dense data (tabular money)
+        stamp: '#A63A2B', // errors/disputes only — never decorative
       },
       fontFamily: {
         // --font-indic is set per-locale in app/[locale]/layout.tsx (Noto Sans
@@ -95,6 +114,14 @@ const config: Config = {
         hover: '0 6px 16px -4px rgb(16 30 24 / 0.12), 0 2px 6px -2px rgb(16 30 24 / 0.07)',
         lg: '0 16px 40px -8px rgb(16 30 24 / 0.16), 0 4px 12px -4px rgb(16 30 24 / 0.08)',
         pressed: 'inset 0 1px 2px 0 rgb(16 30 24 / 0.10)',
+        // FRONTEND.md §2.3 — sheet card two-layer shadow (soft depth, no grey mud)
+        sheet: '0 1px 2px rgba(10,46,34,.06), 0 8px 24px rgba(10,46,34,.10)',
+        modal: '0 2px 6px rgba(10,46,34,.08), 0 24px 64px rgba(10,46,34,.18)',
+      },
+      backgroundImage: {
+        // Metallic gold — the ONLY way gold is rendered as a fill/edge.
+        'gold-metal': 'linear-gradient(135deg, #8C6D14 0%, #C9A227 35%, #EDD27A 55%, #C9A227 75%, #8C6D14 100%)',
+        'emerald-hero': 'linear-gradient(180deg, #072B1F 0%, #0E6B4F 100%)',
       },
       transitionDuration: {
         DEFAULT: '180ms',
