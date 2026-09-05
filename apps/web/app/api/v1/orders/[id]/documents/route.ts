@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
+import { orderDocumentKindSchema } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { resolveActor } from '@/lib/orders/actor'
@@ -57,7 +58,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const form = await request.formData().catch(() => null)
   if (!form) return NextResponse.json({ error: 'Invalid form' }, { status: 400 })
   const file = form.get('file') as File | null
-  const kind = (form.get('kind') as string | null) ?? 'other'
+  // S1.2 — kind reaches a storage object key: closed enum, never free text.
+  const kindParse = orderDocumentKindSchema.safeParse((form.get('kind') as string | null) ?? 'other')
+  if (!kindParse.success) {
+    return NextResponse.json({ error: 'Invalid document kind' }, { status: 422 })
+  }
+  const kind = kindParse.data
+  // Seatbelt behind the enum gate: nothing outside [a-z_] may touch the key.
+  if (!/^[a-z_]{1,40}$/.test(kind)) {
+    return NextResponse.json({ error: 'Invalid document kind' }, { status: 422 })
+  }
   if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
   if (!ALLOWED.includes(file.type)) return NextResponse.json({ error: 'Unsupported file type' }, { status: 422 })
   if (file.size > MAX_BYTES) return NextResponse.json({ error: 'File exceeds 15 MB' }, { status: 422 })

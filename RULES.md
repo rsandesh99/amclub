@@ -13,7 +13,9 @@ Break one only with a founder decision recorded as an ADR in `docs/adr/`.
    migration to prod and leave the code that writes to it unpushed
    ("migration-first, approval-later" lost quote history once). If verification
    needs the table before push, run it against a local server on the prod DB
-   and push immediately after the green run.
+   and push immediately after the green run. Every new migration also adds its
+   principal objects to the manifest in `apps/web/scripts/verify-migrations.ts`
+   — part of its definition of done (the script fails on unmanifested files).
 3. **Append-only event tables never gain UPDATE paths.** `order_events`,
    `quote_events`, `terms_acceptances` (and any future `*_events`): new facts
    are new rows. Keep the `BEFORE UPDATE` trigger, keep UPDATE/DELETE revoked

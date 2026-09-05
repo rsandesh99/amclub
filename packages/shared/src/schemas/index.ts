@@ -10,6 +10,23 @@ export const paiseSchema = z.number().int().positive()
 /** UUID v4 */
 export const uuidSchema = z.string().uuid()
 
+/**
+ * Order document kinds (S1.2). The closed set of values a client may send —
+ * the value reaches a storage object key, so it must never be free text.
+ * 'requirement' | 'deliverable' | 'other' are the services set (schema-comment
+ * parity; web sends 'deliverable', the route defaults 'other').
+ * 'delivery_photo' | 'dispatch_photo' are reserved for AMC Mart goods evidence.
+ */
+export const ORDER_DOCUMENT_KINDS = [
+  'requirement',
+  'deliverable',
+  'other',
+  'delivery_photo',
+  'dispatch_photo',
+] as const
+export type OrderDocumentKind = (typeof ORDER_DOCUMENT_KINDS)[number]
+export const orderDocumentKindSchema = z.enum(ORDER_DOCUMENT_KINDS)
+
 /** Indian phone number — 10 digits, optional +91 prefix */
 export const phoneSchema = z
   .string()

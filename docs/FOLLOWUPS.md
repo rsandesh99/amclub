@@ -115,3 +115,32 @@ go-live), email (Resend) and an in-app channel; WhatsApp is a stub behind
 abstraction with per-channel adapters and DLT/WhatsApp template ids in config,
 delivery-status callbacks recorded per notification, and a sandbox-delivered
 template as the done-criterion (§6 Phase 6). ~2 days after template approval.
+
+---
+
+## Mobile lint warning — unused eslint-disable (logged 2026-09-05, Phase S1)
+
+**Today:** `pnpm lint` reports one pre-existing mobile warning: an unused
+`eslint-disable @typescript-eslint/no-explicit-any` directive at line 87 of a
+mobile file (0 errors; CI unaffected). Not introduced by S1; out of S1 scope.
+
+**Needed:** remove the stale directive (one line) next time mobile is touched.
+
+---
+
+## CI-driven migration apply — protected deploy step (logged 2026-09-05, Phase S1; scoped for incoming developer)
+
+**Today:** migrations 0001+ are hand-applied via the Supabase SQL Editor (or
+apply-sql.ts with DATABASE_URL); nothing in CI or the Vercel build touches the
+database. verify-migrations.ts (S1.4) detects an unapplied migration but cannot
+prevent one.
+
+**Needed:** a protected deploy step (Supabase CLI `db push` or equivalent)
+running the pending migrations with the DB credential held as a CI secret,
+retiring hand-apply. Makes RULES.md rule 2 — "migrations deploy with their
+writers, same push" — mechanically enforced instead of procedural. Must keep
+the idempotent-SQL convention (re-runnable files) and gate on the default
+branch + production environment only.
+
+**Why deferred:** credential handling + pipeline design deserve their own
+review; hand-apply with the S1.4 preflight is safe at current cadence.

@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/admin'
+import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
 import { revalidateProviderCatalog } from '@/lib/catalog/revalidate'
 import { getProviderReadiness } from '@/lib/payments/readiness-server'
@@ -16,16 +17,14 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getSessionUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  // S1.5 — same gate as every other admin route: requireAdmin accepts BOTH the
+  // admin browser cookie session and Bearer callers, and resolves roles via
+  // the service-role client. Plus the standard admin-mutation rate limit.
+  const gate = await requireAdmin()
+  if (gate.error) return gate.error
 
-  const isAdminOrOps =
-    user.roles.includes('admin') || user.roles.includes('ops')
-  if (!isAdminOrOps) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const rl = await enforce(limiters.adminMutation, `admin:${gate.userId}`)
+  if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
   const { id: providerId } = await params
 
@@ -62,7 +61,7 @@ export async function POST(
     .from('provider_verifications')
     .update({
       status: action === 'approve' ? 'manually_approved' : 'rejected',
-      verified_by: user.id,
+      verified_by: gate.userId,
       verified_at: new Date().toISOString(),
       rejection_reason: action === 'reject' ? (reason ?? null) : null,
     })
@@ -89,10 +88,10 @@ export async function POST(
   // item from this instant, not something waiting on the provider.
   const { readiness } = await getProviderReadiness(admin, providerId)
   if (action === 'approve') {
-    console.warn(`[admin/verifications] Provider ${providerId} approved by ${user.id} — payout readiness: ${readiness}`)
+    console.warn(`[admin/verifications] Provider ${providerId} approved by ${gate.userId} — payout readiness: ${readiness}`)
   } else {
     console.warn(
-      `[admin/verifications] Provider ${providerId} rejected by ${user.id}: ${reason}`,
+      `[admin/verifications] Provider ${providerId} rejected by ${gate.userId}: ${reason}`,
     )
   }
 

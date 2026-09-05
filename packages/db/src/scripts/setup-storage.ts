@@ -1,4 +1,6 @@
-/** Create the private Storage buckets used by KYC, orders, and invoices.
+/** Create every Storage bucket production uses (KYC, orders, invoices, and the
+ *  public CMS/media assets bucket — S1.3 drift fix: public-assets existed in
+ *  prod but not here, so a DR rebuild would have 404'd the CMS banner).
  *  Idempotent — ignores "already exists". Run: tsx src/scripts/setup-storage.ts */
 import { createClient } from '@supabase/supabase-js'
 import path from 'path'
@@ -11,15 +13,21 @@ const sb = createClient(process.env['NEXT_PUBLIC_SUPABASE_URL']!, process.env['S
   auth: { persistSession: false },
 })
 
-const BUCKETS = ['kyc-documents', 'order-documents', 'invoices']
+const BUCKETS: { name: string; public: boolean }[] = [
+  { name: 'kyc-documents', public: false },
+  { name: 'order-documents', public: false },
+  { name: 'invoices', public: false },
+  // Public-read, server-only-write (CMS banner images, marketing assets).
+  { name: 'public-assets', public: true },
+]
 
 async function main() {
-  for (const name of BUCKETS) {
-    const { error } = await sb.storage.createBucket(name, { public: false })
+  for (const { name, public: isPublic } of BUCKETS) {
+    const { error } = await sb.storage.createBucket(name, { public: isPublic })
     if (error && !/exists/i.test(error.message)) {
       console.error(`✗ ${name}: ${error.message}`)
     } else {
-      console.log(`✓ ${name} ${error ? '(already exists)' : 'created'}`)
+      console.log(`✓ ${name} (public: ${isPublic}) ${error ? '(already exists)' : 'created'}`)
     }
   }
 }

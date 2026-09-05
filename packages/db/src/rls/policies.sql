@@ -284,6 +284,15 @@ CREATE POLICY "terms_acceptances: admin read" ON terms_acceptances
 -- No INSERT/UPDATE/DELETE policies by design (service role writes; append-only).
 REVOKE UPDATE, DELETE ON terms_acceptances FROM anon, authenticated;
 
+-- ─── order_events append-only guard (0019) ────────────────────────────────────
+-- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
+-- raise_append_only() is created in 0017 (bootstrap runs migrations first).
+DROP TRIGGER IF EXISTS order_events_no_update ON order_events;
+CREATE TRIGGER order_events_no_update
+  BEFORE UPDATE ON order_events
+  FOR EACH ROW EXECUTE FUNCTION raise_append_only();
+REVOKE UPDATE, DELETE ON order_events FROM anon, authenticated;
+
 -- ─── orders ───────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "orders: msme all own" ON orders;

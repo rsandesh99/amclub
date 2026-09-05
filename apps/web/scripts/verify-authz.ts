@@ -284,6 +284,85 @@ async function main() {
     const payoutsView = await api(adminUser.token, '/api/v1/admin/payouts?status=held', undefined, 'GET')
     eq('admin payouts view (held) renders with readiness/aging fields → 200', payoutsView.status, 200)
 
+    // ── 4c. S1 spine hygiene — order_events append-only + document kind gate +
+    //        verifications route auth/limiter consistency ─────────────────────
+    console.log('S1.1 order_events append-only (0019):')
+    {
+      const { data: evRows } = await admin.from('order_events').select('id, event').eq('order_id', orderA).limit(1)
+      const ev = evRows?.[0]
+      eq('order_events INSERT path produced rows (addEvent unaffected)', Boolean(ev), true)
+      if (ev) {
+        const asBuyerA = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${buyerA.token}` } }, auth: { persistSession: false } })
+        const upd = await asBuyerA.from('order_events').update({ event: 'forged' }).eq('id', ev.id).select('id')
+        const updDenied = Boolean(upd.error) || (upd.data ?? []).length === 0
+        console.log(`  ${updDenied ? '✓' : '✗ LEAK'} party UPDATE on order_events denied → ${upd.error ? upd.error.message.slice(0, 60) : (upd.data ?? []).length + ' rows'}`)
+        updDenied ? pass++ : fail++
+        const del = await asBuyerA.from('order_events').delete().eq('id', ev.id).select('id')
+        const delDenied = Boolean(del.error) || (del.data ?? []).length === 0
+        console.log(`  ${delDenied ? '✓' : '✗ LEAK'} party DELETE on order_events denied → ${del.error ? del.error.message.slice(0, 60) : (del.data ?? []).length + ' rows'}`)
+        delDenied ? pass++ : fail++
+        const { data: still } = await admin.from('order_events').select('event').eq('id', ev.id).maybeSingle()
+        eq('row unchanged after forgery attempts', still?.event, ev.event)
+      }
+    }
+
+    console.log('S1.2 order_documents kind allowlist:')
+    {
+      const png = new Blob([Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')], { type: 'image/png' })
+      const evil = new FormData()
+      evil.append('file', png, 'x.png')
+      evil.append('kind', '../../evil')
+      const evilRes = await fetch(`${BASE}/api/v1/orders/${orderA}/documents`, {
+        method: 'POST', headers: { Authorization: `Bearer ${buyerA.token}` }, body: evil,
+      })
+      eq("kind='../../evil' → 422", evilRes.status, 422)
+      const { data: evilObjs } = await admin.storage.from('order-documents').list(orderA)
+      eq('no storage object created for rejected kind', (evilObjs ?? []).some((o) => o.name.includes('evil')), false)
+      const good = new FormData()
+      good.append('file', png, 'x.png')
+      good.append('kind', 'deliverable')
+      const goodRes = await fetch(`${BASE}/api/v1/orders/${orderA}/documents`, {
+        method: 'POST', headers: { Authorization: `Bearer ${buyerA.token}` }, body: good,
+      })
+      eq("kind='deliverable' → 200", goodRes.status, 200)
+      // Zero residue: remove the uploaded doc row + storage object now.
+      const { data: docRows } = await admin.from('order_documents').select('id, file_url').eq('order_id', orderA)
+      for (const d of docRows ?? []) {
+        if (d.file_url) await admin.storage.from('order-documents').remove([d.file_url])
+      }
+      await admin.from('order_documents').delete().eq('order_id', orderA)
+    }
+
+    console.log('S1.5 verifications route — one admin gate + limiter:')
+    {
+      denied('provider Bearer POST /admin/verifications/{provB}', (await api(provA.token, `/api/v1/admin/verifications/${provBId}`, { action: 'reject', reason: 'killtest' })).status)
+      const okBearer = await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'reject', reason: 'killtest' })
+      eq('admin Bearer POST → 200', okBearer.status, 200)
+      // Cookie session (the admin browser path) must also pass — requireAdmin
+      // accepts both. Mint a cookie jar for the admin fixture.
+      const ajar: Record<string, string> = {}
+      const assr = createServerClient(URL_, ANON, {
+        cookies: {
+          getAll() { return Object.entries(ajar).map(([name, value]) => ({ name, value })) },
+          setAll(list) { for (const { name, value } of list) ajar[name] = value },
+        },
+      })
+      await assr.auth.signInWithPassword({ email: `${tag}_admin@killtest.amclub`, password: 'Test1234!' })
+      const acookie = Object.entries(ajar).map(([n, v]) => `${n}=${v}`).join('; ')
+      const okCookie = await fetch(`${BASE}/api/v1/admin/verifications/${provBId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', cookie: acookie },
+        body: JSON.stringify({ action: 'reject', reason: 'killtest-cookie' }),
+      })
+      eq('admin cookie POST → 200', okCookie.status, 200)
+      // adminMutation limiter (60/min per user): hammer until a 429 appears.
+      let saw429 = false
+      for (let i = 0; i < 65 && !saw429; i++) {
+        const r = await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'reject', reason: 'rl-probe' })
+        if (r.status === 429) saw429 = true
+      }
+      eq('adminMutation limiter engages (429 under hammer)', saw429, true)
+    }
+
     // ── 5. Contact-info redaction (phone-mask claim) ───────────────────────────
     if (quoteId) {
       console.log('Contact-info redaction in quote thread:')
