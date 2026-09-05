@@ -4,6 +4,64 @@ Items deliberately deferred during pre-cutover hardening. Each entry says what
 exists today, what is missing, and what would unblock it. Remove an entry when
 it ships.
 
+## Mart-prep hardening sprint — closeout (2026-09-05)
+
+Three gated phases readied the services spine to host AMC Mart (a goods mode,
+to be built as a flag-gated dark build) without touching working services code.
+**S1 — spine hygiene** (commit `6a44bd7`, migration 0019): order_events is now
+append-only (trigger + REVOKE) like the other event tables; order-document
+`kind` is an allowlisted enum (no client text in storage keys); setup-storage
+recreates the `public-assets` bucket (DR drift fixed); `verify-migrations.ts`
+preflight added; the admin verifications route uses the standard
+requireAdmin + rate-limit gate. **S2 — Mart step-0 pre-land** (commit
+`47456eb`, migrations 0020/0021): additive `kind` discriminator on
+orders/checkout_sessions with the trust view kind-scoped (byte-identical for
+services, proven); `gstin_verifications` persists every KYC attempt server-side
+plus an admin `attest_gstin` action; `MART_ENABLED` flag + a shared
+`ProfileMeResponse` deliver the flag to mobile. **S3 — Telugu engineering**
+(commit `d88459c`): `te` is a first-class UI locale (`SUPPORTED_LOCALES`, kept
+separate from `PROVIDER_LANGUAGES` spoken data) end-to-end — enums, notification
+resolver (en fallback), RFQ `label_te`, mobile locale + en-deep-merge + picker,
+Expo Noto Telugu font, and a `verify-te-render` assertion suite; the ~1,400
+strings themselves are a separate translation workstream (below). All three
+verified against the live build (authz 116/0, money-loop 33/0, rfq 13/0,
+migrations 0 missing, te-render 25/0, zero residue). No Mart surface was built —
+that starts fresh with DESIGN.md + FRONTEND.md.
+
+## Incoming developer — open items
+
+Each is deferred with intent, not forgotten. One-line scope; details in the
+dated sections below where present.
+
+- **Settlement webhooks + money journal** — reserved for you; NOT touched by
+  S1–S3. The live-Razorpay cutover (ADR-003) and a double-entry money journal
+  are the biggest remaining money-path work.
+- **CI-driven migration apply** — retire hand-apply; a protected deploy step
+  (Supabase CLI `db push`) with the DB credential as a CI secret, making
+  RULES.md rule 2 mechanically enforced. (Section below.)
+- **Fresh-bootstrap helper ordering** — 0017/0021 inline RLS policies call
+  `auth_user_id()`/`has_role()` defined in policies.sql, which bootstrap runs
+  last; move helpers to an early migration or bootstrap prelude. (Section below.)
+- **0013/0014 policies.sql drift** — `ai_invocations`/`cron_heartbeats` enable
+  RLS inline but were never mirrored into policies.sql (service-role-only, zero
+  policies, so harmless today); mirror for consistency.
+- **Scratch-project storage killtest** — `setup-storage.ts` was proven
+  idempotent against prod; verify a from-zero Supabase project creates all four
+  buckets with correct public flags (pairs with the stale restore-drill).
+- **readiness-flip notification** — when a provider becomes payout-ready
+  (Route id + verified bank), nothing notifies them; today it only surfaces
+  passively in `/admin` and their dashboard banner.
+- **Mobile lint warning** — one unused eslint-disable directive (0 errors);
+  remove next time mobile is touched. (Section below.)
+- **Telugu translation workstream** — ~1,400 leaf strings (web ~1,065 + mobile
+  286 + RFQ `label_te` + notification te slots) need native translation +
+  review, incl. the 73-key legal namespace (qualified review). The engineering
+  is done (S3); this is non-code. Add pages to `TE_ASSERTED_PAGES` in
+  `verify-te-render.ts` as their te keys land. `ta` remains gateway-only until a
+  Tamil cluster is scheduled.
+- **Live-cutover checklist** — see `docs/adr/003-simulate-mode-in-production.md`
+  (KYC vendor key, Route activation, every active provider payout-ready).
+
 ---
 
 ## Quote withdrawal (provider) — no UI, no route (logged 2026-08-27, Phase 1f)
