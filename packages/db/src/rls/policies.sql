@@ -62,6 +62,13 @@ ALTER TABLE cms_banners          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quote_events         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bank_account_verifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE terms_acceptances    ENABLE ROW LEVEL SECURITY;
+-- AMC Mart (0022) — staged; these ALTERs are no-ops until 0022 is applied.
+ALTER TABLE IF EXISTS mart_categories  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS mart_settings    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS products         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS price_tiers      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS product_events   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS ai_decisions     ENABLE ROW LEVEL SECURITY;
 
 -- ─── users ────────────────────────────────────────────────────────────────────
 
@@ -584,3 +591,65 @@ GRANT SELECT (
   median_response_minutes, capacity_paused, top_rated,
   created_at, updated_at, deleted_at
 ) ON provider_profiles TO anon, authenticated;
+
+-- ═══ AMC Mart (0022) — mirrors migration 0022 §7 verbatim ═══════════════════
+-- Guarded: bootstrap applies migrations first, so these tables exist; on a
+-- database where 0022 is NOT yet applied (prod during the dark build) the
+-- whole block is skipped so policies.sql stays re-runnable against prod.
+DO $mart$
+BEGIN
+  IF to_regclass('public.products') IS NULL THEN
+    RAISE NOTICE 'AMC Mart tables absent (0022 not applied) — skipping Mart policies';
+    RETURN;
+  END IF;
+
+  -- The column-grant block above re-applies 0004's fixed list on every run,
+  -- which drops 0022's sells_goods grant; the public catalog policies read it.
+  EXECUTE 'GRANT SELECT (sells_goods) ON provider_profiles TO anon, authenticated';
+
+  EXECUTE 'DROP POLICY IF EXISTS "mart_categories: public read active" ON mart_categories';
+  EXECUTE 'CREATE POLICY "mart_categories: public read active" ON mart_categories FOR SELECT USING (is_active = true)';
+  EXECUTE 'DROP POLICY IF EXISTS "mart_categories: admin all" ON mart_categories';
+  EXECUTE 'CREATE POLICY "mart_categories: admin all" ON mart_categories FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
+
+  EXECUTE 'DROP POLICY IF EXISTS "mart_settings: admin read" ON mart_settings';
+  EXECUTE 'CREATE POLICY "mart_settings: admin read" ON mart_settings FOR SELECT USING (has_role(''admin'') OR has_role(''ops''))';
+  EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON mart_settings FROM anon, authenticated';
+
+  EXECUTE 'DROP POLICY IF EXISTS "products: public read active" ON products';
+  EXECUTE 'CREATE POLICY "products: public read active" ON products FOR SELECT USING (
+    status = ''active'' AND deleted_at IS NULL
+    AND seller_id IN (SELECT id FROM provider_profiles WHERE status = ''active'' AND deleted_at IS NULL AND sells_goods = true))';
+  EXECUTE 'DROP POLICY IF EXISTS "products: seller crud own" ON products';
+  EXECUTE 'CREATE POLICY "products: seller crud own" ON products FOR ALL
+    USING (seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
+    WITH CHECK (seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))';
+  EXECUTE 'DROP POLICY IF EXISTS "products: admin all" ON products';
+  EXECUTE 'CREATE POLICY "products: admin all" ON products FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
+
+  EXECUTE 'DROP POLICY IF EXISTS "price_tiers: public read active" ON price_tiers';
+  EXECUTE 'CREATE POLICY "price_tiers: public read active" ON price_tiers FOR SELECT USING (
+    product_id IN (SELECT p.id FROM products p JOIN provider_profiles s ON s.id = p.seller_id
+      WHERE p.status = ''active'' AND p.deleted_at IS NULL AND s.status = ''active'' AND s.deleted_at IS NULL AND s.sells_goods = true))';
+  EXECUTE 'DROP POLICY IF EXISTS "price_tiers: seller crud own" ON price_tiers';
+  EXECUTE 'CREATE POLICY "price_tiers: seller crud own" ON price_tiers FOR ALL
+    USING (product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())))
+    WITH CHECK (product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())))';
+  EXECUTE 'DROP POLICY IF EXISTS "price_tiers: admin all" ON price_tiers';
+  EXECUTE 'CREATE POLICY "price_tiers: admin all" ON price_tiers FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
+
+  -- product_events / ai_decisions: append-only (trigger from 0022), read-only for clients.
+  EXECUTE 'DROP POLICY IF EXISTS "product_events: seller read own" ON product_events';
+  EXECUTE 'CREATE POLICY "product_events: seller read own" ON product_events FOR SELECT USING (
+    product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())))';
+  EXECUTE 'DROP POLICY IF EXISTS "product_events: admin read" ON product_events';
+  EXECUTE 'CREATE POLICY "product_events: admin read" ON product_events FOR SELECT USING (has_role(''admin'') OR has_role(''ops''))';
+  EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON product_events FROM anon, authenticated';
+
+  EXECUTE 'DROP POLICY IF EXISTS "ai_decisions: self read" ON ai_decisions';
+  EXECUTE 'CREATE POLICY "ai_decisions: self read" ON ai_decisions FOR SELECT USING (decided_by = auth_user_id())';
+  EXECUTE 'DROP POLICY IF EXISTS "ai_decisions: admin read" ON ai_decisions';
+  EXECUTE 'CREATE POLICY "ai_decisions: admin read" ON ai_decisions FOR SELECT USING (has_role(''admin'') OR has_role(''ops''))';
+  EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON ai_decisions FROM anon, authenticated';
+END
+$mart$;
