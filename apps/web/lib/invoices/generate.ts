@@ -69,23 +69,36 @@ export async function generateInvoices(admin: Admin, orderId: string): Promise<{
   const out: { buyer?: string; commission?: string } = {}
 
   // Buyer invoice — service from provider to buyer.
+  // AMC Mart (kind='goods'): generated in AMC's name (merchant-of-record
+  // interim, MART_DESIGN.md §2) with one HSN line per item; seller invoices
+  // are recorded INBOUND against the order at dispatch, never generated here.
   if (!have.has('buyer_invoice')) {
     const number = `INV-${order.order_number}-B`
+    const goods = order.kind === 'goods'
+    const goodsLines: Line[] = goods
+      ? ((order.line_items ?? []) as { name: string; qty: number; unit: string; hsn_code: string; gst_rate_bps: number; line_taxable_paise: number; line_gst_paise: number }[]).flatMap((l) => [
+          { label: `${l.qty} ${l.unit} ${l.name} (HSN ${l.hsn_code})`, value: inr(l.line_taxable_paise) },
+          { label: `  GST ${l.gst_rate_bps / 100}%`, value: inr(l.line_gst_paise) },
+        ])
+      : []
     const bytes = await buildPdf(
-      'Tax Invoice (Buyer)',
+      goods ? 'Tax Invoice (Buyer) — Goods' : 'Tax Invoice (Buyer)',
       {
         'Invoice No': number,
         'Order': order.order_number,
-        'From': provider?.display_name ?? 'Provider',
+        'From': goods ? 'AMClub (Swathisri Infra Projects Pvt Ltd)' : (provider?.display_name ?? 'Provider'),
         'To': msme?.business_name ?? 'Buyer',
         'Buyer GSTIN': msme?.gstin ?? '—',
+        ...(goods ? { 'Supplied by': provider?.display_name ?? 'Seller' } : {}),
       },
-      [
-        { label: order.title, value: inr(order.price_paise) },
-        { label: 'Discount', value: '- ' + inr(order.discount_paise) },
-        { label: 'Taxable value', value: inr(order.price_paise - order.discount_paise) },
-        { label: 'GST (18%)', value: inr(order.gst_paise) },
-      ],
+      goods
+        ? [...goodsLines, { label: 'Taxable value', value: inr(order.price_paise) }, { label: 'Total GST', value: inr(order.gst_paise) }]
+        : [
+            { label: order.title, value: inr(order.price_paise) },
+            { label: 'Discount', value: '- ' + inr(order.discount_paise) },
+            { label: 'Taxable value', value: inr(order.price_paise - order.discount_paise) },
+            { label: 'GST (18%)', value: inr(order.gst_paise) },
+          ],
       'Total payable',
       inr(order.total_paise),
     )

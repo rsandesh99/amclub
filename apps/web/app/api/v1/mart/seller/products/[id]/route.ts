@@ -1,0 +1,145 @@
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+import { productInputSchema, productStatusActionSchema, isValidProductTransition, type ProductStatus } from '@amclub/shared'
+import { martApiGate } from '@/lib/mart/gate'
+import { getAuthedSupabase } from '@/lib/auth/request'
+import { createAdminClient } from '@/lib/supabase/server'
+import { getSellerCtx } from '@/lib/mart/seller'
+import { getSellerProduct } from '@/lib/mart/queries'
+import { getMartCategory, getAutoApproveAfterListings } from '@/lib/mart/config'
+import { addProductEvent } from '@/lib/mart/events'
+import { publicAssetUrl } from '@/lib/mart/assets'
+import { serverError } from '@/lib/api/errors'
+import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
+
+type Ctx = { params: Promise<{ id: string }> }
+
+async function ctx(id: string) {
+  const { userId } = await getAuthedSupabase()
+  if (!userId) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+  const admin = await createAdminClient()
+  const seller = await getSellerCtx(admin, userId)
+  if (!seller) return { error: NextResponse.json({ error: 'No provider profile' }, { status: 404 }) }
+  const product = await getSellerProduct(admin, seller.id, id)
+  if (!product) return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) }
+  return { userId, admin, seller, product }
+}
+
+export async function GET(_request: NextRequest, { params }: Ctx) {
+  const gate = martApiGate()
+  if (gate) return gate
+  const { id } = await params
+  const c = await ctx(id)
+  if (c.error) return c.error
+  const { data: events } = await c.admin
+    .from('product_events')
+    .select('id, event_type, payload, created_at')
+    .eq('product_id', id)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  return NextResponse.json(
+    { product: { ...c.product, imageUrls: c.product.images.map(publicAssetUrl) }, events: events ?? [] },
+    { headers: { 'Cache-Control': 'private, no-store' } },
+  )
+}
+
+/** Full edit (fields + tiers). Emits 'edited' with a before/after diff and 'price_changed' when tiers move. */
+export async function PATCH(request: NextRequest, { params }: Ctx) {
+  const gate = martApiGate()
+  if (gate) return gate
+  const { id } = await params
+  const c = await ctx(id)
+  if (c.error) return c.error
+  const rl = await enforce(limiters.authed, `mart-seller:${c.userId}`)
+  if (!rl.ok) return tooManyRequests(rl.retryAfter)
+  const parsed = productInputSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
+  const d = parsed.data
+  const cat = await getMartCategory(c.admin, d.category_slug)
+  if (!cat || !cat.is_active || cat.bis_blocked) return NextResponse.json({ error: 'Invalid category' }, { status: 422 })
+  if (d.images.some((k) => !k.startsWith(`mart/${c.seller.id}/`))) return NextResponse.json({ error: 'Image not owned by this seller' }, { status: 403 })
+
+  const before = {
+    category_slug: c.product.categorySlug, name: c.product.name, description: c.product.description, hsn_code: c.product.hsnCode,
+    gst_rate_bps: c.product.gstRateBps, unit: c.product.unit, images: c.product.images, min_order_qty: c.product.minOrderQty,
+    country_of_origin: c.product.countryOfOrigin,
+  }
+  const after = {
+    category_slug: d.category_slug, name: d.name, description: d.description ?? null, hsn_code: d.hsn_code, gst_rate_bps: d.gst_rate_bps,
+    unit: d.unit, images: d.images, min_order_qty: d.min_order_qty, country_of_origin: d.country_of_origin,
+  }
+  const { error } = await c.admin.from('products').update({ ...after, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) return serverError('[mart/seller/products PATCH]', error)
+
+  const oldTiers = c.product.tiers.map((t) => ({ min_qty: t.min_qty, unit_price_paise: t.unit_price_paise }))
+  const newTiers = d.tiers.map((t) => ({ min_qty: t.min_qty, unit_price_paise: t.unit_price_paise }))
+  const tiersChanged = JSON.stringify(oldTiers) !== JSON.stringify(newTiers)
+  if (tiersChanged) {
+    await c.admin.from('price_tiers').delete().eq('product_id', id)
+    const { error: tErr } = await c.admin.from('price_tiers').insert(newTiers.map((t) => ({ product_id: id, ...t })))
+    if (tErr) return serverError('[mart/seller/products PATCH tiers]', tErr)
+  }
+  const changed = Object.keys(after).filter((k) => JSON.stringify((before as Record<string, unknown>)[k]) !== JSON.stringify((after as Record<string, unknown>)[k]))
+  if (changed.length > 0) {
+    await addProductEvent(c.admin, id, c.userId, 'edited', {
+      before: Object.fromEntries(changed.map((k) => [k, (before as Record<string, unknown>)[k]])),
+      after: Object.fromEntries(changed.map((k) => [k, (after as Record<string, unknown>)[k]])),
+    })
+  }
+  if (tiersChanged) await addProductEvent(c.admin, id, c.userId, 'price_changed', { before: oldTiers, after: newTiers })
+  return NextResponse.json({ id, status: c.product.status })
+}
+
+/**
+ * Seller status actions: submit (draft → pending_approval, or straight to
+ * active once the seller has N admin-approved listings — config), suspend
+ * (active → suspended), reactivate (suspended → active; only if the seller
+ * suspended it themselves and it was approved before).
+ */
+export async function POST(request: NextRequest, { params }: Ctx) {
+  const gate = martApiGate()
+  if (gate) return gate
+  const { id } = await params
+  const c = await ctx(id)
+  if (c.error) return c.error
+  const parsed = productStatusActionSchema.safeParse((await request.json().catch(() => null))?.action)
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid action' }, { status: 422 })
+  const action = parsed.data
+  const from = c.product.status as ProductStatus
+  const now = new Date().toISOString()
+
+  if (action === 'submit') {
+    if (!c.seller.sellsGoods) return NextResponse.json({ error: 'activation_required' }, { status: 409 })
+    if (!isValidProductTransition(from, 'pending_approval')) return NextResponse.json({ error: `Cannot submit from ${from}` }, { status: 409 })
+    const n = await getAutoApproveAfterListings(c.admin)
+    const { count } = await c.admin.from('products').select('id', { count: 'exact', head: true }).eq('seller_id', c.seller.id).not('approved_at', 'is', null)
+    const autoApprove = (count ?? 0) >= n
+    const to: ProductStatus = autoApprove ? 'active' : 'pending_approval'
+    const { error } = await c.admin
+      .from('products')
+      .update({ status: to, updated_at: now, ...(autoApprove ? { approved_at: now, approved_by: null } : {}) })
+      .eq('id', id)
+      .eq('status', from)
+    if (error) return serverError('[mart/seller/products submit]', error)
+    await addProductEvent(c.admin, id, c.userId, 'submitted', null)
+    if (autoApprove) await addProductEvent(c.admin, id, c.userId, 'activated', { auto: true, approved_listings: count })
+    return NextResponse.json({ id, status: to })
+  }
+  if (action === 'suspend') {
+    if (!isValidProductTransition(from, 'suspended')) return NextResponse.json({ error: `Cannot suspend from ${from}` }, { status: 409 })
+    const { error } = await c.admin.from('products').update({ status: 'suspended', updated_at: now }).eq('id', id).eq('status', from)
+    if (error) return serverError('[mart/seller/products suspend]', error)
+    await addProductEvent(c.admin, id, c.userId, 'suspended', { by: 'seller' })
+    return NextResponse.json({ id, status: 'suspended' })
+  }
+  // reactivate
+  if (!isValidProductTransition(from, 'active')) return NextResponse.json({ error: `Cannot reactivate from ${from}` }, { status: 409 })
+  const { data: lastSuspend } = await c.admin
+    .from('product_events').select('payload').eq('product_id', id).eq('event_type', 'suspended').order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if ((lastSuspend?.payload as { by?: string } | null)?.by === 'admin') return NextResponse.json({ error: 'suspended_by_admin' }, { status: 403 })
+  if (!c.seller.sellsGoods) return NextResponse.json({ error: 'activation_required' }, { status: 409 })
+  const { error } = await c.admin.from('products').update({ status: 'active', updated_at: now }).eq('id', id).eq('status', 'suspended')
+  if (error) return serverError('[mart/seller/products reactivate]', error)
+  await addProductEvent(c.admin, id, c.userId, 'activated', { by: 'seller', reactivated: true })
+  return NextResponse.json({ id, status: 'active' })
+}

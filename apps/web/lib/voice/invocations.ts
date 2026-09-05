@@ -17,7 +17,7 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
 export interface AiInvocationInput {
   userId: string
   /** Telemetry bucket; defaults to the voice pipeline. */
-  feature?: 'voice_rfq' | 'voice_eval' | undefined
+  feature?: 'voice_rfq' | 'voice_eval' | 'catalog_draft' | undefined
   step: 'stt' | 'parse'
   vendor: string
   status: 'ok' | 'error' | 'stub'

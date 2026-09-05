@@ -12,6 +12,8 @@ import { getPaymentGateway } from '@/lib/payments'
 import { PAYOUT_AUTO_RELEASE } from '@/lib/flags'
 import { generateInvoices } from '@/lib/invoices/generate'
 import { notifyOrderTransition, notifyAutoCancelled, notifyAutoAccepted } from '@/lib/notifications/events'
+import { getGoodsDossier } from '@/lib/mart/release'
+import { getTdsConfig } from '@/lib/mart/config'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -90,6 +92,21 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
     ...(provider?.status === 'suspended' ? ['provider_suspended'] : []),
     ...(!bank?.penny_drop_verified ? ['bank_unverified'] : []),
   ]
+  // AMC Mart (kind='goods' ONLY — services orders never enter this branch):
+  // the goods release gate (delivery photo + receipt + return window clear)
+  // adds its hold reasons, and TDS fields are recorded from config (§2).
+  let tds: { tds_section: string; tds_bps: number; tds_paise: number } | null = null
+  if (order.kind === 'goods') {
+    const dossier = await getGoodsDossier(admin, order)
+    holdReasons.push(...dossier.gate.reasons)
+    const cfg = await getTdsConfig(admin)
+    const applies = cfg.rate_bps > 0 && Number(order.provider_earning_paise) >= cfg.threshold_paise
+    tds = {
+      tds_section: cfg.section,
+      tds_bps: applies ? cfg.rate_bps : 0,
+      tds_paise: applies ? Math.round((Number(order.provider_earning_paise) * cfg.rate_bps) / 10000) : 0,
+    }
+  }
   const held = holdReasons.length > 0
 
   const scheduledFor = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().slice(0, 10) // T+2
@@ -102,6 +119,7 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
         amount_paise: order.provider_earning_paise,
         status: held ? 'held' : 'scheduled',
         scheduled_for: scheduledFor,
+        ...(tds ?? {}),
       },
       { onConflict: 'order_id', ignoreDuplicates: true },
     )
@@ -223,6 +241,9 @@ export async function applyTransition(
 ): Promise<TransitionResult> {
   const order = await loadOrder(admin, orderId)
   if (!order) return { ok: false, status: 404, error: 'Order not found' }
+  // AMC Mart: goods orders have their own action set (lib/mart/goods-transitions);
+  // services orders (kind='service') never hit this line's branch.
+  if (order.kind === 'goods') return { ok: false, status: 409, error: 'Goods orders use the Mart order actions' }
 
   const isMsme = actor.msmeId != null && order.msme_id === actor.msmeId
   const isProvider = actor.providerId != null && order.provider_id === actor.providerId

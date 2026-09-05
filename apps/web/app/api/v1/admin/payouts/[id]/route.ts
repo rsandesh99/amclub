@@ -8,6 +8,7 @@ import { getPaymentGateway } from '@/lib/payments'
 import { runPayouts } from '@/lib/payments/payout'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { writeAudit } from '@/lib/audit/log'
+import { getGoodsDossier } from '@/lib/mart/release'
 
 const bodySchema = z.object({ action: z.literal('retry') })
 
@@ -37,6 +38,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const from = payout.status as PayoutStatus
   if (!isValidPayoutTransition(from, 'scheduled')) {
     return NextResponse.json({ error: `illegal transition ${from} → scheduled` }, { status: 409 })
+  }
+
+  // AMC Mart — goods release gate (MART_DESIGN.md §4.3): a goods payout is
+  // NEVER released while delivery evidence, receipt, the return window or an
+  // open return still hold. Services orders (kind='service') skip this block.
+  const { data: ord } = await admin.from('orders').select('*').eq('id', payout.order_id).maybeSingle()
+  if (ord?.kind === 'goods') {
+    const dossier = await getGoodsDossier(admin, ord)
+    if (!dossier.gate.ok) {
+      return NextResponse.json({ error: 'goods_release_gate', reasons: dossier.gate.reasons, dossier }, { status: 409 })
+    }
   }
 
   const { error } = await admin

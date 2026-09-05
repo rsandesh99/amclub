@@ -172,6 +172,16 @@ export async function resolveDispute(
     event: newStatus,
     payload: { resolution, refund_paise: refundPaise, provider_paid_paise: providerPaidPaise },
   })
+  // AMC Mart: a goods dispute is a return (opened via 'return_opened'); close
+  // it in the goods vocabulary too so the release gate sees return_resolved.
+  if (order.kind === 'goods') {
+    await admin.from('order_events').insert({
+      order_id: order.id,
+      actor_id: actorUserId,
+      event: 'return_resolved',
+      payload: { resolution, refund_paise: refundPaise, dispute_id: disputeId },
+    })
+  }
 
   return { ok: true, refundPaise, providerPaidPaise, orderStatus: newStatus }
 }
