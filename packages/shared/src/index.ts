@@ -34,3 +34,6 @@ export * from './legal'
 
 // Zod schemas and derived TypeScript types
 export * from './schemas/index'
+
+// AMC Mart — goods mode vocabulary, schemas, state machines, money math (M0)
+export * from './mart/index'
