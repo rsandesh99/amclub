@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import type { GoodsLineItem } from '@amclub/shared'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatINRExact } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -122,7 +122,7 @@ export function GoodsOrderWorkspace({
           {lines.map((l) => (
             <li key={l.product_id} className="flex justify-between py-2">
               <span className="text-emerald-ink">{t('qty_unit', { qty: l.qty, unit: l.unit })} {l.name} <span className="text-xs text-foreground-secondary">· {t('hsn')} {l.hsn_code} · {t('gst_rate', { rate: l.gst_rate_bps / 100 })}</span></span>
-              <span className="tabular-nums">{formatINR(l.line_taxable_paise)}</span>
+              <span className="tabular-nums">{formatINRExact(l.line_taxable_paise)}</span>
             </li>
           ))}
         </ul>

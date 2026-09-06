@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import { PRODUCT_STATUSES, type ProductStatus } from '@amclub/shared'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatINRExact } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
@@ -241,10 +241,10 @@ export function MartAdminClient() {
                         p.tiers.map((tier) => (
                           <tr key={tier.min_qty} className="border-b border-border last:border-0">
                             <td className="p-2 tabular-nums">{tier.min_qty}+ {p.unit}</td>
-                            <td className="p-2 tabular-nums">{formatINR(tier.unit_price_paise)}</td>
-                            <td className="p-2 tabular-nums">{formatINR(tier.unit_gst_paise)}</td>
-                            <td className="p-2 tabular-nums font-semibold">{formatINR(tier.unit_incl_gst_paise)}</td>
-                            <td className="p-2 tabular-nums">{formatINR(tier.unit_after_itc_paise)}</td>
+                            <td className="p-2 tabular-nums">{formatINRExact(tier.unit_price_paise)}</td>
+                            <td className="p-2 tabular-nums">{formatINRExact(tier.unit_gst_paise)}</td>
+                            <td className="p-2 tabular-nums font-semibold">{formatINRExact(tier.unit_incl_gst_paise)}</td>
+                            <td className="p-2 tabular-nums">{formatINRExact(tier.unit_after_itc_paise)}</td>
                           </tr>
                         ))
                       )}

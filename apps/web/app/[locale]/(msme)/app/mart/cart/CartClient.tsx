@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link, useRouter } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatINRExact } from '@/lib/format'
 import { useCart, groupBySeller } from '@/lib/mart/cart-store'
 import { SheetCard, EmeraldCard, GoldNumeral, LatheSpinner } from '@/components/mart/primitives'
 
@@ -99,7 +99,7 @@ export function CartClient() {
                         <p className="truncate text-sm font-medium text-emerald-ink">{l.name}</p>
                         {li && (
                           <p className="text-xs text-foreground-secondary tabular-nums">
-                            {formatINR(li.tier_unit_price_paise)} {t('per_unit', { unit: l.unit })} · {t('line_total')} {formatINR(li.line_taxable_paise)}
+                            {formatINRExact(li.tier_unit_price_paise)} {t('per_unit', { unit: l.unit })} · {t('line_total')} {formatINRExact(li.line_taxable_paise)}
                           </p>
                         )}
                       </div>

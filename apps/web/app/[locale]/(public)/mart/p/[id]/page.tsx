@@ -7,7 +7,7 @@ import { martPageGate } from '@/lib/mart/gate'
 import { getPublicProduct } from '@/lib/mart/queries'
 import { listMartCategories } from '@/lib/mart/config'
 import { publicAssetUrl } from '@/lib/mart/assets'
-import { formatINR } from '@/lib/format'
+import { formatINRExact } from '@/lib/format'
 import { AddToCart } from '@/components/mart/AddToCart'
 import { SheetCard } from '@/components/mart/primitives'
 import { MART_ENABLED } from '@/lib/flags'
@@ -32,7 +32,7 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
   const images = product.images.map(publicAssetUrl)
 
   return (
-    <div className="mart-enter mx-auto max-w-3xl px-4 py-6">
+    <div className="mart-enter mx-auto max-w-3xl px-4 pb-28 pt-6">
       <nav className="text-xs text-foreground-secondary">
         <Link href={'/mart' as '/services'} className="hover:underline">{t('title')}</Link>
         {cat && (
@@ -90,9 +90,9 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
               {product.tiers.map((tier, i) => (
                 <tr key={tier.min_qty} className={`border-b border-brass/20 ${i === 0 ? '' : 'text-emerald-ink'}`}>
                   <td className="py-2 pr-3 tabular-nums">{tier.min_qty}+</td>
-                  <td className="py-2 pr-3 font-display text-lg font-bold tabular-nums text-ink">{formatINR(tier.unit_price_paise)}</td>
-                  <td className="py-2 pr-3 tabular-nums">{formatINR(tier.unit_incl_gst_paise)}</td>
-                  <td className="py-2 font-semibold tabular-nums text-emerald">{formatINR(tier.unit_after_itc_paise)}</td>
+                  <td className="py-2 pr-3 font-display text-lg font-bold tabular-nums text-ink">{formatINRExact(tier.unit_price_paise)}</td>
+                  <td className="py-2 pr-3 tabular-nums">{formatINRExact(tier.unit_incl_gst_paise)}</td>
+                  <td className="py-2 font-semibold tabular-nums text-emerald">{formatINRExact(tier.unit_after_itc_paise)}</td>
                 </tr>
               ))}
             </tbody>

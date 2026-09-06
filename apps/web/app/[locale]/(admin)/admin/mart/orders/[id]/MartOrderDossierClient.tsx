@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatINRExact } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
@@ -281,10 +281,10 @@ export function MartOrderDossierClient({ id }: { id: string }) {
                   <td className="p-3 font-medium">{li.name}</td>
                   <td className="p-3 font-mono text-xs">{li.hsn_code}</td>
                   <td className="p-3 tabular-nums">{li.qty} {li.unit}</td>
-                  <td className="p-3 tabular-nums">{formatINR(li.tier_unit_price_paise)}</td>
+                  <td className="p-3 tabular-nums">{formatINRExact(li.tier_unit_price_paise)}</td>
                   <td className="p-3 tabular-nums">{li.gst_rate_bps / 100}%</td>
-                  <td className="p-3 tabular-nums">{formatINR(li.line_taxable_paise)}</td>
-                  <td className="p-3 tabular-nums">{formatINR(li.line_gst_paise)}</td>
+                  <td className="p-3 tabular-nums">{formatINRExact(li.line_taxable_paise)}</td>
+                  <td className="p-3 tabular-nums">{formatINRExact(li.line_gst_paise)}</td>
                 </tr>
               ))
             )}

@@ -1,6 +1,6 @@
 import { Link } from '@/i18n/navigation'
 import { useTranslations } from 'next-intl'
-import { formatINR } from '@/lib/format'
+import { formatINRExact } from '@/lib/format'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import type { ProductSummary } from '@/lib/mart/queries'
 
@@ -31,13 +31,13 @@ export function ProductCard({ product }: { product: ProductSummary }) {
         {list && (
           <div className="mt-2 flex items-baseline gap-1.5">
             <span className="text-xs text-foreground-secondary">{t('from_price')}</span>
-            <span className="font-display text-xl font-bold tabular-nums text-ink">{formatINR(list.unit_price_paise)}</span>
+            <span className="font-display text-xl font-bold tabular-nums text-ink">{formatINRExact(list.unit_price_paise)}</span>
             <span className="text-xs text-foreground-secondary">{t('per_unit', { unit: product.unit })} · {t('excl_gst')}</span>
           </div>
         )}
         {list && (
           <p className="mt-0.5 text-xs text-emerald">
-            {t('itc_label')}: <span className="font-semibold tabular-nums">{formatINR(list.unit_after_itc_paise)}</span>
+            {t('itc_label')}: <span className="font-semibold tabular-nums">{formatINRExact(list.unit_after_itc_paise)}</span>
           </p>
         )}
         <p className="mt-1 text-[11px] text-foreground-secondary">

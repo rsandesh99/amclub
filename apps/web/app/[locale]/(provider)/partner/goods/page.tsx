@@ -9,7 +9,7 @@ import { getSellerCtx } from '@/lib/mart/seller'
 import { getGoodsActivation } from '@/lib/mart/activation'
 import { listSellerProducts } from '@/lib/mart/queries'
 import { publicAssetUrl } from '@/lib/mart/assets'
-import { formatINR } from '@/lib/format'
+import { formatINRExact } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { ActivationBanner } from '@/components/mart/ActivationBanner'
 import { GoodsListingActions } from '@/components/mart/GoodsListingActions'
@@ -70,7 +70,7 @@ export default async function PartnerGoodsPage() {
                   </div>
                   <p className="mt-0.5 text-xs text-foreground-secondary">
                     {t('hsn')} {p.hsnCode} · {t('gst_rate', { rate: p.gstRateBps / 100 })}
-                    {p.list ? ` · ${formatINR(p.list.unit_price_paise)} ${t('per_unit', { unit: p.unit })}` : ''}
+                    {p.list ? ` · ${formatINRExact(p.list.unit_price_paise)} ${t('per_unit', { unit: p.unit })}` : ''}
                   </p>
                 </div>
               </div>

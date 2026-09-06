@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { isValidGstin } from '@amclub/shared'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatINRExact } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -121,7 +121,7 @@ export function GoodsCheckoutClient({ sellerId, states }: { sellerId: string | n
             {preview.lineItems.map((li) => (
               <li key={li.product_id} className="flex justify-between py-2">
                 <span className="text-emerald-ink">{t('qty_unit', { qty: li.qty, unit: li.unit })} {li.name}</span>
-                <span className="tabular-nums">{formatINR(li.line_taxable_paise)}</span>
+                <span className="tabular-nums">{formatINRExact(li.line_taxable_paise)}</span>
               </li>
             ))}
           </ul>
