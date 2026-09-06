@@ -13,6 +13,9 @@ import { getProviderBySlug, getPackagesForProvider, getReviews } from '@/lib/cat
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatResponseTime } from '@/lib/format'
 import { INDIAN_STATES } from '@/lib/constants/india'
+import { MART_ENABLED } from '@/lib/flags'
+import { listPublicProducts } from '@/lib/mart/queries'
+import { ProductCard } from '@/components/mart/ProductCard'
 
 export const revalidate = 300
 
@@ -53,9 +56,13 @@ export default async function ProviderProfilePage({
 
   const t = await getTranslations('catalog')
   const locale = await getLocale()
-  const [packages, { reviews, total: reviewTotal }] = await Promise.all([
+  // Mart (dark build): the goods query and its copy only run when the flag is
+  // on — with MART_ENABLED=false the services storefront is byte-identical.
+  const [packages, { reviews, total: reviewTotal }, goods, tm] = await Promise.all([
     getPackagesForProvider(provider.id),
     getReviews(provider.id, 10, 0),
+    MART_ENABLED ? listPublicProducts({ sellerSlug: providerSlug, limit: 6 }) : Promise.resolve(null),
+    MART_ENABLED ? getTranslations('mart') : Promise.resolve(null),
   ])
 
   const stateLabel = STATE_LABEL.get(provider.state) ?? provider.state
@@ -208,6 +215,25 @@ export default async function ProviderProfilePage({
           </div>
         )}
       </section>
+
+      {/* Goods (AMC Mart) — active products only; nothing renders when the flag is off. */}
+      {MART_ENABLED && goods && tm && goods.products.length > 0 && (
+        <section className="mt-8">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg font-bold">{tm('seller_goods_title', { name: provider.displayName })}</h2>
+            <Link href={`/mart?seller=${provider.slug}` as '/services'} className="text-sm font-medium text-primary hover:underline">
+              {tm('view_all_goods')}{goods.total > goods.products.length ? ` (${goods.total})` : ''}
+            </Link>
+          </div>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+            {goods.products.map((p) => (
+              <li key={p.id}>
+                <ProductCard product={p} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Reviews */}
       <section className="mt-8">

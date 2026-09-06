@@ -104,6 +104,22 @@ any → held               (dispute open, provider suspended, or bank verificati
 
 ---
 
+## AMC Mart — goods mode (dark build, `MART_ENABLED`)
+
+**Source of truth for Mart:** `docs/MART_DESIGN.md` (build spec — §0 posture, §4 data model, §7 milestones, §8 Launch Gate) + `docs/FRONTEND.md` (Emerald & Brass UI system) + `docs/AMC_Mart_Design_Document.md` (strategy/regulatory). Session step 1 report: `docs/mart/SPINE_VERIFICATION.md`. Decision record: `docs/adr/005-mart-dark-build-one-spine.md`.
+
+- **ONE SPINE, TWO MODES.** Sellers are providers (`provider_profiles.sells_goods`, gated on a verified GSTIN). Goods orders are `orders` rows with `kind='goods'` + `line_items`. Delivery photos are `order_documents` (`dispatch_photo` / `delivery_photo`). `payout.ts` / `processRefund` / `generateInvoices` are the only money paths — a second one is a design violation.
+- **Flag gate first.** Every Mart page calls `martPageGate()` and every `/api/v1/mart/*` route calls `martApiGate()` (`apps/web/lib/mart/gate.ts`) before anything else. Nav entries are filtered on `MART_ENABLED`. Mobile reads `/profile/me.martEnabled`.
+- **Migration 0022 is STAGED** — never apply to prod during the build; it deploys with the `MART_ENABLED=true` release (Launch Gate §8.2). `verify-migrations.ts` marks it `staged`; use `MART_MIGRATIONS_EXPECTED=false` when verifying prod.
+- **Inertness is a deliverable.** Any edit to a shared file must be a `kind === 'goods'` branch and must keep `pnpm --filter @amclub/shared test`, `killtest-mart-schema.ts`, and `verify-mart-inert.ts` green.
+- **Money is server-computed only.** `computeGoodsOrderAmounts` (per-line GST + commission) runs in `lib/mart/totals.ts`; clients render server paise (cart preview, checkout response, tier displays). Client money arithmetic is review-blocking (FRONTEND.md §8).
+- **Goods actions** live in `apps/web/lib/mart/goods-transitions.ts` and map onto the existing §3.7 transitions (`dispatch` = `accepted → requirements_submitted → in_progress`; `open_return` = `delivered|completed → disputed`). Release gate: `apps/web/lib/mart/release.ts` (`evaluateGoodsReleaseGate` in shared).
+- **Config, not constants:** return windows / commission per category in `mart_categories`; e-way threshold, auto-approve N, TDS in `mart_settings`. Founder decisions §9 are edited there.
+- **Every AI proposal a human confirms → `ai_decisions`** (`recordAiDecision`), refs only.
+- Vocabulary: product statuses `draft | pending_approval | active | suspended`; goods events `dispatched | delivered_photo | buyer_received | return_opened | return_resolved`; pool machine in `packages/shared/src/mart/pools.ts` (M1 tables not yet migrated).
+
+---
+
 ## Scope note — native mobile (deliberate deviation from §1.7)
 
 §1.7 lists native mobile apps as V1 out-of-scope (plan: PWA first, React Native when PWA retention plateaus). Per explicit founder instruction, `apps/mobile` (Expo/React Native, Android-first) is built alongside `apps/web` from Phase 0, sharing `packages/shared` and consuming the same `/api/v1`. This decision is recorded here per §8.4 as a founder-authorised scope override.
@@ -121,7 +137,10 @@ amclub/
 │   ├── shared/       # Zod schemas, types, state machines, category constants — zero runtime deps except zod
 │   └── db/           # Drizzle ORM schema + migrations — source of truth for Postgres schema
 ├── docs/
-│   ├── DESIGN.md     # Master design document (source of truth)
+│   ├── DESIGN.md     # Master design document (source of truth — services)
+│   ├── MART_DESIGN.md# AMC Mart build spec (goods mode, dark build)
+│   ├── FRONTEND.md   # Emerald & Brass UI system + Goldsmith motion
+│   ├── mart/         # Mart verification reports
 │   └── adr/          # Architecture Decision Records
 ├── .env.example      # Variable names only — no secrets ever in repo
 ├── CLAUDE.md         # This file

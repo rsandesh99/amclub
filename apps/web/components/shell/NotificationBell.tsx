@@ -33,7 +33,7 @@ export function NotificationBell({ href }: { href: string }) {
     <Link
       href={href as '/app'}
       aria-label="Notifications"
-      className="relative flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface hover:border-primary/40"
+      className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface hover:border-primary/40"
     >
       <Bell className="h-4 w-4 text-foreground-secondary" />
       {unread > 0 && (

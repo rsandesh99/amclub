@@ -32,11 +32,17 @@ interface VoiceRfqRecorderProps {
   /** Parse LLM failed but we have the transcript — prefill text-only. */
   onTranscriptOnly: (transcript: string, durationMs: number) => void
   track: (event: string, props?: Record<string, unknown>) => void
+  /**
+   * Ask the endpoint for the English transcript only (no LLM parse). The
+   * result arrives via `onTranscriptOnly`; `onParsed` is never called.
+   * Default false — the RFQ form's behaviour is unchanged.
+   */
+  transcriptOnly?: boolean
 }
 
 type Phase = 'idle' | 'recording' | 'review' | 'uploading'
 
-export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfqRecorderProps) {
+export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track, transcriptOnly = false }: VoiceRfqRecorderProps) {
   const t = useTranslations('voice')
 
   const [phase, setPhase] = useState<Phase>('idle')
@@ -143,8 +149,22 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track }: VoiceRfq
       const form = new FormData()
       form.append('audio', blob, 'recording.wav')
       form.append('duration_ms', String(Math.round(durationRef.current)))
+      if (transcriptOnly) form.append('transcript_only', 'true')
       const res = await fetch('/api/v1/rfq/voice-parse', { method: 'POST', body: form })
       const d = await res.json().catch(() => ({}))
+
+      if (res.ok && transcriptOnly && !d.parse) {
+        // Transcript-only reply: { transcript_english, original_language, stub }.
+        track('voice_rfq_transcribed', {
+          surface: 'rfq_form',
+          original_language: d.original_language,
+          duration_ms: Math.round(durationRef.current),
+          transcript_only: true,
+        })
+        onTranscriptOnly(String(d.transcript_english ?? ''), Math.round(durationRef.current))
+        setPhase('idle')
+        return
+      }
 
       if (res.ok) {
         track('voice_rfq_transcribed', {

@@ -15,6 +15,18 @@ export function formatINR(paise: number): string {
   return inr0.format(Math.round(paise / 100))
 }
 
+const inr2 = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/**
+ * Exact INR: whole rupees stay whole ("₹450"), sub-rupee amounts show paise
+ * ("₹4.50"). AMC Mart unit prices are commonly sub-rupee (fasteners, nuts),
+ * so goods surfaces use this for per-unit and line values; order totals keep
+ * formatINR.
+ */
+export function formatINRExact(paise: number): string {
+  return paise % 100 === 0 ? inr0.format(paise / 100) : inr2.format(paise / 100)
+}
+
 export interface Pricing {
   listPaise: number
   /** After the public discount. */

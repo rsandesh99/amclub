@@ -62,6 +62,9 @@ export const providerProfiles = pgTable('provider_profiles', {
   medianResponseMinutes: integer('median_response_minutes'),
   capacityPaused: boolean('capacity_paused').default(false).notNull(),
   topRated: boolean('top_rated').default(false).notNull(),
+  // AMC Mart (0022) — goods selling activated; gated on a verified GSTIN
+  // (gstin_verifications, non-stub). Sellers ARE providers: no second entity.
+  sellsGoods: boolean('sells_goods').default(false).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

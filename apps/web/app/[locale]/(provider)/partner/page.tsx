@@ -8,6 +8,7 @@ import { listMyOrders } from '@/lib/orders/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatINR } from '@/lib/format'
+import { MART_ENABLED } from '@/lib/flags'
 
 const ACTIVE_STATUSES = ['placed', 'accepted', 'requirements_submitted', 'in_progress', 'delivered', 'revision_requested']
 
@@ -86,6 +87,8 @@ export default async function PartnerDashboardPage() {
         {(
           [
             { label: t('manage_listings'), href: '/partner/listings', icon: '🗂️' },
+            // AMC Mart (dark build): goods catalogue link exists only while MART_ENABLED.
+            ...(MART_ENABLED ? [{ label: t('goods_catalogue'), href: '/partner/goods', icon: '🧰' }] : []),
             { label: t('view_orders'), href: '/partner/orders', icon: '📦' },
             { label: t('earnings'), href: '/partner/earnings', icon: '💰' },
             { label: t('view_rfqs'), href: '/partner/rfqs', icon: '📬' },

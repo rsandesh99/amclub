@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from 'next-intl'
-import { usePostHog } from 'posthog-js/react'
+import { useAnalytics } from '@/components/providers/posthog'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { credentialOptionsForCategory } from '@amclub/shared'
 import { useCardTilt } from './useCardTilt'
@@ -49,7 +49,7 @@ export function Gateway() {
   const locale = useLocale()
   const pathname = usePathname()
   const router = useRouter()
-  const posthog = usePostHog()
+  const posthog = useAnalytics()
 
   const [phase, setPhase] = useState<Phase>('intro')
   const [step, setStep] = useState(0)
@@ -76,7 +76,7 @@ export function Gateway() {
 
   const track = useCallback(
     (event: string, props?: Record<string, unknown>) => {
-      posthog?.capture(event, { locale, device: 'web', role: 'anonymous', ...props })
+      posthog.capture(event, { locale, device: 'web', role: 'anonymous', ...props })
     },
     [posthog, locale],
   )

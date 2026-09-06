@@ -53,6 +53,14 @@ DO $do$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
 END $do$;
+-- Supabase grants ALL on every new public table/sequence/function to the
+-- client roles via default privileges; the migrations' REVOKEs (append-only
+-- tables, 0004 column privileges) assume that baseline. Emulate it so a local
+-- drill exercises the same grant surface (killtest-mart-schema relies on it).
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
 `
 
 async function main() {
@@ -66,6 +74,21 @@ async function main() {
     if (authSchema.length === 0) {
       console.log('  no auth schema — applying Supabase shim (local/bare-Postgres target)')
       await sql.unsafe(SUPABASE_SHIM)
+    }
+
+    // Helper prelude (FOLLOWUPS "fresh-bootstrap helper ordering"): migrations
+    // 0016/0017/0021/0022 carry inline RLS policies that call auth_user_id() /
+    // has_role(), which policies.sql defines — and policies.sql runs LAST. On a
+    // from-zero target those blocks failed. Apply ONLY the helper-function
+    // section of policies.sql first (idempotent CREATE OR REPLACE; the full
+    // file still runs at the end and re-asserts the same definitions).
+    const rlsSource = fs.readFileSync(RLS_PATH, 'utf-8')
+    const helpersEnd = rlsSource.indexOf('-- ─── Enable RLS on every table')
+    if (helpersEnd > 0) {
+      console.log('  rls/policies.sql (helper-function prelude)')
+      // SQL-language bodies reference tables 0000 has not created yet; skip
+      // body validation for the prelude only (the final full run re-checks).
+      await sql.unsafe(`SET check_function_bodies = off; ${rlsSource.slice(0, helpersEnd)} SET check_function_bodies = on;`)
     }
 
     const files = fs

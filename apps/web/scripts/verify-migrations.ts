@@ -30,6 +30,8 @@ interface Entry {
   /** [table, trigger] pairs */
   triggers?: [string, string][]
   note?: string
+  /** Dark-build migration: not applied to prod until its Launch Gate. */
+  staged?: boolean
 }
 
 // ─── THE MANIFEST — one entry per migration file + policies.sql ──────────────
@@ -87,6 +89,17 @@ const MANIFEST: Entry[] = [
     note: 'kind columns on orders + checkout_sessions (defaults, no writer); safe-view rebuild; score view kind-scoped',
   },
   { file: '0021_gstin_verifications.sql', tables: ['gstin_verifications'] },
+  {
+    // AMC Mart M0 — STAGED (dark build): MISSING on prod is EXPECTED until the
+    // Launch Gate deploy applies it. Set MART_MIGRATIONS_EXPECTED=false to
+    // downgrade its rows to 'skipped' while verifying prod during the build.
+    file: '0022_mart_catalog.sql',
+    tables: ['mart_categories', 'mart_settings', 'products', 'price_tiers', 'product_events', 'ai_decisions'],
+    views: ['order_safe_view'],
+    functions: ['materialize_order'],
+    triggers: [['product_events', 'product_events_no_update'], ['ai_decisions', 'ai_decisions_no_update']],
+    staged: true,
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]
@@ -144,7 +157,12 @@ async function main() {
     sql = dbPkg.db
   }
 
+  const stagedExpected = process.env['MART_MIGRATIONS_EXPECTED'] !== 'false'
   for (const entry of MANIFEST) {
+    if (entry.staged && !stagedExpected) {
+      record(entry.file, '(staged — MART_MIGRATIONS_EXPECTED=false)', 'skipped')
+      continue
+    }
     for (const t of entry.tables ?? []) {
       if (sql) {
         const r = await sql`SELECT to_regclass(${'public.' + t}) AS reg`

@@ -15,16 +15,18 @@ const ITEMS = [
   { href: '/admin/categories', key: 'categories' },
   { href: '/admin/reviews', key: 'reviews' },
   { href: '/admin/coupons', key: 'coupons' },
+  { href: '/admin/mart', key: 'mart' },
   { href: '/admin/cms', key: 'cms' },
   { href: '/admin/audit', key: 'audit' },
 ] as const
 
 /** Ops sub-navigation across the admin surfaces (§7 / A1-A6). The Coupons tab is
- *  hidden while the COUPONS_ENABLED flag is OFF (passed from the layout). */
-export function AdminNav({ couponsEnabled = false }: { couponsEnabled?: boolean }) {
+ *  hidden while the COUPONS_ENABLED flag is OFF, and the Mart tab while
+ *  MART_ENABLED is OFF (both passed from the layout). */
+export function AdminNav({ couponsEnabled = false, martEnabled = false }: { couponsEnabled?: boolean; martEnabled?: boolean }) {
   const t = useTranslations('admin_nav')
   const pathname = usePathname()
-  const items = ITEMS.filter((it) => it.key !== 'coupons' || couponsEnabled)
+  const items = ITEMS.filter((it) => (it.key !== 'coupons' || couponsEnabled) && (it.key !== 'mart' || martEnabled))
   return (
     <nav className="flex flex-wrap gap-1 border-b border-border px-6 pt-4">
       {items.map((it) => {

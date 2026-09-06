@@ -35,7 +35,7 @@ export function LanguageChips({
             aria-pressed={active}
             lang={l}
             className={cn(
-              'min-h-9 min-w-9 cursor-pointer rounded-chip border px-3 py-1 font-sans text-[13px] font-semibold transition-colors duration-150',
+              'font-system min-h-9 cursor-pointer whitespace-nowrap rounded-chip border px-3 py-1 text-[13px] font-semibold transition-colors duration-150',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
               variant === 'dark'
                 ? active

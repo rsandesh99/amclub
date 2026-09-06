@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 export type ShellContext = 'msme' | 'provider' | 'admin' | 'public'
@@ -37,6 +36,10 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: Ac
 
   async function signOut() {
     setSigningOut(true)
+    // Loaded on demand: the Supabase browser client (~50 KB gz) was the
+    // largest script on every PUBLIC page purely because this menu imported
+    // it for sign-out. Nothing else on a public page needs it.
+    const { createClient } = await import('@/lib/supabase/client')
     const supabase = createClient()
     await supabase.auth.signOut()
     // Sign-out means session over: clear the gateway's saved mid-choreography
@@ -71,9 +74,9 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: Ac
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-1.5 rounded-full border border-border bg-surface py-1 pl-1 pr-2 hover:border-primary/40"
+        className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-surface pl-1 pr-2 hover:border-primary/40"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
           {initial}
         </span>
         <ChevronDown className="h-3.5 w-3.5 text-foreground-secondary" />

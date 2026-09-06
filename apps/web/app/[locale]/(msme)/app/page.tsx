@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatINR } from '@/lib/format'
+import { MART_ENABLED } from '@/lib/flags'
 
 function getGreeting() {
   const hour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getHours()
@@ -60,6 +61,8 @@ export default async function MsmeHomePage() {
         {(
           [
             { label: t('browse_services'), href: '/services', icon: '🔍' },
+            // AMC Mart (dark build): the tile exists only while MART_ENABLED.
+            ...(MART_ENABLED ? [{ label: t('mart'), href: '/mart', icon: '🧰' }] : []),
             { label: t('post_rfq'), href: '/app/rfq/new', icon: '📋' },
             { label: t('my_rfqs'), href: '/app/rfq', icon: '📨' },
             { label: t('my_orders'), href: '/app/orders', icon: '📦' },

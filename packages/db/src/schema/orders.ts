@@ -37,6 +37,14 @@ export const orders = pgTable('orders', {
   // LOCK 5 (§3.7) — set while an in_progress order is blocked on a government/
   // external portal. Display sub-state only; status stays in_progress.
   externalWaitSince: timestamp('external_wait_since', { withTimezone: true }),
+  // S2.1 (0020) — 'service' | 'goods'. Default covers every services writer.
+  kind: text('kind').default('service').notNull(),
+  // AMC Mart (0022) — goods orders only: frozen line items
+  // [{ product_id, name, unit, qty, tier_min_qty, tier_unit_price_paise,
+  //    hsn_code, gst_rate_bps, line_taxable_paise, line_gst_paise }]
+  // and the delivery/pickup snapshot. NULL on every services order.
+  lineItems: jsonb('line_items'),
+  deliverySnapshot: jsonb('delivery_snapshot'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -122,6 +130,11 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   revisionMax: integer('revision_max'),
   couponCode: text('coupon_code'),
   gstInvoice: jsonb('gst_invoice'),
+  // S2.1 (0020) + AMC Mart (0022): same three goods columns as orders —
+  // materialize_order copies them verbatim into the order row.
+  kind: text('kind').default('service').notNull(),
+  lineItems: jsonb('line_items'),
+  deliverySnapshot: jsonb('delivery_snapshot'),
   idempotencyKey: text('idempotency_key').unique().notNull(),
   // created | materialized | failed | expired
   status: text('status').default('created').notNull(),
@@ -158,6 +171,11 @@ export const payouts = pgTable('payouts', {
   scheduledFor: date('scheduled_for'),
   razorpayTransferId: text('razorpay_transfer_id'),
   paidAt: timestamp('paid_at', { withTimezone: true }),
+  // AMC Mart (0022) — TDS on goods vendor payments (§2): config-driven from
+  // mart_settings.tds (CA sets rates), recorded per payout. NULL on services.
+  tdsSection: text('tds_section'),
+  tdsBps: integer('tds_bps'),
+  tdsPaise: bigint('tds_paise', { mode: 'number' }),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
