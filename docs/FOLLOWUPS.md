@@ -67,6 +67,65 @@ seller, admin, goods order workspace), mobile Mart tab. Evidence and the
 - **Mobile `tsconfig` strictness** — extends `expo/tsconfig.base`, not the
   repo base; consider adding the four strict flags.
 
+## AMC Mart M1 — group buys (pools) landed (2026-09-06)
+
+M1 (MART_DESIGN.md §7) is built behind `MART_ENABLED` on branch
+`claude/mart-m1-pools` (stacked on the M0 branch until PR #1 merges). Decision
+record: `docs/adr/006-pool-pay-on-close-per-member-orders.md`; PSP report:
+`docs/mart/PSP_BLOCK_CAPTURE_REPORT.md`.
+
+**What landed**
+- Migration `0023_mart_pools.sql` (STAGED with 0022): `pools` (with a `draft`
+  status before the §4.4 machine), `pool_members` (`blocked | captured |
+  released | failed`, delivery snapshot, checkout session + order links),
+  `pool_events` (append-only), `buyer_pool_discipline_v1`, six `mart_settings`
+  keys (`pool_payment_mode`, `pool_pay_window_hours`, `pool_order_model`,
+  `pool_categories`, `pool_schedule_day_of_month`, `pool_open_limits`).
+- `packages/shared/src/mart/pools.ts`: schemas, open validation, progress /
+  saving math, pay deadline, leave rule, discipline factor (≥3/≥5 gates),
+  WhatsApp card copy in en/hi/te. 80 shared tests green.
+- `apps/web/lib/mart/pools.ts` owns every transition and the one money rule
+  (`mayCapturePoolMember`): draft → approve/open → join / change / leave →
+  close (met/unmet) → member checkout at the pool price (deterministic
+  idempotency key per member) → settle (captured / failed) → ordered →
+  fulfilled. Cron `/api/v1/cron/pool-close` hourly (vercel.json) — inert while
+  the flag is off.
+- Group-Buy Agent v1 (`lib/mart/group-buy-agent.ts`): drafts from 30-day goods
+  demand + monthly schedule; prices = the seller's own bulk tier; optional
+  OpenRouter polish for title + vernacular pitch (stub without key). Documents
+  Agent v1 (`lib/mart/documents-agent.ts`): invoice summary, e-way bill Part A
+  data, payout advice from the order record; admin confirms → `ai_decisions`.
+- Screens: `/mart/pools`, `/mart/pools/[id]` (+ OG card image, WhatsApp
+  share, join island), "Buy together" strip on `/mart`, `/app/mart/pools`,
+  `/app/mart/pools/[id]/pay`, `/partner/goods/pools`, admin pools worklist +
+  documents panel. Mobile: pools list, pool detail with join/leave/pay.
+
+**Verified (local rig, 2026-09-06)**
+- `killtest-mart-pools.ts` 16/16 (append-only, constraints, RLS cross-tenant
+  = 0 rows, seller allocations only after close, discipline view).
+- API lifecycle (`pool-lifecycle.js`) 37/37: agent → draft → approve with
+  edits → join / change / leave / re-join → close now (met) → pay (simulate)
+  → settle → ordered; replays (close, checkout, settle) create nothing twice;
+  unmet pool releases members and refuses checkout; Documents Agent draft +
+  confirm.
+- Expiry / capture-fail (`pool-expiry.js`) 12/12: cron closes expired pools
+  met/unmet; lapsed pay window → `failed`, pool with zero captures →
+  cancelled; a lapsed member can never capture; discipline counts the default.
+- `killtest-mart-schema.ts` still 21/21; shared tests 80/80; typecheck/lint/
+  build green.
+
+**Open**
+- Block-and-capture: refused at join until the PSP checklist in the report is
+  signed off (founder + Razorpay). `pool_payment_mode` is config.
+- §9.1 / §9.4 defaults (per-member orders; fasteners, welding consumables,
+  abrasives) await founder confirmation — both are `mart_settings` edits.
+- Spec-only pools (`product_id` null) are stored but cannot open; awarding a
+  seller at close is M2 work if wanted.
+- Pool-met "group Paisa Moment" variant not built; the pool page uses the
+  gold-edge card + stamp.
+- WhatsApp channel is still the stub; the card text is ready for the
+  Gupshup/Interakt template once the key exists.
+
 ## Mart M0 review fixes + load-path optimisation — closeout (2026-09-06)
 
 The design review (Mart M0 vs FRONTEND.md, competition, density/flow) was

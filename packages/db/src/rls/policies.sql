@@ -65,6 +65,10 @@ ALTER TABLE terms_acceptances    ENABLE ROW LEVEL SECURITY;
 -- AMC Mart (0022) — staged; these ALTERs are no-ops until 0022 is applied.
 ALTER TABLE IF EXISTS mart_categories  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS mart_settings    ENABLE ROW LEVEL SECURITY;
+-- AMC Mart M1 (0023) — staged; no-ops until 0023 is applied.
+ALTER TABLE IF EXISTS pools            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS pool_members     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS pool_events      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS products         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS price_tiers      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS product_events   ENABLE ROW LEVEL SECURITY;
@@ -653,3 +657,40 @@ BEGIN
   EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON ai_decisions FROM anon, authenticated';
 END
 $mart$;
+
+-- ═══ AMC Mart M1 (0023) — mirrors migration 0023 §7 verbatim ════════════════
+DO $mart_pools$
+BEGIN
+  IF to_regclass('public.pools') IS NULL THEN
+    RAISE NOTICE 'AMC Mart pool tables absent (0023 not applied) — skipping pool policies';
+    RETURN;
+  END IF;
+
+  EXECUTE 'DROP POLICY IF EXISTS "pools: public read live" ON pools';
+  EXECUTE 'CREATE POLICY "pools: public read live" ON pools FOR SELECT USING (status IN (''open'',''closed_met'',''closed_unmet'',''ordered'',''fulfilled'') AND deleted_at IS NULL)';
+  EXECUTE 'DROP POLICY IF EXISTS "pools: seller read own" ON pools';
+  EXECUTE 'CREATE POLICY "pools: seller read own" ON pools FOR SELECT USING (seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))';
+  EXECUTE 'DROP POLICY IF EXISTS "pools: admin all" ON pools';
+  EXECUTE 'CREATE POLICY "pools: admin all" ON pools FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
+  EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON pools FROM anon, authenticated';
+
+  EXECUTE 'DROP POLICY IF EXISTS "pool_members: member read own" ON pool_members';
+  EXECUTE 'CREATE POLICY "pool_members: member read own" ON pool_members FOR SELECT USING (user_id = auth_user_id())';
+  EXECUTE 'DROP POLICY IF EXISTS "pool_members: seller read awarded" ON pool_members';
+  EXECUTE 'CREATE POLICY "pool_members: seller read awarded" ON pool_members FOR SELECT USING (
+    pool_id IN (SELECT id FROM pools WHERE status IN (''closed_met'',''ordered'',''fulfilled'')
+      AND seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())))';
+  EXECUTE 'DROP POLICY IF EXISTS "pool_members: admin read" ON pool_members';
+  EXECUTE 'CREATE POLICY "pool_members: admin read" ON pool_members FOR SELECT USING (has_role(''admin'') OR has_role(''ops''))';
+  EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON pool_members FROM anon, authenticated';
+
+  EXECUTE 'DROP POLICY IF EXISTS "pool_events: member read" ON pool_events';
+  EXECUTE 'CREATE POLICY "pool_events: member read" ON pool_events FOR SELECT USING (pool_id IN (SELECT pool_id FROM pool_members WHERE user_id = auth_user_id()))';
+  EXECUTE 'DROP POLICY IF EXISTS "pool_events: admin read" ON pool_events';
+  EXECUTE 'CREATE POLICY "pool_events: admin read" ON pool_events FOR SELECT USING (has_role(''admin'') OR has_role(''ops''))';
+  EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON pool_events FROM anon, authenticated';
+
+  EXECUTE 'REVOKE ALL ON buyer_pool_discipline_v1 FROM anon, authenticated';
+  EXECUTE 'GRANT SELECT ON buyer_pool_discipline_v1 TO authenticated';
+END
+$mart_pools$;

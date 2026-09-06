@@ -8,6 +8,7 @@ import { formatINR, formatINRExact } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { PoolsAdmin } from './PoolsAdmin'
 
 interface Tier {
   min_qty: number
@@ -332,6 +333,9 @@ export function MartAdminClient() {
           </div>
         )}
       </section>
+
+      {/* ── Section 3: group-buy pools (M1) ─────────────────────────────── */}
+      <PoolsAdmin />
     </div>
   )
 }

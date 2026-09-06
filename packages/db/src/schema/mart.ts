@@ -122,3 +122,78 @@ export const aiDecisions = pgTable('ai_decisions', {
 }, (table) => [
   index('ai_decisions_feature_idx').on(table.feature, table.decidedAt),
 ])
+
+// ── M1 — group-buy pools (§4.4). Applied by migration 0023 (STAGED). ─────────
+
+export const pools = pgTable('pools', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+  categorySlug: text('category_slug').references(() => martCategories.slug).notNull(),
+  spec: jsonb('spec'),
+  title: text('title').notNull(),
+  unit: text('unit').notNull(),
+  targetQty: integer('target_qty').notNull(),
+  minQty: integer('min_qty').notNull(),
+  unitPricePaise: bigint('unit_price_paise', { mode: 'number' }).notNull(),
+  closesAt: timestamp('closes_at', { withTimezone: true }).notNull(),
+  // draft | open | closed_met | closed_unmet | ordered | fulfilled | cancelled
+  status: text('status').default('draft').notNull(),
+  sellerId: uuid('seller_id').references(() => providerProfiles.id, { onDelete: 'set null' }),
+  createdBy: uuid('created_by').references(() => users.id),
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  rationale: jsonb('rationale').default(sql`'{}'`).notNull(),
+  cardI18n: jsonb('card_i18n'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => [
+  index('pools_status_closes_idx').on(table.status, table.closesAt),
+  index('pools_product_idx').on(table.productId),
+  index('pools_seller_idx').on(table.sellerId),
+  check('pools_status_check', sql`${table.status} IN ('draft','open','closed_met','closed_unmet','ordered','fulfilled','cancelled')`),
+  check('pools_qty_check', sql`${table.targetQty} > 0 AND ${table.minQty} > 0 AND ${table.minQty} <= ${table.targetQty}`),
+  check('pools_price_check', sql`${table.unitPricePaise} > 0`),
+])
+
+export const poolMembers = pgTable('pool_members', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  poolId: uuid('pool_id').references(() => pools.id, { onDelete: 'cascade' }).notNull(),
+  msmeId: uuid('msme_id').notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  qty: integer('qty').notNull(),
+  // blocked | captured | released | failed
+  paymentState: text('payment_state').default('blocked').notNull(),
+  deliverySnapshot: jsonb('delivery_snapshot').notNull(),
+  gstInvoice: jsonb('gst_invoice'),
+  checkoutSessionId: uuid('checkout_session_id'),
+  orderId: uuid('order_id'),
+  payBy: timestamp('pay_by', { withTimezone: true }),
+  pspRef: text('psp_ref'),
+  committedAt: timestamp('committed_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  capturedAt: timestamp('captured_at', { withTimezone: true }),
+  releasedAt: timestamp('released_at', { withTimezone: true }),
+  failedAt: timestamp('failed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  index('pool_members_pool_idx').on(table.poolId, table.paymentState),
+  index('pool_members_msme_idx').on(table.msmeId),
+  unique('pool_members_pool_msme_uniq').on(table.poolId, table.msmeId),
+  check('pool_members_qty_check', sql`${table.qty} > 0`),
+  check('pool_members_state_check', sql`${table.paymentState} IN ('blocked','captured','released','failed')`),
+])
+
+/** Append-only (trigger + revoked grants + read-only policies) — quote_events regime. */
+export const poolEvents = pgTable('pool_events', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  poolId: uuid('pool_id').references(() => pools.id, { onDelete: 'cascade' }).notNull(),
+  memberId: uuid('member_id').references(() => poolMembers.id, { onDelete: 'set null' }),
+  actorId: uuid('actor_id').references(() => users.id),
+  eventType: text('event_type').notNull(),
+  payload: jsonb('payload'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [
+  index('pool_events_pool_idx').on(table.poolId, table.createdAt),
+])

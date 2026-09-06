@@ -7,6 +7,9 @@ import { ProductGrid } from '@/components/mart/ProductGrid'
 import { SearchBox } from '@/components/mart/SearchBox'
 import { FilterBar, PRICE_BANDS } from '@/components/mart/FilterBar'
 import { JaaliHeader } from '@/components/mart/primitives'
+import { PoolCard } from '@/components/mart/PoolCard'
+import { createAdminClient } from '@/lib/supabase/server'
+import { listPools, poolProgressFor } from '@/lib/mart/pools'
 
 /**
  * Shared renderer for /mart, /mart/c/[slug] and /mart/search. The first two
@@ -55,10 +58,14 @@ export async function MartBrowse({ params, base }: { params: BrowseParams; base:
   const locale = await getLocale()
   const filters = toFilters(params)
   // Three independent reads in parallel — one round trip to the database.
-  const [categories, result, brands] = await Promise.all([
+  const [categories, result, brands, openPools] = await Promise.all([
     listMartCategories(),
     listPublicProducts(filters),
     listBrands(params.category),
+    // "Buy together" strip — only on the unfiltered front page, up to three open pools.
+    !params.category && !params.query && !params.brand && !params.band && !params.seller
+      ? createAdminClient().then((admin) => listPools(admin, { statuses: ['open'], limit: 3 }))
+      : Promise.resolve([]),
   ])
   const chipParams = { sort: params.sort, brand: params.brand, band: params.band, seller: params.seller, query: params.query }
   const keep = new URLSearchParams()
@@ -103,6 +110,20 @@ export async function MartBrowse({ params, base }: { params: BrowseParams; base:
             </Link>
           ))}
         </nav>
+
+        {openPools.length > 0 && (
+          <section className="mt-5" aria-labelledby="pools-strip">
+            <div className="flex items-baseline justify-between">
+              <h2 id="pools-strip" className="font-display text-xl font-bold text-emerald-ink">{t('pools_strip_title')}</h2>
+              <Link href={'/mart/pools' as '/services'} className="inline-flex min-h-11 items-center text-meta font-medium text-emerald underline underline-offset-2">{t('pools_strip_all')} →</Link>
+            </div>
+            <ul className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {openPools.map((p) => (
+                <li key={p.id}><PoolCard pool={p} progress={poolProgressFor(p)} /></li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <FilterBar base={base} current={chipParams} brands={brands} />
 

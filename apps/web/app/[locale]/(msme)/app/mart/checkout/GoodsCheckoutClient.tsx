@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { useCart, groupBySeller } from '@/lib/mart/cart-store'
 import { SheetCard, EmeraldCard, GoldNumeral } from '@/components/mart/primitives'
+import type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
 
 declare global {
   interface Window {
@@ -26,16 +27,7 @@ interface Preview {
   returnWindowHours: number
 }
 
-export interface DeliveryDefaults {
-  contact_name: string
-  contact_phone: string
-  address: string
-  city: string
-  state: string
-  pincode: string
-  pickup: boolean
-  source: 'last_order' | 'profile'
-}
+export type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
 
 function deliveryDate(days: number): string {
   const d = new Date(Date.now() + days * 86_400_000)

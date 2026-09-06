@@ -5,7 +5,15 @@
  */
 import { z } from 'zod'
 
-export const AI_DECISION_FEATURES = ['catalog_draft', 'payout_dossier', 'extraction_correction'] as const
+export const AI_DECISION_FEATURES = [
+  'catalog_draft',
+  'payout_dossier',
+  'extraction_correction',
+  // M1 (0023 widens the CHECK): Group-Buy Agent pool terms, its vernacular card line, Documents Agent drafts.
+  'pool_draft',
+  'pool_card',
+  'documents_draft',
+] as const
 export type AiDecisionFeature = (typeof AI_DECISION_FEATURES)[number]
 
 export const aiDecisionSchema = z.object({

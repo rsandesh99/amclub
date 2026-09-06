@@ -129,6 +129,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Skip static files, _next internals, api routes, and favicon
-    '/((?!api|_next|_vercel|.*\\..*).*)',
+    // Metadata image routes (opengraph-image-*, twitter-image-*) live under
+    // [locale] and carry no file extension — leave them alone or the default-
+    // locale redirect turns every WhatsApp card preview into a 307 → 404.
+    '/((?!api|_next|_vercel|.*\\..*|.*(?:opengraph|twitter)-image.*).*)',
   ],
 }

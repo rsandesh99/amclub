@@ -116,7 +116,8 @@ any → held               (dispute open, provider suspended, or bank verificati
 - **Goods actions** live in `apps/web/lib/mart/goods-transitions.ts` and map onto the existing §3.7 transitions (`dispatch` = `accepted → requirements_submitted → in_progress`; `open_return` = `delivered|completed → disputed`). Release gate: `apps/web/lib/mart/release.ts` (`evaluateGoodsReleaseGate` in shared).
 - **Config, not constants:** return windows / commission per category in `mart_categories`; e-way threshold, auto-approve N, TDS in `mart_settings`. Founder decisions §9 are edited there.
 - **Every AI proposal a human confirms → `ai_decisions`** (`recordAiDecision`), refs only.
-- Vocabulary: product statuses `draft | pending_approval | active | suspended`; goods events `dispatched | delivered_photo | buyer_received | return_opened | return_resolved`; pool machine in `packages/shared/src/mart/pools.ts` (M1 tables not yet migrated).
+- Vocabulary: product statuses `draft | pending_approval | active | suspended`; goods events `dispatched | delivered_photo | buyer_received | return_opened | return_resolved`; pool machine in `packages/shared/src/mart/pools.ts`.
+- **M1 pools (migration 0023, STAGED with 0022; ADR-006).** Pay-on-close: joining records a commitment, no money moves; on `closed_met` each member pays an ordinary goods checkout session at the pool price (one order per member). `apps/web/lib/mart/pools.ts` owns every transition; `mayCapturePoolMember` is the ONLY capture guard; every status write is guarded on the state it expects (replay-safe). `pool_payment_mode='block_capture'` is refused until `docs/mart/PSP_BLOCK_CAPTURE_REPORT.md` §5 is signed off. Agents draft (`group-buy-agent.ts`, `documents-agent.ts`), humans confirm → `ai_decisions`.
 
 ---
 

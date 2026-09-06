@@ -100,6 +100,14 @@ const MANIFEST: Entry[] = [
     triggers: [['product_events', 'product_events_no_update'], ['ai_decisions', 'ai_decisions_no_update']],
     staged: true,
   },
+  {
+    // AMC Mart M1 — STAGED with 0022 (same Launch Gate deploy).
+    file: '0023_mart_pools.sql',
+    tables: ['pools', 'pool_members', 'pool_events'],
+    views: ['buyer_pool_discipline_v1'],
+    triggers: [['pool_events', 'pool_events_no_update']],
+    staged: true,
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]
