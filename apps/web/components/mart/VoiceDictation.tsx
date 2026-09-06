@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { usePostHog } from 'posthog-js/react'
+import { useAnalytics } from '@/components/providers/posthog'
 import type { VoiceParseResponse } from '@amclub/shared'
 import { VoiceRfqRecorder } from '@/components/voice/VoiceRfqRecorder'
 
@@ -16,12 +16,12 @@ import { VoiceRfqRecorder } from '@/components/voice/VoiceRfqRecorder'
 export function VoiceDictation({ onText }: { onText: (text: string) => void }) {
   const t = useTranslations('mart')
   const locale = useLocale()
-  const posthog = usePostHog()
+  const posthog = useAnalytics()
   const [done, setDone] = useState(false)
 
   const track = useCallback(
     (event: string, props?: Record<string, unknown>) =>
-      posthog?.capture(event, { locale, device: 'web', ...props, surface: 'mart_catalog' }),
+      posthog.capture(event, { locale, device: 'web', ...props, surface: 'mart_catalog' }),
     [posthog, locale],
   )
 

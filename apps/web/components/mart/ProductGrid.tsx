@@ -1,16 +1,14 @@
-'use client'
-
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { Button } from '@/components/ui/button'
 import { ProductCard } from './ProductCard'
-import { ProductCardSkeleton } from './skeletons'
+import { LoadMore } from './LoadMore'
 import type { ProductSummary } from '@/lib/mart/queries'
 
 /**
- * Server-rendered first page (props) + client "show more" against the
- * edge-cached /api/v1/mart/products. The initial HTML carries every card the
- * user sees first; JS only runs for page 2 onwards.
+ * Catalogue grid. SERVER component: the first page of cards is plain HTML —
+ * no card is serialised into the RSC payload twice and no hydration work runs
+ * for it (the previous client grid cost ~180 ms of main-thread time on a
+ * mid-range Android just to re-mount 24 cards it already had). Only the
+ * "show more" control below is a client island; it appends page 2+ from the
+ * edge-cached /api/v1/mart/products into its own grid that continues this one.
  */
 export function ProductGrid({
   initial,
@@ -24,46 +22,16 @@ export function ProductGrid({
   /** Query string (without offset) that produced `initial`. */
   query: string
 }) {
-  const t = useTranslations('mart')
-  const [items, setItems] = useState(initial)
-  const [offset, setOffset] = useState<number | null>(nextOffset)
-  const [busy, setBusy] = useState(false)
-
-  async function more() {
-    if (offset === null) return
-    setBusy(true)
-    try {
-      const res = await fetch(`/api/v1/mart/products?${query}${query ? '&' : ''}offset=${offset}&limit=24`)
-      if (!res.ok) return
-      const d = (await res.json()) as { products: ProductSummary[]; nextOffset: number | null }
-      setItems((cur) => [...cur, ...d.products])
-      setOffset(d.nextOffset)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((p, i) => (
+        {initial.map((p, i) => (
           <li key={p.id}>
             <ProductCard product={p} priority={i < 3} />
           </li>
         ))}
-        {busy && Array.from({ length: 3 }, (_, i) => (
-          <li key={`s${i}`}>
-            <ProductCardSkeleton />
-          </li>
-        ))}
       </ul>
-      {offset !== null && (
-        <div className="mt-5 flex justify-center">
-          <Button variant="outline" size="lg" onClick={more} loading={busy} className="border-emerald text-emerald">
-            {t('load_more')} ({total - items.length})
-          </Button>
-        </div>
-      )}
+      {nextOffset !== null && <LoadMore total={total} shown={initial.length} nextOffset={nextOffset} query={query} />}
     </>
   )
 }

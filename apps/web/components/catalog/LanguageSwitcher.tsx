@@ -35,7 +35,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
           onClick={() => switchTo(l)}
           aria-pressed={locale === l}
           className={cn(
-            'rounded-chip px-2.5 py-1 font-medium transition-colors',
+            'font-system rounded-chip px-2.5 py-1 font-medium transition-colors',
             locale === l ? 'bg-primary text-white' : 'text-foreground-secondary hover:text-primary',
           )}
         >

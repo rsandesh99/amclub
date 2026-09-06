@@ -4,7 +4,7 @@ import { GATEWAY_ENABLED } from '@/lib/flags'
 import { LegacyLanding } from '@/components/landing/LegacyLanding'
 import { PublicHeader } from '@/components/catalog/PublicHeader'
 import { PublicFooter } from '@/components/catalog/PublicFooter'
-import { Gateway } from '@/components/gateway/Gateway'
+import { GatewayLazy as Gateway } from '@/components/gateway/GatewayLazy'
 
 // ISR — `/` refreshes hourly (§ Phase 3 SEO; gateway itself is static markup,
 // the legacy fallback fetches catalog data).

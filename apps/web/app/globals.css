@@ -69,6 +69,13 @@
 }
 
 @layer components {
+  /* Script glyphs that must NOT trigger a web-font download (the header's
+     हिं / తె / த language chips): the device's own Noto/system face draws
+     them; the Indic web fonts load only on pages IN that locale. */
+  .font-system {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+
   /* ── Elevation & interactive surfaces (§4) ────────────────────────────────
      ONE coherent system so every card/surface across the app inherits the
      same depth + hover/press behaviour. Motion (the lift) is gated behind
@@ -263,7 +270,11 @@
 @keyframes martStamp { 0% { opacity: 0; transform: scale(1.35); } 60% { opacity: 1; transform: scale(0.94); } 100% { transform: scale(1); } }
 @keyframes martLathe { to { transform: rotate(360deg); } }
 @keyframes martThread { from { transform: scaleY(0); transform-origin: top; } to { transform: scaleY(1); transform-origin: top; } }
-@keyframes martRise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+/* Transform only — never opacity. An opacity fade holds the largest element
+   at opacity:0 until the animation runs, and on a throttled phone the browser
+   records Largest Contentful Paint only when it becomes visible: measured
+   +1.2 s of LCP "render delay" on /mart. The slide alone keeps the motion. */
+@keyframes martRise { from { transform: translateY(12px); } to { transform: translateY(0); } }
 
 /* One orchestrated page entrance (≤500ms total): header settles, title slides 12px, content staggers 40ms. */
 .mart-enter > * { animation: martRise 320ms var(--ease-out) both; }

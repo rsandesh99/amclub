@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { usePostHog } from 'posthog-js/react'
+import { useAnalytics } from '@/components/providers/posthog'
 import { useRouter } from '@/i18n/navigation'
 import { Mic } from 'lucide-react'
 import { voiceMetaSchema, rfqFieldLabel, type RfqTemplateField, type VoiceMeta, type VoiceParseResponse } from '@amclub/shared'
@@ -49,7 +49,7 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
   const tv = useTranslations('voice')
   const locale = useLocale()
   const router = useRouter()
-  const posthog = usePostHog()
+  const posthog = useAnalytics()
 
   const [s, setS] = useState<DraftState>({ ...EMPTY })
   const [loading, setLoading] = useState(false)
@@ -58,7 +58,7 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
 
   const track = useCallback(
     (event: string, props?: Record<string, unknown>) =>
-      posthog?.capture(event, { locale, device: 'web', ...props }),
+      posthog.capture(event, { locale, device: 'web', ...props }),
     [posthog, locale],
   )
 

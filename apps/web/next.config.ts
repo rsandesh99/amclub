@@ -9,11 +9,14 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
 //    (nonce plumbing is the strict upgrade path — docs/SECURITY_CHECKLIST.md);
 //    no 'unsafe-eval' in production.
 //  - Razorpay checkout: script + frame + connect. Turnstile: script + frame.
-//  - PostHog/Sentry: connect only (SDKs are bundled, not CDN-loaded).
+//  - PostHog: connect only (SDK bundled, loaded after idle). Sentry: connect
+//    + script for browser.sentry-cdn.com — Session Replay is lazy-loaded from
+//    there after idle (sentry.client.config.ts) instead of shipping in the
+//    first-visit bundle.
 //  - microphone=(self) — Voice RFQ records on our own origin only.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://challenges.cloudflare.com",
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://challenges.cloudflare.com https://browser.sentry-cdn.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data: https://*.supabase.co",
   "font-src 'self' data:",
@@ -61,6 +64,29 @@ const nextConfig: NextConfig = {
 
   async headers() {
     return [{ source: '/(.*)', headers: SECURITY_HEADERS }]
+  },
+
+  // Chunking: the public header/footer, account menu, language switcher and
+  // shared providers are used by every route group. Left to the defaults,
+  // webpack folded them into the FIRST page entry that used them — the
+  // gateway wizard — so /mart and /services downloaded the whole wizard
+  // (15 KB gz) to get a 2 KB header. One named "shell" chunk, cached once.
+  webpack(config, { isServer, dev }) {
+    const split = config.optimization?.splitChunks
+    if (!isServer && !dev && split && typeof split === 'object') {
+      split.cacheGroups = {
+        ...(split.cacheGroups ?? {}),
+        shell: {
+          name: 'shell',
+          test: /[\\/]components[\\/](catalog|shell|providers|ui|pwa)[\\/]|[\\/]i18n[\\/]navigation/,
+          minChunks: 1,
+          priority: 40,
+          enforce: true,
+          reuseExistingChunk: true,
+        },
+      }
+    }
+    return config
   },
 
   typescript: { ignoreBuildErrors: false },

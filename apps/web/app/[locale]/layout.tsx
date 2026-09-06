@@ -2,17 +2,19 @@ import type { Metadata, Viewport } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getMessages, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
-import { preconnect } from 'react-dom'
 import {
   Noto_Sans,
   Noto_Sans_Devanagari,
   Noto_Sans_Telugu,
   Noto_Sans_Tamil,
 } from 'next/font/google'
+import localFont from 'next/font/local'
 import { routing } from '@/i18n/routing'
 import { PostHogProvider } from '@/components/providers/posthog'
 import { ToastProvider } from '@/components/ui/toast'
 import { PwaManager } from '@/components/pwa/PwaManager'
+import { ResourceHints } from '@/components/shell/ResourceHints'
+import { fontPreloadHrefs } from '@/lib/fonts/preload-hrefs'
 import '@/app/globals.css'
 
 // PWA chrome color (Phase 8 §5) — matches manifest theme_color.
@@ -24,11 +26,33 @@ export const viewport: Viewport = {
 // with the Indic companions below); hierarchy is size + weight. Replaces the
 // Inter + Bricolage pair: one family, four weights, self-hosted by next/font,
 // preloaded, no layout shift (size-adjusted fallback).
+// display:'optional' — on a first 4G visit the page paints at once in the
+// system face (Android ships Noto/Roboto; metrics-matched fallback, no
+// shift) and the web font is used from the second navigation on. 'swap'
+// re-painted the LCP text 3–4s later on simulated 4G (measured: LCP 5.2s →
+// dominated by "render delay" waiting on fonts).
 const notoSans = Noto_Sans({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['400', '600', '700'],
   variable: '--font-sans',
+  display: 'optional',
+  adjustFontFallback: true,
+})
+
+// The rupee sign. Google's Noto Sans keeps U+20B9 in its DEVANAGARI subset,
+// so every price on an English page pulled a 98 KB font file for one glyph
+// (measured on /mart, /services and the product page). This is that glyph
+// alone — Noto Sans's own ₹ and ₨ outlines, variable weight, 2 KB — listed
+// FIRST in the Tailwind font stacks so the browser never reaches the big
+// subset for it. The full Devanagari face still loads on Hindi pages.
+const notoRupee = localFont({
+  src: './../fonts/noto-sans-rupee.woff2',
+  variable: '--font-rupee',
+  weight: '100 900',
   display: 'swap',
+  preload: true,
+  adjustFontFallback: false,
+  declarations: [{ prop: 'unicode-range', value: 'U+20B9, U+20A8' }],
 })
 
 // Indic companions (§4.2) — all three publish the SAME CSS variable
@@ -39,21 +63,21 @@ const notoSans = Noto_Sans({
 const notoDevanagari = Noto_Sans_Devanagari({
   subsets: ['devanagari'],
   variable: '--font-indic',
-  display: 'swap',
+  display: 'optional',
   preload: false,
 })
 
 const notoTelugu = Noto_Sans_Telugu({
   subsets: ['telugu'],
   variable: '--font-indic',
-  display: 'swap',
+  display: 'optional',
   preload: false,
 })
 
 const notoTamil = Noto_Sans_Tamil({
   subsets: ['tamil'],
   variable: '--font-indic',
-  display: 'swap',
+  display: 'optional',
   preload: false,
 })
 
@@ -102,16 +126,19 @@ export default async function LocaleLayout({
   const indic = INDIC_FONT[locale]
 
   // Every page's first data-bearing requests (storage images, client auth)
-  // go to the Supabase origin — open the connection during HTML parse.
+  // go to the Supabase origin — open the connection during HTML parse. The
+  // two preloadable fonts ride the same hint component (see ResourceHints).
   const supabaseOrigin = process.env['NEXT_PUBLIC_SUPABASE_URL']
-  if (supabaseOrigin) preconnect(supabaseOrigin)
+  const hintOrigins = supabaseOrigin ? [supabaseOrigin] : []
+  const fonts = fontPreloadHrefs()
 
   return (
     <html
       lang={locale}
-      className={`${notoSans.variable}${indic ? ` ${indic.variable}` : ''}`}
+      className={`${notoRupee.variable} ${notoSans.variable}${indic ? ` ${indic.variable}` : ''}`}
     >
       <body className="bg-background font-sans text-foreground antialiased">
+        <ResourceHints fonts={fonts} origins={hintOrigins} />
         <NextIntlClientProvider messages={messages}>
           <PostHogProvider>
             <ToastProvider>{children}</ToastProvider>
