@@ -55,6 +55,28 @@ MART_DESIGN.md §1 lists facts about the live services spine and instructs: *ver
 | `next build` with CI placeholder env and `MART_ENABLED=true` | exit 0 |
 | `verify-mart.ts` (M0 acceptance over HTTP) and `verify-mart-inert.ts` (flag-off) | **written, not run** — need a server + Supabase (see §5) |
 
+
+### 4a. Review-fix and optimisation sprint (2026-09-06)
+
+- Lighthouse reports (mobile, local production build, seeded rig):
+  simulated 4G before (`lh/baseline`) and after (`lh/final1..3`, medians
+  reported in FOLLOWUPS.md), and DevTools-throttled after (`lh/final-dt`:
+  LCP 1.8 s /mart, 1.8 s product, 1.6 s /services, CLS 0.000). Reports live in
+  the session rig (`/tmp/amclub-local/lh/`), numbers copied to FOLLOWUPS.md.
+- Font bytes on English pages 209–313 KB → 39 KB (rupee-glyph face, system
+  chips, `display: optional`, no web-font names as fallbacks).
+- Head hints verified with curl on /mart: `<link rel="preconnect">` for the
+  Supabase origin and `<link rel="preload" as="font">` for both fonts.
+- Chunk audit via the client-reference manifests: gateway wizard no longer
+  in the /mart, /services or product script lists; `shell` chunk shared.
+- Inertness unchanged: `pnpm --filter @amclub/shared test` 67/67;
+  `turbo typecheck lint` green (one pre-existing mobile lint warning,
+  FOLLOWUPS "Mobile lint warning"); `next build` green.
+- After-screenshots of the twelve review screens re-taken (browse, category
+  sorted, search, product, prefilled checkout, buyer/seller order pages,
+  wizard confirm, storefront, desktop browse, cart) and embedded in the
+  review artifact's "Sprint outcome" section.
+
 ## 5. Not done here (needs the founder's environment)
 
 - Run `verify-mart.ts` against a local server on a database with 0022 applied and `MART_ENABLED=true`; run `verify-mart-inert.ts` + the four standard suites against prod (flag off).

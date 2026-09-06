@@ -67,6 +67,77 @@ seller, admin, goods order workspace), mobile Mart tab. Evidence and the
 - **Mobile `tsconfig` strictness** — extends `expo/tsconfig.base`, not the
   repo base; consider adding the four strict flags.
 
+## Mart M0 review fixes + load-path optimisation — closeout (2026-09-06)
+
+The design review (Mart M0 vs FRONTEND.md, competition, density/flow) was
+worked in full, with load performance first. Commits `9b16a6a` → `76a0aaf`
+on `claude/new-github-repo-setup-ax25ub`.
+
+**Measured (Lighthouse 12, mobile, local production build on the seeded rig;
+simulated 4G, median of 3 runs after; single baseline run before):**
+
+| Page | Perf | LCP | FCP | Bytes | Fonts | JS |
+|---|---|---|---|---|---|---|
+| /mart | 80 → 92 | 4.7 s → 3.4 s | 2.4 s → 1.2 s | 619 → 354 KB | 313 → 39 KB | 242 → 215 KB |
+| /mart/p/[id] | 72 → 93 | 4.1 s → 3.1 s | 1.7 s → 1.1 s | 625 → 335 KB | 313 → 39 KB | 252 → 218 KB |
+| /services | 85 → 97 | 4.2 s → 2.5 s | 1.7 s → 1.1 s | 515 → 333 KB | 209 → 39 KB | 249 → 206 KB |
+
+Under real DevTools throttling (4G + 4× CPU) the after build paints the
+largest element at **1.8 s on /mart and the product page, 1.6 s on
+/services, CLS 0.000**. The simulated-mode LCP above is pessimistic: Lantern
+ties the text paint to the web-font request because `font-display: optional`
+lets the font win on an unthrottled trace; in the field the fallback paints
+first and no swap happens. Product-page CLS 0.288 → 0.002.
+
+**What moved the numbers (apps/web):**
+- Fonts: Google's Noto Sans keeps `₹` (U+20B9) in its 98 KB Devanagari
+  subset, and the header's हिं/తె/த chips plus a literal `'Noto Sans
+  Devanagari'` Tailwind fallback pulled 165–285 KB more on English pages. Now
+  a 1.9 KB self-hosted `₹`/`₨` face (`app/fonts/noto-sans-rupee.woff2`, Noto's
+  own outlines, variable weight) sits first in the font stacks, chips use
+  `.font-system`, all faces are `display: optional`, and no web-font family
+  name appears as a fallback. Fonts per English page: 39 KB.
+- Preload hints: next/font's font preload and React's `preconnect()` never
+  reached the HTML head on this app (only the RSC payload). The root layout
+  now renders real `<link>` elements (`components/shell/ResourceHints.tsx`,
+  hrefs from `lib/fonts/preload-hrefs.ts`), so the body font is in the first
+  HTML bytes.
+- ProductGrid is a server component; `LoadMore` is the only client island.
+- posthog-js (68 KB gz) loads after `load` + idle or on the first `capture`
+  (buffered); Sentry Session Replay lazy-loads from Sentry's CDN after idle
+  (CSP `script-src` now lists `browser.sentry-cdn.com`).
+- Chunking: Next merges the root page's client manifest into every `[locale]`
+  route (route groups are stripped), so the gateway wizard (11 KB gz) was
+  loaded on /mart and /services. The wizard is now an async client chunk
+  (`GatewayLazy`), and shared header/providers get one named `shell` chunk.
+- `martRise` animates transform only; the opacity fade held the largest
+  element invisible and added ~1.2 s of measured LCP.
+- Earlier in the sprint (9b16a6a): ISR on /mart, /mart/c/[slug] and the
+  product page with on-demand `revalidateMart`, next/image with fixed boxes,
+  sharp resize on upload, skeletons, lazy Supabase client in AccountMenu.
+
+**Review findings closed (8c6872f, 5d1e561):** reorder from a completed goods
+order; checkout prefilled from the last delivery snapshot / MSME profile;
+sticky action bar + real IST dates on the goods order workspace; brand, price
+band, seller filters and price sort; search autosuggest; MOQ and lead time on
+cards; seller trust line, spec block, availability and WhatsApp share on the
+product page; Paisa Moment on first order view / payout paid; gold count-up;
+17/26 body type on Mart screens; voice dictation + brand/specs in the listing
+wizard; goods on the provider storefront; offline evidence-upload queue with
+retry chips; 44 px targets on breadcrumbs.
+
+**Open (not done here):**
+- The mobile app has not had the same font/analytics pass (Expo bundles
+  differently; no web fonts involved).
+- `(provider)/layout` still contributes a 1.9 KB chunk to public pages for
+  the same manifest-merge reason as the gateway; acceptable, noted.
+- /services CLS 0.09 appears in one of three simulated runs (footer shift on
+  a fast font arrival); 0.000 under real throttling. Re-check on Vercel with
+  Speed Insights before treating it as real.
+- A real-throttling "before" could not be produced: the pre-sprint build's
+  catalogue fetch fails inside a worktree on this rig. The simulated numbers
+  above are same-method before/after.
+
 ## Incoming developer — open items
 
 Each is deferred with intent, not forgotten. One-line scope; details in the
