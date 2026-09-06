@@ -32,10 +32,16 @@ export interface GoodsDossier {
 export async function returnWindowHoursForOrder(admin: Admin, order: any): Promise<number> {
   const lines = (order.line_items ?? []) as GoodsLineItem[]
   if (lines.length === 0) return 0
-  const { data: prods } = await admin.from('products').select('id, category_slug').in('id', lines.map((l) => l.product_id))
-  const slugs = [...new Set((prods ?? []).map((p: any) => p.category_slug as string))]
+  // A line carries its own category when it was quoted without a listing (M2);
+  // catalogue lines resolve through the product.
+  const slugs = new Set<string>(lines.map((l) => l.category_slug).filter((x): x is string => !!x))
+  const productIds = lines.filter((l) => !l.category_slug && l.product_id).map((l) => l.product_id as string)
+  if (productIds.length > 0) {
+    const { data: prods } = await admin.from('products').select('id, category_slug').in('id', productIds)
+    for (const p of prods ?? []) slugs.add((p as any).category_slug as string)
+  }
   let hours = 0
-  for (const slug of slugs) {
+  for (const slug of [...slugs]) {
     const cat = await getMartCategory(admin, slug)
     hours = Math.max(hours, cat?.return_window_hours ?? 0)
   }

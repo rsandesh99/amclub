@@ -9,7 +9,8 @@ import { categories } from './catalog'
 export const rfqs = pgTable('rfqs', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   msmeId: uuid('msme_id').references(() => msmeProfiles.id, { onDelete: 'cascade' }).notNull(),
-  categoryId: uuid('category_id').references(() => categories.id).notNull(),
+  // Nullable since 0024 for kind='goods' only (CHECK rfqs_kind_shape_check).
+  categoryId: uuid('category_id').references(() => categories.id),
   title: text('title').notNull(),
   details: jsonb('details').notNull(),
   attachments: jsonb('attachments').default(sql`'[]'::jsonb`).notNull(),
@@ -18,6 +19,11 @@ export const rfqs = pgTable('rfqs', {
   neededBy: date('needed_by'),
   // Phase 8b — transcript + parse when the RFQ began as a voice recording.
   voiceMeta: jsonb('voice_meta'),
+  // AMC Mart M2 (0024, STAGED): service | goods. Goods RFQs carry a Mart
+  // category + goods_spec instead of a services category/template.
+  kind: text('kind').default('service').notNull(),
+  martCategorySlug: text('mart_category_slug'),
+  goodsSpec: jsonb('goods_spec'),
   // open | quoted | accepted | expired | cancelled
   status: text('status').default('open').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -54,6 +60,13 @@ export const quotes = pgTable('quotes', {
   validUntil: date('valid_until'),
   // CHECK 0..100 when not null (quotes_advance_percent_range)
   advancePercent: integer('advance_percent'),
+  // AMC Mart M2 (0024, STAGED) — goods terms; all NULL on services quotes.
+  // CHECK quotes_goods_terms_check: complete set + price_paise = unit × qty.
+  unitPricePaise: bigint('unit_price_paise', { mode: 'number' }),
+  qty: integer('qty'),
+  gstRateBps: integer('gst_rate_bps'),
+  hsnCode: text('hsn_code'),
+  productId: uuid('product_id'),
   // submitted | withdrawn | accepted | declined | expired
   status: text('status').default('submitted').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),

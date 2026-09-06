@@ -14,7 +14,8 @@ import { hsnCodeSchema, gstRateBpsSchema, productUnitSchema } from './catalog'
 
 /** orders.line_items / checkout_sessions.line_items element (frozen at checkout). */
 export const goodsLineItemSchema = z.object({
-  product_id: z.string().uuid(),
+  /** Null for a spec-goods line quoted without a listing (M2 goods RFQ). */
+  product_id: z.string().uuid().nullable(),
   /** Display snapshot so the order stays readable if the listing changes. */
   name: z.string().min(1).max(140),
   unit: productUnitSchema,
@@ -27,6 +28,8 @@ export const goodsLineItemSchema = z.object({
   line_taxable_paise: z.number().int().nonnegative(),
   /** GST on this line at its own rate (goods carry mixed slabs). */
   line_gst_paise: z.number().int().nonnegative(),
+  /** Mart category of the line — set for listing-less lines so the release gate can find its return window. */
+  category_slug: z.string().max(60).optional(),
 })
 export type GoodsLineItem = z.infer<typeof goodsLineItemSchema>
 
@@ -233,4 +236,69 @@ export function evaluateGoodsReleaseGate(f: GoodsReleaseFacts): GoodsReleaseGate
   }
 
   return { ok: reasons.length === 0, reasons, returnWindowEndsAt, autoReceiptAt }
+}
+
+// ── M2: goods RFQ (MART_DESIGN.md §7 M2 — bulk/spec goods through the
+// existing RFQ + quote flow with kind='goods') ────────────────────────────────
+
+export const GOODS_RFQ_MAX_SPEC_LINES = 12
+
+/** rfqs.goods_spec — what the buyer needs, in goods terms (no services template). */
+export const goodsRfqSpecSchema = z.object({
+  item: z.string().trim().min(3).max(140),
+  qty: z.number().int().positive().max(10_000_000),
+  unit: productUnitSchema,
+  /** Spec rows the seller must meet ([{k, v}], seller-readable). */
+  spec: z.array(z.object({ k: z.string().trim().min(1).max(40), v: z.string().trim().min(1).max(200) })).max(GOODS_RFQ_MAX_SPEC_LINES).default([]),
+  brand_preference: z.string().trim().max(80).optional(),
+  /** Buyer's target unit price (paise) — a signal to sellers, never a cap. */
+  target_unit_price_paise: z.number().int().positive().optional(),
+  /** Delivery snapshot the eventual goods order carries (same shape as checkout). */
+  delivery: z.object({
+    contact_name: z.string().trim().min(2).max(100),
+    contact_phone: z.string().regex(/^(?:\+91)?[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
+    address: z.string().trim().min(5).max(300),
+    city: z.string().trim().min(2).max(80),
+    state: z.string().min(2).max(4),
+    pincode: z.string().regex(/^\d{6}$/),
+    pickup: z.boolean().default(false),
+  }),
+  /** Listing the request started from (product page "Ask for a bulk quote"), if any. */
+  product_id: z.string().uuid().optional(),
+})
+export type GoodsRfqSpec = z.infer<typeof goodsRfqSpecSchema>
+
+/**
+ * Goods quote terms. The seller states a UNIT price (excl. GST) at the RFQ's
+ * quantity plus the tax facts the order needs; the server computes
+ * price_paise = qty × unit price and never trusts a client total.
+ */
+export const goodsQuoteTermsSchema = z.object({
+  unit_price_paise: z.number().int().positive(),
+  gst_rate_bps: gstRateBpsSchema,
+  hsn_code: hsnCodeSchema,
+  /** The seller's own listing this quote is for (prefills name/HSN; links the order line). */
+  product_id: z.string().uuid().optional(),
+  /** Seller can offer a different quantity (MOQ / pack rounding); default = the RFQ's qty. */
+  qty: z.number().int().positive().max(10_000_000).optional(),
+})
+export type GoodsQuoteTerms = z.infer<typeof goodsQuoteTermsSchema>
+
+/** Line item for a goods order born from a quote (no listing required). */
+export function goodsQuoteLineItem(input: { spec: GoodsRfqSpec; terms: GoodsQuoteTerms; productName?: string | null; categorySlug: string }): GoodsLineItem {
+  const qty = input.terms.qty ?? input.spec.qty
+  const taxable = qty * input.terms.unit_price_paise
+  return {
+    product_id: input.terms.product_id ?? null,
+    name: input.productName ?? input.spec.item,
+    unit: input.spec.unit,
+    qty,
+    tier_min_qty: qty,
+    tier_unit_price_paise: input.terms.unit_price_paise,
+    hsn_code: input.terms.hsn_code,
+    gst_rate_bps: input.terms.gst_rate_bps,
+    line_taxable_paise: taxable,
+    line_gst_paise: Math.round((taxable * input.terms.gst_rate_bps) / 10000),
+    category_slug: input.categorySlug,
+  }
 }

@@ -7,6 +7,8 @@ import { getPaymentGateway } from '@/lib/payments'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon } from '@/lib/coupons/apply'
 import { COUPONS_ENABLED } from '@/lib/flags'
+import { createAdminClient } from '@/lib/supabase/server'
+import { prepareGoodsQuoteCheckout, type GoodsQuotePrep } from '@/lib/mart/goods-rfq'
 
 const bodySchema = z
   .object({
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest) {
   if (!msme) return NextResponse.json({ error: 'Complete your business profile first' }, { status: 403 })
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
+  let goodsPrep: GoodsQuotePrep | null = null
   let prep: Prep
 
   if (packageId) {
@@ -131,7 +134,7 @@ export async function POST(request: NextRequest) {
     const { data: q } = await supabase
       .from('quotes')
       .select(
-        'id, status, provider_id, price_paise, delivery_days, scope, rfq:rfqs!inner(id, msme_id, category_id, title, status, details)',
+        'id, status, provider_id, price_paise, delivery_days, scope, unit_price_paise, qty, gst_rate_bps, hsn_code, product_id, rfq:rfqs!inner(id, msme_id, category_id, title, status, details, kind, mart_category_slug, goods_spec)',
       )
       .eq('id', quoteId!)
       .maybeSingle()
@@ -144,6 +147,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This request is closed' }, { status: 409 })
     }
 
+    if (rfq.kind === 'goods') {
+      // AMC Mart M2 — an accepted GOODS quote becomes an ordinary goods order:
+      // one line at the quoted unit price, the buyer's delivery snapshot from
+      // the request, commission from the Mart category. Same session →
+      // webhook → materialize_order → goods workspace → release gate → payout.
+      const g = await prepareGoodsQuoteCheckout(await createAdminClient(), quote)
+      if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.status })
+      goodsPrep = g.prep
+      prep = {
+        providerId: quote.provider_id,
+        source: 'quote',
+        packageId: null,
+        quoteId: quote.id,
+        title: g.prep.title,
+        scopeSnapshot: { kind: 'goods', title: { en: rfq.title, hi: rfq.title }, scope: quote.scope, rfq_id: rfq.id, categories: [rfq.mart_category_slug], seller_name: g.prep.sellerName },
+        deliveryDays: quote.delivery_days,
+        revisionMax: null,
+        amounts: g.prep.amounts as unknown as ReturnType<typeof computeOrderAmounts>,
+      }
+    } else {
     const { data: cat } = await supabase.from('categories').select('commission_bps').eq('id', rfq.category_id).maybeSingle()
     const commissionBps: number = cat?.commission_bps ?? 1000
 
@@ -166,6 +189,7 @@ export async function POST(request: NextRequest) {
         discountBps: 0,
         commissionBps,
       }),
+    }
     }
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -195,6 +219,9 @@ export async function POST(request: NextRequest) {
         revision_max: prep.revisionMax,
         coupon_code: couponCode ?? null,
         gst_invoice: gstInvoice ?? null,
+        // Goods-quote sessions carry the goods columns; every other session
+        // leaves them at their defaults exactly as before.
+        ...(goodsPrep ? { kind: 'goods', line_items: goodsPrep.lineItems, delivery_snapshot: goodsPrep.delivery } : {}),
         idempotency_key: idempotencyKey,
         status: 'created',
         expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),

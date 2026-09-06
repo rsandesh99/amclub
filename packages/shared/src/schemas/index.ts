@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { ORDER_STATUSES, RFQ_STATUSES, QUOTE_STATUSES, PAYOUT_STATUSES } from '../state-machines'
 import { CATEGORY_SLUGS } from '../categories'
 import { SUPPORTED_LOCALES, PROVIDER_LANGUAGES } from '../locales'
+import { goodsRfqSpecSchema, goodsQuoteTermsSchema } from '../mart/goods'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -182,17 +183,34 @@ export const voiceMetaSchema = z.object({
 })
 export type VoiceMeta = z.infer<typeof voiceMetaSchema>
 
-export const rfqSchema = z.object({
-  category_slug: z.enum(CATEGORY_SLUGS),
-  title: z.string().min(10).max(200),
-  details: z.record(z.string(), z.unknown()),
-  attachments: z.array(rfqAttachmentSchema).max(5).default([]),
-  budget_min_paise: paiseSchema.optional(),
-  budget_max_paise: paiseSchema.optional(),
-  needed_by: z.string().date().optional(),
-  /** Present only when the RFQ began as a voice recording (Phase 8b). */
-  voice_meta: voiceMetaSchema.optional(),
-})
+export const RFQ_KINDS = ['service', 'goods'] as const
+export type RfqKind = (typeof RFQ_KINDS)[number]
+
+export const rfqSchema = z
+  .object({
+    /** Absent = 'service' — every existing client keeps working unchanged. */
+    kind: z.enum(RFQ_KINDS).default('service'),
+    category_slug: z.enum(CATEGORY_SLUGS).optional(),
+    title: z.string().min(10).max(200),
+    details: z.record(z.string(), z.unknown()),
+    attachments: z.array(rfqAttachmentSchema).max(5).default([]),
+    budget_min_paise: paiseSchema.optional(),
+    budget_max_paise: paiseSchema.optional(),
+    needed_by: z.string().date().optional(),
+    /** Present only when the RFQ began as a voice recording (Phase 8b). */
+    voice_meta: voiceMetaSchema.optional(),
+    // AMC Mart M2 — goods RFQ: a Mart category + a goods spec instead of a services template.
+    mart_category_slug: z.string().min(1).max(60).optional(),
+    goods_spec: goodsRfqSpecSchema.optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.kind === 'goods') {
+      if (!d.mart_category_slug) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['mart_category_slug'], message: 'Required for a goods request' })
+      if (!d.goods_spec) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['goods_spec'], message: 'Required for a goods request' })
+    } else if (!d.category_slug) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['category_slug'], message: 'Required' })
+    }
+  })
 
 export type RfqInput = z.infer<typeof rfqSchema>
 
@@ -209,6 +227,8 @@ export const quoteSchema = z.object({
   /** ISO date (YYYY-MM-DD). */
   valid_until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').optional(),
   advance_percent: z.number().int().min(0).max(100).optional(),
+  /** AMC Mart M2 — present on a goods RFQ; the server recomputes price_paise from it. */
+  goods: goodsQuoteTermsSchema.optional(),
 })
 
 export type QuoteInput = z.infer<typeof quoteSchema>

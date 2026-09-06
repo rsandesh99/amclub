@@ -43,7 +43,10 @@ export default async function MyRfqsPage() {
                   <p className="truncate font-medium">{r.title}</p>
                   <p className="text-xs text-foreground-secondary">{t('quotes_n', { n: r.quoteCount, max: r.maxQuotes })}</p>
                 </div>
-                <Badge variant={VARIANT[r.status] ?? 'default'}>{t(`status_${r.status}` as 'status_open')}</Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  {r.kind === 'goods' && <Badge variant="default">{t('goods_badge')}</Badge>}
+                  <Badge variant={VARIANT[r.status] ?? 'default'}>{t(`status_${r.status}` as 'status_open')}</Badge>
+                </div>
               </Link>
             </li>
           ))}

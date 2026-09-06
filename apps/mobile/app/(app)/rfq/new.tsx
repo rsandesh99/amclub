@@ -5,11 +5,11 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
-import { createRfq } from '@/lib/api'
+import { createRfq, fetchMartCategories, fetchMartDeliveryDefaults, type MartCategory, type GoodsDelivery } from '@/lib/api'
 import { track } from '@/lib/analytics'
 import { VoiceRfqRecorder } from '@/components/VoiceRfqRecorder'
 import { colors } from '@/lib/theme'
-import { rfqFieldLabel, pickLocale } from '@amclub/shared'
+import { rfqFieldLabel, pickLocale, PRODUCT_UNITS } from '@amclub/shared'
 
 export default function NewRfqScreen() {
   const { t, locale } = useI18n()
@@ -23,10 +23,54 @@ export default function NewRfqScreen() {
   const [error, setError] = useState('')
   // Phase 8b — voice_meta carried to the normal RFQ submit (never auto-sent).
   const [voice, setVoice] = useState<any>(null)
+  // AMC Mart M2 — goods mode exists only when /api/v1/mart/categories answers (flag on).
+  const [martCats, setMartCats] = useState<MartCategory[]>([])
+  const [mode, setMode] = useState<'service' | 'goods'>('service')
+  const [gCat, setGCat] = useState('')
+  const [gItem, setGItem] = useState('')
+  const [gQty, setGQty] = useState('')
+  const [gUnit, setGUnit] = useState<string>('pcs')
+  const [gSpec, setGSpec] = useState<{ k: string; v: string }[]>([{ k: '', v: '' }])
+  const [gTarget, setGTarget] = useState('')
+  const [gDetails, setGDetails] = useState('')
+  const [deliv, setDeliv] = useState<GoodsDelivery>({ contact_name: '', contact_phone: '', address: '', city: '', state: 'AP', pincode: '', pickup: false })
 
   useEffect(() => {
     supabase.from('categories').select('slug, name_i18n, rfq_template').eq('is_active', true).order('sort_order').then(({ data }) => setCats(data ?? []))
+    fetchMartCategories().then((r) => {
+      if (!r.ok) return
+      setMartCats(r.categories.filter((c) => !c.bisBlocked))
+      fetchMartDeliveryDefaults().then((d) => { if (d) setDeliv({ contact_name: d.contact_name, contact_phone: d.contact_phone, address: d.address, city: d.city, state: d.state || 'AP', pincode: d.pincode, pickup: d.pickup }) })
+    })
   }, [])
+
+  async function submitGoods() {
+    setError('')
+    const qtyNum = Number(gQty)
+    if (!gCat) { setError(t('rfq.goods_category_label') + ': ' + t('rfq.required')); return }
+    if (gItem.trim().length < 3) { setError(t('rfq.goods_err_item')); return }
+    if (!Number.isInteger(qtyNum) || qtyNum <= 0) { setError(t('rfq.goods_err_qty')); return }
+    const spec = gSpec.map((r) => ({ k: r.k.trim(), v: r.v.trim() })).filter((r) => r.k && r.v)
+    if (!deliv.contact_name.trim() || !deliv.contact_phone.trim() || !deliv.city.trim() || !/^\d{6}$/.test(deliv.pincode) || (!deliv.pickup && deliv.address.trim().length < 5)) { setError(t('rfq.goods_err_delivery')); return }
+    const targetPaise = gTarget.trim() ? Math.round(Number(gTarget) * 100) : 0
+    setLoading(true)
+    const res = await createRfq({
+      kind: 'goods',
+      mart_category_slug: gCat,
+      title: `${gItem.trim()} × ${qtyNum} ${gUnit}`.slice(0, 200),
+      details: gDetails.trim() ? { additional_details: gDetails.trim() } : {},
+      goods_spec: {
+        item: gItem.trim(), qty: qtyNum, unit: gUnit, spec,
+        ...(targetPaise > 0 ? { target_unit_price_paise: targetPaise } : {}),
+        delivery: { ...deliv, address: deliv.pickup && deliv.address.trim().length < 5 ? `Pickup — ${deliv.city}` : deliv.address.trim() },
+      },
+    })
+    setLoading(false)
+    if (res.status === 403 && res.data?.error === 'profile_incomplete') { setError(t('rfq.profile_incomplete')); return }
+    if (!res.ok) { setError(t('rfq.err_create')); return }
+    track('mart_goods_rfq_created', { surface: 'rfq_form', category: gCat, qty: qtyNum, unit: gUnit, spec_lines: spec.length, locale })
+    router.replace(`/rfq/${res.data.rfqId}` as never)
+  }
 
   const category = cats.find((c) => c.slug === slug)
   const fields: any[] = category?.rfq_template?.fields ?? []
@@ -117,6 +161,73 @@ export default function NewRfqScreen() {
         <Text className="text-lg font-bold text-foreground">{t('rfq.new_title')}</Text>
       </View>
       <ScrollView contentContainerClassName="px-4 py-4 gap-4">
+        {martCats.length > 0 && (
+          <View className="flex-row gap-2">
+            {(['service', 'goods'] as const).map((m) => (
+              <TouchableOpacity key={m} onPress={() => setMode(m)} className={`flex-1 items-center rounded-xl border py-2 ${mode === m ? 'border-primary bg-primary/10' : 'border-border bg-surface'}`}>
+                <Text className={`text-sm ${mode === m ? 'font-semibold text-primary' : 'text-foreground'}`}>{m === 'goods' ? t('rfq.goods_new_title') : t('rfq.new_title')}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {mode === 'goods' ? (
+          <>
+            <Text className="text-sm font-medium text-foreground">{t('rfq.goods_category_label')}</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {martCats.map((c) => (
+                <TouchableOpacity key={c.slug} onPress={() => setGCat(c.slug)} className={`rounded-full border px-3 py-1.5 ${gCat === c.slug ? 'border-primary bg-primary' : 'border-border'}`}>
+                  <Text className={`text-xs font-medium ${gCat === c.slug ? 'text-white' : 'text-foreground'}`}>{pickLocale(c.nameI18n, locale)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Field label={t('rfq.goods_item_label')} value={gItem} onChange={setGItem} />
+            <View className="flex-row gap-3">
+              <View className="flex-1"><Field label={t('rfq.goods_qty_label')} value={gQty} onChange={setGQty} numeric /></View>
+              <View className="flex-1 gap-1.5">
+                <Text className="text-xs font-medium text-foreground-secondary">{t('rfq.goods_unit_label')}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-1.5">
+                  {PRODUCT_UNITS.map((u) => (
+                    <TouchableOpacity key={u} onPress={() => setGUnit(u)} className={`rounded-lg border px-2.5 py-2 ${gUnit === u ? 'border-primary bg-primary/10' : 'border-border'}`}>
+                      <Text className={`text-xs ${gUnit === u ? 'font-semibold text-primary' : 'text-foreground'}`}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <Text className="text-xs font-medium text-foreground-secondary">{t('rfq.goods_spec_label')}</Text>
+            {gSpec.map((r, i) => (
+              <View key={i} className="flex-row gap-2">
+                <TextInput value={r.k} onChangeText={(v) => setGSpec((rs) => rs.map((x, j) => (j === i ? { ...x, k: v } : x)))} placeholder="Grade" placeholderTextColor="#9CA3AF" className="flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground" />
+                <TextInput value={r.v} onChangeText={(v) => setGSpec((rs) => rs.map((x, j) => (j === i ? { ...x, v } : x)))} placeholder="8.8" placeholderTextColor="#9CA3AF" className="flex-[2] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground" />
+              </View>
+            ))}
+            {gSpec.length < 12 && (
+              <TouchableOpacity onPress={() => setGSpec((rs) => [...rs, { k: '', v: '' }])}><Text className="text-xs font-medium text-primary">+ {t('rfq.goods_spec_add')}</Text></TouchableOpacity>
+            )}
+            <Field label={t('rfq.goods_target_label')} value={gTarget} onChange={setGTarget} numeric />
+            <Field label={t('rfq.details_label')} value={gDetails} onChange={setGDetails} multiline />
+
+            <Text className="text-sm font-medium text-foreground">{t('rfq.goods_deliver_to')}</Text>
+            <Field label={t('mart.contact_name')} value={deliv.contact_name} onChange={(v) => setDeliv((d) => ({ ...d, contact_name: v }))} />
+            <Field label={t('mart.contact_phone')} value={deliv.contact_phone} onChange={(v) => setDeliv((d) => ({ ...d, contact_phone: v }))} numeric />
+            <Field label={t('mart.address')} value={deliv.address} onChange={(v) => setDeliv((d) => ({ ...d, address: v }))} />
+            <View className="flex-row gap-3">
+              <View className="flex-1"><Field label={t('mart.city')} value={deliv.city} onChange={(v) => setDeliv((d) => ({ ...d, city: v }))} /></View>
+              <View className="w-20"><Field label={t('mart.state')} value={deliv.state} onChange={(v) => setDeliv((d) => ({ ...d, state: v.toUpperCase().slice(0, 2) }))} /></View>
+              <View className="w-28"><Field label={t('mart.pincode')} value={deliv.pincode} onChange={(v) => setDeliv((d) => ({ ...d, pincode: v }))} numeric /></View>
+            </View>
+            <TouchableOpacity onPress={() => setDeliv((d) => ({ ...d, pickup: !d.pickup }))} className="flex-row items-center gap-2">
+              <Ionicons name={deliv.pickup ? 'checkbox' : 'square-outline'} size={20} color={colors.primary} />
+              <Text className="text-sm text-foreground">{t('mart.pickup')}</Text>
+            </TouchableOpacity>
+            {error ? <Text className="text-sm text-danger">{error}</Text> : null}
+            <TouchableOpacity onPress={submitGoods} disabled={loading} className="mt-2 items-center rounded-xl bg-primary py-3">
+              {loading ? <ActivityIndicator color="#fff" /> : <Text className="font-semibold text-white">{t('rfq.goods_submit')}</Text>}
+            </TouchableOpacity>
+          </>
+        ) : (
+        <>
         <VoiceRfqRecorder onParsed={applyParse} onTranscriptOnly={applyTranscriptOnly} />
 
         {voice ? (
@@ -177,6 +288,8 @@ export default function NewRfqScreen() {
               {loading ? <ActivityIndicator color="#fff" /> : <Text className="font-semibold text-white">{t('rfq.submit')}</Text>}
             </TouchableOpacity>
           </>
+        )}
+        </>
         )}
       </ScrollView>
     </SafeAreaView>

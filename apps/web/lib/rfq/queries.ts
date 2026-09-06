@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
+import { effectiveCostAfterItcPaise } from '@amclub/shared'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -8,6 +9,9 @@ export interface RfqListItem {
   id: string
   title: string
   status: string
+  /** AMC Mart M2: 'service' | 'goods' (goods carry a Mart category + spec). */
+  kind: 'service' | 'goods'
+  martCategorySlug: string | null
   quoteCount: number
   maxQuotes: number
   categorySlug: string | null
@@ -32,9 +36,40 @@ export function mapQuoteTerms(q: any): QuoteTerms {
   }
 }
 
+/** AMC Mart M2 — goods terms on a quote (null on services quotes). */
+export interface QuoteGoodsTerms {
+  unitPricePaise: number
+  qty: number
+  gstRateBps: number
+  hsnCode: string
+  productId: string | null
+  /** Server-computed display money (clients never do money arithmetic — FRONTEND.md §8). */
+  taxablePaise: number
+  gstPaise: number
+  totalInclGstPaise: number
+  afterItcPaise: number
+  unitInclGstPaise: number
+}
+
+export function mapQuoteGoods(q: any): QuoteGoodsTerms | null {
+  if (q.unit_price_paise == null || q.qty == null) return null
+  const unitPricePaise = Number(q.unit_price_paise)
+  const qty = Number(q.qty)
+  const gstRateBps = Number(q.gst_rate_bps)
+  const taxablePaise = unitPricePaise * qty
+  const gstPaise = Math.round((taxablePaise * gstRateBps) / 10000)
+  return {
+    unitPricePaise, qty, gstRateBps, hsnCode: q.hsn_code, productId: q.product_id ?? null,
+    taxablePaise, gstPaise, totalInclGstPaise: taxablePaise + gstPaise,
+    afterItcPaise: effectiveCostAfterItcPaise({ taxablePaise }),
+    unitInclGstPaise: unitPricePaise + Math.round((unitPricePaise * gstRateBps) / 10000),
+  }
+}
+
 export interface QuoteForBuyer extends QuoteTerms {
   id: string
   status: string
+  goods: QuoteGoodsTerms | null
   pricePaise: number
   deliveryDays: number
   scope: string
@@ -52,8 +87,11 @@ export interface RfqDetailForBuyer {
   budgetMinPaise: number | null
   budgetMaxPaise: number | null
   neededBy: string | null
-  categoryId: string
+  categoryId: string | null
   categorySlug: string | null
+  kind: 'service' | 'goods'
+  martCategorySlug: string | null
+  goodsSpec: Record<string, any> | null
   quoteCount: number
   maxQuotes: number
   expiresAt: string
@@ -68,12 +106,13 @@ export async function listMyRfqs(userId: string): Promise<RfqListItem[]> {
   if (!actor.msmeId) return []
   const { data } = await admin
     .from('rfqs')
-    .select('id, title, status, quote_count, max_quotes, created_at, expires_at, category:categories(slug)')
+    .select('id, title, status, quote_count, max_quotes, created_at, expires_at, kind, mart_category_slug, category:categories(slug)')
     .eq('msme_id', actor.msmeId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
   return (data ?? []).map((r: any) => ({
     id: r.id, title: r.title, status: r.status, quoteCount: r.quote_count, maxQuotes: r.max_quotes,
+    kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null,
     categorySlug: r.category?.slug ?? null, createdAt: r.created_at, expiresAt: r.expires_at,
   }))
 }
@@ -95,17 +134,18 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
 
   const { data: quotes } = await admin
     .from('quotes')
-    .select('id, status, price_paise, delivery_days, scope, message, created_at, gst_included, transport_included, valid_until, advance_percent, provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state)')
+    .select('id, status, price_paise, delivery_days, scope, message, created_at, gst_included, transport_included, valid_until, advance_percent, unit_price_paise, qty, gst_rate_bps, hsn_code, product_id, provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state)')
     .eq('rfq_id', rfqId)
     .order('price_paise', { ascending: true })
 
   return {
     id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: r.attachments ?? [],
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
-    categoryId: r.category_id, categorySlug: r.category?.slug ?? null,
+    categoryId: r.category_id ?? null, categorySlug: r.category?.slug ?? null,
+    kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
     quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at, createdAt: r.created_at,
     quotes: (quotes ?? []).map((q: any) => ({
-      id: q.id, status: q.status, pricePaise: Number(q.price_paise), deliveryDays: q.delivery_days,
+      id: q.id, status: q.status, goods: mapQuoteGoods(q), pricePaise: Number(q.price_paise), deliveryDays: q.delivery_days,
       scope: q.scope, message: q.message, createdAt: q.created_at,
       ...mapQuoteTerms(q),
       provider: {
@@ -121,6 +161,8 @@ export interface ProviderRfqItem {
   rfqId: string
   title: string
   status: string
+  kind: 'service' | 'goods'
+  martCategorySlug: string | null
   categorySlug: string | null
   quoteCount: number
   maxQuotes: number
@@ -137,7 +179,7 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
 
   const { data: matches } = await admin
     .from('rfq_matches')
-    .select('rfq_id, viewed_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at, category:categories(slug))')
+    .select('rfq_id, viewed_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at, kind, mart_category_slug, category:categories(slug))')
     .eq('provider_id', actor.providerId)
     .order('notified_at', { ascending: false })
   if (!matches) return []
@@ -153,7 +195,7 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
   return (matches as any[])
     .filter((m) => m.rfq && (m.rfq.status === 'open' || m.rfq.status === 'quoted'))
     .map((m) => ({
-      rfqId: m.rfq_id, title: m.rfq.title, status: m.rfq.status, categorySlug: m.rfq.category?.slug ?? null,
+      rfqId: m.rfq_id, title: m.rfq.title, status: m.rfq.status, kind: m.rfq.kind === 'goods' ? 'goods' : 'service', martCategorySlug: m.rfq.mart_category_slug ?? null, categorySlug: m.rfq.category?.slug ?? null,
       quoteCount: m.rfq.quote_count, maxQuotes: m.rfq.max_quotes, expiresAt: m.rfq.expires_at,
       viewed: !!m.viewed_at, quoted: quotedSet.has(m.rfq_id),
     }))
@@ -169,11 +211,14 @@ export interface RfqDetailForProvider {
   budgetMaxPaise: number | null
   neededBy: string | null
   categorySlug: string | null
+  kind: 'service' | 'goods'
+  martCategorySlug: string | null
+  goodsSpec: Record<string, any> | null
   quoteCount: number
   maxQuotes: number
   expiresAt: string
   canQuote: boolean
-  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; status: string } & QuoteTerms) | null
+  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; status: string; goods: QuoteGoodsTerms | null } & QuoteTerms) | null
 }
 
 /** RFQ detail for a matched provider; marks viewed_at on open. */
@@ -201,7 +246,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
 
   const { data: myQuote } = await admin
     .from('quotes')
-    .select('id, price_paise, delivery_days, scope, status, gst_included, transport_included, valid_until, advance_percent')
+    .select('id, price_paise, delivery_days, scope, status, gst_included, transport_included, valid_until, advance_percent, unit_price_paise, qty, gst_rate_bps, hsn_code, product_id')
     .eq('rfq_id', rfqId)
     .eq('provider_id', actor.providerId)
     .maybeSingle()
@@ -213,9 +258,11 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
   return {
     id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: r.attachments ?? [],
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
-    categorySlug: r.category?.slug ?? null, quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at,
+    categorySlug: r.category?.slug ?? null,
+    kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
+    quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at,
     canQuote: active && slotsLeft && notExpired && !myQuote,
-    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, status: (myQuote as any).status, ...mapQuoteTerms(myQuote) } : null,
+    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, status: (myQuote as any).status, goods: mapQuoteGoods(myQuote), ...mapQuoteTerms(myQuote) } : null,
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

@@ -89,6 +89,46 @@ MART_DESIGN.md §1 lists facts about the live services spine and instructs: *ver
 - Money path unchanged: member payment = ordinary goods checkout session →
   webhook → `materialize_order` → `payout.ts`. No consolidated-order path.
 
+### 4c. M2 — goods RFQ (2026-09-06)
+
+- Schema killtest `packages/db/src/scripts/killtest-mart-goods-rfq.ts`: 14/14
+  on the local killtest database — `kind` default + enum, the mutually
+  exclusive `rfqs_kind_shape_check` (a services row cannot carry Mart columns;
+  a goods row cannot carry `category_id`), the Mart-category FK, and
+  `quotes_goods_terms_check` (all-or-nothing terms, GST slab, HSN shape,
+  `price_paise = unit × qty`, listing delete → `product_id` SET NULL).
+  Two constraint gaps found by the killtest and fixed in the STAGED 0024
+  before anything shipped: a CHECK that evaluates to NULL passes, so
+  "unit price only" and "goods RFQ with a services category" both slipped
+  through until every term got an explicit `IS NOT NULL`.
+- API lifecycle (session rig, local production build, `MART_ENABLED=true`):
+  30/30 — services RFQ fans out to the services provider only and its quote
+  keeps the client price; goods terms on a services RFQ → 422; goods RFQ
+  without a spec → 422; BIS-blocked category → 422; fan-out reaches the
+  in-state goods seller with a listing in the category only (never the
+  services provider, never the out-of-state seller), and every in-state
+  goods seller when nothing is listed; goods quote without terms → 422; a
+  linked listing outside the category → 422 `listing_mismatch`; the quote
+  row stores `price_paise = 500 × 850` with the client's total ignored; the
+  buyer view carries server money (taxable 4,25,000 / GST 76,500 / incl.
+  5,01,500 / after ITC 4,25,000 paise); accept → `checkout_sessions.kind='goods'`
+  with one line + delivery snapshot → simulate → `orders.kind='goods'` linked
+  to the quote; RFQ and quote `accepted`; re-accept 409; simulate replay
+  creates no second order; the seller reads the order through the ordinary
+  orders API; a spec-only quote with a seller-adjusted qty prices 5 × 3,20,000.
+  `apps/web/scripts/verify-goods-rfq.ts` is the founder-environment form of
+  the same suite (creates its own users; zero residue).
+- Inertness: `pnpm --filter @amclub/shared test` 80/80; web + mobile
+  typecheck and lint clean (the pre-existing mobile lint warning is gone);
+  `next build` green; the goods branch of `POST /api/v1/rfq` returns 404 when
+  the flag is off and the services branch is byte-identical; 0024 is staged
+  with 0022/0023 (`verify-migrations.ts`).
+- Screenshots (session rig `shots-goods-rfq/`): goods RFQ form prefilled from
+  a listing (en + te), buyer detail with spec card and unit-price / GST /
+  after-ITC compare row, seller detail with the goods composer and with a
+  submitted goods quote, both inboxes with goods badges, product-page
+  "Ask for a bulk quote", empty-search entry point, the resulting goods order.
+
 ## 5. Not done here (needs the founder's environment)
 
 - Run `verify-mart.ts` against a local server on a database with 0022 applied and `MART_ENABLED=true`; run `verify-mart-inert.ts` + the four standard suites against prod (flag off).

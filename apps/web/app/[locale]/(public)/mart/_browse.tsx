@@ -55,6 +55,7 @@ function apiQuery(f: ProductListFilters): string {
 
 export async function MartBrowse({ params, base }: { params: BrowseParams; base: string }) {
   const t = await getTranslations('mart')
+  const tr = await getTranslations('rfq')
   const locale = await getLocale()
   const filters = toFilters(params)
   // Three independent reads in parallel — one round trip to the database.
@@ -142,6 +143,13 @@ export async function MartBrowse({ params, base }: { params: BrowseParams; base:
           <div className="jaali-ivory mt-4 rounded-[10px] border border-brass/40 px-6 py-16 text-center">
             <h2 className="text-lg font-semibold text-emerald-ink">{t('no_products_title')}</h2>
             <p className="mx-auto mt-1 max-w-md text-body text-foreground-secondary">{t('no_products_body')}</p>
+            {/* AMC Mart M2 — nothing listed → ask verified sellers to quote. */}
+            <Link
+              href={`/app/mart/rfq/new${params.query ? `?item=${encodeURIComponent(params.query)}` : ''}${params.category ? `${params.query ? '&' : '?'}category=${encodeURIComponent(params.category)}` : ''}` as '/app'}
+              className="mt-4 inline-flex min-h-11 items-center rounded-button bg-emerald px-4 text-meta font-semibold text-ivory"
+            >
+              {tr('goods_empty_ask_cta')}
+            </Link>
           </div>
         ) : (
           <ProductGrid initial={result.products} total={result.total} nextOffset={result.nextOffset} query={apiQuery(filters)} />

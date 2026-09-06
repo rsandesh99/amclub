@@ -35,6 +35,7 @@ export default async function PartnerRfqsPage() {
                   <p className="text-xs text-foreground-secondary">{t('quotes_n', { n: r.quoteCount, max: r.maxQuotes })}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  {r.kind === 'goods' && <Badge variant="default">{t('goods_badge')}</Badge>}
                   {r.quoted ? <Badge variant="success">{t('quoted_badge')}</Badge> : !r.viewed ? <Badge variant="info">{t('new_label')}</Badge> : null}
                 </div>
               </Link>

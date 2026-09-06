@@ -6,7 +6,7 @@ import { useRouter } from '@/i18n/navigation'
 import { Link } from '@/i18n/navigation'
 import { MessageSquare, Star, ShieldCheck } from 'lucide-react'
 import type { RfqDetailForBuyer, QuoteForBuyer } from '@/lib/rfq/queries'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatINRExact } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { QuoteTermsRow } from './QuoteTermsRow'
 
@@ -20,8 +20,12 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
   const [accepting, setAccepting] = useState<string | null>(null)
   const [error, setError] = useState('')
 
+  const goods = rfq.kind === 'goods'
+  const specUnit = String(rfq.goodsSpec?.['unit'] ?? '')
+  const specQty = Number(rfq.goodsSpec?.['qty'] ?? 0)
   const quotes = [...rfq.quotes].sort((a, b) => {
-    if (sort === 'price') return a.pricePaise - b.pricePaise
+    // Goods: compare the unit price the seller quoted (qty may differ by MOQ).
+    if (sort === 'price') return goods && a.goods && b.goods ? a.goods.unitPricePaise - b.goods.unitPricePaise : a.pricePaise - b.pricePaise
     if (sort === 'delivery') return a.deliveryDays - b.deliveryDays
     return b.provider.avgRating - a.provider.avgRating
   })
@@ -36,8 +40,8 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
           <p className="text-sm font-medium">{t('rescue_title')}</p>
           <p className="mt-1 text-xs text-foreground-secondary">{t('rescue_body')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link href="/app/rfq/new"><Button>{t('rebroadcast')}</Button></Link>
-            <Link href="/services"><Button variant="outline">{t('browse_providers')}</Button></Link>
+            <Link href={(goods ? '/app/mart/rfq/new' : '/app/rfq/new') as '/app/rfq/new'}><Button>{t('rebroadcast')}</Button></Link>
+            <Link href={(goods ? '/mart' : '/services') as '/services'}><Button variant="outline">{t('browse_providers')}</Button></Link>
           </div>
         </div>
       </div>
@@ -113,9 +117,43 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
                 </p>
               </div>
               <div className="text-right">
-                <p className="font-display text-lg font-bold text-primary">{formatINR(q.pricePaise)}</p>
+                {goods && q.goods ? (
+                  <>
+                    <p className="font-display text-lg font-bold text-primary tabular-nums">{formatINRExact(q.goods.unitPricePaise)} <span className="text-xs font-normal text-foreground-secondary">{t('goods_per_unit', { unit: specUnit })}</span></p>
+                    <p className="text-xs text-foreground-secondary">{t('goods_col_after_itc')} {formatINRExact(q.goods.afterItcPaise)}</p>
+                  </>
+                ) : (
+                  <p className="font-display text-lg font-bold text-primary">{formatINR(q.pricePaise)}</p>
+                )}
               </div>
             </div>
+
+            {/* AMC Mart M2 — goods quote: server-computed paise, rendered as a row. */}
+            {goods && q.goods && (
+              <div className="mt-3 overflow-x-auto rounded-button border border-border bg-muted/40">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-foreground-secondary">
+                      <th className="px-3 py-1.5 font-medium">{t('goods_col_qty')}</th>
+                      <th className="px-3 py-1.5 font-medium">{t('goods_col_unit_price')}</th>
+                      <th className="px-3 py-1.5 font-medium">{t('goods_col_gst')}</th>
+                      <th className="px-3 py-1.5 font-medium">{t('goods_col_incl')}</th>
+                      <th className="px-3 py-1.5 font-medium text-success">{t('goods_col_after_itc')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="tabular-nums text-foreground">
+                      <td className="px-3 py-1.5">{q.goods.qty} {specUnit}{specQty && q.goods.qty !== specQty ? ' *' : ''}</td>
+                      <td className="px-3 py-1.5">{formatINRExact(q.goods.unitPricePaise)}</td>
+                      <td className="px-3 py-1.5">{q.goods.gstRateBps / 100}% · {formatINRExact(q.goods.gstPaise)}</td>
+                      <td className="px-3 py-1.5 font-semibold">{formatINRExact(q.goods.totalInclGstPaise)}</td>
+                      <td className="px-3 py-1.5 font-semibold text-success">{formatINRExact(q.goods.afterItcPaise)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="px-3 pb-2 text-[11px] text-foreground-secondary">HSN {q.goods.hsnCode} · {t('goods_itc_hint')}</p>
+              </div>
+            )}
 
             <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{q.scope}</p>
 
@@ -129,7 +167,7 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {!decided && q.status === 'submitted' && (
-                <Button onClick={() => accept(q.id)} loading={accepting === q.id}>
+                <Button onClick={() => accept(q.id)} loading={accepting === q.id} title={goods && q.goods ? t('goods_accept_note', { qty: q.goods.qty, unit: specUnit, total: formatINRExact(q.goods.totalInclGstPaise) }) : undefined}>
                   {accepting === q.id ? t('accepting') : t('accept_quote')}
                 </Button>
               )}

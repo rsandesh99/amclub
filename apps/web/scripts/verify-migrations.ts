@@ -108,6 +108,12 @@ const MANIFEST: Entry[] = [
     triggers: [['pool_events', 'pool_events_no_update']],
     staged: true,
   },
+  {
+    // AMC Mart M2 — STAGED with 0022/0023: goods columns on rfqs + quotes.
+    file: '0024_mart_goods_rfq.sql',
+    note: 'column additions only (rfqs.kind/mart_category_slug/goods_spec; quotes goods terms); category_id nullable for goods',
+    staged: true,
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

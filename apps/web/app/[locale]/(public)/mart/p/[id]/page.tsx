@@ -39,7 +39,7 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
   martPageGate()
   const { id } = await params
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound()
-  const [product, categories, t, locale] = await Promise.all([getPublicProduct(id), listMartCategories(), getTranslations('mart'), getLocale()])
+  const [product, categories, t, locale, tr] = await Promise.all([getPublicProduct(id), listMartCategories(), getTranslations('mart'), getLocale(), getTranslations('rfq')])
   if (!product) notFound()
   const cat = categories.find((c) => c.slug === product.categorySlug)
   const images = product.images.map(publicAssetUrl)
@@ -146,6 +146,13 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
         </div>
         <p className="mt-2 text-xs text-foreground-secondary">{t('itc_hint')}</p>
         {cat && <p className="mt-1 text-xs text-foreground-secondary">{t('return_window_note', { hours: cat.return_window_hours })}</p>}
+        {/* AMC Mart M2 — bulk / custom-spec → goods RFQ prefilled from this listing. */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-brass/30 pt-3">
+          <Link href={`/app/mart/rfq/new?product_id=${product.id}` as '/app'} className="inline-flex min-h-11 items-center rounded-button border border-brass/60 px-3 text-meta font-semibold text-emerald-ink hover:bg-emerald/10">
+            {tr('goods_ask_cta')}
+          </Link>
+          <span className="text-xs text-foreground-secondary">{tr('goods_ask_hint')}</span>
+        </div>
       </SheetCard>
 
       {product.specs.length > 0 && (

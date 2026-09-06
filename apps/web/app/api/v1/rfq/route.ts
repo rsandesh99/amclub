@@ -7,6 +7,8 @@ import { resolveActor } from '@/lib/orders/actor'
 import { fanoutRfq } from '@/lib/rfq/fanout'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { MART_ENABLED } from '@/lib/flags'
+import { getMartCategory } from '@/lib/mart/config'
 
 const RFQ_TTL_MS = 72 * 60 * 60 * 1000
 
@@ -40,18 +42,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'profile_incomplete' }, { status: 403 })
   }
 
-  const { data: category } = await admin
-    .from('categories')
-    .select('id')
-    .eq('slug', d.category_slug)
-    .maybeSingle()
-  if (!category) return NextResponse.json({ error: 'Invalid category' }, { status: 422 })
+  // AMC Mart M2 — goods RFQ: a Mart category + goods spec instead of a services
+  // template. Does not exist while the flag is off (same hard-404 as every
+  // Mart surface); the services branch below is byte-identical to before.
+  let categoryId: string | null = null
+  let martCategorySlug: string | null = null
+  if (d.kind === 'goods') {
+    if (!MART_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const cat = await getMartCategory(admin, d.mart_category_slug!)
+    if (!cat || !cat.is_active || cat.bis_blocked) return NextResponse.json({ error: 'Invalid category' }, { status: 422 })
+    martCategorySlug = cat.slug
+  } else {
+    const { data: category } = await admin
+      .from('categories')
+      .select('id')
+      .eq('slug', d.category_slug!)
+      .maybeSingle()
+    if (!category) return NextResponse.json({ error: 'Invalid category' }, { status: 422 })
+    categoryId = category.id
+  }
 
   const { data: rfq, error } = await admin
     .from('rfqs')
     .insert({
       msme_id: actor.msmeId,
-      category_id: category.id,
+      category_id: categoryId,
+      ...(d.kind === 'goods' ? { kind: 'goods', mart_category_slug: martCategorySlug, goods_spec: d.goods_spec } : {}),
       title: d.title,
       details: d.details,
       attachments: d.attachments ?? [],

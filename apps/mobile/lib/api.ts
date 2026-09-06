@@ -152,8 +152,33 @@ export async function fetchMyOrders(role: 'msme' | 'provider' = 'msme'): Promise
 
 // ── RFQ (Phase 5) — same /api/v1 the web uses, Bearer-authed ───────────────────
 
+/** AMC Mart M2 — goods_spec body (goodsRfqSpecSchema in @amclub/shared). */
+export interface GoodsRfqSpecInput {
+  item: string
+  qty: number
+  unit: string
+  spec: { k: string; v: string }[]
+  brand_preference?: string
+  target_unit_price_paise?: number
+  delivery: GoodsDelivery
+  product_id?: string
+}
+
+/** AMC Mart M2 — goods terms on a quote; the server computes price_paise = qty × unit price. */
+export interface GoodsQuoteTermsInput {
+  unit_price_paise: number
+  gst_rate_bps: number
+  hsn_code: string
+  product_id?: string
+  qty?: number
+}
+
 export async function createRfq(body: {
-  category_slug: string
+  /** AMC Mart M2 — 'goods' carries a Mart category + spec; absent = services. */
+  kind?: 'service' | 'goods'
+  category_slug?: string
+  mart_category_slug?: string
+  goods_spec?: GoodsRfqSpecInput
   title: string
   details: Record<string, unknown>
   budget_min_paise?: number
@@ -223,6 +248,8 @@ export async function submitQuote(
     transport_included?: boolean
     valid_until?: string
     advance_percent?: number
+    /** AMC Mart M2 — required on a goods RFQ. */
+    goods?: GoodsQuoteTermsInput
   },
 ) {
   const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quote`, {
