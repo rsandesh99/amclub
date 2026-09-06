@@ -6,7 +6,8 @@ import { Link, useRouter } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
 import { formatINR, formatINRExact } from '@/lib/format'
 import { useCart, groupBySeller } from '@/lib/mart/cart-store'
-import { SheetCard, EmeraldCard, GoldNumeral, LatheSpinner } from '@/components/mart/primitives'
+import { SheetCard, EmeraldCard, GoldNumeral } from '@/components/mart/primitives'
+import { CartSkeleton } from '@/components/mart/skeletons'
 
 interface Preview {
   sellerName: string
@@ -57,7 +58,8 @@ export function CartClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, hydrated])
 
-  if (!hydrated) return <div className="flex justify-center py-16"><LatheSpinner /></div>
+  // Skeleton, never a spinner on white (FRONTEND.md §5); same shapes as the hydrated cart.
+  if (!hydrated) return <CartSkeleton rows={Math.max(1, Math.min(lines.length, 3))} />
 
   if (lines.length === 0) {
     return (
@@ -71,11 +73,17 @@ export function CartClient() {
     )
   }
 
+  // The first seller group's checkout is the page's ONE primary action: it
+  // lives in the sticky thumb-zone bar below (§5), not in its emerald card.
+  const first = groups[0]
+  const firstPv = first ? previews[first.sellerId] : undefined
+  const firstOk = firstPv && !('error' in firstPv) ? firstPv : null
+
   return (
     <div className="mart-enter mx-auto max-w-lg space-y-5 px-4 py-6">
       <h1 className="font-display text-2xl font-bold text-emerald-ink">{t('cart_title')}</h1>
       {groups.length > 1 && <p className="text-xs text-foreground-secondary">{t('one_seller_note')}</p>}
-      {groups.map((g) => {
+      {groups.map((g, gi) => {
         const pv = previews[g.sellerId]
         const err = pv && 'error' in pv ? pv.error : null
         const ok = pv && !('error' in pv) ? pv : null
@@ -125,23 +133,45 @@ export function CartClient() {
                   <div className="flex justify-between"><dt className="text-ivory/80">{t('gst')}</dt><dd className="tabular-nums">{formatINR(ok.amounts.gstPaise)}</dd></div>
                   <div className="flex items-baseline justify-between border-t border-ivory/20 pt-2">
                     <dt className="font-semibold">{t('total')}</dt>
-                    <dd><GoldNumeral className="text-3xl">{formatINR(ok.amounts.totalPaise)}</GoldNumeral></dd>
+                    <dd><GoldNumeral className="text-3xl" countUpPaise={ok.amounts.totalPaise} /></dd>
                   </div>
                   <div className="flex justify-between text-xs"><dt className="text-ivory/80">{t('after_itc')}</dt><dd className="tabular-nums">{formatINR(ok.amounts.afterItcPaise)}</dd></div>
                 </dl>
-                <Button
-                  size="lg"
-                  className="mt-4 w-full bg-gold-metal text-emerald-ink hover:opacity-95"
-                  loading={loading}
-                  onClick={() => router.push(`/app/mart/checkout?seller=${g.sellerId}` as '/app')}
-                >
-                  {t('checkout_cta')}
-                </Button>
+                {gi > 0 && (
+                  <Button
+                    size="lg"
+                    className="mt-4 w-full bg-gold-metal text-emerald-ink hover:opacity-95"
+                    loading={loading}
+                    onClick={() => router.push(`/app/mart/checkout?seller=${g.sellerId}` as '/app')}
+                  >
+                    {t('checkout_cta')}
+                  </Button>
+                )}
               </EmeraldCard>
             )}
           </section>
         )
       })}
+
+      {/* Sticky checkout for the first seller group — thumb zone, 48dp (§5). Total is the server's paise. */}
+      {first && firstOk && (
+        <div className="sticky bottom-0 z-20 -mx-4 border-t border-brass/40 bg-ivory/95 px-4 py-3 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs text-foreground-secondary">{t('total')} · {first.sellerName}</p>
+              <p className="font-display text-xl font-bold tabular-nums text-ink">{formatINR(firstOk.amounts.totalPaise)}</p>
+            </div>
+            <Button
+              size="lg"
+              className="shrink-0 bg-gold-metal text-emerald-ink hover:opacity-95"
+              loading={loading}
+              onClick={() => router.push(`/app/mart/checkout?seller=${first.sellerId}` as '/app')}
+            >
+              {t('checkout_cta')}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

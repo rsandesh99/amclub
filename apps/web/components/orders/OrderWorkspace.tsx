@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ReviewSection } from './ReviewSection'
 import { GoodsOrderWorkspace } from '@/components/mart/GoodsOrderWorkspace'
+import type { GoodsOrderExtras } from '@/lib/mart/order-extras'
 
 interface OrderEvent {
   id: string
@@ -71,17 +72,22 @@ export function OrderWorkspace({
   events,
   viewerRole,
   documents,
+  goods,
+  firstView,
 }: {
   order: Record<string, unknown>
   events: OrderEvent[]
   viewerRole: 'msme' | 'provider'
   documents: DocItem[]
+  /** AMC Mart only — extra facts for goods orders (undefined for services). */
+  goods?: GoodsOrderExtras | undefined
+  firstView?: boolean | undefined
 }) {
   // AMC Mart: goods orders render their own workspace (kind-parameterised
   // shared page, FRONTEND.md §8). Services orders (kind='service') never
   // take this branch — the component below is byte-unchanged for them.
   if (order['kind'] === 'goods') {
-    return <GoodsOrderWorkspace order={order} events={events} viewerRole={viewerRole} documents={documents} />
+    return <GoodsOrderWorkspace order={order} events={events} viewerRole={viewerRole} documents={documents} goods={goods} firstView={firstView ?? false} />
   }
   return <ServicesOrderWorkspace order={order} events={events} viewerRole={viewerRole} documents={documents} />
 }

@@ -20,9 +20,26 @@ declare global {
 
 interface Preview {
   sellerName: string
+  deliveryDays: number
   amounts: { taxablePaise: number; gstPaise: number; totalPaise: number; afterItcPaise: number }
   lineItems: { product_id: string; name: string; qty: number; unit: string; tier_unit_price_paise: number; line_taxable_paise: number; line_gst_paise: number }[]
   returnWindowHours: number
+}
+
+export interface DeliveryDefaults {
+  contact_name: string
+  contact_phone: string
+  address: string
+  city: string
+  state: string
+  pincode: string
+  pickup: boolean
+  source: 'last_order' | 'profile'
+}
+
+function deliveryDate(days: number): string {
+  const d = new Date(Date.now() + days * 86_400_000)
+  return d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 const ERR_KEYS: Record<string, string> = {
@@ -34,7 +51,7 @@ const ERR_KEYS: Record<string, string> = {
  * services CheckoutClient flow (simulate in test mode; the WEBHOOK creates the
  * order with real keys). No motion while money is uncertain (FRONTEND.md §3.2).
  */
-export function GoodsCheckoutClient({ sellerId, states }: { sellerId: string | null; states: { value: string; label: string }[] }) {
+export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: string | null; states: { value: string; label: string }[]; defaults: DeliveryDefaults | null }) {
   const t = useTranslations('mart')
   const router = useRouter()
   const lines = useCart((s) => s.lines)
@@ -45,7 +62,10 @@ export function GoodsCheckoutClient({ sellerId, states }: { sellerId: string | n
 
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewErr, setPreviewErr] = useState('')
-  const [form, setForm] = useState({ contact_name: '', contact_phone: '', address: '', city: '', state: 'AP', pincode: '', pickup: false })
+  const [form, setForm] = useState({
+    contact_name: defaults?.contact_name ?? '', contact_phone: defaults?.contact_phone ?? '', address: defaults?.address ?? '',
+    city: defaults?.city ?? '', state: defaults?.state || 'AP', pincode: defaults?.pincode ?? '', pickup: defaults?.pickup ?? false,
+  })
   const [gstin, setGstin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -131,7 +151,8 @@ export function GoodsCheckoutClient({ sellerId, states }: { sellerId: string | n
       </SheetCard>
 
       <SheetCard className="space-y-3">
-        <h2 className="text-sm font-semibold text-emerald-ink">{t('delivery_title')}</h2>
+        <h2 className="text-meta font-semibold text-emerald-ink">{t('delivery_title')}</h2>
+        {defaults && <p className="text-xs text-foreground-secondary">{t('address_prefilled')}</p>}
         <div><Label htmlFor="cn">{t('contact_name')}</Label><Input id="cn" value={form.contact_name} onChange={(e) => set('contact_name', e.target.value)} /></div>
         <div><Label htmlFor="cp">{t('contact_phone')}</Label><Input id="cp" inputMode="tel" value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} /></div>
         <div><Label htmlFor="ad">{t('address')}</Label><Input id="ad" value={form.address} onChange={(e) => set('address', e.target.value)} /></div>
@@ -145,8 +166,8 @@ export function GoodsCheckoutClient({ sellerId, states }: { sellerId: string | n
             {states.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </Select>
         </div>
-        <label className="flex items-start gap-2 text-sm text-emerald-ink">
-          <input type="checkbox" checked={form.pickup} onChange={(e) => set('pickup', e.target.checked)} className="mt-1 h-5 w-5 accent-emerald" />
+        <label className="flex min-h-12 items-start gap-3 text-meta text-emerald-ink">
+          <input type="checkbox" checked={form.pickup} onChange={(e) => set('pickup', e.target.checked)} className="mt-0.5 h-6 w-6 shrink-0 accent-emerald" />
           <span>{t('pickup')}<span className="block text-xs text-foreground-secondary">{t('pickup_hint')}</span></span>
         </label>
         <div>
@@ -163,11 +184,12 @@ export function GoodsCheckoutClient({ sellerId, states }: { sellerId: string | n
             <div className="flex justify-between"><dt className="text-ivory/80">{t('gst')}</dt><dd className="tabular-nums">{formatINR(preview.amounts.gstPaise)}</dd></div>
             <div className="flex items-baseline justify-between border-t border-ivory/20 pt-2">
               <dt className="font-semibold">{t('you_pay')}</dt>
-              <dd><GoldNumeral className="text-3xl">{formatINR(preview.amounts.totalPaise)}</GoldNumeral></dd>
+              <dd><GoldNumeral className="text-3xl" countUpPaise={preview.amounts.totalPaise} /></dd>
             </div>
             <div className="flex justify-between text-xs"><dt className="text-ivory/80">{t('after_itc')}</dt><dd className="tabular-nums">{formatINR(preview.amounts.afterItcPaise)}</dd></div>
           </dl>
-          <p className="mt-3 text-xs text-ivory/80">{t('return_window_note', { hours: preview.returnWindowHours })}</p>
+          <p className="mt-3 text-meta font-medium text-ivory">{form.pickup ? t('pickup_label') : t('delivery_by', { date: deliveryDate(preview.deliveryDays) })}</p>
+          <p className="mt-1 text-xs text-ivory/80">{t('return_window_note', { hours: preview.returnWindowHours })}</p>
         </EmeraldCard>
       )}
 

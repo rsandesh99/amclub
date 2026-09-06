@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { martApiGate } from '@/lib/mart/gate'
 import { createAdminClient } from '@/lib/supabase/server'
 import { prepareGoodsCheckout } from '@/lib/mart/totals'
+import { getMartSetting } from '@/lib/mart/config'
 import { enforce, limiters, tooManyRequests, clientIp } from '@/lib/rate-limit'
 
 const bodySchema = z.object({
@@ -22,12 +23,16 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   const admin = await createAdminClient()
-  const prepared = await prepareGoodsCheckout(admin, parsed.data.items)
+  const [prepared, deliveryDays] = await Promise.all([
+    prepareGoodsCheckout(admin, parsed.data.items),
+    getMartSetting<number | string>(admin, 'goods_delivery_days', 3).then(Number),
+  ])
   if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status })
   const { prep } = prepared
   return NextResponse.json(
     {
       sellerName: prep.sellerName,
+      deliveryDays,
       lineItems: prep.lineItems,
       amounts: {
         taxablePaise: prep.amounts.taxablePaise,
