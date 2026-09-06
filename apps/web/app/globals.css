@@ -303,3 +303,79 @@
   }
   .lathe-spinner { animation-duration: 1.8s; }
 }
+
+/* ── Paisa Moment (FRONTEND.md §3.1 #2) ──────────────────────────────────────
+   Full-screen emerald-deep celebration: coin flips down and lands as a tick,
+   radial shimmer bloom, gold count-up, lattice breathes +2% once. Every
+   keyframe is transform/opacity only; total choreography ≤1400ms. Base styles
+   ARE the final frame, so `animation: none` under prefers-reduced-motion
+   renders the finished state instantly (no per-element fallbacks needed). */
+.paisa-overlay { animation: paisaFade 180ms var(--ease-out) both; }
+.paisa-lattice { opacity: 0.98; animation: paisaBreathe 1000ms 300ms ease-in-out both; }
+.paisa-stage { perspective: 640px; }
+.paisa-coin {
+  transform-style: preserve-3d;
+  transform: translateY(0) rotateY(540deg) scale(1);
+  animation: paisaFlip 640ms 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.paisa-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.paisa-face--tick { transform: rotateY(180deg); }
+.paisa-bloom {
+  opacity: 0.5;
+  transform: scale(1);
+  background: radial-gradient(circle, rgba(237, 210, 122, 0.55) 0%, rgba(237, 210, 122, 0.18) 40%, rgba(237, 210, 122, 0) 70%);
+  animation: paisaBloom 560ms 520ms var(--ease-out) both;
+}
+.paisa-amount { animation: paisaRise 280ms 440ms var(--ease-out) both; }
+.paisa-copy { animation: paisaRise 240ms 680ms var(--ease-out) both; }
+@keyframes paisaFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes paisaFlip {
+  0% { opacity: 0; transform: translateY(-64px) rotateY(0deg) scale(1); }
+  12% { opacity: 1; }
+  78% { transform: translateY(0) rotateY(540deg) scale(1); }
+  88% { transform: translateY(-5px) rotateY(540deg) scale(1.04); }
+  100% { transform: translateY(0) rotateY(540deg) scale(1); }
+}
+@keyframes paisaBloom {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 0.85; transform: scale(1.04); }
+  100% { opacity: 0.5; transform: scale(1); }
+}
+@keyframes paisaBreathe { 0% { opacity: 0.98; } 50% { opacity: 1; } 100% { opacity: 0.98; } }
+@keyframes paisaRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Skeletons (FRONTEND.md §3.1 #7, §5 "skeletons not spinners"): ivory bones
+   with a brass tint so they read on ivory sheets, and a 700ms gold-tint sweep
+   (rgba(237,210,122,.35)) with an equal rest between sweeps. Loading-only —
+   never on a content screen. Static under prefers-reduced-motion. */
+.mart-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background-color: #fcfaf3;
+  background-image: linear-gradient(rgba(176, 141, 42, 0.12), rgba(176, 141, 42, 0.12));
+}
+.mart-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-120%);
+  background: linear-gradient(110deg, transparent 30%, rgba(237, 210, 122, 0.35) 50%, transparent 70%);
+  animation: martSkeletonSweep 1400ms linear infinite;
+}
+@keyframes martSkeletonSweep { 0% { transform: translateX(-120%); } 50%, 100% { transform: translateX(120%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .paisa-overlay, .paisa-lattice, .paisa-coin, .paisa-bloom, .paisa-amount, .paisa-copy { animation: none !important; }
+  .mart-skeleton::after { display: none; }
+}
+/* ── end Paisa Moment / skeletons ── */

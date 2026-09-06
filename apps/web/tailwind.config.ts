@@ -81,10 +81,16 @@ const config: Config = {
       fontFamily: {
         // --font-indic is set per-locale in app/[locale]/layout.tsx (Noto Sans
         // Devanagari / Telugu / Tamil); unset for en, hence the fallback value.
-        display: ['var(--font-bricolage)', 'var(--font-indic, sans-serif)', 'var(--font-inter)', 'sans-serif'],
-        sans: ['var(--font-inter)', 'var(--font-indic, sans-serif)', 'Noto Sans Devanagari', 'sans-serif'],
+        // FRONTEND.md v2 §2.4 — ONE face across scripts: Noto Sans (Latin) with
+        // the locale's Noto Indic companion. Display hierarchy comes from
+        // size/weight, not a second family — one fewer font download on 4G.
+        display: ['var(--font-sans)', 'var(--font-indic, sans-serif)', 'sans-serif'],
+        sans: ['var(--font-sans)', 'var(--font-indic, sans-serif)', 'Noto Sans Devanagari', 'sans-serif'],
       },
       fontSize: {
+        // FRONTEND.md §2.4 — mobile body 17/26, secondary 15/22 (sunlight + gloves).
+        body: ['17px', { lineHeight: '26px' }],
+        meta: ['15px', { lineHeight: '22px' }],
         // §4.2 type scale — tightened tracking on the larger steps for cleaner
         // heading hierarchy. Body stays at 15px.
         xs: ['13px', { lineHeight: '1.4' }],

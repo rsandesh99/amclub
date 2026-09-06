@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { martApiGate } from '@/lib/mart/gate'
-import { listPublicProducts } from '@/lib/mart/queries'
+import { listPublicProducts, PRODUCT_SORTS } from '@/lib/mart/queries'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { enforce, limiters, tooManyRequests, clientIp } from '@/lib/rate-limit'
 
@@ -10,6 +10,10 @@ const querySchema = z.object({
   category: z.string().max(60).optional(),
   query: z.string().trim().max(120).optional(),
   seller: z.string().max(120).optional(),
+  brand: z.string().trim().max(60).optional(),
+  minPrice: z.coerce.number().int().nonnegative().optional(),
+  maxPrice: z.coerce.number().int().nonnegative().optional(),
+  sort: z.enum(PRODUCT_SORTS).optional(),
   limit: z.coerce.number().int().min(1).max(48).optional(),
   offset: z.coerce.number().int().nonnegative().optional(),
 })
@@ -28,6 +32,10 @@ export async function GET(request: NextRequest) {
     ...(q.category ? { category: q.category } : {}),
     ...(q.query ? { query: q.query } : {}),
     ...(q.seller ? { sellerSlug: q.seller } : {}),
+    ...(q.brand ? { brand: q.brand } : {}),
+    ...(q.minPrice !== undefined ? { minPricePaise: q.minPrice } : {}),
+    ...(q.maxPrice !== undefined ? { maxPricePaise: q.maxPrice } : {}),
+    ...(q.sort ? { sort: q.sort } : {}),
     ...(q.limit !== undefined ? { limit: q.limit } : {}),
     ...(q.offset !== undefined ? { offset: q.offset } : {}),
   })

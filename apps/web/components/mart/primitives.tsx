@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { CountUpNumeral } from './CountUp'
 
 /**
  * AMC Mart UI primitives (FRONTEND.md §2–§3) — thin wrappers over the token
@@ -49,7 +50,16 @@ export function LatheSpinner({ className }: { className?: string }) {
   return <span className={cn('lathe-spinner', className)} role="status" aria-label="Loading" />
 }
 
-/** Gold display numeral (≥20px bold). Never for small text. */
-export function GoldNumeral({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn('gold-numeral', className)}>{children}</span>
+/**
+ * Gold display numeral (≥20px bold). Never for small text.
+ * Pass `countUpPaise` (server paise) to get the §3.1 #6 count-up on first
+ * paint — the final string is server-rendered so there is no CLS; otherwise
+ * `children` render as-is.
+ */
+export function GoldNumeral({ children, className, countUpPaise }: { children?: ReactNode; className?: string; countUpPaise?: number }) {
+  return (
+    <span className={cn('gold-numeral', className)}>
+      {countUpPaise !== undefined ? <CountUpNumeral paise={countUpPaise} /> : children}
+    </span>
+  )
 }

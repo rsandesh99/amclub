@@ -46,7 +46,17 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.supabase.co',
       },
+      // Local Supabase stand-ins (supabase start / the screenshot rig). Never
+      // matches in production, where NEXT_PUBLIC_SUPABASE_URL is *.supabase.co.
+      ...(process.env['NEXT_PUBLIC_SUPABASE_URL']?.startsWith('http://localhost')
+        ? [{ protocol: 'http' as const, hostname: 'localhost' }, { protocol: 'http' as const, hostname: '127.0.0.1' }]
+        : []),
     ],
+    // Product cards render at 80–160px; the hero at ≤600px. Small, exact
+    // sizes keep the optimizer's output tiny on 4G.
+    deviceSizes: [390, 640, 828, 1080, 1280],
+    imageSizes: [80, 120, 160, 240, 320],
+    minimumCacheTTL: 31536000,
   },
 
   async headers() {

@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getMessages, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
+import { preconnect } from 'react-dom'
 import {
-  Inter,
-  Bricolage_Grotesque,
+  Noto_Sans,
   Noto_Sans_Devanagari,
   Noto_Sans_Telugu,
   Noto_Sans_Tamil,
@@ -20,15 +20,14 @@ export const viewport: Viewport = {
   themeColor: '#1B4D3E',
 }
 
-const inter = Inter({
+// FRONTEND.md v2 §2.4 — Noto Sans is the one Latin face (cross-script harmony
+// with the Indic companions below); hierarchy is size + weight. Replaces the
+// Inter + Bricolage pair: one family, four weights, self-hosted by next/font,
+// preloaded, no layout shift (size-adjusted fallback).
+const notoSans = Noto_Sans({
   subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
-
-const bricolage = Bricolage_Grotesque({
-  subsets: ['latin'],
-  variable: '--font-bricolage',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-sans',
   display: 'swap',
 })
 
@@ -102,10 +101,15 @@ export default async function LocaleLayout({
 
   const indic = INDIC_FONT[locale]
 
+  // Every page's first data-bearing requests (storage images, client auth)
+  // go to the Supabase origin — open the connection during HTML parse.
+  const supabaseOrigin = process.env['NEXT_PUBLIC_SUPABASE_URL']
+  if (supabaseOrigin) preconnect(supabaseOrigin)
+
   return (
     <html
       lang={locale}
-      className={`${inter.variable} ${bricolage.variable}${indic ? ` ${indic.variable}` : ''}`}
+      className={`${notoSans.variable}${indic ? ` ${indic.variable}` : ''}`}
     >
       <body className="bg-background font-sans text-foreground antialiased">
         <NextIntlClientProvider messages={messages}>

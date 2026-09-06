@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 export type ShellContext = 'msme' | 'provider' | 'admin' | 'public'
@@ -37,6 +36,10 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: Ac
 
   async function signOut() {
     setSigningOut(true)
+    // Loaded on demand: the Supabase browser client (~50 KB gz) was the
+    // largest script on every PUBLIC page purely because this menu imported
+    // it for sign-out. Nothing else on a public page needs it.
+    const { createClient } = await import('@/lib/supabase/client')
     const supabase = createClient()
     await supabase.auth.signOut()
     // Sign-out means session over: clear the gateway's saved mid-choreography

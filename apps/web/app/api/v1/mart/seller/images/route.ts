@@ -7,9 +7,12 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getSellerCtx } from '@/lib/mart/seller'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { serverError } from '@/lib/api/errors'
+import sharp from 'sharp'
 
-const ALLOWED: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
-const MAX_BYTES = 5 * 1024 * 1024
+const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const MAX_BYTES = 8 * 1024 * 1024
+/** Longest edge after resize — enough for a 2× product hero, ~40–80 KB as WebP. */
+const MAX_EDGE = 1200
 
 /** Upload one product photo to the PUBLIC assets bucket under the seller's prefix. */
 export async function POST(request: NextRequest) {
@@ -24,14 +27,28 @@ export async function POST(request: NextRequest) {
   const form = await request.formData().catch(() => null)
   const file = form?.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
-  const ext = ALLOWED[file.type]
-  if (!ext) return NextResponse.json({ error: 'Unsupported image type' }, { status: 422 })
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Image exceeds 5 MB' }, { status: 422 })
+  if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'Unsupported image type' }, { status: 422 })
+  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Image exceeds 8 MB' }, { status: 422 })
 
-  const key = `mart/${seller.id}/${randomUUID()}.${ext}`
+  // Phone photos arrive at 3–6 MB; the catalogue never needs more than 1200px.
+  // Resize + WebP here so every later render (cards, product hero, admin
+  // queue) pays for ~60 KB instead of the raw capture. EXIF orientation is
+  // honoured (rotate()) so shop-floor portrait shots stay upright.
+  let body: Buffer
+  try {
+    body = await sharp(Buffer.from(await file.arrayBuffer()))
+      .rotate()
+      .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer()
+  } catch (e) {
+    return serverError('[mart/seller/images resize]', e)
+  }
+  const key = `mart/${seller.id}/${randomUUID()}.webp`
   const { error } = await admin.storage
     .from('public-assets')
-    .upload(key, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false })
+    // Immutable key → a year of browser/CDN caching.
+    .upload(key, body, { contentType: 'image/webp', upsert: false, cacheControl: '31536000' })
   if (error) return serverError('[mart/seller/images]', error)
   return NextResponse.json({ key, url: publicAssetUrl(key) })
 }
