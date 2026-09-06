@@ -34,6 +34,10 @@ export default async function EditGoodsListingPage({ params }: { params: Promise
         unit: product.unit,
         minOrderQty: String(product.minOrderQty),
         countryOfOrigin: product.countryOfOrigin,
+        brand: product.brand ?? '',
+        specs: product.specs,
+        availability: product.availability,
+        leadTimeDays: product.leadTimeDays != null ? String(product.leadTimeDays) : '',
         images: product.images.map((k) => ({ key: k, url: publicAssetUrl(k) })),
         tiers: product.tiers.map((t) => ({ minQty: String(t.min_qty), rupees: (t.unit_price_paise / 100).toString() })),
       }}

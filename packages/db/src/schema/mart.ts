@@ -40,6 +40,15 @@ export const products = pgTable('products', {
   categorySlug: text('category_slug').references(() => martCategories.slug).notNull(),
   name: text('name').notNull(),
   description: text('description'),
+  brand: text('brand'),
+  // [{ k, v }] — spec table rows (seller-confirmed)
+  specs: jsonb('specs').default(sql`'[]'`).notNull(),
+  // in_stock | lead_time — seller-declared, never inventory
+  availability: text('availability').default('in_stock').notNull(),
+  leadTimeDays: integer('lead_time_days'),
+  // Denormalised min_qty=1 tier price, written by the API on every tier change;
+  // lets the public catalog sort/filter by price without a join.
+  listPricePaise: bigint('list_price_paise', { mode: 'number' }),
   hsnCode: text('hsn_code').notNull(),
   // basis points: 0 | 500 | 1200 | 1800 | 2800
   gstRateBps: integer('gst_rate_bps').notNull(),
@@ -59,6 +68,8 @@ export const products = pgTable('products', {
 }, (table) => [
   index('products_seller_idx').on(table.sellerId),
   index('products_category_status_idx').on(table.categorySlug, table.status),
+  index('products_status_price_idx').on(table.status, table.listPricePaise),
+  check('products_availability_check', sql`${table.availability} IN ('in_stock', 'lead_time')`),
   check('products_status_check', sql`${table.status} IN ('draft', 'pending_approval', 'active', 'suspended')`),
   check('products_gst_rate_check', sql`${table.gstRateBps} IN (0, 500, 1200, 1800, 2800)`),
   check('products_hsn_check', sql`${table.hsnCode} ~ '^[0-9]{4}([0-9]{2})?([0-9]{2})?$'`),

@@ -147,10 +147,25 @@ export const priceTiersSchema = z
     }
   })
 
+export const PRODUCT_AVAILABILITY = ['in_stock', 'lead_time'] as const
+export type ProductAvailability = (typeof PRODUCT_AVAILABILITY)[number]
+
+/** Key/value specification rows shown as a table on the product page. */
+export const productSpecSchema = z.object({
+  k: z.string().trim().min(1).max(40),
+  v: z.string().trim().min(1).max(120),
+})
+export type ProductSpec = z.infer<typeof productSpecSchema>
+
 export const productInputSchema = z.object({
   category_slug: z.string().min(2).max(60),
   name: z.string().trim().min(3).max(140),
   description: z.string().trim().max(2000).optional(),
+  brand: z.string().trim().max(60).optional(),
+  specs: z.array(productSpecSchema).max(20).default([]),
+  /** Seller-declared availability (no inventory is held — MART_DESIGN.md §3). */
+  availability: z.enum(PRODUCT_AVAILABILITY).default('in_stock'),
+  lead_time_days: z.number().int().min(1).max(90).optional(),
   hsn_code: hsnCodeSchema,
   gst_rate_bps: gstRateBpsSchema,
   unit: productUnitSchema,

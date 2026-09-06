@@ -22,7 +22,9 @@ import {
  *
  * multipart/form-data: `audio` (file, ≤3MB, ≤60s) + `duration_ms` (client-
  * measured; the byte cap backstops a lying client — 60s of voice-grade
- * compressed audio is far under 3MB).
+ * compressed audio is far under 3MB) + optional `transcript_only` ('true' →
+ * STT only, no LLM parse; used by the Mart catalog dictation, which needs the
+ * English text, not an RFQ structure — halves the paid calls per clip).
  */
 
 export const maxDuration = 60
@@ -117,6 +119,16 @@ export async function POST(request: NextRequest) {
     )
   }
   if (!transcript) return NextResponse.json({ error: 'transcription_empty' }, { status: 422 })
+
+  // Transcript-only mode: the STT invocation is logged above exactly as in
+  // the full path; the parser is never invoked. Absent field → unchanged flow.
+  if (form.get('transcript_only') === 'true') {
+    return NextResponse.json({
+      transcript_english: transcript,
+      original_language: languageCode,
+      stub: sttStub,
+    })
+  }
 
   const parseStart = Date.now()
   try {

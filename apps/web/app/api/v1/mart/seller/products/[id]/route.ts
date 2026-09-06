@@ -10,6 +10,7 @@ import { getMartCategory, getAutoApproveAfterListings } from '@/lib/mart/config'
 import { addProductEvent } from '@/lib/mart/events'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { serverError } from '@/lib/api/errors'
+import { revalidateMart } from '@/lib/mart/revalidate'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -62,13 +63,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   const before = {
     category_slug: c.product.categorySlug, name: c.product.name, description: c.product.description, hsn_code: c.product.hsnCode,
     gst_rate_bps: c.product.gstRateBps, unit: c.product.unit, images: c.product.images, min_order_qty: c.product.minOrderQty,
-    country_of_origin: c.product.countryOfOrigin,
+    country_of_origin: c.product.countryOfOrigin, brand: c.product.brand, specs: c.product.specs, availability: c.product.availability,
+    lead_time_days: c.product.leadTimeDays,
   }
   const after = {
     category_slug: d.category_slug, name: d.name, description: d.description ?? null, hsn_code: d.hsn_code, gst_rate_bps: d.gst_rate_bps,
-    unit: d.unit, images: d.images, min_order_qty: d.min_order_qty, country_of_origin: d.country_of_origin,
+    unit: d.unit, images: d.images, min_order_qty: d.min_order_qty, country_of_origin: d.country_of_origin, brand: d.brand ?? null,
+    specs: d.specs, availability: d.availability, lead_time_days: d.availability === 'lead_time' ? (d.lead_time_days ?? null) : null,
   }
-  const { error } = await c.admin.from('products').update({ ...after, updated_at: new Date().toISOString() }).eq('id', id)
+  const { error } = await c.admin
+    .from('products')
+    .update({ ...after, list_price_paise: d.tiers[0]?.unit_price_paise ?? null, updated_at: new Date().toISOString() })
+    .eq('id', id)
   if (error) return serverError('[mart/seller/products PATCH]', error)
 
   const oldTiers = c.product.tiers.map((t) => ({ min_qty: t.min_qty, unit_price_paise: t.unit_price_paise }))
@@ -87,6 +93,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     })
   }
   if (tiersChanged) await addProductEvent(c.admin, id, c.userId, 'price_changed', { before: oldTiers, after: newTiers })
+  if (c.product.status === 'active') revalidateMart({ productId: id, categorySlug: d.category_slug, providerSlug: c.product.seller.slug })
   return NextResponse.json({ id, status: c.product.status })
 }
 
@@ -122,7 +129,10 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       .eq('status', from)
     if (error) return serverError('[mart/seller/products submit]', error)
     await addProductEvent(c.admin, id, c.userId, 'submitted', null)
-    if (autoApprove) await addProductEvent(c.admin, id, c.userId, 'activated', { auto: true, approved_listings: count })
+    if (autoApprove) {
+      await addProductEvent(c.admin, id, c.userId, 'activated', { auto: true, approved_listings: count })
+      revalidateMart({ productId: id, categorySlug: c.product.categorySlug, providerSlug: c.product.seller.slug })
+    }
     return NextResponse.json({ id, status: to })
   }
   if (action === 'suspend') {
@@ -130,6 +140,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     const { error } = await c.admin.from('products').update({ status: 'suspended', updated_at: now }).eq('id', id).eq('status', from)
     if (error) return serverError('[mart/seller/products suspend]', error)
     await addProductEvent(c.admin, id, c.userId, 'suspended', { by: 'seller' })
+    revalidateMart({ productId: id, categorySlug: c.product.categorySlug, providerSlug: c.product.seller.slug })
     return NextResponse.json({ id, status: 'suspended' })
   }
   // reactivate
@@ -141,5 +152,6 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   const { error } = await c.admin.from('products').update({ status: 'active', updated_at: now }).eq('id', id).eq('status', 'suspended')
   if (error) return serverError('[mart/seller/products reactivate]', error)
   await addProductEvent(c.admin, id, c.userId, 'activated', { by: 'seller', reactivated: true })
+  revalidateMart({ productId: id, categorySlug: c.product.categorySlug, providerSlug: c.product.seller.slug })
   return NextResponse.json({ id, status: 'active' })
 }

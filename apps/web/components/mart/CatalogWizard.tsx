@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, Link } from '@/i18n/navigation'
-import { pickLocale, PRODUCT_UNITS, GST_RATE_BPS_OPTIONS, HSN_CODE_RE, type CatalogDraft } from '@amclub/shared'
+import { pickLocale, PRODUCT_UNITS, GST_RATE_BPS_OPTIONS, HSN_CODE_RE, type CatalogDraft, type ProductAvailability } from '@amclub/shared'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { SheetCard, GoldStamp, LatheSpinner } from './primitives'
+import { VoiceDictation } from './VoiceDictation'
 
 export interface ListingDraft {
   name: string
@@ -21,14 +22,25 @@ export interface ListingDraft {
   unit: string
   minOrderQty: string
   countryOfOrigin: string
+  /** Not AI-suggested — plain inputs on the confirm step. */
+  brand: string
+  specs: { k: string; v: string }[]
+  availability: ProductAvailability
+  /** Only meaningful when availability === 'lead_time'; sent as 1..90. */
+  leadTimeDays: string
   images: { key: string; url: string }[]
   tiers: { minQty: string; rupees: string }[]
 }
 
 const EMPTY: ListingDraft = {
   name: '', description: '', categorySlug: '', hsnCode: '', gstRateBps: '', unit: 'pcs', minOrderQty: '1', countryOfOrigin: 'IN',
+  brand: '', specs: [], availability: 'in_stock', leadTimeDays: '',
   images: [], tiers: [{ minQty: '1', rupees: '' }],
 }
+
+const MAX_SPECS = 20
+const LEAD_TIME_MIN = 1
+const LEAD_TIME_MAX = 90
 
 const STEPS = ['capture', 'confirm', 'pricing', 'review'] as const
 type Step = (typeof STEPS)[number]
@@ -71,6 +83,11 @@ export function CatalogWizard({
   const set = (patch: Partial<ListingDraft>) => setDraft((d) => ({ ...d, ...patch }))
   const catName = (slug: string) => { const c = categories.find((x) => x.slug === slug); return c ? pickLocale(c.nameI18n, locale) : slug }
   const gstLabel = (bps: number) => `${bps / 100}%`
+  /** Clamped to the schema's 1..90 so the review step shows exactly what is sent. */
+  const leadDays = () => Math.min(LEAD_TIME_MAX, Math.max(LEAD_TIME_MIN, Math.floor(Number(draft.leadTimeDays)) || LEAD_TIME_MIN))
+  const cleanSpecs = () => draft.specs.map((x) => ({ k: x.k.trim(), v: x.v.trim() })).filter((x) => x.k && x.v).slice(0, MAX_SPECS)
+  const appendDictation = (text: string) =>
+    setDraft((d) => ({ ...d, description: d.description.trim() ? `${d.description.trimEnd()}\n${text}` : text }))
 
   async function uploadImage(file: File) {
     setBusy('upload'); setError('')
@@ -132,6 +149,10 @@ export function CatalogWizard({
       category_slug: draft.categorySlug,
       name: draft.name.trim(),
       ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+      ...(draft.brand.trim() ? { brand: draft.brand.trim() } : {}),
+      specs: cleanSpecs(),
+      availability: draft.availability,
+      ...(draft.availability === 'lead_time' ? { lead_time_days: leadDays() } : {}),
       hsn_code: draft.hsnCode.trim(),
       gst_rate_bps: Number(draft.gstRateBps),
       unit: draft.unit,
@@ -241,10 +262,17 @@ export function CatalogWizard({
               )}
             </div>
           </div>
-          <div>
-            <Label htmlFor="desc">{t('description')}</Label>
-            <p className="text-xs text-foreground-secondary">{t('description_hint')}</p>
-            <Textarea id="desc" className="mt-2" value={draft.description} onChange={(e) => set({ description: e.target.value })} rows={4} />
+          <div className="grid gap-4 md:grid-cols-[1fr_minmax(0,18rem)]">
+            <div>
+              <Label htmlFor="desc">{t('description')}</Label>
+              <p className="text-xs text-foreground-secondary">{t('description_hint')}</p>
+              <Textarea id="desc" className="mt-2" value={draft.description} onChange={(e) => set({ description: e.target.value })} rows={6} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-emerald-ink">{t('dictate')}</p>
+              <p className="text-xs text-foreground-secondary">{t('dictate_hint')}</p>
+              <div className="mt-2"><VoiceDictation onText={appendDictation} /></div>
+            </div>
           </div>
           {error && <p className="text-sm text-stamp" role="alert">{error}</p>}
           <div className="flex flex-wrap gap-2">
@@ -280,6 +308,54 @@ export function CatalogWizard({
             <div><Label htmlFor="moq">{t('field_min_order')}</Label><Input id="moq" inputMode="numeric" value={draft.minOrderQty} onChange={(e) => set({ minOrderQty: e.target.value })} /></div>
             <div><Label htmlFor="coo">{t('field_country')}</Label><Input id="coo" maxLength={2} value={draft.countryOfOrigin} onChange={(e) => set({ countryOfOrigin: e.target.value.toUpperCase() })} /></div>
           </div>
+          <div>
+            <Label htmlFor="brand">{t('field_brand')}</Label>
+            <Input id="brand" maxLength={60} value={draft.brand} onChange={(e) => set({ brand: e.target.value })} />
+          </div>
+
+          <fieldset>
+            <legend className="text-sm font-medium text-emerald-ink">{t('availability')}</legend>
+            <div className="mt-2 grid grid-cols-2 gap-2" role="group">
+              {(['in_stock', 'lead_time'] as const).map((opt) => {
+                const on = draft.availability === opt
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => set({ availability: opt })}
+                    className={`h-12 rounded-button border text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald ${on ? 'border-emerald bg-emerald text-ivory' : 'border-brass/50 bg-ivory text-emerald-ink hover:bg-emerald/5'}`}
+                  >
+                    {t(opt)}
+                  </button>
+                )
+              })}
+            </div>
+            {draft.availability === 'lead_time' && (
+              <div className="mt-2">
+                <Label htmlFor="lead">{t('lead_time_days')}</Label>
+                <Input id="lead" type="number" inputMode="numeric" min={LEAD_TIME_MIN} max={LEAD_TIME_MAX} value={draft.leadTimeDays} onChange={(e) => set({ leadTimeDays: e.target.value.replace(/\D/g, '').slice(0, 2) })} />
+                <p className="mt-1 text-xs text-foreground-secondary">{t('lead_time_note', { days: leadDays() })}</p>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-foreground-secondary">{t('availability_hint')}</p>
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-medium text-emerald-ink">{t('specs')}</legend>
+            <div className="mt-2 space-y-2">
+              {draft.specs.map((row, i) => (
+                <div key={i} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                  <div><Label htmlFor={`sk-${i}`}>{t('spec_key')}</Label><Input id={`sk-${i}`} maxLength={40} value={row.k} onChange={(e) => set({ specs: draft.specs.map((x, j) => (j === i ? { ...x, k: e.target.value } : x)) })} /></div>
+                  <div><Label htmlFor={`sv-${i}`}>{t('spec_value')}</Label><Input id={`sv-${i}`} maxLength={120} value={row.v} onChange={(e) => set({ specs: draft.specs.map((x, j) => (j === i ? { ...x, v: e.target.value } : x)) })} /></div>
+                  <Button variant="ghost" size="sm" onClick={() => set({ specs: draft.specs.filter((_, j) => j !== i) })}>{t('remove')}</Button>
+                </div>
+              ))}
+              {draft.specs.length < MAX_SPECS && (
+                <Button variant="outline" size="sm" onClick={() => set({ specs: [...draft.specs, { k: '', v: '' }] })}>{t('add_spec')}</Button>
+              )}
+            </div>
+          </fieldset>
           {error && <p className="text-sm text-stamp" role="alert">{error}</p>}
           <div className="flex justify-between">
             <Button variant="ghost" onClick={() => setStepIdx(0)}>{t('back')}</Button>
@@ -317,7 +393,14 @@ export function CatalogWizard({
             <div><dt>{t('field_hsn')}</dt><dd className="text-emerald-ink">{draft.hsnCode}</dd></div>
             <div><dt>{t('field_gst')}</dt><dd className="text-emerald-ink">{gstLabel(Number(draft.gstRateBps))}</dd></div>
             <div><dt>{t('field_unit')}</dt><dd className="text-emerald-ink">{draft.unit}</dd></div>
+            {draft.brand.trim() && <div><dt>{t('field_brand')}</dt><dd className="text-emerald-ink">{draft.brand.trim()}</dd></div>}
+            <div><dt>{t('availability')}</dt><dd className="text-emerald-ink">{draft.availability === 'lead_time' ? t('lead_time_note', { days: leadDays() }) : t('in_stock')}</dd></div>
           </dl>
+          {cleanSpecs().length > 0 && (
+            <dl className="grid grid-cols-2 gap-x-2 gap-y-1 border-t border-brass/20 pt-2 text-xs">
+              {cleanSpecs().map((x, i) => <div key={i} className="contents"><dt className="text-foreground-secondary">{x.k}</dt><dd className="text-emerald-ink">{x.v}</dd></div>)}
+            </dl>
+          )}
           <table className="w-full text-sm">
             <thead><tr className="text-left text-xs text-foreground-secondary"><th className="py-1 font-medium">{t('tier_qty')}</th><th className="py-1 font-medium">{t('tier_unit_price_rupees')}</th></tr></thead>
             <tbody>{draft.tiers.map((x, i) => <tr key={i} className="border-t border-brass/20"><td className="py-1 tabular-nums">{x.minQty}+</td><td className="py-1 font-semibold tabular-nums text-ink">₹{x.rupees}</td></tr>)}</tbody>

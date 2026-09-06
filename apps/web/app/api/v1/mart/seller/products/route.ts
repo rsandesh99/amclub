@@ -67,6 +67,11 @@ export async function POST(request: NextRequest) {
       images: d.images,
       min_order_qty: d.min_order_qty,
       country_of_origin: d.country_of_origin,
+      brand: d.brand ?? null,
+      specs: d.specs,
+      availability: d.availability,
+      lead_time_days: d.availability === 'lead_time' ? (d.lead_time_days ?? null) : null,
+      list_price_paise: d.tiers[0]?.unit_price_paise ?? null,
       status: 'draft',
     })
     .select('id')

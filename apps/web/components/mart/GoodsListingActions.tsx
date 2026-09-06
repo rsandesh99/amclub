@@ -34,7 +34,7 @@ export function GoodsListingActions({ productId, status, sellsGoods }: { product
         <Pencil className="h-3.5 w-3.5" /> {t('action_edit')}
       </Link>
       {status === 'draft' && (
-        <button type="button" disabled={busy || !sellsGoods} onClick={() => act('submit')} className={`${btn} bg-emerald text-ivory hover:bg-emerald-ink disabled:opacity-50`}>
+        <button type="button" disabled={busy || !sellsGoods} onClick={() => act('submit')} className={`${btn} border border-emerald text-emerald hover:bg-emerald/10 disabled:opacity-50`}>
           <Send className="h-3.5 w-3.5" /> {t('action_submit')}
         </button>
       )}

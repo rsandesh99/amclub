@@ -88,6 +88,13 @@ CREATE TABLE IF NOT EXISTS products (
   category_slug     text NOT NULL REFERENCES mart_categories(slug),
   name              text NOT NULL,
   description       text,
+  brand             text,
+  specs             jsonb NOT NULL DEFAULT '[]',
+  -- in_stock | lead_time — seller-declared (no inventory is ever held)
+  availability      text NOT NULL DEFAULT 'in_stock',
+  lead_time_days    integer,
+  -- denormalised min_qty=1 tier price (API-maintained) for sort/filter
+  list_price_paise  bigint,
   hsn_code          text NOT NULL,
   gst_rate_bps      integer NOT NULL,
   unit              text NOT NULL,
@@ -98,7 +105,7 @@ CREATE TABLE IF NOT EXISTS products (
   approved_by       uuid REFERENCES users(id),
   approved_at       timestamptz,
   search_tsv        tsvector GENERATED ALWAYS AS (
-                      to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(description, '') || ' ' || coalesce(hsn_code, ''))
+                      to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(description, '') || ' ' || coalesce(hsn_code, ''))
                     ) STORED,
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz,
@@ -106,7 +113,8 @@ CREATE TABLE IF NOT EXISTS products (
   CONSTRAINT products_status_check CHECK (status IN ('draft', 'pending_approval', 'active', 'suspended')),
   CONSTRAINT products_gst_rate_check CHECK (gst_rate_bps IN (0, 500, 1200, 1800, 2800)),
   CONSTRAINT products_hsn_check CHECK (hsn_code ~ '^[0-9]{4}([0-9]{2})?([0-9]{2})?$'),
-  CONSTRAINT products_min_order_qty_check CHECK (min_order_qty > 0)
+  CONSTRAINT products_min_order_qty_check CHECK (min_order_qty > 0),
+  CONSTRAINT products_availability_check CHECK (availability IN ('in_stock', 'lead_time'))
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS products_seller_idx ON products (seller_id);
@@ -114,6 +122,8 @@ CREATE INDEX IF NOT EXISTS products_seller_idx ON products (seller_id);
 CREATE INDEX IF NOT EXISTS products_category_status_idx ON products (category_slug, status);
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS products_search_idx ON products USING GIN (search_tsv);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS products_status_price_idx ON products (status, list_price_paise);
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS price_tiers (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -8,6 +8,7 @@ import { addProductEvent } from '@/lib/mart/events'
 import { writeAudit } from '@/lib/audit/log'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { revalidateMart } from '@/lib/mart/revalidate'
 
 /** Admin listing review: approve (→ active), reject (→ draft, reason), suspend (→ suspended, reason). */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +24,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const d = parsed.data
 
   const admin = await createAdminClient()
-  const { data: product } = await admin.from('products').select('id, status, seller_id').eq('id', id).is('deleted_at', null).maybeSingle()
+  const { data: product } = await admin
+    .from('products')
+    .select('id, status, seller_id, category_slug, seller:provider_profiles!inner(slug)')
+    .eq('id', id)
+    .is('deleted_at', null)
+    .maybeSingle()
   if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const from = product.status as ProductStatus
   const to: ProductStatus = d.action === 'approve' ? 'active' : d.action === 'reject' ? 'draft' : 'suspended'
@@ -48,5 +54,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     before: { status: from },
     after: { status: to, ...(reason ? { reason } : {}) },
   })
+  // Edge cache purge so an approval is live in seconds (Phase 3 "<5s" criterion).
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const sellerRel = (product as any).seller
+  const providerSlug: string | undefined = (Array.isArray(sellerRel) ? sellerRel[0] : sellerRel)?.slug
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  revalidateMart({ productId: id, categorySlug: product.category_slug as string, ...(providerSlug ? { providerSlug } : {}) })
   return NextResponse.json({ id, status: to })
 }
