@@ -74,9 +74,9 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: Ac
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-1.5 rounded-full border border-border bg-surface py-1 pl-1 pr-2 hover:border-primary/40"
+        className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-surface pl-1 pr-2 hover:border-primary/40"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
           {initial}
         </span>
         <ChevronDown className="h-3.5 w-3.5 text-foreground-secondary" />

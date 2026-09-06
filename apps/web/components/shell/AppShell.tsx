@@ -38,13 +38,16 @@ export function AppShell({
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
-          <Link href={homeHref as '/app'} className="font-display text-lg font-bold text-primary">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4">
+          <Link
+            href={homeHref as '/app'}
+            className="font-display text-[26px] font-bold leading-none tracking-tight text-primary"
+          >
             AMClub<span className="text-foreground-secondary">{suffix}</span>
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex h-10 items-center gap-2">
             {/* Jurisdiction is a buyer-discovery control — shown in the MSME shell. */}
-            {context === 'msme' && <JurisdictionSelector className="hidden sm:inline-flex" />}
+            {context === 'msme' && <JurisdictionSelector className="hidden md:inline-flex" />}
             <LanguageSwitcher />
             {/* The bell links into the msme/provider notification centres — an
                 admin clicking it would be dropped out of the admin shell. */}

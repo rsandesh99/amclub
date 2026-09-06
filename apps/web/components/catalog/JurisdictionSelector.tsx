@@ -42,17 +42,17 @@ export function JurisdictionSelector({ className }: { className?: string }) {
   return (
     <label
       className={cn(
-        'relative inline-flex items-center gap-1 rounded-chip border border-border bg-surface pl-2 pr-1 text-xs text-foreground-secondary',
+        'relative inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-button border border-border bg-surface pl-2.5 pr-1 text-sm text-foreground hover:border-primary/40',
         className,
       )}
     >
-      <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+      <MapPin className="h-4 w-4 shrink-0 text-primary" aria-hidden />
       <span className="sr-only">{t('filter_state')}</span>
       <select
         value={state}
         onChange={(e) => choose(e.target.value)}
         aria-label={t('filter_state')}
-        className="max-w-[7.5rem] cursor-pointer truncate bg-transparent py-1.5 pr-4 font-medium text-foreground focus:outline-none"
+        className="max-w-[8.5rem] cursor-pointer truncate bg-transparent py-1 pr-1 font-semibold text-foreground focus:outline-none"
       >
         <option value="">{t('all_states')}</option>
         {INDIAN_STATES.map((s) => (

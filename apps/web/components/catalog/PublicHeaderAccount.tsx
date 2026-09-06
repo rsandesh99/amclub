@@ -38,7 +38,8 @@ export function PublicHeaderAccount() {
   }, [])
 
   // Avoid a flash of the wrong state before we know.
-  if (!loaded) return <div className="h-8 w-16" aria-hidden />
+  // Reserve the exact footprint of "Sign in · Sign up" so the row never jumps.
+  if (!loaded) return <div className="h-10 w-[5.25rem] sm:w-[10.5rem]" aria-hidden />
 
   if (me) {
     const roles = me.roles ?? []
@@ -54,11 +55,19 @@ export function PublicHeaderAccount() {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <Link href="/login" className="rounded-button px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/5">
+    <div className="flex h-10 items-center gap-2">
+      {/* Phones get one filled "Sign in" (the login page links to sign-up);
+          tablet and up show both, outlined + filled, on the same 40px axis. */}
+      <Link
+        href="/login"
+        className="inline-flex h-10 items-center whitespace-nowrap rounded-button border px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 border-primary bg-primary text-white hover:bg-primary-strong sm:border-primary/30 sm:bg-surface sm:text-primary sm:hover:border-primary sm:hover:bg-primary/5"
+      >
         {tAuth('sign_in')}
       </Link>
-      <Link href="/signup" className="rounded-button bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary/90">
+      <Link
+        href="/signup"
+        className="hidden h-10 items-center whitespace-nowrap rounded-button bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:inline-flex"
+      >
         {tAuth('sign_up')}
       </Link>
     </div>
