@@ -36,6 +36,9 @@ export default async function PartnerGoodsPage() {
           <h1 className="font-display text-2xl font-bold text-emerald-ink">{t('seller_title')}</h1>
           <p className="mt-1 text-sm text-foreground-secondary">{t('seller_subtitle')}</p>
         </div>
+        <Link href={'/partner/goods/pools' as '/partner'} className="inline-flex shrink-0 items-center rounded-button border border-brass/60 px-3 py-2.5 text-sm font-semibold text-emerald-ink hover:bg-emerald/10">
+          {t('pools_title')}
+        </Link>
         <Link href={'/partner/goods/new' as '/partner'} className="inline-flex shrink-0 items-center gap-2 rounded-button bg-emerald px-4 py-2.5 text-sm font-semibold text-ivory hover:bg-emerald-ink">
           <Plus className="h-4 w-4" /> {t('new_listing')}
         </Link>

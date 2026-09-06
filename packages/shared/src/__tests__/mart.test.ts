@@ -269,3 +269,100 @@ describe('services order machine is byte-untouched by Mart (inertness)', () => {
     expect(isValidOrderTransition('completed', 'disputed')).toBe(true)
   })
 })
+
+// ── M1: pools ────────────────────────────────────────────────────────────────
+import {
+  POOL_MEMBER_PAYMENT_STATES,
+  POOL_MEMBER_PAYMENT_TRANSITIONS,
+  poolProgress,
+  poolSaving,
+  poolIsDueToClose,
+  poolPayDeadline,
+  poolMemberMayLeave,
+  poolOpenProblem,
+  poolDisciplineFactor,
+  buildPoolCardText,
+  poolDraftSchema,
+  poolJoinSchema,
+} from '../mart/pools'
+
+describe('pool state machine — M1 acceptance (met / unmet / expiry / exit / capture-fail)', () => {
+  it('every status and every payment state has a transition row (exhaustive)', () => {
+    for (const s of POOL_STATUSES) expect(Array.isArray(POOL_TRANSITIONS[s])).toBe(true)
+    for (const s of POOL_MEMBER_PAYMENT_STATES) expect(Array.isArray(POOL_MEMBER_PAYMENT_TRANSITIONS[s])).toBe(true)
+  })
+  it('terminal states have no exits', () => {
+    for (const s of ['closed_unmet', 'fulfilled', 'cancelled'] as const) expect(POOL_TRANSITIONS[s]).toEqual([])
+    for (const s of ['captured', 'released'] as const) expect(POOL_MEMBER_PAYMENT_TRANSITIONS[s]).toEqual([])
+  })
+  it('expiry: an open pool past closes_at is due; nothing else ever is', () => {
+    const now = new Date('2026-09-10T00:00:00Z')
+    expect(poolIsDueToClose('open', '2026-09-09T23:59:59Z', now)).toBe(true)
+    expect(poolIsDueToClose('open', '2026-09-10T00:00:01Z', now)).toBe(false)
+    for (const s of POOL_STATUSES.filter((x) => x !== 'open')) expect(poolIsDueToClose(s, '2026-09-01T00:00:00Z', now)).toBe(false)
+  })
+  it('exit: a member may leave only while the pool is open and still merely committed', () => {
+    expect(poolMemberMayLeave('open', 'blocked')).toBe(true)
+    expect(poolMemberMayLeave('closed_met', 'blocked')).toBe(false)
+    expect(poolMemberMayLeave('open', 'released')).toBe(false)
+    expect(poolMemberMayLeave('open', 'captured')).toBe(false)
+  })
+  it('capture-fail: failed may re-block, never jump to captured', () => {
+    expect(isValidPoolMemberPaymentTransition('failed', 'blocked')).toBe(true)
+    expect(isValidPoolMemberPaymentTransition('failed', 'captured')).toBe(false)
+    expect(mayCapturePoolMember('closed_met', 'failed')).toBe(false)
+  })
+  it('the money rule, cross-product: capture is legal in exactly one (pool, member) cell', () => {
+    const legal: string[] = []
+    for (const p of POOL_STATUSES) for (const m of POOL_MEMBER_PAYMENT_STATES) if (mayCapturePoolMember(p, m)) legal.push(`${p}/${m}`)
+    expect(legal).toEqual(['closed_met/blocked'])
+  })
+})
+
+describe('pool math and rules', () => {
+  it('progress against target with the minimum line', () => {
+    expect(poolProgress(0, 50, 100)).toEqual({ pct: 0, metPct: 50, met: false, remainingToMin: 50 })
+    expect(poolProgress(60, 50, 100)).toEqual({ pct: 60, metPct: 50, met: true, remainingToMin: 0 })
+    expect(poolProgress(500, 50, 100).pct).toBe(100)
+  })
+  it('saving vs list price never negative', () => {
+    expect(poolSaving(400, 500)).toEqual({ paise: 100, pct: 20 })
+    expect(poolSaving(500, 500)).toEqual({ paise: 0, pct: 0 })
+    expect(poolSaving(500, null)).toEqual({ paise: 0, pct: 0 })
+  })
+  it('pay-on-close deadline = close time + window', () => {
+    expect(poolPayDeadline('2026-09-10T10:00:00Z', 48).toISOString()).toBe('2026-09-12T10:00:00.000Z')
+  })
+  it('open validation returns the first problem', () => {
+    const now = new Date('2026-09-10T00:00:00Z')
+    const base = { product_id: 'p', min_qty: 50, target_qty: 100, unit_price_paise: 400, closes_at: '2026-09-15T00:00:00Z', list_price_paise: 500 }
+    expect(poolOpenProblem(base, now)).toBeNull()
+    expect(poolOpenProblem({ ...base, product_id: null }, now)).toBe('product_required')
+    expect(poolOpenProblem({ ...base, min_qty: 101 }, now)).toBe('min_exceeds_target')
+    expect(poolOpenProblem({ ...base, closes_at: '2026-09-10T12:00:00Z' }, now)).toBe('closes_too_soon')
+    expect(poolOpenProblem({ ...base, closes_at: '2026-11-10T12:00:00Z' }, now)).toBe('closes_too_late')
+    expect(poolOpenProblem({ ...base, unit_price_paise: 500 }, now)).toBe('price_not_below_list')
+  })
+  it('discipline: neutral below the sample gate, honoured/due above, public at 5', () => {
+    expect(poolDisciplineFactor({ due: 0, honoured: 0, defaulted: 0 })).toEqual({ factor: 1, sample: 0, public: false })
+    expect(poolDisciplineFactor({ due: 2, honoured: 0, defaulted: 2 })).toEqual({ factor: 1, sample: 2, public: false })
+    expect(poolDisciplineFactor({ due: 4, honoured: 3, defaulted: 1 })).toEqual({ factor: 0.75, sample: 4, public: false })
+    expect(poolDisciplineFactor({ due: 6, honoured: 6, defaulted: 0 })).toEqual({ factor: 1, sample: 6, public: true })
+  })
+  it('schemas: draft min ≤ target; join needs a delivery snapshot', () => {
+    expect(poolDraftSchema.safeParse({ product_id: null, category_slug: 'fasteners', title: 'M8 bolts', unit: 'pcs', target_qty: 100, min_qty: 200, unit_price_paise: 400, closes_at: '2026-09-15T00:00:00+05:30' }).success).toBe(false)
+    expect(poolJoinSchema.safeParse({ qty: 10 }).success).toBe(false)
+    expect(poolJoinSchema.safeParse({ qty: 10, delivery: { contact_name: 'Ravi', contact_phone: '9876543210', address: 'Plot 4, Estate', city: 'Kurnool', state: 'AP', pincode: '518001' } }).success).toBe(true)
+  })
+  it('card text carries the numbers in all three languages', () => {
+    const inp = { title: 'M8 × 40 hex bolt', unit: 'pcs', unitPricePaise: 400, listPricePaise: 450, committedQty: 120, minQty: 200, targetQty: 500, memberCount: 3, closesAt: '2026-09-15T12:30:00Z', url: 'https://amclub.in/mart/pools/x' }
+    for (const l of ['en', 'hi', 'te'] as const) {
+      const t = buildPoolCardText(inp, l)
+      expect(t).toContain('₹4/pcs')
+      expect(t).toContain('120/500')
+      expect(t).toContain('11%')
+      expect(t).toContain('https://amclub.in/mart/pools/x')
+    }
+    expect(buildPoolCardText({ ...inp, committedQty: 250 }, 'en')).toContain('Minimum reached')
+  })
+})

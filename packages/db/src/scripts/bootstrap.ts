@@ -77,7 +77,7 @@ async function main() {
     }
 
     // Helper prelude (FOLLOWUPS "fresh-bootstrap helper ordering"): migrations
-    // 0016/0017/0021/0022 carry inline RLS policies that call auth_user_id() /
+    // 0016/0017/0021/0022/0023 carry inline RLS policies that call auth_user_id() /
     // has_role(), which policies.sql defines — and policies.sql runs LAST. On a
     // from-zero target those blocks failed. Apply ONLY the helper-function
     // section of policies.sql first (idempotent CREATE OR REPLACE; the full

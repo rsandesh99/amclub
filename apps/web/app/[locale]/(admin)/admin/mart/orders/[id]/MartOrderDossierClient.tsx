@@ -7,6 +7,7 @@ import { formatINR, formatINRExact } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { DocumentsPanel } from './DocumentsPanel'
 
 type HoldReason = 'no_delivery_photo' | 'awaiting_receipt' | 'return_window_open' | 'return_open'
 
@@ -323,6 +324,7 @@ export function MartOrderDossierClient({ id }: { id: string }) {
           <p className="text-sm text-foreground-secondary">{t('payout_none')}</p>
         )}
       </div>
+      <DocumentsPanel orderId={id} />
     </div>
   )
 }

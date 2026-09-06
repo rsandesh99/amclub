@@ -80,6 +80,14 @@ export default function MartBrowseScreen() {
             <Text className="text-xs text-foreground-secondary" numberOfLines={2}>{t('mart.subtitle')}</Text>
           </View>
           <TouchableOpacity
+            onPress={() => router.push('/mart/pools' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={t('mart.pools_title')}
+            className="mr-2 h-12 w-12 items-center justify-center rounded-button border border-border bg-ivory"
+          >
+            <Ionicons name="people-outline" size={22} color={colors.emeraldInk} />
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={() => router.push('/mart/cart' as never)}
             accessibilityRole="button"
             accessibilityLabel={t('mart.view_cart')}

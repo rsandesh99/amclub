@@ -116,6 +116,8 @@ export default function AppLayout() {
       />
       <Tabs.Screen name="mart/[id]" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="mart/cart" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="mart/pools" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="mart/pool/[id]" options={{ href: null, headerShown: false }} />
       {/* Detail screens — navigable via push, hidden from the tab bar. */}
       <Tabs.Screen name="category/[slug]" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="provider/[slug]" options={{ href: null, headerShown: false }} />

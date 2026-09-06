@@ -62,7 +62,7 @@ export default async function MsmeHomePage() {
           [
             { label: t('browse_services'), href: '/services', icon: '🔍' },
             // AMC Mart (dark build): the tile exists only while MART_ENABLED.
-            ...(MART_ENABLED ? [{ label: t('mart'), href: '/mart', icon: '🧰' }] : []),
+            ...(MART_ENABLED ? [{ label: t('mart'), href: '/mart', icon: '🧰' }, { label: t('my_pools'), href: '/app/mart/pools', icon: '🤝' }] : []),
             { label: t('post_rfq'), href: '/app/rfq/new', icon: '📋' },
             { label: t('my_rfqs'), href: '/app/rfq', icon: '📨' },
             { label: t('my_orders'), href: '/app/orders', icon: '📦' },

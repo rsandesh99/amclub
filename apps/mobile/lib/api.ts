@@ -505,3 +505,94 @@ function cryptoRandomUUID(): string {
 }
 
 export { API_URL }
+
+// ── AMC Mart M1 — group-buy pools (pay-on-close; server-computed numbers) ──
+
+export interface MartPoolProgress { pct: number; metPct: number; met: boolean; remainingToMin: number }
+export interface MartPool {
+  id: string
+  title: string
+  unit: string
+  status: 'open' | 'closed_met' | 'closed_unmet' | 'ordered' | 'fulfilled' | 'cancelled'
+  target_qty: number
+  min_qty: number
+  unit_price_paise: number
+  list_price_paise: number | null
+  closes_at: string
+  committed_qty: number
+  member_count: number
+  imageUrl: string | null
+  product_id: string | null
+  seller: { id: string; displayName: string; city: string | null; state: string } | null
+  progress: MartPoolProgress
+}
+export interface MartPoolMember { id: string; qty: number; payment_state: 'blocked' | 'captured' | 'released' | 'failed'; pay_by: string | null; order_id: string | null }
+
+export async function fetchMartPools(): Promise<{ ok: boolean; pools: MartPool[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/mart/pools`)
+    if (!res.ok) return { ok: false, pools: [] }
+    const d = await res.json().catch(() => ({}))
+    return { ok: true, pools: d.pools ?? [] }
+  } catch {
+    return { ok: false, pools: [] }
+  }
+}
+
+export async function fetchMartPool(id: string, locale: string): Promise<{ ok: boolean; pool: MartPool | null; member: MartPoolMember | null; shareText: string }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/mart/pools/${encodeURIComponent(id)}?locale=${locale}`, { headers: await authHeaders() })
+    if (res.status === 404) return { ok: true, pool: null, member: null, shareText: '' }
+    if (!res.ok) return { ok: false, pool: null, member: null, shareText: '' }
+    const d = await res.json().catch(() => ({}))
+    return { ok: true, pool: d.pool ?? null, member: d.member ?? null, shareText: d.shareText ?? '' }
+  } catch {
+    return { ok: false, pool: null, member: null, shareText: '' }
+  }
+}
+
+export async function joinMartPool(id: string, qty: number, delivery: GoodsDelivery): Promise<{ ok: boolean; error: string | null; pool: MartPool | null; member: MartPoolMember | null }> {
+  const res = await fetch(`${API_URL}/api/v1/mart/pools/${encodeURIComponent(id)}/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ qty, delivery }),
+  })
+  const d = await res.json().catch(() => ({}))
+  return { ok: res.ok, error: res.ok ? null : typeof d.error === 'string' ? d.error : 'failed', pool: d.pool ?? null, member: d.member ? { ...d.member, pay_by: null, order_id: null } : null }
+}
+
+export async function leaveMartPool(id: string): Promise<{ ok: boolean; error: string | null; pool: MartPool | null }> {
+  const res = await fetch(`${API_URL}/api/v1/mart/pools/${encodeURIComponent(id)}/leave`, { method: 'POST', headers: await authHeaders() })
+  const d = await res.json().catch(() => ({}))
+  return { ok: res.ok, error: res.ok ? null : typeof d.error === 'string' ? d.error : 'failed', pool: d.pool ?? null }
+}
+
+/** Pay-on-close: the member's goods order session (same shape as goods checkout). */
+export async function martPoolCheckout(id: string): Promise<{ ok: boolean; error: string | null; session: GoodsCheckoutResponse | null; orderId: string | null }> {
+  const res = await fetch(`${API_URL}/api/v1/mart/pools/${encodeURIComponent(id)}/checkout`, { method: 'POST', headers: await authHeaders() })
+  const d = await res.json().catch(() => ({}))
+  if (res.status === 409 && d.orderId) return { ok: false, error: 'already_paid', session: null, orderId: d.orderId }
+  return { ok: res.ok, error: res.ok ? null : typeof d.error === 'string' ? d.error : 'failed', session: res.ok ? (d as GoodsCheckoutResponse) : null, orderId: null }
+}
+
+export async function fetchMyMartPools(): Promise<{ ok: boolean; memberships: { member: MartPoolMember & { committed_at: string }; pool: MartPool }[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/mart/pools/mine`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, memberships: [] }
+    const d = await res.json().catch(() => ({}))
+    return { ok: true, memberships: d.memberships ?? [] }
+  } catch {
+    return { ok: false, memberships: [] }
+  }
+}
+
+export async function fetchMartDeliveryDefaults(): Promise<GoodsDelivery | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/mart/delivery-defaults`, { headers: await authHeaders() })
+    if (!res.ok) return null
+    const d = await res.json().catch(() => ({}))
+    return d.defaults ?? null
+  } catch {
+    return null
+  }
+}

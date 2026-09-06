@@ -77,6 +77,18 @@ MART_DESIGN.md §1 lists facts about the live services spine and instructs: *ver
   wizard confirm, storefront, desktop browse, cart) and embedded in the
   review artifact's "Sprint outcome" section.
 
+
+### 4b. M1 — pools (2026-09-06)
+
+- Schema killtest `packages/db/src/scripts/killtest-mart-pools.ts`: 16/16.
+- API lifecycle + expiry/capture-fail scripts (session rig): 37/37 and 12/12;
+  every replay idempotent; blocked commitments never captured on unmet or
+  lapsed pools (`mayCapturePoolMember` is the single guard).
+- Inertness: no services file changed; the cron returns `skipped` when
+  `MART_ENABLED=false`; 0023 is staged with 0022; `policies.sql` block guarded.
+- Money path unchanged: member payment = ordinary goods checkout session →
+  webhook → `materialize_order` → `payout.ts`. No consolidated-order path.
+
 ## 5. Not done here (needs the founder's environment)
 
 - Run `verify-mart.ts` against a local server on a database with 0022 applied and `MART_ENABLED=true`; run `verify-mart-inert.ts` + the four standard suites against prod (flag off).
