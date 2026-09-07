@@ -29,6 +29,10 @@ const ok = (name: string, cond: boolean, extra = '') => { console.log(`  ${cond 
 
 const API_404 = [
   ['GET', '/api/v1/mart/categories'],
+  ['GET', '/api/v1/mart/admin/settings'],
+  ['PUT', '/api/v1/mart/admin/settings'],
+  ['GET', '/api/v1/mart/admin/categories'],
+  ['PATCH', '/api/v1/mart/admin/categories/fasteners'],
   ['GET', '/api/v1/mart/products'],
   ['GET', `/api/v1/mart/products/${randomUUID()}`],
   ['POST', '/api/v1/mart/cart/preview'],

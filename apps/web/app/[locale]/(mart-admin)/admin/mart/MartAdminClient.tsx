@@ -142,6 +142,7 @@ export function MartAdminClient() {
       <div>
         <h1 className="font-display text-2xl font-bold">{t('title')}</h1>
         <p className="mt-1 text-sm text-foreground-secondary">{t('subtitle')}</p>
+        <Link href={'/admin/mart/settings' as '/admin'} className="mt-2 inline-block text-sm font-medium text-primary underline underline-offset-2">{t('settings_link')} →</Link>
       </div>
 
       {/* ── Section 1: listing queue ─────────────────────────────────────── */}

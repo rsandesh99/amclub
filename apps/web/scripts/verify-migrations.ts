@@ -114,6 +114,12 @@ const MANIFEST: Entry[] = [
     note: 'column additions only (rfqs.kind/mart_category_slug/goods_spec; quotes goods terms); category_id nullable for goods',
     staged: true,
   },
+  {
+    // AMC Mart Launch Gate — STAGED with 0022–0024: mart_categories.return_freight_payer (§9.2).
+    file: '0025_mart_launch_config.sql',
+    note: 'column addition only (mart_categories.return_freight_payer + CHECK)',
+    staged: true,
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

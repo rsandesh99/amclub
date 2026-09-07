@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { LEGAL_VERSIONS } from '@amclub/shared'
+import { LEGAL_VERSIONS_EFFECTIVE as LEGAL_VERSIONS } from '@/lib/legal/versions'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAcceptedVersions, isProviderAccount, missingLegalDocs } from '@/lib/legal/acceptance'

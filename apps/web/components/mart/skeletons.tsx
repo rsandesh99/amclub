@@ -30,7 +30,7 @@ export function ProductCardSkeleton() {
   )
 }
 
-/** Matches app/[locale]/(public)/mart/page.tsx: jaali header + chips + card grid. */
+/** Matches app/[locale]/(mart-public)/mart/page.tsx: jaali header + chips + card grid. */
 export function CatalogueSkeleton({ cards = 6 }: { cards?: number }) {
   return (
     <div aria-hidden="true">
@@ -63,7 +63,7 @@ export function CatalogueSkeleton({ cards = 6 }: { cards?: number }) {
   )
 }
 
-/** Matches app/[locale]/(public)/mart/p/[id]/page.tsx: breadcrumb + sheet (images, title, tier table) + sticky add bar. */
+/** Matches app/[locale]/(mart-public)/mart/p/[id]/page.tsx: breadcrumb + sheet (images, title, tier table) + sticky add bar. */
 export function ProductPageSkeleton() {
   return (
     <div className="mx-auto max-w-3xl px-4 pb-28 pt-6" aria-hidden="true">
@@ -149,7 +149,7 @@ export function OrderWorkspaceSkeleton() {
   )
 }
 
-/** Matches app/[locale]/(provider)/partner/goods/page.tsx: header row + banner + listing rows. */
+/** Matches app/[locale]/(mart-provider)/partner/goods/page.tsx: header row + banner + listing rows. */
 export function SellerCatalogueSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 py-8" aria-hidden="true">

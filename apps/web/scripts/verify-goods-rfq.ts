@@ -60,6 +60,8 @@ async function mkProvider(uid: string, label: string, state: string, sellsGoods:
   created.providerIds.push(data.id)
   return data.id as string
 }
+/** Suites run on shared databases: assert membership, never exact equality of the match set. */
+const ok2xx = (status: number) => status === 200 || status === 201
 const matches = async (rfqId: string) => ((await admin.from('rfq_matches').select('provider_id').eq('rfq_id', rfqId)).data ?? []).map((m) => m.provider_id as string).sort()
 
 async function main() {
@@ -81,12 +83,12 @@ async function main() {
 
   console.log('A. Services RFQ untouched')
   const s1 = await api(buyer.token, '/api/v1/rfq', { category_slug: cat!.slug, title: `${tag} GST filing for a small foundry`, details: {}, attachments: [] })
-  ok('services RFQ created', s1.status === 201, JSON.stringify(s1.body).slice(0, 120))
+  ok('services RFQ created', ok2xx(s1.status), JSON.stringify(s1.body).slice(0, 120))
   if (s1.body.rfqId) created.rfqIds.push(s1.body.rfqId)
-  ok('matched the services provider only', JSON.stringify(await matches(s1.body.rfqId)) === JSON.stringify([svcId]))
+  { const m = await matches(s1.body.rfqId); ok('matched the services provider, not the goods sellers', m.includes(svcId) && !m.includes(sellerId) && !m.includes(sellerTSId), m.join(',')) }
   const sq = await api(svc.token, `/api/v1/rfq/${s1.body.rfqId}/quote`, { price_paise: 250000, delivery_days: 7, scope: 'Monthly GSTR-1 and GSTR-3B filing, reconciliation, notices.' })
   const sqRow = sq.body.quoteId ? (await admin.from('quotes').select('price_paise').eq('id', sq.body.quoteId).single()).data : null
-  ok('services quote keeps the client price', sq.status === 201 && Number(sqRow?.price_paise) === 250000)
+  ok('services quote keeps the client price', ok2xx(sq.status) && Number(sqRow?.price_paise) === 250000)
   const s2 = await api(buyer.token, '/api/v1/rfq', { category_slug: cat!.slug, title: `${tag} second services request here`, details: {}, attachments: [] })
   if (s2.body.rfqId) created.rfqIds.push(s2.body.rfqId)
   const sqg = await api(svc.token, `/api/v1/rfq/${s2.body.rfqId}/quote`, { price_paise: 1000, delivery_days: 7, scope: 'Monthly GSTR-1 and GSTR-3B filing, reconciliation, notices.', goods: { unit_price_paise: 1, gst_rate_bps: 1800, hsn_code: '7318' } })
@@ -100,15 +102,15 @@ async function main() {
     ok('BIS-blocked category refused (422)', b2.status === 422, String(b2.status))
   }
   const g1 = await api(buyer.token, '/api/v1/rfq', { kind: 'goods', mart_category_slug: 'fasteners', title: `${tag} M12 × 50 hex bolt × 500 pcs`, details: {}, goods_spec: spec({ product_id: bolt!.id }) })
-  ok('goods RFQ created', g1.status === 201, JSON.stringify(g1.body).slice(0, 120))
+  ok('goods RFQ created', ok2xx(g1.status), JSON.stringify(g1.body).slice(0, 120))
   const goodsRfq = g1.body.rfqId as string
   created.rfqIds.push(goodsRfq)
   const row = (await admin.from('rfqs').select('kind, category_id, mart_category_slug, goods_spec').eq('id', goodsRfq).single()).data!
   ok("row kind='goods', category_id NULL, spec stored", row.kind === 'goods' && row.category_id === null && row.mart_category_slug === 'fasteners' && (row.goods_spec as { qty: number }).qty === 500)
-  ok('fan-out: in-state goods seller with a fasteners listing only', JSON.stringify(await matches(goodsRfq)) === JSON.stringify([sellerId]), JSON.stringify(await matches(goodsRfq)))
+  { const m = await matches(goodsRfq); ok('fan-out: in-state goods seller with a fasteners listing; never the services provider or the TS seller', m.includes(sellerId) && !m.includes(svcId) && !m.includes(sellerTSId), m.join(',')) }
   const g2 = await api(buyer.token, '/api/v1/rfq', { kind: 'goods', mart_category_slug: 'spares', title: `${tag} lathe chuck jaws 200 mm`, details: {}, goods_spec: spec({ item: 'Lathe chuck jaws 200 mm', qty: 4, unit: 'set', spec: [] }) })
   if (g2.body.rfqId) created.rfqIds.push(g2.body.rfqId)
-  ok('no listing in category → every in-state goods seller (still not TS, not services)', g2.status === 201 && JSON.stringify(await matches(g2.body.rfqId)) === JSON.stringify([sellerId]))
+  { const m = await matches(g2.body.rfqId); ok('no listing in category → every in-state goods seller (still not TS, not services)', ok2xx(g2.status) && m.includes(sellerId) && !m.includes(svcId) && !m.includes(sellerTSId), m.join(',')) }
   ok('services provider cannot read the goods RFQ', (await api(svc.token, `/api/v1/rfq/${goodsRfq}`)).status === 404)
   ok('out-of-state goods seller cannot read it', (await api(sellerTS.token, `/api/v1/rfq/${goodsRfq}`)).status === 404)
 
@@ -118,7 +120,7 @@ async function main() {
   const q1 = await api(seller.token, `/api/v1/rfq/${goodsRfq}/quote`, { price_paise: 100, delivery_days: 5, scope: 'Zinc plated grade 8.8, IS 1364, packed 100 per box, ex Kurnool.', goods: { unit_price_paise: 850, gst_rate_bps: 1800, hsn_code: '7318', product_id: disc!.id } })
   ok('listing outside the category / not owned refused', q1.status >= 400 && q1.status < 500, String(q1.status))
   const q2 = await api(seller.token, `/api/v1/rfq/${goodsRfq}/quote`, { price_paise: 100, delivery_days: 5, scope: 'Zinc plated grade 8.8, IS 1364, packed 100 per box, ex Kurnool.', goods: { unit_price_paise: 850, gst_rate_bps: 1800, hsn_code: '7318', product_id: bolt!.id } })
-  ok('goods quote created', q2.status === 201, JSON.stringify(q2.body).slice(0, 120))
+  ok('goods quote created', ok2xx(q2.status), JSON.stringify(q2.body).slice(0, 120))
   const quoteId = q2.body.quoteId as string
   const qrow = (await admin.from('quotes').select('price_paise, unit_price_paise, qty, gst_rate_bps, hsn_code, product_id').eq('id', quoteId).single()).data!
   ok('price_paise = 500 × 850 (client 100 ignored), terms stored', Number(qrow.price_paise) === 425000 && Number(qrow.unit_price_paise) === 850 && Number(qrow.qty) === 500 && qrow.hsn_code === '7318' && qrow.product_id === bolt!.id)

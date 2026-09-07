@@ -21,6 +21,8 @@ export const martCategories = pgTable('mart_categories', {
   bisBlocked: boolean('bis_blocked').default(false).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
   sortOrder: integer('sort_order'),
+  // §9.2 — seller | buyer | split (0025, staged)
+  returnFreightPayer: text('return_freight_payer').default('seller').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })

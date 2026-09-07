@@ -1,5 +1,6 @@
 import { getLocale, getTranslations } from 'next-intl/server'
-import { LEGAL_VERSIONS, type LegalDoc } from '@amclub/shared'
+import type { LegalDoc } from '@amclub/shared'
+import { LEGAL_VERSIONS_EFFECTIVE as LEGAL_VERSIONS } from '@/lib/legal/versions'
 
 /**
  * Shared renderer for the legal pages (/terms, /privacy, /refund-policy,
