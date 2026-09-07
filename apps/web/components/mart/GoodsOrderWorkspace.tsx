@@ -110,7 +110,7 @@ export function GoodsOrderWorkspace({
 
   function reorder() {
     for (const l of lines) {
-      addToCart({ productId: l.product_id, name: l.name, unit: l.unit, sellerId: order['provider_id'] as string, sellerName: goods?.sellerName ?? '', minOrderQty: 1, imageUrl: null }, l.qty)
+      if (l.product_id) addToCart({ productId: l.product_id, name: l.name, unit: l.unit, sellerId: order['provider_id'] as string, sellerName: goods?.sellerName ?? '', minOrderQty: 1, imageUrl: null }, l.qty)
     }
     setStamp('reordered')
     setTimeout(() => router.push('/app/mart/cart' as '/app'), 700)
@@ -158,7 +158,7 @@ export function GoodsOrderWorkspace({
         </div>
         <ul className="mt-3 divide-y divide-brass/20 text-meta">
           {lines.map((l) => (
-            <li key={l.product_id} className="flex justify-between gap-3 py-2">
+            <li key={l.product_id ?? l.name} className="flex justify-between gap-3 py-2">
               <span className="text-emerald-ink">{t('qty_unit', { qty: l.qty, unit: l.unit })} {l.name} <span className="text-xs text-foreground-secondary">· {t('hsn')} {l.hsn_code} · {t('gst_rate', { rate: l.gst_rate_bps / 100 })}</span></span>
               <span className="shrink-0 tabular-nums">{formatINRExact(l.line_taxable_paise)}</span>
             </li>

@@ -126,6 +126,49 @@ record: `docs/adr/006-pool-pay-on-close-per-member-orders.md`; PSP report:
 - WhatsApp channel is still the stub; the card text is ready for the
   Gupshup/Interakt template once the key exists.
 
+## AMC Mart M2 — goods RFQ landed (2026-09-06)
+
+M2 (MART_DESIGN.md §7) is built behind `MART_ENABLED` on branch
+`claude/mart-m2-goods-rfq`: bulk / spec goods requests ride the existing RFQ
+engine as `rfqs.kind='goods'` (ADR-007). Landed:
+
+- **Schema (migration 0024, STAGED with 0022/0023):** `rfqs.kind`,
+  `mart_category_slug` (FK), `goods_spec`; `category_id` nullable for goods only
+  (`rfqs_kind_shape_check`); `quotes.unit_price_paise/qty/gst_rate_bps/hsn_code/product_id`
+  with `quotes_goods_terms_check` (all-or-nothing, `price_paise = unit × qty`).
+- **Server:** goods branch of `POST /api/v1/rfq` (404 when the flag is off,
+  Mart category validated, BIS-blocked refused); goods fan-out to in-state
+  goods sellers (listing-in-category first); goods quote route recomputes
+  `price_paise`; `lib/mart/goods-rfq.ts` turns an accepted quote into an
+  ordinary goods checkout session (line + delivery snapshot + category
+  commission) — webhook → `materialize_order` → release gate → `payout.ts`
+  unchanged. Compare-screen money (GST, incl., after ITC) computed in
+  `lib/rfq/queries.ts`.
+- **UI:** `/app/mart/rfq/new` (Mart category, item, spec rows, qty + unit,
+  target unit price, dictation, delivery prefilled from
+  `/api/v1/mart/delivery-defaults`, listing prefill via `?product_id=`);
+  entry points on the product page and the empty catalogue state; buyer
+  detail with the spec card and a unit-price / GST / after-ITC compare row;
+  seller composer goods mode (unit price, GST slab, HSN, optional listing,
+  qty); goods badges on both inboxes; mobile goods mode on create, buyer and
+  seller RFQ screens. i18n en/hi/te (web) and en/hi (mobile).
+- **Verification:** `packages/db/src/scripts/killtest-mart-goods-rfq.ts`
+  (0024 constraints) and an API lifecycle killtest (fan-out to sellers only,
+  server-computed price, accept → `orders.kind='goods'` with frozen line +
+  delivery, replay refused, services RFQ/quote unchanged) — numbers in
+  docs/mart/SPINE_VERIFICATION.md §4c. `apps/web/scripts/verify-goods-rfq.ts`
+  is the founder-environment version (creates its own users; zero residue).
+
+**Not now (M2 scope):**
+- Multi-line goods RFQs (one item per request) and drawing attachments on
+  goods RFQs — the spec rows + free text cover the launch categories.
+- Seller-side "quote from listing" auto-pricing from tiers (the listing only
+  prefills HSN/GST today; price is typed).
+- Goods RFQ voice parse (dictation appends to the free text only; no LLM
+  parse into item/qty/spec).
+
+---
+
 ## Mart M0 review fixes + load-path optimisation — closeout (2026-09-06)
 
 The design review (Mart M0 vs FRONTEND.md, competition, density/flow) was
@@ -342,16 +385,6 @@ go-live), email (Resend) and an in-app channel; WhatsApp is a stub behind
 abstraction with per-channel adapters and DLT/WhatsApp template ids in config,
 delivery-status callbacks recorded per notification, and a sandbox-delivered
 template as the done-criterion (§6 Phase 6). ~2 days after template approval.
-
----
-
-## Mobile lint warning — unused eslint-disable (logged 2026-09-05, Phase S1)
-
-**Today:** `pnpm lint` reports one pre-existing mobile warning: an unused
-`eslint-disable @typescript-eslint/no-explicit-any` directive at line 87 of a
-mobile file (0 errors; CI unaffected). Not introduced by S1; out of S1 scope.
-
-**Needed:** remove the stale directive (one line) next time mobile is touched.
 
 ---
 

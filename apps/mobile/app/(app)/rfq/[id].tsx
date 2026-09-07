@@ -5,6 +5,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { useI18n } from '@/lib/i18n'
 import { fetchRfq, acceptQuote, fetchQuoteMessages, sendQuoteMessage } from '@/lib/api'
 import { formatINR } from '@/lib/format'
+import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
 
  
 const CARD_W = Math.min(Dimensions.get('window').width - 48, 340)
@@ -34,6 +35,7 @@ export default function BuyerRfqScreen() {
 
   const quotes: any[] = rfq.quotes ?? []
   const decided = rfq.status === 'accepted'
+  const goods = rfq.kind === 'goods' && rfq.goodsSpec ? rfq.goodsSpec : null
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -41,6 +43,8 @@ export default function BuyerRfqScreen() {
         <Text className="text-base font-bold text-foreground" numberOfLines={1}>{rfq.title}</Text>
         <Text className="text-xs text-foreground-secondary">{t(`rfq.status_${rfq.status}`)} · {t('rfq.quotes_n', { n: rfq.quoteCount, max: rfq.maxQuotes })}</Text>
       </View>
+
+      {goods && <GoodsSpecBlock spec={goods} t={t} />}
 
       {rfq.status === 'expired' ? (
         <View className="m-4 rounded-xl border border-border bg-surface p-5">
@@ -62,7 +66,16 @@ export default function BuyerRfqScreen() {
               <View key={q.id} style={{ width: CARD_W }} className={`rounded-xl border bg-surface p-4 ${q.status === 'accepted' ? 'border-success' : q.status === 'declined' ? 'border-border opacity-60' : 'border-border'}`}>
                 <Text className="text-sm font-semibold text-foreground">{q.provider.displayName}</Text>
                 <Text className="text-xs text-foreground-secondary">{q.provider.avgRating > 0 ? `★ ${q.provider.avgRating.toFixed(1)} (${q.provider.reviewCount})` : t('rfq.status_open')} · {t('rfq.delivery_days', { days: q.deliveryDays })}</Text>
-                <Text className="mt-2 font-bold text-primary" style={{ fontSize: 20 }}>{formatINR(q.pricePaise)}</Text>
+                {goods && q.goods ? (
+                  <>
+                    <Text className="mt-2 font-bold text-primary" style={{ fontSize: 20 }}>{formatINR(q.goods.unitPricePaise)} <Text className="text-xs font-normal text-foreground-secondary">/ {goods.unit}</Text></Text>
+                    {/* Server-computed paise (queries.ts mapQuoteGoods) — rendered, never recomputed here. */}
+                    <Text className="text-xs text-foreground-secondary">{t('rfq.goods_col_qty')} {q.goods.qty} {goods.unit} · {t('rfq.goods_col_gst')} {q.goods.gstRateBps / 100}% ({formatINR(q.goods.gstPaise)})</Text>
+                    <Text className="text-xs text-foreground">{t('rfq.goods_col_incl')}: <Text className="font-semibold">{formatINR(q.goods.totalInclGstPaise)}</Text> · {t('rfq.goods_col_after_itc')}: <Text className="font-semibold text-success">{formatINR(q.goods.afterItcPaise)}</Text></Text>
+                  </>
+                ) : (
+                  <Text className="mt-2 font-bold text-primary" style={{ fontSize: 20 }}>{formatINR(q.pricePaise)}</Text>
+                )}
                 <Text className="mt-2 text-sm text-foreground" numberOfLines={6}>{q.scope}</Text>
                 {/* Phase 4c — stated terms; NULL renders the "not stated — ask" hint, never a blank. */}
                 <TermsBlock q={q} t={t} />
@@ -84,7 +97,6 @@ export default function BuyerRfqScreen() {
   )
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 function TermsBlock({ q, t }: { q: any; t: (k: string, p?: Record<string, string | number>) => string }) {
   const yn = (v: boolean) => (v ? t('rfq.term_yes') : t('rfq.term_no'))
   const rows: [string, string | null][] = [
@@ -106,7 +118,6 @@ function TermsBlock({ q, t }: { q: any; t: (k: string, p?: Record<string, string
     </View>
   )
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function Thread({ quoteId }: { quoteId: string }) {
   const { t } = useI18n()

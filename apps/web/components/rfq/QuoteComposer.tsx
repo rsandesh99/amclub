@@ -7,13 +7,28 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { GST_RATE_BPS_OPTIONS } from '@amclub/shared'
 
 type Tri = '' | 'yes' | 'no'
 
-export function QuoteComposer({ rfqId }: { rfqId: string }) {
+/** AMC Mart M2 — goods RFQ context for the seller's composer. */
+export interface QuoteComposerGoods {
+  unit: string
+  qty: number
+  /** The seller's own active listings in the RFQ's category (prefill HSN/GST; links the order line). */
+  listings: { id: string; name: string; hsnCode: string; gstRateBps: number }[]
+}
+
+export function QuoteComposer({ rfqId, goods }: { rfqId: string; goods?: QuoteComposerGoods | undefined }) {
   const t = useTranslations('rfq')
   const router = useRouter()
   const [price, setPrice] = useState('')
+  // Goods terms: unit price (rupees typed → paise integer), GST slab, HSN, optional listing, qty.
+  const [unitPrice, setUnitPrice] = useState('')
+  const [gstBps, setGstBps] = useState('')
+  const [hsn, setHsn] = useState('')
+  const [listingId, setListingId] = useState('')
+  const [gQty, setGQty] = useState(goods ? String(goods.qty) : '')
   const [days, setDays] = useState('')
   const [scope, setScope] = useState('')
   const [message, setMessage] = useState('')
@@ -27,8 +42,18 @@ export function QuoteComposer({ rfqId }: { rfqId: string }) {
 
   async function submit() {
     setError('')
-    const pricePaise = Math.round(Number(price) * 100)
     const deliveryDays = Number(days)
+    let pricePaise = Math.round(Number(price) * 100)
+    let goodsTerms: { unit_price_paise: number; gst_rate_bps: number; hsn_code: string; product_id?: string; qty?: number } | null = null
+    if (goods) {
+      const unitPaise = Math.round(Number(unitPrice) * 100)
+      const qtyNum = Number(gQty)
+      if (!unitPaise || unitPaise <= 0 || gstBps === '' || !/^\d{4}(?:\d{2})?(?:\d{2})?$/.test(hsn.trim())) { setError(t('goods_err_terms')); return }
+      if (!Number.isInteger(qtyNum) || qtyNum <= 0) { setError(t('goods_quote_qty') + ': ' + t('required_field')); return }
+      goodsTerms = { unit_price_paise: unitPaise, gst_rate_bps: Number(gstBps), hsn_code: hsn.trim(), ...(listingId ? { product_id: listingId } : {}), ...(qtyNum !== goods.qty ? { qty: qtyNum } : {}) }
+      // Client-side placeholder only — the server recomputes price_paise = qty × unit price.
+      pricePaise = unitPaise * qtyNum
+    }
     if (!pricePaise || pricePaise <= 0) { setError(t('quote_price_label') + ': ' + t('required_field')); return }
     if (!deliveryDays || deliveryDays <= 0) { setError(t('quote_delivery_label') + ': ' + t('required_field')); return }
     if (scope.trim().length < 20) { setError(t('quote_scope_label') + ': ' + t('required_field')); return }
@@ -47,6 +72,7 @@ export function QuoteComposer({ rfqId }: { rfqId: string }) {
           ...(transport ? { transport_included: transport === 'yes' } : {}),
           ...(validUntil ? { valid_until: validUntil } : {}),
           ...(advanceNum !== undefined ? { advance_percent: advanceNum } : {}),
+          ...(goodsTerms ? { goods: goodsTerms } : {}),
         }),
       })
       const d = await res.json().catch(() => ({}))
@@ -77,20 +103,78 @@ export function QuoteComposer({ rfqId }: { rfqId: string }) {
   return (
     <div className="rounded-card border border-border bg-surface p-5 shadow-card space-y-4">
       <h2 className="text-sm font-semibold">{t('quote_title')}</h2>
-      <div className="flex gap-3">
-        <div className="flex-1 flex flex-col gap-1.5">
-          <Label htmlFor="q-price">{t('quote_price_label')}</Label>
-          <Input id="q-price" type="number" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} />
-        </div>
-        <div className="flex-1 flex flex-col gap-1.5">
-          <Label htmlFor="q-days">{t('quote_delivery_label')}</Label>
-          <Input id="q-days" type="number" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />
-        </div>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="q-scope">{t('quote_scope_label')}</Label>
-        <Textarea id="q-scope" value={scope} onChange={(e) => setScope(e.target.value)} placeholder={t('quote_scope_placeholder')} rows={4} />
-      </div>
+      {goods ? (
+        <>
+          {/* AMC Mart M2 — goods terms. Unit price excl. GST; the server computes the total. */}
+          <p className="text-xs text-foreground-secondary">{t('goods_quote_intro', { qty: goods.qty, unit: goods.unit })}</p>
+          {goods.listings.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="q-listing">{t('goods_quote_listing')}</Label>
+              <select
+                id="q-listing"
+                value={listingId}
+                onChange={(e) => {
+                  const id = e.target.value
+                  setListingId(id)
+                  const l = goods.listings.find((x) => x.id === id)
+                  if (l) { setHsn(l.hsnCode); setGstBps(String(l.gstRateBps)) }
+                }}
+                className="h-10 rounded-button border border-border bg-surface px-3 text-sm text-foreground"
+              >
+                <option value="">{t('goods_quote_listing_none')}</option>
+                {goods.listings.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="q-unit-price">{t('goods_quote_unit_price', { unit: goods.unit })}</Label>
+              <Input id="q-unit-price" type="number" inputMode="decimal" min={0} step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="q-gqty">{t('goods_quote_qty')}</Label>
+              <Input id="q-gqty" type="number" inputMode="numeric" min={1} value={gQty} onChange={(e) => setGQty(e.target.value)} />
+              {Number(gQty) !== goods.qty && <p className="text-[11px] text-foreground-secondary">{t('goods_quote_qty_hint', { qty: goods.qty })}</p>}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="q-gst-rate">{t('goods_quote_gst')}</Label>
+              <select id="q-gst-rate" value={gstBps} onChange={(e) => setGstBps(e.target.value)} className="h-10 rounded-button border border-border bg-surface px-3 text-sm text-foreground">
+                <option value="">—</option>
+                {GST_RATE_BPS_OPTIONS.map((b) => <option key={b} value={b}>{b / 100}%</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="q-hsn">{t('goods_quote_hsn')}</Label>
+              <Input id="q-hsn" inputMode="numeric" maxLength={8} value={hsn} onChange={(e) => setHsn(e.target.value.replace(/\D/g, ''))} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="q-days">{t('quote_delivery_label')}</Label>
+              <Input id="q-days" type="number" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="q-scope">{t('quote_scope_label')}</Label>
+            <Textarea id="q-scope" value={scope} onChange={(e) => setScope(e.target.value)} placeholder={t('goods_quote_scope_placeholder')} rows={4} />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex gap-3">
+            <div className="flex-1 flex flex-col gap-1.5">
+              <Label htmlFor="q-price">{t('quote_price_label')}</Label>
+              <Input id="q-price" type="number" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} />
+            </div>
+            <div className="flex-1 flex flex-col gap-1.5">
+              <Label htmlFor="q-days">{t('quote_delivery_label')}</Label>
+              <Input id="q-days" type="number" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="q-scope">{t('quote_scope_label')}</Label>
+            <Textarea id="q-scope" value={scope} onChange={(e) => setScope(e.target.value)} placeholder={t('quote_scope_placeholder')} rows={4} />
+          </div>
+        </>
+      )}
 
       {/* Phase 4b — optional terms. Skipping them submits exactly as before. */}
       <details className="rounded-button border border-border bg-muted/30 p-3">
