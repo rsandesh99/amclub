@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "killtest:replay": "tsx scripts/killtest-webhook-replay.ts",
     "killtest:dropped": "tsx scripts/killtest-dropped-webhook.ts",
-    "eval:golden": "tsx scripts/eval-ai-golden.ts"
+    "eval:golden": "tsx scripts/eval-ai-golden.ts",
+    "mart:acceptance": "tsx scripts/mart-acceptance.ts",
+    "mart:preflight": "tsx scripts/verify-launch-gate.ts",
+    "mart:smoke": "tsx scripts/mart-launch-smoke.ts"
   },
   "dependencies": {
     "@amclub/db": "workspace:*",

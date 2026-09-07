@@ -129,9 +129,57 @@ MART_DESIGN.md §1 lists facts about the live services spine and instructs: *ver
   submitted goods quote, both inboxes with goods badges, product-page
   "Ask for a bulk quote", empty-search entry point, the resulting goods order.
 
+### 4d. Launch Gate readiness (2026-09-06)
+
+- **Founder decisions as config.** `/admin/mart/settings` edits every
+  `mart_settings` key against the closed registry in
+  `packages/shared/src/mart/settings.ts` (per-key Zod) and every
+  `mart_categories` row (§9.2 return window + return-freight payer, §9.3
+  commission); every write is audited (`mart_setting_update`,
+  `mart_category_update`, stable uuid entity ids for text-keyed rows).
+  Migration 0025 (STAGED) adds `return_freight_payer`. Rig killtest 24/24:
+  anon 401, buyer 403, unknown key 422, bad enum / range 422, strict category
+  patch, audit rows with before/after, the running money path reading the new
+  value (cart preview `deliveryDays`, `returnWindowHours`), the product page
+  showing the freight note, and the addendum surfaces below.
+- **Addendum goods schedule tied to the flag.** `effectiveLegalVersions({martEnabled})`
+  bumps only `provider_addendum` to `2026-09-06` when `MART_ENABLED=true`; every
+  server consumer (acceptance rows, `/legal/status`, rendered date, the gate
+  modal) reads the effective version; `/provider-addendum` renders sections
+  6–8 only with the flag; `/api/v1/legal/versions` is public for the preflight.
+  Flag off = services version, nobody re-prompted (shared test).
+- **Acceptance bundle on the rig, flag ON** (`pnpm --filter @amclub/web mart:acceptance`,
+  rig gateway extended with a fake auth admin API so the committed suites run
+  unchanged): verify-mart 57/57 (first run of the M0 suite outside the
+  founder's environment), verify-goods-rfq 24/24 (made robust to shared
+  databases: membership, not exact match sets), DB killtests 21/21 · 16/16 · 14/14.
+- **Preflight + smoke + runbook.** `mart:preflight` (read-only, `EXPECT_FLAG`)
+  checks flag delivery, 0022–0025, every registry key, categories,
+  `pool_categories` ⊆ active, addendum version/sections, seed sellers with
+  approved listings, pilot buyers, aged/failed payouts, open disputes;
+  `mart:smoke` drives one real internal goods order with a pause for the live
+  payment; `docs/mart/LAUNCH_RUNBOOK.md` is the flip procedure with rollback.
+- **Inertness, flag OFF** (rig rebuilt with `MART_ENABLED=false`):
+  `mart:acceptance -- --inert` 45/45; `mart:preflight EXPECT_FLAG=off`
+  19 pass / 3 warn / 0 fail. **Finding fixed on the way:** the public Mart
+  pages answered **200 with the 404 UI** while the flag was off. Every route
+  group (`(public)`, `(msme)`, `(provider)`, `(admin)`) streams through a
+  group-level `loading.tsx`, so a `notFound()` thrown by a Mart page or a
+  Mart segment layout arrives after the 200 headers. The four Mart subtrees
+  now live in their own route groups — `(mart-public)/mart`,
+  `(mart-msme)/app/mart`, `(mart-provider)/partner/goods`,
+  `(mart-admin)/admin/mart` — whose layout calls `martPageGate()` before
+  rendering the parent group's shell, so the whole subtree is a real 404
+  before anything streams. URLs unchanged; `lib/mart/revalidate.ts` paths
+  updated. This had been masked in 4a/4b because the earlier inert runs
+  pre-dated the streaming skeletons.
+- **Preflight, flag ON** (rig): 21 pass / 2 warn (TDS rate unconfirmed,
+  counsel sign-off) / 0 fail.
+
 ## 5. Not done here (needs the founder's environment)
 
-- Run `verify-mart.ts` against a local server on a database with 0022 applied and `MART_ENABLED=true`; run `verify-mart-inert.ts` + the four standard suites against prod (flag off).
-- Apply 0022 **only** at the Launch Gate (§8.2). `verify-migrations.ts` treats it as `staged`: set `MART_MIGRATIONS_EXPECTED=false` when verifying prod during the build.
-- Provider-addendum goods schedule (`LEGAL_VERSIONS` bump) — Launch Gate item 4, legal copy pending.
+- Run `mart:acceptance` against a Vercel preview with `MART_ENABLED=true` on a STAGING Supabase project with 0022–0025 applied (the rig run above proves the suites; the preview run proves the deploy), and `mart:acceptance -- --inert` + the four standard suites against prod (flag off).
+- `mart:preflight` with `EXPECT_FLAG=off` against prod today, then `EXPECT_FLAG=on` after the enabling deploy; `mart:smoke` on flip day (real payment).
+- Apply 0022–0025 **only** at the Launch Gate (§8.2). `verify-migrations.ts` treats them as `staged`: set `MART_MIGRATIONS_EXPECTED=false` when verifying prod during the build.
+- Counsel review of addendum sections 6–8 (§9.5 liability caps / indemnities) — the version bump itself is automatic with the flag.
 - Founder decisions §9.1–9.5, encoded in `mart_categories` / `mart_settings` / ADR.

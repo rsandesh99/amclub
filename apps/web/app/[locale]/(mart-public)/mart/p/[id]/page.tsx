@@ -145,7 +145,7 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
           </table>
         </div>
         <p className="mt-2 text-xs text-foreground-secondary">{t('itc_hint')}</p>
-        {cat && <p className="mt-1 text-xs text-foreground-secondary">{t('return_window_note', { hours: cat.return_window_hours })}</p>}
+        {cat && <p className="mt-1 text-xs text-foreground-secondary">{t('return_window_note', { hours: cat.return_window_hours })} {t(`return_freight_${cat.return_freight_payer ?? 'seller'}`)}</p>}
         {/* AMC Mart M2 — bulk / custom-spec → goods RFQ prefilled from this listing. */}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-brass/30 pt-3">
           <Link href={`/app/mart/rfq/new?product_id=${product.id}` as '/app'} className="inline-flex min-h-11 items-center rounded-button border border-brass/60 px-3 text-meta font-semibold text-emerald-ink hover:bg-emerald/10">

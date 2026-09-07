@@ -1318,7 +1318,13 @@
     "provider_addendum_s4_h": "Responding to requests (auto-decline)",
     "provider_addendum_s4_p": "When you are matched to a buyer’s request for quotes, you are expected to respond within the response window shown in the request. If you do not, the platform sends a courteous decline to the buyer on your behalf so they are not kept waiting. The first time this happens you will be notified.",
     "provider_addendum_s5_h": "Use of your data",
-    "provider_addendum_s5_p": "Quote and transaction data may be used in anonymised, aggregated form to improve platform services. Photos and voice recordings you submit are stored and may be processed by automated (AI) systems for evidence, verification and service features. Our Privacy Policy governs all personal data."
+    "provider_addendum_s5_p": "Quote and transaction data may be used in anonymised, aggregated form to improve platform services. Photos and voice recordings you submit are stored and may be processed by automated (AI) systems for evidence, verification and service features. Our Privacy Policy governs all personal data.",
+    "provider_addendum_s6_h": "Goods supply on AMC Mart",
+    "provider_addendum_s6_p": "This section applies when you sell goods through AMC Mart. You may list goods only after your GSTIN is verified; each listing is reviewed before it goes live and may be suspended for inaccuracy. You are responsible for the accuracy of every listing — name, specification, brand, HSN code, GST rate, country of origin, minimum order quantity and price tiers — and you warrant that goods supplied conform to the listing and to the buyer's accepted quote where the order arose from a goods request. Categories regulated under BIS or other mandatory standards stay blocked until you evidence compliance. On every goods order you dispatch with a dispatch photo and your tax invoice to the buyer, and confirm delivery with a delivery photo; where the consignment value meets the statutory threshold you generate the e-way bill and record its number at dispatch.",
+    "provider_addendum_s7_h": "Goods payments, tax and release",
+    "provider_addendum_s7_p": "AMC collects the buyer's payment and holds it until release. Your payout for a goods order is released only after delivery evidence has been recorded, the buyer has confirmed receipt (or 72 hours have passed without objection), and the category's return window has closed with no return open. The commission for each Mart category is shown to you before you list and is fixed for an order at the time it is placed; changes to category commission apply to new orders only. Where tax deduction at source applies to payments made to you, AMC deducts it at the rate notified and states the section, rate and amount on your payout advice. Payment gateway fees are borne by AMC out of its commission. Commission and tax invoices are generated automatically for every goods order.",
+    "provider_addendum_s8_h": "Returns, warranty and liability for goods",
+    "provider_addendum_s8_p": "A buyer may open a return within the category's return window for short quantity, damage in transit, or goods that do not match the listing. AMC's operations team resolves each return on the evidence submitted and may order a full or partial refund from the held amount; who bears return freight for each category is shown on the listing and applies to that order. Any manufacturer's warranty on goods you supply passes to the buyer unchanged. You remain the seller of the goods for the purposes of product quality, conformity and applicable product liability; AMC operates the marketplace and payment collection and is not the manufacturer or seller of record of your goods. Liability caps and indemnities for goods transactions will be set out in the version of this addendum reviewed by counsel before AMC Mart opens."
   },
   "grievance": {
     "title": "Grievance redressal",
@@ -1687,7 +1693,10 @@
     "allocation_paid": "paid",
     "allocation_pending": "awaiting payment",
     "pool_og_title": "AMC Mart group buy",
-    "view_order": "View order"
+    "view_order": "View order",
+    "return_freight_seller": "Return freight is borne by the seller.",
+    "return_freight_buyer": "Return freight is borne by the buyer.",
+    "return_freight_split": "Return freight is split equally between buyer and seller."
   },
   "admin_mart": {
     "title": "AMC Mart",
@@ -1847,6 +1856,31 @@
     "documents_warnings": "Warnings",
     "supplier": "Supplier",
     "buyer": "Buyer",
-    "place_of_supply": "Place of supply"
+    "place_of_supply": "Place of supply",
+    "settings_link": "Founder settings (§9)",
+    "settings_title": "Mart settings — founder decisions",
+    "settings_subtitle": "MART_DESIGN.md §9 decisions live here as config, never in code. Every save is audited. Commission changes apply to new orders only; return windows apply to orders delivered after the change.",
+    "categories_title": "Categories — return window, freight, commission",
+    "categories_subtitle": "§9.2 return window (hours after delivery) and who pays return freight; §9.3 commission in basis points (500 = 5%). BIS-blocked categories cannot list or be requested.",
+    "categories_note": "Return window 0 = no return window (payout releases on receipt). Inactive categories disappear from browse, RFQ and pools but keep their orders.",
+    "col_return_window": "Return window (h)",
+    "col_commission": "Commission (bps)",
+    "col_freight": "Return freight",
+    "col_bis": "BIS blocked",
+    "col_active": "Active",
+    "col_sort": "Sort",
+    "col_listings": "Active listings",
+    "freight_seller": "Seller pays",
+    "freight_buyer": "Buyer pays",
+    "freight_split": "Split 50/50",
+    "keys_title": "Config keys",
+    "keys_subtitle": "Each key is validated against the registry in @amclub/shared (closed set). JSON keys are edited as JSON.",
+    "settings_saved": "Saved {key}",
+    "category_saved": "Saved {slug}",
+    "settings_invalid_json": "Not valid JSON",
+    "updated_at": "Updated {date}",
+    "not_set": "Not set — the code default applies",
+    "block_capture_warning": "block_capture is refused at pool join until docs/mart/PSP_BLOCK_CAPTURE_REPORT.md §5 is signed off. Saving it here does not enable it.",
+    "save": "Save"
   }
 }

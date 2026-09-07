@@ -1,5 +1,6 @@
 import 'server-only'
-import { LEGAL_VERSIONS, requiredLegalDocs, type LegalDoc, type LegalSurface } from '@amclub/shared'
+import { requiredLegalDocs, type LegalDoc, type LegalSurface } from '@amclub/shared'
+import { LEGAL_VERSIONS_EFFECTIVE as LEGAL_VERSIONS } from '@/lib/legal/versions'
 import type { createAdminClient } from '@/lib/supabase/server'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>

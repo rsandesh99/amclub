@@ -169,6 +169,40 @@ engine as `rfqs.kind='goods'` (ADR-007). Landed:
 
 ---
 
+## AMC Mart — Launch Gate readiness landed (2026-09-06)
+
+Branch `claude/mart-m3` (Launch Gate, not M3 — M3 is traction-gated per
+MART_DESIGN.md §7 and stays unbuilt until post-launch numbers). Landed:
+
+- **§9 decisions as config:** `/admin/mart/settings` (registry-validated
+  `mart_settings`, per-category return window / return-freight payer /
+  commission / BIS / active / sort), audited; migration 0025 (STAGED)
+  `mart_categories.return_freight_payer`; product page shows the freight note.
+- **Addendum goods schedule (Launch Gate 4):** sections 6–8 + version
+  `2026-09-06` render and bump only when `MART_ENABLED=true`
+  (`effectiveLegalVersions`); public `/api/v1/legal/versions`.
+  DRAFT FOR COUNSEL — docs/COMPLIANCE.md row.
+- **Ops tooling:** `pnpm --filter @amclub/web mart:preflight | mart:smoke |
+  mart:acceptance` + `docs/mart/LAUNCH_RUNBOOK.md` (flip + rollback).
+- **Verification:** docs/mart/SPINE_VERIFICATION.md §4d (M0 suite ran on the
+  rig for the first time: 57/57; inert 45/45 after fixing a real leak — Mart
+  pages returned 200 + 404 UI with the flag off because group-level
+  `loading.tsx` streams before a page `notFound()`; Mart subtrees now sit in
+  `(mart-*)` route groups whose layout gates first).
+
+**Not now / needs the founder:**
+- Staging Supabase project for the preview acceptance run (Launch Gate 1) —
+  the rig proves the suites, not the deploy.
+- Counsel sign-off on addendum sections 6–8 (§9.5) before the flip.
+- Founder's §9 values (entered in the preview's settings screen, re-entered on
+  prod after migrations apply — see runbook step 3.4); CA's TDS section/rate.
+- Seed sellers (founder's plant + 2–3 distributors) and the Kurnool pilot
+  buyer list; live Razorpay keys + webhook registration (services cutover
+  item, shared).
+- M3 (courier API, ONDC catalog, benchmark pricing, vision QC) — traction-gated.
+
+---
+
 ## Mart M0 review fixes + load-path optimisation — closeout (2026-09-06)
 
 The design review (Mart M0 vs FRONTEND.md, competition, density/flow) was

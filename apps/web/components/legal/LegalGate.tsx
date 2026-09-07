@@ -19,6 +19,8 @@ export function LegalGate() {
   const locale = useLocale()
   const router = useRouter()
   const [required, setRequired] = useState<LegalDoc[]>([])
+  // Versions in force come from the server (the addendum bumps with MART_ENABLED); the constant is only a fallback.
+  const [versions, setVersions] = useState<Partial<Record<LegalDoc, string>>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
 
@@ -26,11 +28,13 @@ export function LegalGate() {
     let active = true
     fetch('/api/v1/legal/status', { cache: 'no-store' })
       .then(async (r) => {
-        const d = (await r.json().catch(() => null)) as { required?: LegalDoc[] } | null
+        const d = (await r.json().catch(() => null)) as { required?: LegalDoc[]; versions?: Partial<Record<LegalDoc, string>> } | null
         return r.ok ? d : null
       })
       .then((d) => {
-        if (active && d?.required?.length) setRequired(d.required)
+        if (!active) return
+        if (d?.versions) setVersions(d.versions)
+        if (d?.required?.length) setRequired(d.required)
       })
       .catch(() => {})
     return () => {
@@ -73,7 +77,7 @@ export function LegalGate() {
               <Link href={LEGAL_DOC_PATHS[doc]} target="_blank" rel="noopener" className="font-medium text-primary underline underline-offset-2 hover:no-underline">
                 {t(`doc_${doc}`)}
               </Link>
-              <span className="text-xs text-foreground-secondary">{t('updated_on', { date: fmt(LEGAL_VERSIONS[doc]) })}</span>
+              <span className="text-xs text-foreground-secondary">{t('updated_on', { date: fmt(versions[doc] ?? LEGAL_VERSIONS[doc]) })}</span>
             </li>
           ))}
         </ul>

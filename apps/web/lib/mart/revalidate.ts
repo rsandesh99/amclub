@@ -17,6 +17,6 @@ export function revalidateMart(opts: { productId?: string; categorySlug?: string
     if (opts.productId) revalidatePath(`${l}/mart/p/${opts.productId}`)
     if (opts.providerSlug) revalidatePath(`${l}/p/${opts.providerSlug}`)
   }
-  revalidatePath('/[locale]/(public)/mart/c/[slug]', 'page')
-  revalidatePath('/[locale]/(public)/mart/p/[id]', 'page')
+  revalidatePath('/[locale]/(mart-public)/mart/c/[slug]', 'page')
+  revalidatePath('/[locale]/(mart-public)/mart/p/[id]', 'page')
 }
