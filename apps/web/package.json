@@ -13,7 +13,8 @@
     "eval:golden": "tsx scripts/eval-ai-golden.ts",
     "mart:acceptance": "tsx scripts/mart-acceptance.ts",
     "mart:preflight": "tsx scripts/verify-launch-gate.ts",
-    "mart:smoke": "tsx scripts/mart-launch-smoke.ts"
+    "mart:smoke": "tsx scripts/mart-launch-smoke.ts",
+    "mart:static": "tsx scripts/verify-mart-static-inert.ts"
   },
   "dependencies": {
     "@amclub/db": "workspace:*",

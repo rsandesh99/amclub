@@ -128,6 +128,17 @@ record: `docs/adr/006-pool-pay-on-close-per-member-orders.md`; PSP report:
 
 ## AMC Mart M2 — goods RFQ landed (2026-09-06)
 
+> **Incident 2026-09-09 (fixed same day).** M2's services read paths named the
+> staged 0024 columns (`rfqs.kind/mart_category_slug/goods_spec`, quote goods
+> terms) in select strings. Prod lacks them → PostgREST 42703 → null data:
+> fan-out matched nobody, buyer RFQ list and compare view were empty, provider
+> matched list was empty, quote→order 404'd. Caught by `verify-rfq.ts` against
+> prod (2/12) after the H0 push; `verify-mart-inert.ts` had only run on a rig
+> WITH 0022 applied, so it could not see it. Fix: `lib/mart/staged-columns.ts`
+> fragments (empty while the flag is off) + `mart:static` guard. Open: run
+> `verify-mart-inert.ts` against a DB WITHOUT the staged migrations, and run
+> the four services suites against prod after every Mart merge (was skipped).
+
 M2 (MART_DESIGN.md §7) is built behind `MART_ENABLED` on branch
 `claude/mart-m2-goods-rfq`: bulk / spec goods requests ride the existing RFQ
 engine as `rfqs.kind='goods'` (ADR-007). Landed:

@@ -62,3 +62,25 @@ export async function prepareGoodsQuoteCheckout(
     },
   }
 }
+
+/**
+ * The seller's own ACTIVE listings in a Mart category (quote composer prefill
+ * for HSN / GST; a quote may link one to the order line). Names staged
+ * columns — reached only from a goods branch.
+ */
+export async function listSellerListingsInCategory(
+  admin: Admin,
+  sellerId: string,
+  martCategorySlug: string,
+): Promise<{ id: string; name: string; hsnCode: string; gstRateBps: number }[]> {
+  const { data } = await admin
+    .from('products')
+    .select('id, name, hsn_code, gst_rate_bps')
+    .eq('seller_id', sellerId)
+    .eq('category_slug', martCategorySlug)
+    .eq('status', 'active')
+    .is('deleted_at', null)
+    .order('name')
+    .limit(50)
+  return (data ?? []).map((l) => ({ id: l.id as string, name: l.name as string, hsnCode: l.hsn_code as string, gstRateBps: Number(l.gst_rate_bps) }))
+}

@@ -10,6 +10,7 @@ import { pickLocale } from '@amclub/shared'
 import { getLocale } from 'next-intl/server'
 import { GoodsSpecCard, type GoodsSpecView } from '@/components/mart/GoodsSpecCard'
 import { getMartCategory } from '@/lib/mart/config'
+import { listSellerListingsInCategory } from '@/lib/mart/goods-rfq'
 import { createAdminClient } from '@/lib/supabase/server'
 import type { QuoteComposerGoods } from '@/components/rfq/QuoteComposer'
 
@@ -29,14 +30,14 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
   let goodsCatName: string | null = null
   if (rfq.kind === 'goods' && rfq.goodsSpec && rfq.martCategorySlug) {
     const admin = await createAdminClient()
-    const [cat, { data: listings }, locale] = await Promise.all([
+    const [cat, listings, locale] = await Promise.all([
       getMartCategory(admin, rfq.martCategorySlug),
-      admin.from('products').select('id, name, hsn_code, gst_rate_bps').eq('seller_id', profile.id).eq('category_slug', rfq.martCategorySlug).eq('status', 'active').is('deleted_at', null).order('name').limit(50),
+      listSellerListingsInCategory(admin, profile.id, rfq.martCategorySlug),
       getLocale(),
     ])
     goodsCatName = cat ? pickLocale(cat.name_i18n, locale) : null
     const spec = rfq.goodsSpec as unknown as GoodsSpecView
-    goods = { unit: spec.unit, qty: spec.qty, listings: (listings ?? []).map((l) => ({ id: l.id as string, name: l.name as string, hsnCode: l.hsn_code as string, gstRateBps: Number(l.gst_rate_bps) })) }
+    goods = { unit: spec.unit, qty: spec.qty, listings }
   }
 
   const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')

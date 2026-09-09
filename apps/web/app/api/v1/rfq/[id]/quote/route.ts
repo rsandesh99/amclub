@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { quoteSchema } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { RFQ_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { createNotification } from '@/lib/notifications/create'
@@ -32,8 +33,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // AMC Mart M2 — a goods RFQ needs goods terms; the total is qty × unit price,
   // computed HERE (the client's price_paise is ignored for goods).
-  const { data: rfqRow } = await admin.from('rfqs').select('kind, goods_spec, mart_category_slug').eq('id', rfqId).maybeSingle()
-  const isGoods = rfqRow?.kind === 'goods'
+  const { data: rfqData } = await admin.from('rfqs').select('id' + RFQ_GOODS_COLS).eq('id', rfqId).maybeSingle()
+  const rfqRow = rfqData as unknown as { id: string; kind?: string; goods_spec?: unknown; mart_category_slug?: string | null } | null
+  const isGoods = isGoodsRow(rfqRow)
   let goods: { unit_price_paise: number; qty: number; gst_rate_bps: number; hsn_code: string; product_id: string | null } | null = null
   if (isGoods) {
     if (!d.goods) return NextResponse.json({ error: 'goods_terms_required' }, { status: 422 })

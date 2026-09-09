@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { computeOrderAmounts } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { getPaymentGateway } from '@/lib/payments'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon } from '@/lib/coupons/apply'
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest) {
     const { data: q } = await supabase
       .from('quotes')
       .select(
-        'id, status, provider_id, price_paise, delivery_days, scope, unit_price_paise, qty, gst_rate_bps, hsn_code, product_id, rfq:rfqs!inner(id, msme_id, category_id, title, status, details, kind, mart_category_slug, goods_spec)',
+        'id, status, provider_id, price_paise, delivery_days, scope' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_COLS + ')',
       )
       .eq('id', quoteId!)
       .maybeSingle()
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This request is closed' }, { status: 409 })
     }
 
-    if (rfq.kind === 'goods') {
+    if (isGoodsRow(rfq)) {
       // AMC Mart M2 — an accepted GOODS quote becomes an ordinary goods order:
       // one line at the quoted unit price, the buyer's delivery snapshot from
       // the request, commission from the Mart category. Same session →

@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { effectiveCostAfterItcPaise } from '@amclub/shared'
+import { RFQ_GOODS_LIST_COLS, QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -106,7 +107,7 @@ export async function listMyRfqs(userId: string): Promise<RfqListItem[]> {
   if (!actor.msmeId) return []
   const { data } = await admin
     .from('rfqs')
-    .select('id, title, status, quote_count, max_quotes, created_at, expires_at, kind, mart_category_slug, category:categories(slug)')
+    .select('id, title, status, quote_count, max_quotes, created_at, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug)')
     .eq('msme_id', actor.msmeId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -134,7 +135,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
 
   const { data: quotes } = await admin
     .from('quotes')
-    .select('id, status, price_paise, delivery_days, scope, message, created_at, gst_included, transport_included, valid_until, advance_percent, unit_price_paise, qty, gst_rate_bps, hsn_code, product_id, provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state)')
+    .select('id, status, price_paise, delivery_days, scope, message, created_at, gst_included, transport_included, valid_until, advance_percent' + QUOTE_GOODS_COLS + ', provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state)')
     .eq('rfq_id', rfqId)
     .order('price_paise', { ascending: true })
 
@@ -179,7 +180,7 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
 
   const { data: matches } = await admin
     .from('rfq_matches')
-    .select('rfq_id, viewed_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at, kind, mart_category_slug, category:categories(slug))')
+    .select('rfq_id, viewed_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug))')
     .eq('provider_id', actor.providerId)
     .order('notified_at', { ascending: false })
   if (!matches) return []
@@ -246,7 +247,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
 
   const { data: myQuote } = await admin
     .from('quotes')
-    .select('id, price_paise, delivery_days, scope, status, gst_included, transport_included, valid_until, advance_percent, unit_price_paise, qty, gst_rate_bps, hsn_code, product_id')
+    .select('id, price_paise, delivery_days, scope, status, gst_included, transport_included, valid_until, advance_percent' + QUOTE_GOODS_COLS)
     .eq('rfq_id', rfqId)
     .eq('provider_id', actor.providerId)
     .maybeSingle()
