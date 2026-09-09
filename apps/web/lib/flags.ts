@@ -37,3 +37,12 @@ export const PAYOUT_AUTO_RELEASE = process.env['PAYOUT_AUTO_RELEASE'] === 'true'
  * No Mart surface exists yet; the flag and its delivery mechanism land first.
  */
 export const MART_ENABLED = process.env['MART_ENABLED'] === 'true'
+
+/**
+ * AGENT_ENABLED — master switch for the agentic assistant programme (H0
+ * groundwork, DESIGN.md §8.6 / ADR-008). Default OFF. No agent surface exists
+ * yet; the flag lands first (COUPONS/MART pattern) so every later surface
+ * ships dark. The task-class router and ai_invocations attribution are NOT
+ * gated — they are telemetry on the existing voice pipeline.
+ */
+export const AGENT_ENABLED = process.env['AGENT_ENABLED'] === 'true'

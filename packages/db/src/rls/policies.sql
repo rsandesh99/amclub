@@ -310,6 +310,38 @@ CREATE POLICY "gstin_verifications: admin read" ON gstin_verifications
 -- No INSERT/UPDATE/DELETE policies by design (service role writes only).
 REVOKE INSERT, UPDATE, DELETE ON gstin_verifications FROM anon, authenticated;
 
+-- ─── agent_runs / agent_events (0026) — self read + admin read; service writes ─
+-- Mirrors migration 0026 (H0 agent groundwork, ADR-008). agent_events carries
+-- the same append-only guard as order_events; raise_append_only() from 0017.
+
+ALTER TABLE agent_runs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "agent_runs: self read" ON agent_runs;
+CREATE POLICY "agent_runs: self read" ON agent_runs
+  FOR SELECT USING (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "agent_runs: admin read" ON agent_runs;
+CREATE POLICY "agent_runs: admin read" ON agent_runs
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+REVOKE INSERT, UPDATE, DELETE ON agent_runs FROM anon, authenticated;
+
+ALTER TABLE agent_events ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "agent_events: self read" ON agent_events;
+CREATE POLICY "agent_events: self read" ON agent_events
+  FOR SELECT USING (run_id IN (SELECT id FROM agent_runs WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "agent_events: admin read" ON agent_events;
+CREATE POLICY "agent_events: admin read" ON agent_events
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+DROP TRIGGER IF EXISTS agent_events_no_update ON agent_events;
+CREATE TRIGGER agent_events_no_update
+  BEFORE UPDATE ON agent_events
+  FOR EACH ROW EXECUTE FUNCTION raise_append_only();
+REVOKE INSERT, UPDATE, DELETE ON agent_events FROM anon, authenticated;
+
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
 -- raise_append_only() is created in 0017 (bootstrap runs migrations first).

@@ -50,6 +50,14 @@ const serverEnvSchema = z.object({
   // for STT; OpenRouter conversion falls back to ₹88/USD.
   SARVAM_COST_PAISE_PER_MIN: z.string().optional(),
   OPENROUTER_USD_INR_PAISE: z.string().optional(),
+  // Task-class model router (H0, ADR-008). Tier -> OpenAI-compatible model id;
+  // unset -> lib/agent/router.ts defaults (routine default == Phase 8b parser).
+  AGENT_MODEL_LIVE: z.string().optional(),
+  AGENT_MODEL_ROUTINE: z.string().optional(),
+  AGENT_MODEL_REASONING: z.string().optional(),
+  AGENT_MODEL_FRONTIER: z.string().optional(),
+  // AGENT_ENABLED gates agent surfaces (none yet). Default OFF.
+  AGENT_ENABLED: z.string().optional(),
   // Feature flags. 'true' enables; anything else (incl. unset) = OFF.
   // COUPONS_ENABLED gates the entire Phase-6 coupon path (see lib/flags.ts).
   COUPONS_ENABLED: z.string().optional(),

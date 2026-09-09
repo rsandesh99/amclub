@@ -97,7 +97,8 @@ any → held               (dispute open, provider suspended, or bank verificati
 
 ## Scope governance (§8)
 
-- **NOT-NOW register (§8.3):** AI matching/chatbot, bidding wars on RFQs, pre-order chat, cash/offline payments, social feed, gamification, video consults, multi-currency, dynamic surge pricing, blockchain — do not implement under any circumstances.
+- **NOT-NOW register (§8.3):** bidding wars/auctions on RFQs, pre-order provider chat, cash/offline payments, per-buyer price negotiation in V1, social feed, gamification, video consults, international/multi-currency, dynamic surge pricing, blockchain — do not implement under any circumstances.
+- **AI features are version-gated (§8.2), not NOT-NOW.** The AI RFQ assistant is pulled forward by §8.6 (founder-authorised, 2026-09-08); AI matching / the buyer agent with tools stays at the V1.5→V2 gate. Agent rules: ADR-008 — agents call `/api/v1` under the user's own session (never service-role for user data), confirm gates are fixed in `packages/shared/src/agent.ts`, admin actions are never tools, `AGENT_ENABLED` default OFF.
 - Feature flags (PostHog flags) for all user-visible changes; ship dark, enable per-cohort.
 - ADRs in `docs/adr/NNN-*.md` for any decision touching money, auth, or the order state machine.
 - Schema changes after launch: migration + backfill plan + rollback note in PR description.

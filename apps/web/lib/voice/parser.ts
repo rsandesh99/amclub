@@ -10,6 +10,7 @@ import {
 } from '@amclub/shared'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { VendorHttpError } from './types'
+import { resolveModel } from '@/lib/agent/router'
 import type { ParseResult, RequirementParser } from './types'
 
 /**
@@ -25,7 +26,9 @@ import type { ParseResult, RequirementParser } from './types'
  */
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite'
+// Model id comes from the task-class router (H0, ADR-008); VOICE_PARSE_MODEL
+// remains the explicit override. Default is unchanged from Phase 8b.
+const parseModel = () => process.env['VOICE_PARSE_MODEL'] || resolveModel('rfq_parse').model
 
 const SYSTEM_PROMPT = `You convert an Indian MSME owner's spoken service requirement (already translated to English) into strict JSON for a B2B services marketplace RFQ form. Return ONLY a JSON object — no prose, no code fences.
 
@@ -195,12 +198,12 @@ class StubParser implements RequirementParser {
 export function getParser(): RequirementParser {
   const key = process.env['OPENROUTER_API_KEY']
   if (!key) return new StubParser()
-  return new OpenRouterParser(key, process.env['VOICE_PARSE_MODEL'] || DEFAULT_MODEL)
+  return new OpenRouterParser(key, parseModel())
 }
 
 /** Vendor tag for telemetry when the call itself failed (no result object). */
 export function parserVendorTag(): string {
   return process.env['OPENROUTER_API_KEY']
-    ? `openrouter:${process.env['VOICE_PARSE_MODEL'] || DEFAULT_MODEL}`
+    ? `openrouter:${parseModel()}`
     : 'stub'
 }

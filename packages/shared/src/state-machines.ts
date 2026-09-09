@@ -114,3 +114,29 @@ export const PAYOUT_TRANSITIONS: Record<PayoutStatus, readonly PayoutStatus[]> =
 export function isValidPayoutTransition(from: PayoutStatus, to: PayoutStatus): boolean {
   return (PAYOUT_TRANSITIONS[from] as readonly string[]).includes(to)
 }
+
+// ── Agent run (H0 groundwork, ADR-008) ────────────────────────────────────────
+// One run = one agent task on behalf of one user. `awaiting_confirmation` is
+// the confirm-gate: a tool marked `confirm: true` (see agent.ts) parks the run
+// until the SURFACE (never the model) records the user's explicit yes/no.
+
+export const AGENT_RUN_STATUSES = [
+  'running',
+  'awaiting_confirmation',
+  'completed',
+  'failed',
+  'cancelled',
+] as const
+export type AgentRunStatus = (typeof AGENT_RUN_STATUSES)[number]
+
+export const AGENT_RUN_TRANSITIONS: Record<AgentRunStatus, readonly AgentRunStatus[]> = {
+  running: ['awaiting_confirmation', 'completed', 'failed', 'cancelled'],
+  awaiting_confirmation: ['running', 'cancelled', 'failed'],
+  completed: [],
+  failed: [],
+  cancelled: [],
+}
+
+export function isValidAgentRunTransition(from: AgentRunStatus, to: AgentRunStatus): boolean {
+  return (AGENT_RUN_TRANSITIONS[from] as readonly string[]).includes(to)
+}

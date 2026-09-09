@@ -308,6 +308,36 @@ dated sections below where present.
 - **Live-cutover checklist** — see `docs/adr/003-simulate-mode-in-production.md`
   (KYC vendor key, Route activation, every active provider payout-ready).
 
+## Agent groundwork (H0) — open items (logged 2026-09-08, ADR-008)
+
+Landed: ADR-008, DESIGN.md §8.6, `@amclub/shared` `agent.ts` (personas, tool
+allowlists, confirm gates, task classes → tiers, event kinds) + agent-run state
+machine, migration 0026 (`agent_runs`, append-only `agent_events`, nullable
+routing/token columns on `ai_invocations`), `lib/agent/router.ts` (voice
+parser now routed; default unchanged), `AGENT_ENABLED` flag (OFF, no surface),
+authz §4e. 0026 was applied to prod on 2026-09-09 before this deploy (additive). Deferred, each its own PR:
+
+- **Agent runtime service** — long-running host (sockets, tool loops, the
+  pg-boss worker ADR-001 deferred). Needed by the first H1 feature; cannot
+  run on Vercel functions.
+- **Token exchange `POST /api/v1/agent/token`** — short-lived scoped JWT
+  (claims in ADR-008 §3); needs `SUPABASE_JWT_SECRET` as a server env var.
+  No consumer until the runtime exists.
+- **Distributed budgets** — per-user daily compute budget in Upstash (the
+  in-process limiters are per-instance); `agent_runs` carries the counters.
+- **Retrieval** — `pgvector` extension + embedding columns on packages, help,
+  legal and order documents; ingestion job for uploads (needs the worker).
+- **Consent ledger** — purpose/source/timestamp per ingested feed, before any
+  account-aggregator or GST-portal integration (H6).
+- **`ai_decisions` (Mart) vs `agent_events` (H0)** — Mart records every
+  human-confirmed AI proposal in `ai_decisions` (refs only); H0 records the
+  same moment as an `agent_events` row of kind `confirmed`. Two ledgers for
+  one concept. Reconcile when the runtime lands: either the runtime writes
+  `ai_decisions` for confirmations (and `agent_events` stays the trace), or
+  Mart's agents move onto `agent_runs`. Decide before A1 ships.
+- **A2 governance** — buyer agent with tools stays at the §8.2 V1.5→V2 gate;
+  negotiation protocol needs an explicit §8.3 amendment.
+
 ---
 
 ## Quote withdrawal (provider) — no UI, no route (logged 2026-08-27, Phase 1f)

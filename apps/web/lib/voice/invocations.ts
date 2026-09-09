@@ -1,5 +1,6 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
+import { tierFor, type AgentTaskClass, type AgentTier } from '@amclub/shared'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -28,6 +29,25 @@ export interface AiInvocationInput {
   requestId?: string | null | undefined
   error?: string | undefined
   meta?: Record<string, unknown> | undefined
+  /** H0 (0026): agent run this call belongs to; null for standalone calls. */
+  runId?: string | null | undefined
+  /** H0 (0026): overrides the step-derived task class (router attribution). */
+  taskClass?: AgentTaskClass | undefined
+}
+
+/** Legacy voice steps map onto the shared task-class vocabulary (ADR-008). */
+const STEP_TASK_CLASS: Record<AiInvocationInput['step'], AgentTaskClass> = {
+  stt: 'speech_to_text',
+  parse: 'rfq_parse',
+}
+
+/** OpenAI-compatible usage -> token counts (OpenRouter returns this shape). */
+function tokensFromUsage(meta: Record<string, unknown> | undefined): { input: number | null; output: number | null } {
+  const usage = meta?.['usage']
+  if (!usage || typeof usage !== 'object') return { input: null, output: null }
+  const u = usage as Record<string, unknown>
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null)
+  return { input: n(u['prompt_tokens']), output: n(u['completion_tokens']) }
 }
 
 export function estimateSttCostPaise(durationMs: number, stub: boolean): number | null {
@@ -50,6 +70,9 @@ export function estimateParseCostPaise(
 
 export async function logAiInvocation(admin: Admin, row: AiInvocationInput): Promise<void> {
   try {
+    const taskClass: AgentTaskClass = row.taskClass ?? STEP_TASK_CLASS[row.step]
+    const tier: AgentTier = tierFor(taskClass)
+    const tokens = tokensFromUsage(row.meta)
     const { error } = await admin.from('ai_invocations').insert({
       user_id: row.userId,
       feature: row.feature ?? 'voice_rfq',
@@ -63,6 +86,11 @@ export async function logAiInvocation(admin: Admin, row: AiInvocationInput): Pro
       request_id: row.requestId ?? null,
       error: row.error ?? null,
       meta: row.meta ?? null,
+      run_id: row.runId ?? null,
+      task_class: taskClass,
+      tier,
+      input_tokens: tokens.input,
+      output_tokens: tokens.output,
     })
     if (error) console.error('[ai-invocations]', error.message)
   } catch (e) {

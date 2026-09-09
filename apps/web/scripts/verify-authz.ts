@@ -437,6 +437,72 @@ async function main() {
       await admin.from('gstin_verifications').delete().in('user_id', [provD.uid])
     }
 
+    // ── 4e. H0 agent groundwork (0026, ADR-008) — RLS + append-only + ledger ──
+    // Fresh fixtures (own limiter budget). Tables are service-role-write only;
+    // self + admin read. agent_events rejects UPDATE for everyone (trigger).
+    console.log('H0 agent_runs / agent_events / ai_invocations attribution:')
+    {
+      const agentU = await mkUser('agentU', ['msme'])
+      const agentX = await mkUser('agentX', ['msme'])
+      const adminUser3 = await mkUser('admin3', ['msme', 'admin'])
+
+      const { data: run, error: runErr } = await admin
+        .from('agent_runs')
+        .insert({ user_id: agentU.uid, persona: 'buyer', surface: 'web', meta: { tag } })
+        .select('id, status')
+        .single()
+      eq('service-role opens a run (status running)', run?.status ?? runErr?.message, 'running')
+      const runId = run!.id
+      const { error: evErr } = await admin
+        .from('agent_events')
+        .insert({ run_id: runId, kind: 'started', actor: 'system', payload: { tag } })
+      eq('service-role appends an event', evErr?.message ?? null, null)
+      const upd = await admin.from('agent_events').update({ kind: 'completed' }).eq('run_id', runId)
+      eq('append-only: UPDATE agent_events raises even for service role', Boolean(upd.error), true)
+      const badPersona = await admin.from('agent_runs').insert({ user_id: agentU.uid, persona: 'admin', surface: 'web' })
+      eq("CHECK rejects persona outside AGENT_PERSONAS", Boolean(badPersona.error), true)
+
+      const asU = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${agentU.token}` } }, auth: { persistSession: false } })
+      const asX = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${agentX.token}` } }, auth: { persistSession: false } })
+      const asA = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${adminUser3.token}` } }, auth: { persistSession: false } })
+      eq('owner self-reads own run', ((await asU.from('agent_runs').select('id').eq('id', runId)).data ?? []).length, 1)
+      eq('owner self-reads own events', ((await asU.from('agent_events').select('id').eq('run_id', runId)).data ?? []).length, 1)
+      eq('admin reads the run', ((await asA.from('agent_runs').select('id').eq('id', runId)).data ?? []).length, 1)
+      const xr = await asX.from('agent_runs').select('id').eq('id', runId)
+      const xDenied = Boolean(xr.error) || (xr.data ?? []).length === 0
+      console.log(`  ${xDenied ? '✓' : '✗ LEAK'} cross-tenant run read → ${xr.error ? 'error' : (xr.data ?? []).length + ' rows'}`)
+      xDenied ? pass++ : fail++
+      const xe = await asX.from('agent_events').select('id').eq('run_id', runId)
+      const xeDenied = Boolean(xe.error) || (xe.data ?? []).length === 0
+      console.log(`  ${xeDenied ? '✓' : '✗ LEAK'} cross-tenant event read → ${xe.error ? 'error' : (xe.data ?? []).length + ' rows'}`)
+      xeDenied ? pass++ : fail++
+      const forgeRun = await asU.from('agent_runs').insert({ user_id: agentU.uid, persona: 'buyer', surface: 'web' })
+      eq('client INSERT agent_runs denied', Boolean(forgeRun.error), true)
+      const forgeEv = await asU.from('agent_events').insert({ run_id: runId, kind: 'confirmed', actor: 'user' })
+      eq('client INSERT agent_events denied (confirmation cannot be forged)', Boolean(forgeEv.error), true)
+      const clientUpd = await asU.from('agent_runs').update({ status: 'completed' }).eq('id', runId).select('id')
+      const updDenied = Boolean(clientUpd.error) || (clientUpd.data ?? []).length === 0
+      eq('client UPDATE agent_runs denied', updDenied, true)
+
+      // Ledger attribution through the DEPLOYED writer: the admin text-parse
+      // diagnostic writes an ai_invocations row via logAiInvocation.
+      const ev = await api(adminUser3.token, '/api/v1/admin/voice-parse-text', { text: 'need GST returns filed for my textile unit in Guntur' })
+      eq('admin voice-parse-text → 200', ev.status, 200)
+      const { data: inv } = await admin
+        .from('ai_invocations')
+        .select('task_class, tier, run_id')
+        .eq('user_id', adminUser3.uid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      eq("deployed ledger writer sets task_class='rfq_parse'", inv?.[0]?.task_class, 'rfq_parse')
+      eq("deployed ledger writer sets tier='routine'", inv?.[0]?.tier, 'routine')
+      eq('standalone call has run_id null', inv?.[0]?.run_id ?? null, null)
+
+      // Residue: ai_invocations.user_id is ON DELETE SET NULL — delete explicitly.
+      await admin.from('ai_invocations').delete().in('user_id', [adminUser3.uid, agentU.uid, agentX.uid])
+      await admin.from('agent_runs').delete().eq('id', runId) // cascades agent_events
+    }
+
     // ── 5. Contact-info redaction (phone-mask claim) ───────────────────────────
     if (quoteId) {
       console.log('Contact-info redaction in quote thread:')

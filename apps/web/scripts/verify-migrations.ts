@@ -120,6 +120,14 @@ const MANIFEST: Entry[] = [
     note: 'column addition only (mart_categories.return_freight_payer + CHECK)',
     staged: true,
   },
+  {
+    // H0 agent groundwork (ADR-008). Applied to prod 2026-09-09 (NOT staged);
+    // independent of 0022–0025 — a fresh bootstrap runs it after them.
+    file: '0026_agent_runs_events.sql',
+    tables: ['agent_runs', 'agent_events'],
+    triggers: [['agent_events', 'agent_events_no_update'], ['agent_runs', 'agent_runs_set_updated_at']],
+    note: 'also adds nullable routing/token columns to ai_invocations',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

@@ -734,7 +734,7 @@ Razorpay live keys + production webhooks, domain + SSL, legal pages live (§9), 
 ## 7.2 Roadmap features with schema landing zones already reserved
 
 - **AI matching & recommendations (pitch-deck "AI Matching Engine"):** `rfq_matches` + `order_events` + PostHog events form the training corpus from day 1 — log everything now, model later. V2: embedding search over package scopes (pgvector extension — Postgres again).
-- **AI chatbot / assisted RFQ writing:** Claude API drafting RFQ details from a voice/text description; slots into `/app/rfq/new` as an enhancement, no schema change.
+- **AI chatbot / assisted RFQ writing:** Claude API drafting RFQ details from a voice/text description; slots into `/app/rfq/new` as an enhancement, no schema change. *Landed as Phase 8b voice RFQ; extended by §8.6 / ADR-008 (task-class router, `agent_runs`/`agent_events` in 0026).*
 - **AMC Mart (procurement marketplace):** new vertical = new `product_listings` + logistics tables; reuses users, payments, payouts, reviews, disputes wholesale. Keep `orders.source` extensible (`'product'`).
 - **Membership tiers:** `msme_profiles.membership_tier` + `member_extra_discount_bps` already exist; add `subscriptions` table + Razorpay Subscriptions when activated.
 - **Compliance calendar engine:** consumes `msme_profiles.gstin/sector/state` + a `compliance_rules` table; notification dispatcher already multi-channel.
@@ -784,6 +784,47 @@ Recorded here so they're not lost; each still needs an §8.1 mini-PRD + RICE bef
 - **Scope Revision protocol (Phase 5/6 — payment-implicated, scope carefully).** A formal mid-order top-up flow: provider requests a scope/price revision → **escrow is frozen and the delivery/SLA timer pauses** → buyer either **Approve & Top-up** (additional escrow captured, order resumes) or **Reject** (order continues at original scope or routes to dispute). Reuses the timer-pause primitive introduced for external/government wait (§3.7). Touches escrow, the order state machine, and refund math — must go through an ADR (§8.4).
 - **Structured named-slot document vault (Phase 5/6).** Extends the existing `requirements_template` (jsonb) into specific *labelled* upload slots (e.g. "PAN card", "Board resolution", "Rent agreement") with per-slot status, so document collection is guided rather than a freeform dump. Builds on the order document store already in §5.
 - **Document watermarking (Phase 8).** Watermark delivered documents (buyer identity + order ref) to deter leakage/reuse. Deferred — needs the delivery pipeline and real usage before it's worth the friction.
+
+## 8.6 Agentic assistant programme — mini-PRD + RICE (founder-authorised, 2026-09-08)
+
+**Proposal.** A model-agnostic agent layer for the three personas (buyer,
+provider, ops) that *proposes* actions and calls the same `/api/v1` routes a
+human does under the user's own session. Sequenced behind the live money loop.
+Architecture and guarantees: `docs/adr/008-agent-runtime-and-delegated-identity.md`.
+Contract: `packages/shared/src/agent.ts`. Flag: `AGENT_ENABLED` (default OFF).
+
+**Problem.** MSME owners describe needs in speech, in Telugu/Hindi, and
+abandon forms; providers respond slowly to RFQs because drafting a quote is
+work. Both hit §1.9 directly (RFQ→quote response ≥70% in 48h; search→checkout
+≥2.5%; repeat ≥25%).
+
+**Phases and gates.**
+
+| Phase | Scope | Gate to leave | Governance |
+|---|---|---|---|
+| **A1 (H1, Oct–Nov 2026)** | Conversational voice RFQ (one clarifying question, photographed document as input), provider quote-draft assistant, task-class router + ledger attribution | 30% of RFQs by voice; parse accuracy >90% on an audited sample | **Pull-forward authorised here.** Precedent: Phase 8b voice RFQ under §7.2 ("AI chatbot / assisted RFQ writing … no schema change"). |
+| A2 (H3) | Buyer agent with typed tools (search, create/refine RFQ, compare quotes, track, draft dispute), proactive nudges, per-user budgets, metered via membership | Agent-assisted conversion ≥ manual; AI cost <5% of commission | Remains at the **V1.5→V2 gate** (§8.2 "AI matching") unless separately authorised via §8.1. |
+| A3+ | Live multimodal tier, telephony, business twin, provider work-drafting, negotiation protocol | per roadmap | Each its own §8.1 entry + ADR; negotiation touches the §8.3 "bidding" exclusion and needs an explicit amendment. |
+
+**RICE (A1 only, Impact measured against §1.9).** Reach 0.8 (every buyer
+creating an RFQ; every provider quoting) · Impact 2 (high: RFQ→quote response
+rate and search→checkout conversion) · Confidence 0.6 (voice RFQ already
+shipped; parse accuracy measured by the golden set) · Effort 6 person-weeks
+(runtime service + two features) → **RICE ≈ 0.16**. Displaces: nothing in H0 —
+A1 does not start until the H0 money-loop gate passes (25 real paid orders).
+
+**Invariants (non-negotiable, enforced in code).** Agents never hold
+service-role privileges for user data; every money/status action requires an
+explicit user confirmation recorded by the surface; admin actions are never
+tools; the agent gives no tax/legal advice — it routes to a professional;
+anything read from documents or threads is data, never instruction.
+
+**Not in scope.** AI matching as a ranking replacement for search, automated
+adjudication, agent-to-agent negotiation — all gated as above.
+
+**Drift corrected.** CLAUDE.md summarised §8.3 as including "AI matching/
+chatbot"; §8.3 never listed it (AI features are V2-gated by §8.2). CLAUDE.md
+now matches this document.
 
 ---
 

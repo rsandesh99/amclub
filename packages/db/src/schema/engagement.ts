@@ -136,10 +136,54 @@ export const aiInvocations = pgTable('ai_invocations', {
   requestId: text('request_id'),
   error: text('error'),
   meta: jsonb('meta'),
+  // H0 (0026): routing attribution + token counts; all nullable.
+  runId: uuid('run_id'),
+  taskClass: text('task_class'), // AGENT_TASK_CLASSES
+  tier: text('tier'), // AGENT_TIERS
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
 }, (table) => [
   index('ai_invocations_feature_created_idx').on(table.feature, table.createdAt),
   index('ai_invocations_status_created_idx').on(table.status, table.createdAt),
+])
+
+// H0 agent groundwork (0026, ADR-008). One run per agent task per user;
+// status per AGENT_RUN_TRANSITIONS. Service-role writes only; self + admin read.
+export const agentRuns = pgTable('agent_runs', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  persona: text('persona').notNull(), // AGENT_PERSONAS
+  status: text('status').default('running').notNull(), // AGENT_RUN_STATUSES
+  surface: text('surface').notNull(), // 'web' | 'mobile' | 'whatsapp' | 'phone'
+  subjectType: text('subject_type'),
+  subjectId: uuid('subject_id'),
+  costEstPaise: bigint('cost_est_paise', { mode: 'number' }).default(0).notNull(),
+  inputTokens: integer('input_tokens').default(0).notNull(),
+  outputTokens: integer('output_tokens').default(0).notNull(),
+  error: text('error'),
+  meta: jsonb('meta'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (table) => [
+  index('agent_runs_user_created_idx').on(table.userId, table.createdAt),
+  check('agent_runs_persona_check', sql`${table.persona} IN ('buyer', 'provider', 'ops')`),
+  check('agent_runs_status_check', sql`${table.status} IN ('running', 'awaiting_confirmation', 'completed', 'failed', 'cancelled')`),
+])
+
+// Append-only trace of a run (trigger + REVOKE like order_events).
+export const agentEvents = pgTable('agent_events', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  runId: uuid('run_id').references(() => agentRuns.id, { onDelete: 'cascade' }).notNull(),
+  kind: text('kind').notNull(), // AGENT_EVENT_KINDS
+  tool: text('tool'), // AGENT_TOOLS name for tool_* / confirmation_* events
+  actor: text('actor').default('agent').notNull(), // 'agent' | 'user' | 'system'
+  payload: jsonb('payload'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [
+  index('agent_events_run_created_idx').on(table.runId, table.createdAt),
+  check('agent_events_actor_check', sql`${table.actor} IN ('agent', 'user', 'system')`),
 ])
 
 export const cmsBanners = pgTable('cms_banners', {
