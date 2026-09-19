@@ -3,6 +3,8 @@ import { getTranslations } from 'next-intl/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { MsmeProfileForm, type MsmeProfileInitial } from '@/components/profile/MsmeProfileForm'
+import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
+import { AGENT_ENABLED } from '@/lib/flags'
 
 export default async function MsmeProfilePage() {
   const t = await getTranslations('profile')
@@ -56,6 +58,8 @@ export default async function MsmeProfilePage() {
       </section>
 
       <MsmeProfileForm initial={initial} />
+
+      {AGENT_ENABLED && <AgentGrantsSection persona="buyer" />}
     </div>
   )
 }

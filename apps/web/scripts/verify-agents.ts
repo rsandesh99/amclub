@@ -77,7 +77,14 @@ async function http() {
     record('HTTP checks (no BASE_URL)', 'skip', 'set BASE_URL to a running server / preview / prod')
     return
   }
-  const agentPaths = ['/api/v1/agent/grants', '/api/v1/agent/runs', `/api/v1/agent/runs/00000000-0000-0000-0000-000000000000`]
+  const agentPaths = [
+    '/api/v1/agent/grants',
+    '/api/v1/agent/runs',
+    '/api/v1/agent/runs/00000000-0000-0000-0000-000000000000',
+    '/api/v1/agent/admin/settings',
+    '/api/v1/agent/admin/runs',
+    '/api/v1/agent/admin/spend',
+  ]
 
   // Probe the flag via the token endpoint (404 while AGENT_ENABLED=false).
   const probe = await fetch(`${BASE_URL}/api/v1/agent/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
@@ -105,6 +112,11 @@ async function http() {
   })
   await drain(badCred)
   check('bad runtime credential -> 401', badCred.status === 401, `status ${badCred.status}`)
+
+  // Admin routes reject an unauthenticated caller.
+  const adminNoAuth = await fetch(`${BASE_URL}/api/v1/agent/admin/settings`, { method: 'GET' })
+  await drain(adminNoAuth)
+  check('admin settings without auth -> 401', adminNoAuth.status === 401, `status ${adminNoAuth.status}`)
 
   if (RUNTIME_SECRET && VERIFY_USER) {
     const cred = signRuntimeCredential(RUNTIME_SECRET, { userId: VERIFY_USER, persona: 'buyer', runId: '00000000-0000-0000-0000-000000000009' })

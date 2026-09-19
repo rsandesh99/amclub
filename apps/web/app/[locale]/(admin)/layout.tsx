@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSessionUser, getMsmeProfile, getProviderProfile } from '@/lib/auth/session'
 import { AppShell } from '@/components/shell/AppShell'
 import { AdminNav } from '@/components/shell/AdminNav'
-import { COUPONS_ENABLED, MART_ENABLED } from '@/lib/flags'
+import { COUPONS_ENABLED, MART_ENABLED, AGENT_ENABLED } from '@/lib/flags'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
@@ -25,7 +25,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       hasMsmeProfile={Boolean(msme)}
       hasProviderProfile={Boolean(provider)}
     >
-      <AdminNav couponsEnabled={COUPONS_ENABLED} martEnabled={MART_ENABLED} />
+      <AdminNav couponsEnabled={COUPONS_ENABLED} martEnabled={MART_ENABLED} agentEnabled={AGENT_ENABLED} />
       <div className="p-6">{children}</div>
     </AppShell>
   )

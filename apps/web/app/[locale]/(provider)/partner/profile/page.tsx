@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { Badge } from '@/components/ui/badge'
 import { ProviderProfileForm, type ProviderProfileInitial } from '@/components/profile/ProviderProfileForm'
+import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
+import { AGENT_ENABLED } from '@/lib/flags'
 
 export default async function ProviderProfilePage() {
   const t = await getTranslations('profile')
@@ -60,6 +62,8 @@ export default async function ProviderProfilePage() {
       )}
 
       <ProviderProfileForm initial={initial} />
+
+      {AGENT_ENABLED && <AgentGrantsSection persona="provider" />}
     </div>
   )
 }

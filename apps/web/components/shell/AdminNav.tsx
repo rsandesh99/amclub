@@ -16,17 +16,18 @@ const ITEMS = [
   { href: '/admin/reviews', key: 'reviews' },
   { href: '/admin/coupons', key: 'coupons' },
   { href: '/admin/mart', key: 'mart' },
+  { href: '/admin/agents', key: 'agents' },
   { href: '/admin/cms', key: 'cms' },
   { href: '/admin/audit', key: 'audit' },
 ] as const
 
 /** Ops sub-navigation across the admin surfaces (§7 / A1-A6). The Coupons tab is
- *  hidden while the COUPONS_ENABLED flag is OFF, and the Mart tab while
- *  MART_ENABLED is OFF (both passed from the layout). */
-export function AdminNav({ couponsEnabled = false, martEnabled = false }: { couponsEnabled?: boolean; martEnabled?: boolean }) {
+ *  hidden while COUPONS_ENABLED is OFF, the Mart tab while MART_ENABLED is OFF,
+ *  and the Agents tab while AGENT_ENABLED is OFF (all passed from the layout). */
+export function AdminNav({ couponsEnabled = false, martEnabled = false, agentEnabled = false }: { couponsEnabled?: boolean; martEnabled?: boolean; agentEnabled?: boolean }) {
   const t = useTranslations('admin_nav')
   const pathname = usePathname()
-  const items = ITEMS.filter((it) => (it.key !== 'coupons' || couponsEnabled) && (it.key !== 'mart' || martEnabled))
+  const items = ITEMS.filter((it) => (it.key !== 'coupons' || couponsEnabled) && (it.key !== 'mart' || martEnabled) && (it.key !== 'agents' || agentEnabled))
   return (
     <nav className="flex flex-wrap gap-1 border-b border-border px-6 pt-4">
       {items.map((it) => {

@@ -4,6 +4,30 @@ Items deliberately deferred during pre-cutover hardening. Each entry says what
 exists today, what is missing, and what would unblock it. Remove an entry when
 it ships.
 
+## Agent S0.2 — admin console + grants UI + kill switch (2026-09-20)
+
+Landed the founder console at `/admin/agents` (spend today/month + AI share of
+commission, per-agent enable toggles, budgets/cohort/consent-version editor,
+runs table + detail drawer, one-tap kill switch) and the user grant toggle on
+the web MSME + provider profile pages. All admin/ops-gated, `agentApiGate` first,
+dark behind `AGENT_ENABLED`. Verified: web build green; HTTP inertness 14/15
+(every `/api/v1/agent/*` incl. admin 404s with the flag off).
+
+Deferred:
+- **Mobile grant UI** — there is no mobile profile/settings screen today (grants
+  are inert while dark, and the WhatsApp opt-in grant arrives via S0.5, not a
+  mobile screen). Logged as mobile parity; add the section when the mobile
+  profile screen lands (see `docs/MOBILE_PARITY.md`).
+- **Spend sums in JS** over the window (`/api/v1/agent/admin/spend`, cap 20k
+  rows) — fine at pilot scale; replace with a Postgres aggregate RPC before
+  invoice volume grows.
+- **admin_agents strings are English-only in hi/te** — deepMerge falls back to
+  en (the repo's standard for admin surfaces); `agent_grants` (user-facing) is
+  translated to Hindi, and Telugu falls back per te.json's partial-locale policy.
+- **Flag-ON admin authz matrix** in verify-agents (buyer→403, unknown key→422,
+  kill audited) needs a seeded admin session; the flag-off inertness + no-auth
+  401 run everywhere.
+
 ## Agent S0.1 — core + runtime + token exchange (2026-09-20)
 
 Landed the agent programme's code foundation, all dark (`AGENT_ENABLED=false`):
