@@ -7,15 +7,17 @@ import { MART_ENABLED } from '@/lib/flags'
 import { listMartCategories } from '@/lib/mart/config'
 import { MartBrowse, type BrowseParams } from '../../_browse'
 
-/** Category browse — ISR per category (built on first hit, purged on mutation). */
+/**
+ * Category browse — ISR per category, rendered ON DEMAND (first hit builds it,
+ * revalidate purges it; lib/mart/revalidate.ts purges on mutation), exactly
+ * like /mart/p/[id]. No generateStaticParams: it used to enumerate categories
+ * from the database at BUILD time, which (a) coupled the build to the DB and
+ * the flag's build-time value and (b) produced an empty prerender set when
+ * the flag was off at build, after which every /mart/c/* request 500'd on
+ * Vercel with the flag on (2026-09-19 demo incident). On-demand ISR has no
+ * build-time state to get wrong.
+ */
 export const revalidate = 60
-export const dynamicParams = true
-
-export async function generateStaticParams() {
-  if (!MART_ENABLED) return []
-  const cats = await listMartCategories()
-  return cats.filter((c) => !c.bis_blocked).map((c) => ({ slug: c.slug }))
-}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   if (!MART_ENABLED) return {}

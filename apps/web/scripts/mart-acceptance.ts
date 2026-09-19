@@ -37,10 +37,12 @@ console.log(`\nMart acceptance ${inert ? '(inert)' : '(flag ON)'} → ${process.
 const results: { name: string; code: number; summary: string }[] = []
 for (const s of suites) {
   console.log(`━━ ${s.name}`)
-  const r = spawnSync(s.cmd, s.args, { cwd: s.cwd, env: process.env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-  process.stdout.write(r.stdout)
+  // shell:true on Windows — `pnpm` is pnpm.cmd there and spawnSync cannot exec it directly (2026-09-19).
+  const r = spawnSync(s.cmd, s.args, { cwd: s.cwd, env: process.env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32' })
+  if (r.error) console.error(`  spawn failed: ${r.error.message}`)
+  process.stdout.write(r.stdout ?? '')
   if (r.stderr) process.stderr.write(r.stderr)
-  const summary = (r.stdout.match(/(\d+) passed, (\d+) failed/) ?? r.stdout.match(/(\d+) pass, (\d+) warn, (\d+) fail/))?.[0] ?? (r.status === 0 ? 'ok' : `exit ${r.status}`)
+  const summary = ((r.stdout ?? '').match(/(\d+) passed, (\d+) failed/) ?? (r.stdout ?? '').match(/(\d+) pass, (\d+) warn, (\d+) fail/))?.[0] ?? (r.status === 0 ? 'ok' : `exit ${r.status}`)
   results.push({ name: s.name, code: r.status ?? 1, summary })
 }
 console.log('\n━━ scoreboard')
