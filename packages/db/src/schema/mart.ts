@@ -105,25 +105,9 @@ export const productEvents = pgTable('product_events', {
   index('product_events_product_idx').on(table.productId, table.createdAt),
 ])
 
-/**
- * ai_decisions (§4.6) — append-only decision records for every AI output a
- * human confirms/corrects. Refs only, no PII blobs. Training corpus; cannot
- * be backfilled, hence M0.
- */
-export const aiDecisions = pgTable('ai_decisions', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  // catalog_draft | payout_dossier | extraction_correction
-  feature: text('feature').notNull(),
-  inputRefs: jsonb('input_refs').notNull(),
-  proposed: jsonb('proposed').notNull(),
-  final: jsonb('final').notNull(),
-  correctedFields: text('corrected_fields').array().default(sql`'{}'`).notNull(),
-  decidedBy: uuid('decided_by').references(() => users.id).notNull(),
-  decidedAt: timestamp('decided_at', { withTimezone: true }).default(sql`now()`).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
-}, (table) => [
-  index('ai_decisions_feature_idx').on(table.feature, table.decidedAt),
-])
+// ai_decisions moved to schema/engagement.ts — migration 0027 LIFTS it out of
+// the staged Mart 0022 into an always-applied table (the ONE confirmation ledger
+// for Mart + runtime agents; gains run_id/tool). Import `aiDecisions` from there.
 
 // ── M1 — group-buy pools (§4.4). Applied by migration 0023 (STAGED). ─────────
 

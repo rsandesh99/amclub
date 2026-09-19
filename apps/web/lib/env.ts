@@ -51,12 +51,29 @@ const serverEnvSchema = z.object({
   SARVAM_COST_PAISE_PER_MIN: z.string().optional(),
   OPENROUTER_USD_INR_PAISE: z.string().optional(),
   // Task-class model router (H0, ADR-008). Tier -> OpenAI-compatible model id;
-  // unset -> lib/agent/router.ts defaults (routine default == Phase 8b parser).
+  // unset -> agent-core router defaults (routine default == Phase 8b parser).
   AGENT_MODEL_LIVE: z.string().optional(),
   AGENT_MODEL_ROUTINE: z.string().optional(),
   AGENT_MODEL_REASONING: z.string().optional(),
   AGENT_MODEL_FRONTIER: z.string().optional(),
-  // AGENT_ENABLED gates agent surfaces (none yet). Default OFF.
+  // Agent programme S0.1 (ADR-009). All optional in the dark build — the token
+  // endpoint 404s while AGENT_ENABLED=false and the gateway stubs without a key.
+  // Delegated identity: mint the run-bound JWT with the project's JWT secret.
+  SUPABASE_JWT_SECRET: z.string().optional(),
+  // The always-on runtime (Fly bom): its base URL + the HMAC the token endpoint
+  // trusts and the decision route calls back with.
+  AGENT_RUNTIME_URL: z.string().url().optional(),
+  AGENT_RUNTIME_SECRET: z.string().optional(),
+  // LLM gateway (OpenAI-compatible). Absent key -> stub mode (no bill).
+  AGENT_LLM_BASE_URL: z.string().url().optional(),
+  AGENT_LLM_API_KEY: z.string().optional(),
+  AGENT_EMBED_BASE_URL: z.string().url().optional(),
+  AGENT_MODEL_EMBEDDING: z.string().optional(),
+  // Budget cap overrides (else agent_settings, else registry defaults).
+  AGENT_BUDGET_RUN_PAISE: z.string().optional(),
+  AGENT_BUDGET_USER_DAY_PAISE: z.string().optional(),
+  AGENT_BUDGET_MONTH_PAISE: z.string().optional(),
+  // AGENT_ENABLED gates every /api/v1/agent/* surface (dark build). Default OFF.
   AGENT_ENABLED: z.string().optional(),
   // Feature flags. 'true' enables; anything else (incl. unset) = OFF.
   // COUPONS_ENABLED gates the entire Phase-6 coupon path (see lib/flags.ts).

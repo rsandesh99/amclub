@@ -1,0 +1,4 @@
+[
+  { "input": "hi there", "expectOk": true },
+  { "input": "namaste, is this working?", "expectOk": true }
+]

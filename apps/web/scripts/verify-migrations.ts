@@ -128,6 +128,20 @@ const MANIFEST: Entry[] = [
     triggers: [['agent_events', 'agent_events_no_update'], ['agent_runs', 'agent_runs_set_updated_at']],
     note: 'also adds nullable routing/token columns to ai_invocations',
   },
+  {
+    // Agent programme S0.1 (ADR-009). Applied to prod BEFORE the writer deploys
+    // (NOT staged). ai_decisions is LIFTED here out of staged Mart 0022 into an
+    // always-applied table — so on prod it exists via 0027, not 0022 (whose
+    // entry above stays staged/skipped). agent_runs gains parent_run_id/job_id.
+    file: '0027_agent_foundation.sql',
+    tables: ['ai_decisions', 'agent_settings', 'agent_grants'],
+    triggers: [
+      ['ai_decisions', 'ai_decisions_no_update'],
+      ['agent_settings', 'agent_settings_set_updated_at'],
+      ['agent_grants', 'agent_grants_set_updated_at'],
+    ],
+    note: 'lifts ai_decisions out of staged 0022; adds agent_settings + agent_grants; agent_runs parent_run_id/job_id',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

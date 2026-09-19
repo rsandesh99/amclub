@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { rfqSchema } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { requireToolScope } from '@/lib/agent/scope'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { fanoutRfq } from '@/lib/rfq/fanout'
@@ -17,6 +18,9 @@ const RFQ_TTL_MS = 72 * 60 * 60 * 1000
 export async function POST(request: NextRequest) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Delegated-token scope gate (no-op for ordinary sessions; ADR-009 §6).
+  const scope = await requireToolScope('create_rfq')
+  if (scope) return scope
 
   const rl = await enforce(limiters.rfqCreate, `rfq:${userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)

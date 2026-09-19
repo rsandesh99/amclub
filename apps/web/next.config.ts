@@ -40,7 +40,7 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   // Transpile internal workspace packages (source exports, not compiled)
-  transpilePackages: ['@amclub/shared', '@amclub/db'],
+  transpilePackages: ['@amclub/shared', '@amclub/db', '@amclub/agent-core'],
 
   images: {
     formats: ['image/avif', 'image/webp'],

@@ -1,6 +1,11 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { tierFor, type AgentTaskClass, type AgentTier } from '@amclub/shared'
+// Pure cost math lives in @amclub/agent-core now — ONE place shared with the
+// runtime (ADR-009 §1). Re-exported so existing importers keep their import.
+import { tokensFromUsage, estimateSttCostPaise, estimateParseCostPaise } from '@amclub/agent-core'
+
+export { estimateSttCostPaise, estimateParseCostPaise }
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -39,33 +44,6 @@ export interface AiInvocationInput {
 const STEP_TASK_CLASS: Record<AiInvocationInput['step'], AgentTaskClass> = {
   stt: 'speech_to_text',
   parse: 'rfq_parse',
-}
-
-/** OpenAI-compatible usage -> token counts (OpenRouter returns this shape). */
-function tokensFromUsage(meta: Record<string, unknown> | undefined): { input: number | null; output: number | null } {
-  const usage = meta?.['usage']
-  if (!usage || typeof usage !== 'object') return { input: null, output: null }
-  const u = usage as Record<string, unknown>
-  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null)
-  return { input: n(u['prompt_tokens']), output: n(u['completion_tokens']) }
-}
-
-export function estimateSttCostPaise(durationMs: number, stub: boolean): number | null {
-  if (stub) return 0
-  const perMin = Number(process.env['SARVAM_COST_PAISE_PER_MIN'] ?? '')
-  if (!Number.isFinite(perMin) || perMin <= 0) return null
-  return Math.ceil((durationMs / 60_000) * perMin)
-}
-
-export function estimateParseCostPaise(
-  usage: Record<string, unknown> | undefined,
-  stub: boolean,
-): number | null {
-  if (stub) return 0
-  const usd = typeof usage?.['cost'] === 'number' ? (usage['cost'] as number) : null
-  if (usd === null) return null
-  const paisePerUsd = Number(process.env['OPENROUTER_USD_INR_PAISE'] ?? '8800')
-  return Math.ceil(usd * paisePerUsd)
 }
 
 export async function logAiInvocation(admin: Admin, row: AiInvocationInput): Promise<void> {

@@ -72,7 +72,8 @@ ALTER TABLE IF EXISTS pool_events      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS products         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS price_tiers      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS product_events   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS ai_decisions     ENABLE ROW LEVEL SECURITY;
+-- ai_decisions RLS is enabled in the always-applied section (0027 lifted it out
+-- of staged Mart 0022); no IF EXISTS guard needed once 0027 is applied.
 
 -- ─── users ────────────────────────────────────────────────────────────────────
 
@@ -341,6 +342,57 @@ CREATE TRIGGER agent_events_no_update
   BEFORE UPDATE ON agent_events
   FOR EACH ROW EXECUTE FUNCTION raise_append_only();
 REVOKE INSERT, UPDATE, DELETE ON agent_events FROM anon, authenticated;
+
+-- ─── ai_decisions (0027) — LIFTED from the Mart $mart$ block; always applied ───
+-- The single confirmation ledger (Mart + runtime agents). Append-only; the
+-- deciding human reads their own rows, admins read all, service role writes.
+ALTER TABLE ai_decisions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "ai_decisions: self read" ON ai_decisions;
+CREATE POLICY "ai_decisions: self read" ON ai_decisions
+  FOR SELECT USING (decided_by = auth_user_id());
+
+DROP POLICY IF EXISTS "ai_decisions: admin read" ON ai_decisions;
+CREATE POLICY "ai_decisions: admin read" ON ai_decisions
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+DROP TRIGGER IF EXISTS ai_decisions_no_update ON ai_decisions;
+CREATE TRIGGER ai_decisions_no_update
+  BEFORE UPDATE ON ai_decisions
+  FOR EACH ROW EXECUTE FUNCTION raise_append_only();
+REVOKE INSERT, UPDATE, DELETE ON ai_decisions FROM anon, authenticated;
+
+-- ─── agent_settings (0027) — closed config registry; admin read, service write ─
+ALTER TABLE agent_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "agent_settings: admin read" ON agent_settings;
+CREATE POLICY "agent_settings: admin read" ON agent_settings
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+REVOKE INSERT, UPDATE, DELETE ON agent_settings FROM anon, authenticated;
+
+-- ─── agent_grants (0027) — delegated-identity consent; self read/insert/revoke ─
+ALTER TABLE agent_grants ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "agent_grants: self read" ON agent_grants;
+CREATE POLICY "agent_grants: self read" ON agent_grants
+  FOR SELECT USING (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "agent_grants: self insert" ON agent_grants;
+CREATE POLICY "agent_grants: self insert" ON agent_grants
+  FOR INSERT WITH CHECK (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "agent_grants: self revoke" ON agent_grants;
+CREATE POLICY "agent_grants: self revoke" ON agent_grants
+  FOR UPDATE USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "agent_grants: admin read" ON agent_grants;
+CREATE POLICY "agent_grants: admin read" ON agent_grants
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- Self may INSERT own rows and UPDATE only revoked_at (column-scoped grant); never DELETE.
+REVOKE UPDATE, DELETE ON agent_grants FROM anon, authenticated;
+GRANT UPDATE (revoked_at) ON agent_grants TO authenticated;
 
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
@@ -674,19 +726,15 @@ BEGIN
   EXECUTE 'DROP POLICY IF EXISTS "price_tiers: admin all" ON price_tiers';
   EXECUTE 'CREATE POLICY "price_tiers: admin all" ON price_tiers FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
 
-  -- product_events / ai_decisions: append-only (trigger from 0022), read-only for clients.
+  -- product_events: append-only (trigger from 0022), read-only for clients.
   EXECUTE 'DROP POLICY IF EXISTS "product_events: seller read own" ON product_events';
   EXECUTE 'CREATE POLICY "product_events: seller read own" ON product_events FOR SELECT USING (
     product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())))';
   EXECUTE 'DROP POLICY IF EXISTS "product_events: admin read" ON product_events';
   EXECUTE 'CREATE POLICY "product_events: admin read" ON product_events FOR SELECT USING (has_role(''admin'') OR has_role(''ops''))';
   EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON product_events FROM anon, authenticated';
-
-  EXECUTE 'DROP POLICY IF EXISTS "ai_decisions: self read" ON ai_decisions';
-  EXECUTE 'CREATE POLICY "ai_decisions: self read" ON ai_decisions FOR SELECT USING (decided_by = auth_user_id())';
-  EXECUTE 'DROP POLICY IF EXISTS "ai_decisions: admin read" ON ai_decisions';
-  EXECUTE 'CREATE POLICY "ai_decisions: admin read" ON ai_decisions FOR SELECT USING (has_role(''admin'') OR has_role(''ops''))';
-  EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON ai_decisions FROM anon, authenticated';
+  -- NOTE: ai_decisions policies moved to the always-applied section (0027 lifts
+  -- the table out of staged 0022). Nothing for ai_decisions belongs here now.
 END
 $mart$;
 

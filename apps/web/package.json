@@ -14,9 +14,11 @@
     "mart:acceptance": "tsx scripts/mart-acceptance.ts",
     "mart:preflight": "tsx scripts/verify-launch-gate.ts",
     "mart:smoke": "tsx scripts/mart-launch-smoke.ts",
-    "mart:static": "tsx scripts/verify-mart-static-inert.ts"
+    "mart:static": "tsx scripts/verify-mart-static-inert.ts",
+    "agents:verify": "tsx scripts/verify-agents.ts"
   },
   "dependencies": {
+    "@amclub/agent-core": "workspace:*",
     "@amclub/db": "workspace:*",
     "@amclub/shared": "workspace:*",
     "@hookform/resolvers": "^5.4.0",

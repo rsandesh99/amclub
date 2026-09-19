@@ -12,6 +12,10 @@ import {
   agentToolNameSchema,
   AGENT_RUN_TRANSITIONS,
   isValidAgentRunTransition,
+  agentGrantSchema,
+  scopesWithinPersona,
+  AGENT_SURFACES,
+  AGENT_CHANNELS,
 } from '../index'
 
 /**
@@ -85,5 +89,40 @@ describe('agent run state machine', () => {
     expect(isValidAgentRunTransition('awaiting_confirmation', 'running')).toBe(true)
     expect(isValidAgentRunTransition('awaiting_confirmation', 'cancelled')).toBe(true)
     expect(isValidAgentRunTransition('completed', 'running')).toBe(false)
+  })
+})
+
+describe('delegation grant — scopes are a subset of the persona allowlist', () => {
+  it('accepts scopes that are the persona\'s own tools', () => {
+    const r = agentGrantSchema.safeParse({ persona: 'buyer', scopes: ['search_catalog', 'create_rfq'], channel: 'whatsapp', channel_identity: '+919876543210' })
+    expect(r.success).toBe(true)
+  })
+
+  it('rejects a scope from another persona (the injection boundary)', () => {
+    const r = agentGrantSchema.safeParse({ persona: 'buyer', scopes: ['submit_quote'], channel: 'web' })
+    expect(r.success).toBe(false)
+  })
+
+  it('rejects an unknown scope', () => {
+    const r = agentGrantSchema.safeParse({ persona: 'ops', scopes: ['release_payout'], channel: 'web' })
+    expect(r.success).toBe(false)
+  })
+
+  it('defaults scopes to empty and allows an empty grant', () => {
+    const r = agentGrantSchema.safeParse({ persona: 'provider', channel: 'mobile' })
+    expect(r.success).toBe(true)
+    if (r.success) expect(r.data.scopes).toEqual([])
+  })
+
+  it('scopesWithinPersona matches the schema decision', () => {
+    expect(scopesWithinPersona('buyer', ['search_catalog'])).toBe(true)
+    expect(scopesWithinPersona('buyer', ['submit_quote'])).toBe(false)
+  })
+
+  it('grant channels never include phone or system; surfaces do', () => {
+    expect([...AGENT_CHANNELS]).toEqual(['web', 'mobile', 'whatsapp'])
+    expect(AGENT_SURFACES).toContain('system')
+    expect(AGENT_SURFACES).toContain('phone')
+    for (const c of AGENT_CHANNELS) expect(AGENT_SURFACES).toContain(c)
   })
 })

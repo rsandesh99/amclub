@@ -33,6 +33,10 @@ export * from './locales'
 // confirm gates, event kinds (H0 groundwork, DESIGN.md §8.6 / ADR-008)
 export * from './agent'
 
+// Agent config registry: agents_enabled, budget caps, cohort, consent version —
+// the closed registry the admin console edits (S0.1, ADR-009 §7)
+export * from './agent-settings'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

@@ -47,6 +47,12 @@ jobs:
       - name: Unit tests (shared — money, state machines, masking)
         run: pnpm --filter @amclub/shared test
 
+      - name: Unit tests (agent-core — runner, confirm gate, budget, envelope)
+        run: pnpm --filter @amclub/agent-core test
+
+      - name: Prompt golden eval (agent-core — STUB mode, no key)
+        run: pnpm --filter @amclub/agent-core eval
+
       - name: Build (web)
         run: pnpm turbo run build --filter=@amclub/web
         env:

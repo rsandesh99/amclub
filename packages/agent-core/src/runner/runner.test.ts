@@ -1,0 +1,256 @@
+import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
+import { AGENT_TOOLS, agentTool, isValidAgentRunTransition } from '@amclub/shared'
+import type { Gateway } from '../llm/gateway'
+import type { Budget } from '../budget'
+import type { Ledger, RunRow } from '../ledger/types'
+import type { PromptRef } from '../prompts/registry'
+import { envelope } from '../untrusted/envelope'
+import {
+  AgentRun,
+  BudgetExceededError,
+  ConfirmationNotApprovedError,
+  isReadOnlyOrLocal,
+  runAgent,
+  ToolNotAllowedError,
+  ToolOutOfScopeError,
+  type RunContext,
+} from './index'
+
+// ── fakes ──────────────────────────────────────────────────────────────────
+
+function makeFakeLedger() {
+  const runs = new Map<string, RunRow>()
+  const events: Array<{ runId: string; kind: string; tool?: string | null }> = []
+  const invocations: unknown[] = []
+  const decisions: Array<{ id: string; runId?: string | null; tool?: string | null }> = []
+  let seq = 0
+  const ledger: Ledger = {
+    async openRun(input) {
+      const id = `run_${++seq}`
+      runs.set(id, { id, userId: input.userId, persona: input.persona, status: 'running', surface: input.surface, costEstPaise: 0, inputTokens: 0, outputTokens: 0 })
+      return { id }
+    },
+    async getRun(id) {
+      return runs.get(id) ?? null
+    },
+    async transitionRun(id, from, to) {
+      if (!isValidAgentRunTransition(from, to)) throw new Error(`illegal ${from}->${to}`)
+      const r = runs.get(id)
+      if (!r || r.status !== from) throw new Error(`lost transition on ${id}: expected ${from}, was ${r?.status}`)
+      r.status = to
+    },
+    async addRunCost(id, c) {
+      const r = runs.get(id)
+      if (r) {
+        r.costEstPaise += c.costPaise
+        r.inputTokens += c.inputTokens
+        r.outputTokens += c.outputTokens
+      }
+    },
+    async appendEvent(e) {
+      events.push({ runId: e.runId, kind: e.kind, tool: e.tool ?? null })
+    },
+    async logInvocation(i) {
+      invocations.push(i)
+    },
+    async recordDecision(d) {
+      const id = `dec_${++seq}`
+      decisions.push({ id, runId: d.runId ?? null, tool: d.tool ?? null })
+      return { id }
+    },
+    async hasApprovedDecision(q) {
+      return decisions.some((d) => d.runId === q.runId && d.tool === q.tool && (!q.decisionId || d.id === q.decisionId))
+    },
+  }
+  return { ledger, runs, events, invocations, decisions }
+}
+
+const fakeGateway: Gateway = {
+  async chatJson({ schema, stub }) {
+    const data = schema.parse(stub ? stub() : {})
+    return { data, usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001, raw: null }, model: 'fake', latencyMs: 1, stub: false }
+  },
+  async embed(texts) {
+    return { vectors: texts.map(() => [0.1]), usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, raw: null }, model: 'fake', latencyMs: 1, stub: false }
+  },
+}
+
+function budget(ok: boolean): Budget {
+  return {
+    async check() {
+      return ok ? { ok: true, spent: { run: 0, userDay: 0, month: 0 } } : { ok: false, breach: 'run_cap', spent: { run: 9999, userDay: 0, month: 0 } }
+    },
+    async add() {},
+  }
+}
+
+const okFetch: typeof fetch = (async () => ({ status: 200, ok: true, json: async () => ({ id: 'created_1' }) })) as unknown as typeof fetch
+
+function ctxWith(ledger: Ledger, runId: string, over = false, scopes?: string[]): RunContext {
+  return {
+    runId,
+    userId: 'u1',
+    persona: 'buyer',
+    ledger,
+    gateway: fakeGateway,
+    budget: budget(!over),
+    apiBaseUrl: 'http://local',
+    getToken: () => 'delegated-jwt',
+    ...(scopes ? { scopes } : {}),
+    fetchImpl: okFetch,
+  }
+}
+
+const PROMPT: PromptRef = { id: 't', version: 'v1', taskClass: 'rfq_parse', schemaRef: 'x', text: 'hi' }
+const SCHEMA = z.object({ ok: z.literal(true) })
+
+// ── static invariant: the taint law over the allowlist ──────────────────────
+
+describe('taint law is a static property of the tool table', () => {
+  it('every confirm:false tool wraps a GET or a pure local computation', () => {
+    for (const t of AGENT_TOOLS) {
+      if (!t.confirm) expect(isReadOnlyOrLocal(t)).toBe(true)
+    }
+  })
+})
+
+// ── the confirm gate cannot be bypassed ──────────────────────────────────────
+
+describe('confirm gate', () => {
+  it('a confirm:true tool parks the run in awaiting_confirmation', async () => {
+    const { ledger, runs } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id))
+    const out = await run.proposeTool('create_rfq', { title: 'x' })
+    expect(out.status).toBe('awaiting_confirmation')
+    expect(runs.get(id)?.status).toBe('awaiting_confirmation')
+    expect(run.parked).toBe(true)
+  })
+
+  it('resume WITHOUT an approved decision is refused', async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id))
+    await run.proposeTool('create_rfq', { title: 'x' })
+    await expect(run.resume('create_rfq', { title: 'x' })).rejects.toBeInstanceOf(ConfirmationNotApprovedError)
+  })
+
+  it('resume WITH an approved ai_decisions row executes the tool under the delegated token', async () => {
+    const { ledger, runs } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id))
+    await run.proposeTool('create_rfq', { title: 'x' })
+    await ledger.recordDecision({ feature: 'agent_tool', runId: id, tool: 'create_rfq', inputRefs: {}, proposed: {}, final: {}, decidedBy: 'u1' })
+    const out = await run.resume('create_rfq', { title: 'x' })
+    expect(out.status).toBe('done')
+    if (out.status === 'done') expect(out.result.status).toBe(200)
+    expect(runs.get(id)?.status).toBe('running')
+  })
+})
+
+// ── allowlist + scope ────────────────────────────────────────────────────────
+
+describe('allowlist and scope', () => {
+  it("a persona cannot call another persona's tool", async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id))
+    await expect(run.proposeTool('submit_quote' as never)).rejects.toBeInstanceOf(ToolNotAllowedError)
+  })
+
+  it('a tool outside the granted scopes is refused', async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id, false, ['search_catalog']))
+    await expect(run.proposeTool('create_rfq', {})).rejects.toBeInstanceOf(ToolOutOfScopeError)
+  })
+
+  it('a read-only tool still runs after untrusted content taints the run', async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id))
+    await run.callModel({ taskClass: 'rfq_parse', prompt: PROMPT, schema: SCHEMA, parts: { untrusted: [envelope('junk', { kind: 'rfq', id: 'r' })] }, stub: () => ({ ok: true as const }) })
+    expect(run.isTainted).toBe(true)
+    const out = await run.proposeTool('search_catalog', { q: 'welding' })
+    expect(out.status).toBe('done')
+  })
+})
+
+// ── budget + envelope + finality ─────────────────────────────────────────────
+
+describe('budget, envelope, finality', () => {
+  it('a budget breach fails the run cleanly', async () => {
+    const { ledger, runs } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id, true))
+    await expect(run.callModel({ taskClass: 'rfq_parse', prompt: PROMPT, schema: SCHEMA, stub: () => ({ ok: true as const }) })).rejects.toBeInstanceOf(BudgetExceededError)
+    expect(runs.get(id)?.status).toBe('failed')
+  })
+
+  it('a raw string is refused where an Envelope is required', async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id))
+    await expect(
+      run.callModel({ taskClass: 'rfq_parse', prompt: PROMPT, schema: SCHEMA, parts: { untrusted: ['not an envelope' as never] }, stub: () => ({ ok: true as const }) }),
+    ).rejects.toThrow(/raw string/)
+  })
+
+  it('terminal states are final: a completed run cannot be transitioned again', async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const run = new AgentRun(ctxWith(ledger, id))
+    await run.complete()
+    await expect(run.complete()).rejects.toThrow()
+  })
+
+  it('agentTool ties a tool to its confirm flag (create_rfq is confirm:true)', () => {
+    expect(agentTool('create_rfq').confirm).toBe(true)
+  })
+})
+
+// ── runAgent wrapper ─────────────────────────────────────────────────────────
+
+describe('runAgent wrapper', () => {
+  it('opens, runs, and completes a no-op agent; a parked agent stays awaiting', async () => {
+    const { ledger, runs } = makeFakeLedger()
+    const deps = {
+      ledger,
+      gateway: fakeGateway,
+      makeBudget: () => budget(true),
+      apiBaseUrl: 'http://local',
+      makeToken: () => 'jwt',
+      fetchImpl: okFetch,
+    }
+    const completed = await runAgent(
+      { name: 'noop', persona: 'buyer' as const, run: async (r) => { await r.callModel({ taskClass: 'rfq_parse', prompt: PROMPT, schema: SCHEMA, stub: () => ({ ok: true as const }) }); return 'done' } },
+      deps,
+      { userId: 'u1', surface: 'system' },
+      undefined,
+    )
+    expect(completed.status).toBe('completed')
+    expect(runs.get(completed.runId)?.status).toBe('completed')
+
+    const parked = await runAgent(
+      { name: 'parker', persona: 'buyer' as const, run: async (r) => { await r.proposeTool('create_rfq', { title: 'x' }); return 'parked' } },
+      deps,
+      { userId: 'u1', surface: 'system' },
+      undefined,
+    )
+    expect(parked.status).toBe('awaiting_confirmation')
+    expect(runs.get(parked.runId)?.status).toBe('awaiting_confirmation')
+  })
+
+  it('a throwing agent ends failed, not thrown', async () => {
+    const { ledger, runs } = makeFakeLedger()
+    const res = await runAgent(
+      { name: 'boom', persona: 'buyer' as const, run: async () => { throw new Error('kaboom') } },
+      { ledger, gateway: fakeGateway, makeBudget: () => budget(true), apiBaseUrl: 'http://local', makeToken: () => 'jwt' },
+      { userId: 'u1', surface: 'system' },
+      undefined,
+    )
+    expect(res.status).toBe('failed')
+    expect(runs.get(res.runId)?.status).toBe('failed')
+  })
+})

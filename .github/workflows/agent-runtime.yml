@@ -1,0 +1,44 @@
+# Deploy the always-on agent runtime to Fly.io (ADR-009 §1). Runs on master when
+# the runtime or its source packages change. NO-OP until FLY_API_TOKEN is set as
+# a repo secret (founder task, docs/agents/RUNTIME.md) — the deploy step is
+# skipped when the secret is absent, so the workflow never fails a build.
+name: Deploy agent-runtime
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/agent-runtime/**'
+      - 'packages/agent-core/**'
+      - 'packages/shared/**'
+      - '.github/workflows/agent-runtime.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Fly deploy (bom)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard — FLY_API_TOKEN present?
+        id: guard
+        run: |
+          if [ -n "${{ secrets.FLY_API_TOKEN }}" ]; then
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            echo "FLY_API_TOKEN not set — skipping deploy (dark build)."
+          fi
+
+      - name: Setup Fly CLI
+        if: steps.guard.outputs.armed == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy (repo-root context so pnpm workspace resolves)
+        if: steps.guard.outputs.armed == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --config apps/agent-runtime/fly.toml --dockerfile apps/agent-runtime/Dockerfile --remote-only .

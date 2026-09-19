@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { quoteSchema } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
@@ -17,6 +18,8 @@ const bodySchema = quoteSchema.omit({ rfq_id: true })
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const scope = await requireToolScope('submit_quote')
+  if (scope) return scope
   const { id: rfqId } = await params
 
   const admin = await createAdminClient()

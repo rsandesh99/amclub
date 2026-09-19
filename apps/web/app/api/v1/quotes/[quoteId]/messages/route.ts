@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { quoteMessageSchema, redactContactInfo } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { requireToolScope } from '@/lib/agent/scope'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { createNotification } from '@/lib/notifications/create'
@@ -72,6 +73,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ quoteId: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const scope = await requireToolScope('reply_thread')
+  if (scope) return scope
   const { quoteId } = await params
   const admin = await createAdminClient()
   const thread = await loadThread(admin, quoteId, userId)

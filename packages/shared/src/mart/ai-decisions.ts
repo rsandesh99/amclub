@@ -13,6 +13,17 @@ export const AI_DECISION_FEATURES = [
   'pool_draft',
   'pool_card',
   'documents_draft',
+  // Agent programme (0027 lifts ai_decisions out of staged Mart + widens the CHECK
+  // to the whole programme). Every runtime confirm-gate write uses one of these.
+  'agent_tool',        // generic runtime tool confirmation (run_id + tool set)
+  'quote_extraction',  // S1.1
+  'decline_message',   // S1.2 / S0.4
+  'onboarding',        // S1.6
+  'dispute_triage',    // S1.7
+  'rfq_quality',       // S1.5
+  'munshi_draft',      // S2.2
+  'support_reply',     // S2.3
+  'score_note',        // S2.4
 ] as const
 export type AiDecisionFeature = (typeof AI_DECISION_FEATURES)[number]
 

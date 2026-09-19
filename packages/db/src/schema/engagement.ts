@@ -163,11 +163,15 @@ export const agentRuns = pgTable('agent_runs', {
   outputTokens: integer('output_tokens').default(0).notNull(),
   error: text('error'),
   meta: jsonb('meta'),
+  // 0027: chained / resumable work. No FK (self-reference kept additive).
+  parentRunId: uuid('parent_run_id'),
+  jobId: text('job_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 }, (table) => [
   index('agent_runs_user_created_idx').on(table.userId, table.createdAt),
+  index('agent_runs_parent_idx').on(table.parentRunId),
   check('agent_runs_persona_check', sql`${table.persona} IN ('buyer', 'provider', 'ops')`),
   check('agent_runs_status_check', sql`${table.status} IN ('running', 'awaiting_confirmation', 'completed', 'failed', 'cancelled')`),
 ])
@@ -184,6 +188,59 @@ export const agentEvents = pgTable('agent_events', {
 }, (table) => [
   index('agent_events_run_created_idx').on(table.runId, table.createdAt),
   check('agent_events_actor_check', sql`${table.actor} IN ('agent', 'user', 'system')`),
+])
+
+// ai_decisions (0027) — the ONE confirmation ledger. Lifted from staged Mart
+// 0022 into an always-applied table: every human confirmation of an AI proposal
+// (Mart catalog/pool/documents + runtime agent tools) is a row here. Append-only
+// (trigger); refs only, never PII blobs. run_id/tool tie a row to a runtime run.
+export const aiDecisions = pgTable('ai_decisions', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  feature: text('feature').notNull(), // AI_DECISION_FEATURES (@amclub/shared)
+  inputRefs: jsonb('input_refs').notNull(),
+  proposed: jsonb('proposed').notNull(),
+  final: jsonb('final').notNull(),
+  correctedFields: text('corrected_fields').array().default(sql`'{}'`).notNull(),
+  decidedBy: uuid('decided_by').references(() => users.id).notNull(),
+  decidedAt: timestamp('decided_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  // 0027: runtime confirm-gate linkage; null for Mart confirm-and-correct.
+  runId: uuid('run_id'),
+  tool: text('tool'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [
+  index('ai_decisions_feature_idx').on(table.feature, table.decidedAt),
+  index('ai_decisions_run_idx').on(table.runId),
+])
+
+// agent_settings (0027) — closed config registry (mirrors mart_settings).
+// agents_enabled per agent, budget caps, cohort ids, consent versions. Writes
+// via service role from the admin route only; admin/ops read.
+export const agentSettings = pgTable('agent_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updatedBy: uuid('updated_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+})
+
+// agent_grants (0027) — delegated-identity consent. Which persona, which scopes,
+// which channel, with a consent snapshot. The token endpoint refuses a runtime
+// credential without an active (revoked_at IS NULL) grant.
+export const agentGrants = pgTable('agent_grants', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  persona: text('persona').notNull(), // AGENT_PERSONAS
+  scopes: text('scopes').array().default(sql`'{}'`).notNull(),
+  channel: text('channel').notNull(), // 'web' | 'mobile' | 'whatsapp'
+  channelIdentity: text('channel_identity'),
+  consent: jsonb('consent').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+}, (table) => [
+  index('agent_grants_user_idx').on(table.userId),
+  check('agent_grants_persona_check', sql`${table.persona} IN ('buyer', 'provider', 'ops')`),
+  check('agent_grants_channel_check', sql`${table.channel} IN ('web', 'mobile', 'whatsapp')`),
 ])
 
 export const cmsBanners = pgTable('cms_banners', {

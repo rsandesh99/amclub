@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { computeOrderAmounts } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { getPaymentGateway } from '@/lib/payments'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
@@ -47,6 +48,8 @@ interface Prep {
 export async function POST(request: NextRequest) {
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const scope = await requireToolScope('place_order')
+  if (scope) return scope
 
   // Per-user request cap (idempotencyKey already prevents double-charge).
   const rl = await enforce(limiters.checkout, `checkout:${userId}`)

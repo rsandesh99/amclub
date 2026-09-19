@@ -131,10 +131,10 @@ cluster is a serving change, never an application change.
 | tier | today's default | used for |
 |---|---|---|
 | `device` | on-device (no server model) | wake/soft signals only |
-| `live` | `google/gemini-2.5-flash-lite` | speech leg, one clarifying turn |
-| `routine` | `google/gemini-2.5-flash-lite` | structured extraction (`rfq_parse`, `quote_extract`, `decline_message`, `translation`, `embedding`, intent) |
-| `reasoning` | `qwen/qwen3-235b-a22b` | `quote_draft`, `quote_compare`, onboarding interview |
-| `frontier` | `anthropic/claude-sonnet-4.5` | `document_extract`, `dispute_summary`, `photo_plausibility`, `benchmark_explain` |
+| `live` | `google/gemini-2.5-flash-lite` | speech leg (`speech_to_text`, `text_to_speech`), one clarifying turn (`rfq_clarify`) |
+| `routine` | `google/gemini-2.5-flash-lite` | structured extraction (`rfq_parse`, `quote_extract`, `decline_message`, `rfq_quality`, `translation`, `embedding`) |
+| `reasoning` | `qwen/qwen3-235b-a22b` | `quote_draft`, `quote_compare`, `onboarding_interview`, `support_reply` |
+| `frontier` | `anthropic/claude-sonnet-4.5` | `document_extract`, `dispute_summary`, `dispute_triage`, `photo_plausibility`, `benchmark_explain` |
 
 Every model call is tagged with its class and tier and logged to
 `ai_invocations` with token counts and a paise cost estimate, so the two

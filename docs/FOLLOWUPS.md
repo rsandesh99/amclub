@@ -4,6 +4,36 @@ Items deliberately deferred during pre-cutover hardening. Each entry says what
 exists today, what is missing, and what would unblock it. Remove an entry when
 it ships.
 
+## Agent S0.1 — core + runtime + token exchange (2026-09-20)
+
+Landed the agent programme's code foundation, all dark (`AGENT_ENABLED=false`):
+`@amclub/agent-core` (gateway, prompt registry, untrusted Envelope, ledger,
+budget, runtime credential, runner), `apps/agent-runtime` (Hono + pg-boss on
+Fly `bom`), the token-exchange endpoint + delegation grants + runs/decision
+routes, per-tool scope on the five wrapped routes, and migration 0027 (lifts
+`ai_decisions` out of staged Mart 0022 into an always-applied ledger; adds
+`agent_settings` + `agent_grants`; `agent_runs.parent_run_id`/`job_id`).
+
+Deferred to their stages / founder tasks (not built here):
+- **Fly deploy is not run** — needs `FLY_API_TOKEN`, `SUPABASE_JWT_SECRET`,
+  `AGENT_RUNTIME_SECRET`, LLM key, Upstash (see `docs/agents/RUNTIME.md`,
+  `docs/COMPLIANCE.md`). CI's `agent-runtime.yml` is a no-op until the token is set.
+- **Migration 0027 apply** is the founder-gated deploy step (RULES.md 2): apply
+  to prod with the writer push. `verify-migrations` shows `agent_settings` +
+  `agent_grants` MISSING until then; `ai_decisions` already exists on prod so
+  0027's `CREATE … IF NOT EXISTS` no-ops it.
+- **gateway `vision()`** (multimodal) is not implemented yet — arrives with
+  `document_extract`/`photo_plausibility` (S0.3/S1). `chatJson` uses JSON mode +
+  Zod; strict `json_schema` is wired but optional (`jsonSchema` param).
+- **Prompt loading in the Vercel functions** uses `registerPrompt`; the fs
+  loader (`loadDefaultPrompts`) is used by the runtime/eval only — Next tracing
+  of `.md` files is revisited when the first bounded call registers a prompt.
+- **`postgres` was not added to agent-core deps**: the ledger uses the Supabase
+  service-role client (matching web), so the raw driver was unnecessary.
+- **verify-agents HTTP flag-ON positive path** needs a seeded user +
+  `AGENT_RUNTIME_SECRET` + `AGENT_VERIFY_USER_ID`; offline + flag-off inertness
+  run everywhere.
+
 ## Mart-prep hardening sprint — closeout (2026-09-05)
 
 Three gated phases readied the services spine to host AMC Mart (a goods mode,

@@ -25,27 +25,48 @@ export type AgentTier = (typeof AGENT_TIERS)[number]
 
 export const AGENT_TASK_CLASSES = [
   'speech_to_text',    // audio → text (+translate) — today Sarvam, later the live tier
+  'text_to_speech',    // text → audio for the speech leg (live tier)
   'rfq_parse',         // English requirement → structured RFQ prefill (Phase 8b)
   'rfq_clarify',       // one clarifying question in the user's language (H1)
+  'rfq_quality',       // pre-fan-out RFQ completeness check (S1.5)
   'document_extract',  // photographed notice/invoice → structured facts (H1)
   'quote_draft',       // RFQ → provider quote draft (H1)
+  'quote_extract',     // provider's free text → structured quote fields (S1.1)
   'quote_compare',     // ≤7 quotes → ranked comparison with reasons (H3)
+  'decline_message',   // polite, translated decline copy (S1.2 / S0.4)
+  'onboarding_interview', // provider intake interview turn (S1.6)
+  'dispute_summary',   // ops: neutral summary of a dispute thread (recommendation only)
+  'dispute_triage',    // ops: triage card for a dispute (S1.7)
+  'photo_plausibility',// is this evidence photo plausibly of the work? (S0.3/S1.4)
+  'support_reply',     // customer support reply, bounded + safe (S2.3)
+  'benchmark_explain', // fair-price range explanation (S3.2)
   'translation',       // UI-adjacent short translation
   'embedding',         // retrieval vectors
-  'dispute_summary',   // ops: neutral summary of a dispute thread (recommendation only)
 ] as const
 export type AgentTaskClass = (typeof AGENT_TASK_CLASSES)[number]
 
+// class→tier is the reviewable routing policy (ARCHITECTURE.md §6). The tier is
+// the only thing that moves when prices or hardware change; ids live in the
+// router (agent-core/src/llm), never here.
 export const TASK_CLASS_TIER: Record<AgentTaskClass, AgentTier> = {
   speech_to_text: 'live',
+  text_to_speech: 'live',
   rfq_parse: 'routine',
   rfq_clarify: 'live',
+  rfq_quality: 'routine',
   document_extract: 'frontier',
   quote_draft: 'reasoning',
+  quote_extract: 'routine',
   quote_compare: 'reasoning',
+  decline_message: 'routine',
+  onboarding_interview: 'reasoning',
+  dispute_summary: 'frontier',
+  dispute_triage: 'frontier',
+  photo_plausibility: 'frontier',
+  support_reply: 'reasoning',
+  benchmark_explain: 'frontier',
   translation: 'routine',
   embedding: 'routine',
-  dispute_summary: 'frontier',
 }
 
 export function tierFor(taskClass: AgentTaskClass): AgentTier {
@@ -160,3 +181,50 @@ export const AGENT_EVENT_KINDS = [
 ] as const
 export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number]
 export const agentEventKindSchema = z.enum(AGENT_EVENT_KINDS)
+
+// ── Surfaces and channels ─────────────────────────────────────────────────────
+// A SURFACE is where a run was opened (agent_runs.surface); it includes 'system'
+// for scheduled/proactive runs with no human at a screen. A CHANNEL is the
+// delivery channel a delegation grant is bound to (agent_grants.channel) — the
+// user-facing subset, never 'phone'/'system'.
+
+export const AGENT_SURFACES = ['web', 'mobile', 'whatsapp', 'phone', 'system'] as const
+export type AgentSurface = (typeof AGENT_SURFACES)[number]
+export const agentSurfaceSchema = z.enum(AGENT_SURFACES)
+
+export const AGENT_CHANNELS = ['web', 'mobile', 'whatsapp'] as const
+export type AgentChannel = (typeof AGENT_CHANNELS)[number]
+export const agentChannelSchema = z.enum(AGENT_CHANNELS)
+
+// ── Delegation grant ──────────────────────────────────────────────────────────
+// POST /api/v1/agent/grants body. Scopes are tool names and MUST be a subset of
+// the persona's allowlist — the token endpoint mints amc_scopes from the grant,
+// so a scope outside the persona could never be honoured anyway; we reject it at
+// the source. channel_identity is the E.164 phone for a whatsapp grant.
+
+export const agentGrantSchema = z
+  .object({
+    persona: agentPersonaSchema,
+    scopes: z.array(z.string().min(1).max(60)).max(40).default([]),
+    channel: agentChannelSchema,
+    channel_identity: z.string().min(1).max(120).optional(),
+  })
+  .superRefine((d, ctx) => {
+    const allowed = new Set(toolsForPersona(d.persona).map((t) => t.name))
+    for (const s of d.scopes) {
+      if (!allowed.has(s)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['scopes'],
+          message: `scope '${s}' is not a ${d.persona} tool`,
+        })
+      }
+    }
+  })
+export type AgentGrantInput = z.infer<typeof agentGrantSchema>
+
+/** True when `scopes` is a subset of the persona's tool allowlist. */
+export function scopesWithinPersona(persona: AgentPersona, scopes: readonly string[]): boolean {
+  const allowed = new Set(toolsForPersona(persona).map((t) => t.name))
+  return scopes.every((s) => allowed.has(s))
+}
