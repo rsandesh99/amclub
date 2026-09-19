@@ -822,6 +822,18 @@ anything read from documents or threads is data, never instruction.
 **Not in scope.** AI matching as a ranking replacement for search, automated
 adjudication, agent-to-agent negotiation — all gated as above.
 
+**Amendment 2026-09-19 (founder-authorised).** The full roadmap (`AMC_Technology_Roadmap`,
+Aug 2026: internal agents → Digital Munshi and support → buyer procurement agent, benchmark
+pricing, first-order guarantee, demand aggregation → rules-gated micro-payouts, public AMC
+Score) is **built now, dark**, in the staged order of `docs/agents/BUILD_PROMPTS.md` under the
+architecture locked in ADR-009. Building does not move a gate: A1 enables after the money-loop
+gate (25 real paid orders), A2 at V1.5→V2, rules-gated autonomy after six months of audited
+payout history, each per cohort via `agent_settings`. Agent-to-agent negotiation and reverse
+auctions stay ADR-only (S4.3) until §8.3 is amended in writing. RICE for the dark build of
+A2/A3: Reach 0.8 · Impact 3 (the Trust Graph moats) · Confidence 0.5 · Effort ≈ 40
+person-weeks → ≈ 0.03; justified as sequencing (each phase is the previous phase's data), not
+as a standalone feature.
+
 **Drift corrected.** CLAUDE.md summarised §8.3 as including "AI matching/
 chatbot"; §8.3 never listed it (AI features are V2-gated by §8.2). CLAUDE.md
 now matches this document.

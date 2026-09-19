@@ -319,6 +319,22 @@ dated sections below where present.
 - **Live-cutover checklist** — see `docs/adr/003-simulate-mode-in-production.md`
   (KYC vendor key, Route activation, every active provider payout-ready).
 
+## Agent programme — architecture locked, build plan issued (2026-09-19, ADR-009)
+
+`docs/adr/009-agent-programme-build-architecture.md` locks runtime (Node/TS, Hono + pg-boss,
+Fly.io bom), no agent framework (deterministic runner in `packages/agent-core`), the model
+gateway, **delegation grants** for proactive runs, `ai_decisions` as the single confirmation
+ledger (resolves the H0 item below; lifted out of staged 0022 in S0.1), `agent_settings`
+registry, Upstash budgets, WhatsApp adapter (meta_cloud default / interakt), pgvector
+retrieval, evidence-first sequencing. `docs/agents/BUILD_PROMPTS.md` carries 21 staged prompts
+(S0.1–S4.3), one PR each, for the Antigravity IDE. `docs/PRE_LAUNCH_CHECKLIST.md` committed as
+that file instructs. Fixture `apps/web/tests/fixtures/drawings/cad1.step` for S1.8 drawing intake.
+
+Decisions still owed by the founder before enablement: §8.3 amendment for negotiation (S4.3),
+WhatsApp driver account (meta_cloud vs interakt), Fly.io account + `FLY_API_TOKEN`,
+`SUPABASE_JWT_SECRET` in Vercel, counsel copy for the first-order guarantee (S3.3), CA opinion
+on guarantee accounting.
+
 ## Agent groundwork (H0) — open items (logged 2026-09-08, ADR-008)
 
 Landed: ADR-008, DESIGN.md §8.6, `@amclub/shared` `agent.ts` (personas, tool
