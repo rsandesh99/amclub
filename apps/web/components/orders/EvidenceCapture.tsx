@@ -20,7 +20,7 @@ export function EvidenceCapture({
   compact = false,
 }: {
   orderId: string
-  kind: 'dispatch_photo' | 'delivery_photo' | 'other' | 'deliverable'
+  kind: 'dispatch_photo' | 'delivery_photo' | 'other' | 'deliverable' | 'milestone_photo'
   label: string
   accept?: string
   onUploaded: (docId: string) => void

@@ -142,6 +142,13 @@ const MANIFEST: Entry[] = [
     ],
     note: 'lifts ai_decisions out of staged 0022; adds agent_settings + agent_grants; agent_runs parent_run_id/job_id',
   },
+  {
+    // Services evidence engine (S0.3). Additive columns on order_milestones
+    // (kind/photo_doc_id/note/created_by) + partial unique + RLS tightened to
+    // parties-read. Applied to prod before/with the writer (NOT staged).
+    file: '0028_order_milestone_evidence.sql',
+    note: 'column additions + partial unique index on order_milestones; RLS read-only for parties',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

@@ -949,6 +949,23 @@
     "revoked": "Assistant access revoked.",
     "action_failed": "That didn't work. Try again."
   },
+  "evidence": {
+    "title": "Progress",
+    "loading": "Loading…",
+    "none": "No progress recorded yet.",
+    "kind_accepted": "Accepted",
+    "kind_site_or_materials": "Reached site / materials ready",
+    "kind_in_progress": "Work in progress",
+    "kind_work_complete": "Work complete",
+    "photo_attached": "photo",
+    "next_stage": "Next: {stage}",
+    "note_label": "Note (optional)",
+    "note_placeholder": "Add a short note (optional)",
+    "capture_photo": "Take photo",
+    "mark_done": "Mark {stage}",
+    "add_failed": "Couldn't record that. Try again.",
+    "buyer_waiting": "Your provider will post progress updates here as the work moves along."
+  },
   "admin_reviews": {
     "title": "Flagged reviews",
     "subtitle": "Reviews reported or auto-flagged for moderation. Remove hides them; restore re-publishes.",

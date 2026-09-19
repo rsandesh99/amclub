@@ -4,6 +4,33 @@ Items deliberately deferred during pre-cutover hardening. Each entry says what
 exists today, what is missing, and what would unblock it. Remove an entry when
 it ships.
 
+## Agent S0.3 — services evidence engine (2026-09-20)
+
+Services orders now record staged milestones with photo proof
+(`accepted → site_or_materials → in_progress → work_complete`); `work_complete`
+delivers the order; the payout release gate gains a services branch
+(`evaluateServicesReleaseGate`) held behind the `evidence_required_from`
+cutover. Migration 0028 (NOT staged) tightens `order_milestones` RLS to
+parties-read + service-role writes. Contract verified (verify-evidence 13/13);
+web build green; gate wiring mirrors the proven goods path.
+
+Deferred / notes:
+- **Mobile timeline + capture** — the plan lists mobile; the web card ships now.
+  Add a Milestones section to `apps/mobile/app/(app)/orders/[id].tsx` (mobile
+  parity, `docs/MOBILE_PARITY.md`). Inert until then; nothing mobile breaks.
+- **Buyer photo thumbnails** — the card shows a "📷 photo" badge; wiring the
+  signed-URL thumbnail (reuse the documents list) is a polish follow-up.
+- **Cutover proxy** — enforcement compares `order.created_at` (when placed) to
+  `evidence_required_from`, not the quote/package `created_at` the prompt names.
+  Simpler, always present, monotonic; revisit if the founder wants listing-time
+  semantics.
+- **Full seeded lifecycle** — verify-evidence checks the pure machine/gate + the
+  structural columns (read-only, zero residue). The end-to-end
+  placed→…→completed→payout-held run belongs in the acceptance harness (needs a
+  seeded provider/buyer/admin); not run here to avoid prod writes.
+- **evidence_required_from is null on prod** — the gate is inert until the
+  founder sets a date at /admin/agents; the milestone capture UI is live.
+
 ## Agent S0.2 — admin console + grants UI + kill switch (2026-09-20)
 
 Landed the founder console at `/admin/agents` (spend today/month + AI share of

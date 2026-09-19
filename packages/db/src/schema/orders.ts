@@ -72,6 +72,12 @@ export const orderMilestones = pgTable('order_milestones', {
   status: text('status').default('pending').notNull(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   sort: integer('sort').default(0).notNull(),
+  // Services evidence engine (0028). MILESTONE_KINDS; photo required for
+  // site_or_materials/in_progress/work_complete (enforced by the route + schema).
+  kind: text('kind'),
+  photoDocId: uuid('photo_doc_id').references(() => orderDocuments.id),
+  note: text('note'),
+  createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })

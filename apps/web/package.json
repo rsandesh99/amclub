@@ -15,7 +15,8 @@
     "mart:preflight": "tsx scripts/verify-launch-gate.ts",
     "mart:smoke": "tsx scripts/mart-launch-smoke.ts",
     "mart:static": "tsx scripts/verify-mart-static-inert.ts",
-    "agents:verify": "tsx scripts/verify-agents.ts"
+    "agents:verify": "tsx scripts/verify-agents.ts",
+    "evidence:verify": "tsx scripts/verify-evidence.ts"
   },
   "dependencies": {
     "@amclub/agent-core": "workspace:*",

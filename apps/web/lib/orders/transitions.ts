@@ -14,6 +14,7 @@ import { generateInvoices } from '@/lib/invoices/generate'
 import { notifyOrderTransition, notifyAutoCancelled, notifyAutoAccepted } from '@/lib/notifications/events'
 import { getGoodsDossier } from '@/lib/mart/release'
 import { getTdsConfig } from '@/lib/mart/config'
+import { getServicesEvidence } from '@/lib/orders/evidence'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -106,6 +107,14 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
       tds_bps: applies ? cfg.rate_bps : 0,
       tds_paise: applies ? Math.round((Number(order.provider_earning_paise) * cfg.rate_bps) / 10000) : 0,
     }
+  }
+  // Services evidence gate (S0.3): a services order placed on/after the
+  // evidence_required_from cutover is held until a work-complete photo +
+  // buyer confirmation exist and no dispute is open. Inert (no reasons) until
+  // the cutover is set — byte-identical to today for every existing order.
+  if (order.kind !== 'goods') {
+    const ev = await getServicesEvidence(admin, order)
+    if (ev.enforced && !ev.gate.ok) holdReasons.push(...ev.gate.reasons)
   }
   const held = holdReasons.length > 0
 

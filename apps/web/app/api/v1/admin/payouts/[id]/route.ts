@@ -9,6 +9,7 @@ import { runPayouts } from '@/lib/payments/payout'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { writeAudit } from '@/lib/audit/log'
 import { getGoodsDossier } from '@/lib/mart/release'
+import { getServicesEvidence } from '@/lib/orders/evidence'
 
 const bodySchema = z.object({ action: z.literal('retry') })
 
@@ -48,6 +49,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const dossier = await getGoodsDossier(admin, ord)
     if (!dossier.gate.ok) {
       return NextResponse.json({ error: 'goods_release_gate', reasons: dossier.gate.reasons, dossier }, { status: 409 })
+    }
+  } else if (ord) {
+    // Services evidence gate (S0.3): only enforced for orders placed on/after
+    // the evidence_required_from cutover (inert otherwise).
+    const ev = await getServicesEvidence(admin, ord)
+    if (ev.enforced && !ev.gate.ok) {
+      return NextResponse.json({ error: 'services_release_gate', reasons: ev.gate.reasons, milestones: ev.milestones }, { status: 409 })
     }
   }
 

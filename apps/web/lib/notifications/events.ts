@@ -1,5 +1,6 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
+import type { MilestoneKind } from '@amclub/shared'
 import { createNotification } from './create'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -133,6 +134,29 @@ async function notifyDispute(admin: Admin, order: any): Promise<void> {
       channels: ['email'],
     })
   }
+}
+
+const MILESTONE_LABELS: Record<MilestoneKind, { en: string; hi: string }> = {
+  accepted: { en: 'Provider accepted', hi: 'प्रदाता ने स्वीकार किया' },
+  site_or_materials: { en: 'Reached site / materials ready', hi: 'साइट पर पहुँचे / सामग्री तैयार' },
+  in_progress: { en: 'Work in progress', hi: 'काम जारी है' },
+  work_complete: { en: 'Work complete', hi: 'काम पूरा हुआ' },
+}
+
+/** Services evidence engine (S0.3): notify the buyer on each milestone. Best-effort.
+ *  WhatsApp is added once S0.5 lands (email + in-app for now). */
+export async function notifyMilestone(admin: Admin, order: any, kind: MilestoneKind): Promise<void> {
+  const { msmeUserId } = await parties(admin, order)
+  if (!msmeUserId) return
+  const l = MILESTONE_LABELS[kind]
+  await createNotification(admin, {
+    userId: msmeUserId,
+    kind: 'milestone_added',
+    titleI18n: { en: `Update: ${l.en}`, hi: `अपडेट: ${l.hi}` },
+    bodyI18n: { en: `${ref(order)}: ${l.en}.`, hi: `${ref(order)}: ${l.hi}।` },
+    link: `/app/orders/${order.id}`,
+    channels: ['email'],
+  })
 }
 
 /** Prompt the buyer to review a completed order. */

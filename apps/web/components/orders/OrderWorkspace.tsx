@@ -7,6 +7,7 @@ import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ReviewSection } from './ReviewSection'
+import { MilestonesCard } from './MilestonesCard'
 import { GoodsOrderWorkspace } from '@/components/mart/GoodsOrderWorkspace'
 import type { GoodsOrderExtras } from '@/lib/mart/order-extras'
 
@@ -240,6 +241,9 @@ function ServicesOrderWorkspace({
           {error && <p className="text-sm text-danger">{error}</p>}
         </div>
       )}
+
+      {/* Services evidence engine (S0.3): staged milestones with photo proof. */}
+      <MilestonesCard orderId={id} role={viewerRole} orderStatus={status} />
 
       {/* Reviews — prompt/form for the buyer on completion; reply box for the provider */}
       {(status === 'completed' || status === 'reviewed') && <ReviewSection orderId={id} />}

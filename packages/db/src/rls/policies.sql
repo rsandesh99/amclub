@@ -471,15 +471,19 @@ CREATE POLICY "order_events: admin all" ON order_events
 
 -- ─── order_milestones & order_documents ───────────────────────────────────────
 
+-- Evidence engine (0028): order parties READ; writes go through the milestone
+-- route (service role). The legacy "parties all" policy is dropped.
 DROP POLICY IF EXISTS "order_milestones: parties all" ON order_milestones;
-CREATE POLICY "order_milestones: parties all" ON order_milestones
-  FOR ALL USING (
+DROP POLICY IF EXISTS "order_milestones: parties read" ON order_milestones;
+CREATE POLICY "order_milestones: parties read" ON order_milestones
+  FOR SELECT USING (
     order_id IN (
       SELECT id FROM orders
       WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
          OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
     )
   );
+REVOKE INSERT, UPDATE, DELETE ON order_milestones FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "order_documents: parties all" ON order_documents;
 CREATE POLICY "order_documents: parties all" ON order_documents

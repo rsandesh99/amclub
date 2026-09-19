@@ -25,6 +25,8 @@ export const ORDER_DOCUMENT_KINDS = [
   'other',
   'delivery_photo',
   'dispatch_photo',
+  // Services evidence engine (S0.3): staged milestone proof photos.
+  'milestone_photo',
 ] as const
 export type OrderDocumentKind = (typeof ORDER_DOCUMENT_KINDS)[number]
 export const orderDocumentKindSchema = z.enum(ORDER_DOCUMENT_KINDS)

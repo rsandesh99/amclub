@@ -37,6 +37,9 @@ export * from './agent'
 // the closed registry the admin console edits (S0.1, ADR-009 §7)
 export * from './agent-settings'
 
+// Services evidence engine: milestone machine + payout release gate (S0.3)
+export * from './evidence'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

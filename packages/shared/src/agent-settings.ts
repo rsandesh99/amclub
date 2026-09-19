@@ -80,6 +80,11 @@ export const AGENT_SETTING_DEFS = {
     default: 'v1',
     hint: 'Version tag of the WhatsApp consent text captured in agent_grants.consent (S0.5). Bump when the wording changes.',
   },
+  evidence_required_from: {
+    schema: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').nullable(),
+    default: null,
+    hint: 'S0.3 cutover (ISO date). Services orders placed on/after this date are payout-held until a work-complete photo + buyer confirmation exist. null = not enforced (the milestone capture UI still works).',
+  },
 } as const satisfies Record<string, AgentSettingDef>
 
 export type AgentSettingKey = keyof typeof AGENT_SETTING_DEFS
