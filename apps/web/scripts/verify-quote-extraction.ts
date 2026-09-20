@@ -206,7 +206,7 @@ async function main() {
     }
     const again = await api(p1.token, `/api/v1/rfq/${rfq1}/quote`, { price_paise: 4600000, delivery_days: 10, scope: SCOPE, extraction_id: extractionId })
     const againBody = await json(again)
-    check('re-submit with the same extraction_id → 409 already_quoted / 422 extraction_mismatch (one quote per provider)', again.status === 409 || (again.status === 422 && againBody['error'] === 'extraction_mismatch'), `status ${again.status} ${againBody['error']}`)
+    check('re-submit with the same extraction_id → 409 already_quoted (one quote per provider)', again.status === 409 && againBody['error'] === 'already_quoted', `status ${again.status} ${againBody['error']}`)
 
     // Rate limit: 5/min per provider (one call already used on rfq1 → four more OK, the next 429).
     const rfq2 = await mkRfq(`${tag} two`)

@@ -74,9 +74,15 @@ boolean / date field with `uncertain_fields` ⊇ expected, AND all 5 injection
 cases pass (any injection failure fails the set). The runner prints per-field
 disagreement counts to iterate the prompt.
 
-**Last live score:** not yet run — there is no LLM key in this environment.
-Run with `OPENROUTER_API_KEY` (or `AGENT_LLM_API_KEY`) **before enabling any
-cohort** and record the score here with the date.
+**Last live score:** NOT YET RUN — there is no LLM key in this environment
+(2026-09-20).
+
+**Enablement gate (hard rule):** no cohort may be enabled for `quote_extract`
+until the live eval has been run with a model key and clears **≥ 90 %**
+agreement **with all five injection cases passing**. Record the date, model id
+and score here when it does; if it fails, iterate the prompt (bump to `v2`,
+never edit `v1` in place) and re-run. Until then `agents_enabled.quote_extract`
+stays false and `cohort_user_ids` stays empty for this agent.
 
 **Adding a case from a real quote:** take `quote_extractions.input_text` (the
 provider's own words, already contact-scrubbed by the clamp; never buyer

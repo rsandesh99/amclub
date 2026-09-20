@@ -46,8 +46,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (d.extraction_id) {
     const { data: ex } = await admin.from('quote_extractions').select('id, rfq_id, provider_id, decision_id, proposed').eq('id', d.extraction_id).maybeSingle()
     const row = ex as { id: string; rfq_id: string; provider_id: string; decision_id: string | null; proposed: QuoteExtraction } | null
-    if (!row || row.rfq_id !== rfqId || row.provider_id !== actor.providerId || row.decision_id) {
+    if (!row || row.rfq_id !== rfqId || row.provider_id !== actor.providerId) {
       return NextResponse.json({ error: 'extraction_mismatch' }, { status: 422 })
+    }
+    if (row.decision_id) {
+      // Own extraction, already confirmed: a re-submit is the one-quote-per-provider
+      // case (409 already_quoted), never a fresh quote on a used extraction.
+      const { data: dup } = await admin.from('quotes').select('id').eq('rfq_id', rfqId).eq('provider_id', actor.providerId).maybeSingle()
+      return NextResponse.json({ error: dup ? 'already_quoted' : 'extraction_mismatch' }, { status: dup ? 409 : 422 })
     }
     extraction = { id: row.id, proposed: row.proposed }
   }
