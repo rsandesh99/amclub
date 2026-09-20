@@ -201,6 +201,11 @@ const MANIFEST: Entry[] = [
     triggers: [['rfq_clarifications', 'rfq_clarifications_set_updated_at']],
     note: 'RFQ clarification threads (RLS: buyer + every matched provider read; no client writes); quotes.revision/revised_at join the 0033 column grant; quote_events CHECK gains revised',
   },
+  {
+    file: '0035_rfq_quality.sql',
+    tables: [],
+    note: 'S1.5 two-phase create: rfqs.fanout_at (BACKFILLED to created_at for every pre-0035 row — deferred = fanout_at IS NULL, never a status), quality_report/checked_at/decision/decision_at/decision_id, partial index rfqs_deferred_idx',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

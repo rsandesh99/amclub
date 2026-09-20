@@ -118,6 +118,10 @@ export const AGENT_TOOLS = [
   { name: 'decline_quote', persona: 'buyer', confirm: true, wraps: 'POST /rfq/[id]/quote/[quoteId]/decline' },
   // S1.3 — buyer answers a provider's clarification (visible to every matched provider); a write, so confirm-gated.
   { name: 'answer_clarification', persona: 'buyer', confirm: true, wraps: 'POST /rfq/[id]/clarifications/[cid]/answer' },
+  // S1.5 — pre-fan-out completeness: the check only produces questions (local, no write); the buyer's
+  // answer / send-as-is is the confirmation and the only write (fan-out release), so confirm-gated.
+  { name: 'check_rfq_quality', persona: 'buyer', confirm: false, taskClass: 'rfq_quality', wraps: 'local (questions only)' },
+  { name: 'complete_rfq', persona: 'buyer', confirm: true, wraps: 'POST /rfq/[id]/quality/{answer|send}' },
   // provider
   { name: 'extract_requirements', persona: 'provider', confirm: false, taskClass: 'rfq_parse', wraps: 'GET /rfq/matched' },
   { name: 'draft_quote', persona: 'provider', confirm: false, taskClass: 'quote_draft', wraps: 'local (draft only)' },

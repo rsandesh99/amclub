@@ -7,6 +7,10 @@ import { addQuoteEvents } from '@/lib/rfq/events'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { quoteWindowLapsed } from '@amclub/shared'
 import { notifyQuoteWindowLapsed } from '@/lib/notifications/events'
+import { createNotification } from '@/lib/notifications/create'
+import { releaseDeferredRfq } from '@/lib/rfq/release'
+import { getRfqQualityHoldMinutes } from '@/lib/agent/rfq-quality'
+import { captureServerEvent } from '@/lib/analytics/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +32,47 @@ export async function GET(request: NextRequest) {
   if (error) {
     console.error('[cron/rfq-expire]', error)
     return NextResponse.json({ error: 'failed' }, { status: 500 })
+  }
+
+  // S1.5 — hold guard: DEFERRED RFQs (fanout_at NULL, still open) older than
+  // agent_settings.rfq_quality_hold_minutes are released as is, through the ONE
+  // release path (guarded, so a buyer answering at the same moment yields exactly
+  // one fan-out). With the flag off there are no deferred rows: a no-op select.
+  let qualityReleased = 0
+  try {
+    const holdMinutes = await getRfqQualityHoldMinutes(admin)
+    const cutoff = new Date(Date.now() - holdMinutes * 60_000).toISOString()
+    const { data: deferred, error: defErr } = await admin
+      .from('rfqs')
+      .select('id, msme:msme_profiles!inner(user_id)')
+      .is('fanout_at', null)
+      .eq('status', 'open')
+      .lte('created_at', cutoff)
+      .order('created_at', { ascending: true })
+      .limit(200)
+    if (defErr) console.error('[cron/rfq-expire] deferred lookup', defErr)
+    for (const row of (deferred ?? []) as unknown as { id: string; msme: { user_id: string } | null }[]) {
+      const { released, matched } = await releaseDeferredRfq(admin, row.id, 'auto_released')
+      if (!released) continue
+      qualityReleased++
+      const buyerUserId = row.msme?.user_id ?? null
+      if (buyerUserId) {
+        // In-app only: the buyer can still answer provider questions (S1.3 threads).
+        await createNotification(admin, {
+          userId: buyerUserId,
+          kind: 'rfq_sent_as_is',
+          titleI18n: { en: 'We sent your request', hi: 'हमने आपका अनुरोध भेज दिया' },
+          bodyI18n: {
+            en: `We sent your request to ${matched} providers; you can still answer questions from them.`,
+            hi: `हमने आपका अनुरोध ${matched} प्रदाताओं को भेज दिया; आप अभी भी उनके सवालों के जवाब दे सकते हैं।`,
+          },
+          link: `/app/rfq/${row.id}`,
+        })
+        captureServerEvent(buyerUserId, 'rfq_quality_auto_released', { rfq_id: row.id, matched, hold_minutes: holdMinutes, role: 'msme' })
+      }
+    }
+  } catch (e) {
+    console.error('[cron/rfq-expire] quality hold guard', e)
   }
 
   // Sweep ALL closed RFQs (not only this run's) so quotes left 'submitted'
@@ -119,7 +164,7 @@ export async function GET(request: NextRequest) {
     console.error('[cron/rfq-expire] quote-window sweep', e)
   }
 
-  const result = { expired: data?.length ?? 0, quotesExpired, matchesLapsed, buyersNotified }
+  const result = { expired: data?.length ?? 0, quotesExpired, matchesLapsed, buyersNotified, qualityReleased }
   await recordHeartbeat(admin, 'rfq-expire', result)
   return NextResponse.json(result)
 }

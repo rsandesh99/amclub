@@ -11,11 +11,17 @@ import { serverError } from '@/lib/api/errors'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { MART_ENABLED } from '@/lib/flags'
 import { getMartCategory } from '@/lib/mart/config'
+import { isRfqQualityEnabledFor, runRfqQualityCheck, toQualityLocale } from '@/lib/agent/rfq-quality'
 
 const RFQ_TTL_MS = 72 * 60 * 60 * 1000
 
 /** Create an RFQ (status 'open', 72h expiry, 7-quote cap) and fan out to matched
- *  providers. Requires a complete MSME profile (state + sector — §1.5 M5/§3.3). */
+ *  providers. Requires a complete MSME profile (state + sector — §1.5 M5/§3.3).
+ *  S1.5: with AGENT_ENABLED + agents_enabled.rfq_quality + cohort (services only)
+ *  the create is TWO-PHASE — the RFQ is inserted with fanout_at NULL, checked,
+ *  and either released at once (nothing to ask) or held for the buyer's answers
+ *  (fanout_at stays NULL; the cron guard bounds the hold). Otherwise this route
+ *  is byte-identical to before apart from fanout_at = now() on the insert. */
 export async function POST(request: NextRequest) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -67,6 +73,12 @@ export async function POST(request: NextRequest) {
     categoryId = category.id
   }
 
+  // S1.5 — two-phase only for services RFQs of an enabled, cohorted buyer. Decided
+  // before the insert so the single-phase path writes fanout_at = now() in the same
+  // statement (the one added column value); with the flag off no setting is read.
+  const twoPhase = d.kind !== 'goods' && (await isRfqQualityEnabledFor(admin, userId))
+  const nowIso = new Date().toISOString()
+
   const maxQuotes = effectiveQuoteCap(await getAgentSetting(admin, 'rfq_max_quotes'))
   const { data: rfq, error } = await admin
     .from('rfqs')
@@ -88,18 +100,41 @@ export async function POST(request: NextRequest) {
       max_quotes: maxQuotes,
       quote_count: 0,
       expires_at: new Date(Date.now() + RFQ_TTL_MS).toISOString(),
+      // S1.5: deferred = fanout_at NULL (never a status). Single phase stamps it now.
+      fanout_at: twoPhase ? null : nowIso,
     })
     .select('id')
     .single()
   if (error || !rfq) return serverError('[rfq POST]', error)
 
-  // Fan-out (match + notify). Best-effort — the RFQ exists regardless.
-  let matched = 0
-  try {
-    ;({ matched } = await fanoutRfq(admin, rfq.id))
-  } catch (e) {
-    console.error('[rfq fanout]', e)
+  if (!twoPhase) {
+    // Fan-out (match + notify). Best-effort — the RFQ exists regardless.
+    let matched = 0
+    try {
+      ;({ matched } = await fanoutRfq(admin, rfq.id))
+    } catch (e) {
+      console.error('[rfq fanout]', e)
+    }
+    return NextResponse.json({ rfqId: rfq.id, matched })
   }
 
-  return NextResponse.json({ rfqId: rfq.id, matched })
+  // Two-phase: precheck + one bounded model call → release now (nothing to ask) or hold.
+  // Any failure here still releases: the buyer is never held hostage to the check.
+  const { data: u } = await admin.from('users').select('preferred_locale').eq('id', userId).maybeSingle()
+  try {
+    const outcome = await runRfqQualityCheck(admin, { rfqId: rfq.id, userId, locale: toQualityLocale((u as { preferred_locale?: string | null } | null)?.preferred_locale) })
+    return NextResponse.json({
+      rfqId: rfq.id,
+      matched: outcome.matched,
+      quality: outcome.report,
+      // model_used=false → rule-only questions (gateway error / budget breach / no key): the UI says so.
+      quality_meta: { stub: outcome.stub, model_used: outcome.modelUsed },
+      ...(outcome.deferred ? { deferred: true, deadline_at: outcome.deadlineAt } : {}),
+    })
+  } catch (e) {
+    console.error('[rfq quality] check failed → releasing inline', rfq.id, e)
+    const { releaseDeferredRfq } = await import('@/lib/rfq/release')
+    const { matched } = await releaseDeferredRfq(admin, rfq.id, 'skipped')
+    return NextResponse.json({ rfqId: rfq.id, matched })
+  }
 }

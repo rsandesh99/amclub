@@ -120,6 +120,11 @@ export const AGENT_SETTING_DEFS = {
     default: null,
     hint: 'S0.3 cutover (ISO date). Services orders placed on/after this date are payout-held until a work-complete photo + buyer confirmation exist. null = not enforced (the milestone capture UI still works).',
   },
+  rfq_quality_hold_minutes: {
+    schema: z.number().int().min(5).max(180),
+    default: 30,
+    hint: "S1.5 minutes a deferred RFQ waits for the buyer's answers before the cron guard fans it out as is.",
+  },
 } as const satisfies Record<string, AgentSettingDef>
 
 export type AgentSettingKey = keyof typeof AGENT_SETTING_DEFS

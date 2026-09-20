@@ -45,6 +45,8 @@ export default function MyRfqsScreen() {
             <TouchableOpacity key={r.id} onPress={() => router.push(`/rfq/${r.id}` as never)} className="rounded-xl border border-border bg-surface p-4">
               <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>{r.title}</Text>
               <Text className="mt-1 text-xs text-foreground-secondary">{t('rfq.quotes_n', { n: r.quoteCount, max: r.maxQuotes })} · {t(`rfq.status_${r.status}`)}</Text>
+              {/* S1.5 — held for the buyer's quality answers (fanout_at NULL; never a status). */}
+              {r.deferred ? <Text className="mt-1 self-start rounded-full bg-[#f5ebdd] px-2 py-0.5 text-[11px] font-medium text-[#b45309]">{t('rfq.quality_badge_deferred', { n: r.qualityMissing || 1 })}</Text> : null}
               {/* S1.3 — "N questions waiting" (derived from open clarifications; never a status). */}
               {r.openQuestions > 0 && (r.status === 'open' || r.status === 'quoted') ? <Text className="mt-1 self-start rounded-full bg-[#f5ebdd] px-2 py-0.5 text-[11px] font-medium text-[#b45309]">{t('rfq.clarify_waiting_badge', { n: r.openQuestions })}</Text> : null}
             </TouchableOpacity>

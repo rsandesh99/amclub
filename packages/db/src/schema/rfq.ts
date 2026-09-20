@@ -27,6 +27,14 @@ export const rfqs = pgTable('rfqs', {
   // S1.2 (0033) — one-slot pointer cache { hash, locale, pointers, model, stub, created_at }.
   comparePointers: jsonb('compare_pointers'),
   comparePointersAt: timestamp('compare_pointers_at', { withTimezone: true }),
+  // S1.5 (0035) — two-phase create. fanout_at NULL + status open = DEFERRED (derived, never a status);
+  // backfilled to created_at for every pre-0035 row. releaseDeferredRfq is the only writer of fanout_at.
+  fanoutAt: timestamp('fanout_at', { withTimezone: true }),
+  qualityReport: jsonb('quality_report'), // RfqQualityReport the buyer saw
+  qualityCheckedAt: timestamp('quality_checked_at', { withTimezone: true }),
+  qualityDecision: text('quality_decision'), // answered | sent_as_is | auto_released | skipped (CHECK)
+  qualityDecisionAt: timestamp('quality_decision_at', { withTimezone: true }),
+  qualityDecisionId: uuid('quality_decision_id'), // FK → ai_decisions in SQL
   // open | quoted | accepted | expired | cancelled
   status: text('status').default('open').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),

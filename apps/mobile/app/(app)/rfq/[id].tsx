@@ -5,6 +5,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { useI18n } from '@/lib/i18n'
 import { fetchRfq, acceptQuote, fetchQuoteMessages, sendQuoteMessage, fetchCompare, declineQuote, fetchMe } from '@/lib/api'
 import { ClarificationsBlock } from '@/components/ClarificationsBlock'
+import { QualityQuestionsBlock } from '@/components/QualityQuestionsBlock'
 import { formatINR } from '@/lib/format'
 import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
 
@@ -78,6 +79,8 @@ export default function BuyerRfqScreen() {
         <Text className="text-xs text-foreground-secondary">{t(`rfq.status_${rfq.status}`)} · {t('rfq.quotes_n', { n: rfq.quoteCount, max: rfq.maxQuotes })}</Text>
         {/* S1.3 — "awaiting your answer" chip: derived state, no status text change. */}
         {active && openQ > 0 ? <Text className="mt-1 self-start rounded-full border border-[#b45309]/40 bg-[#f5ebdd] px-2 py-0.5 text-[11px] font-medium text-[#b45309]">{t('rfq.clarify_awaiting_chip')}</Text> : null}
+        {/* S1.5 — derived "deferred" chip (open + fanout_at NULL); never a status text change. */}
+        {rfq.quality?.deferred ? <Text className="mt-1 self-start rounded-full border border-[#b45309]/40 bg-[#f5ebdd] px-2 py-0.5 text-[11px] font-medium text-[#b45309]">{t('rfq.quality_chip_deferred')}</Text> : null}
       </View>
 
       {goods && <GoodsSpecBlock spec={goods} t={t} />}
@@ -96,6 +99,12 @@ export default function BuyerRfqScreen() {
         </ScrollView>
       ) : allQuotes.length === 0 ? (
         <ScrollView>
+          {/* S1.5 — held for the buyer's answers (nobody matched yet): the questions card first. */}
+          {rfq.quality?.deferred && rfq.quality.report ? (
+            <View className="px-4 pt-4">
+              <QualityQuestionsBlock rfqId={id} report={rfq.quality.report} deadlineAt={rfq.quality.deadlineAt ?? null} onSent={() => { setLoading(true); void load() }} />
+            </View>
+          ) : null}
           {clar}
           <View className="m-4 rounded-xl border border-dashed border-border bg-surface p-8">
             <Text className="text-center text-sm text-foreground-secondary">{t('rfq.no_quotes_yet')}</Text>

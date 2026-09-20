@@ -788,3 +788,33 @@ web + mobile UI, `verify-clarifications.ts`.
 - **Goods revision** is exercised only on a rig with `MART_ENABLED` (the verify script skips it on prod); the goods
   path is the same `resolveQuoteTerms` call as POST, so it cannot drift.
 - **Tamil/Telugu:** new keys only (18 each), English fallback for the rest, as S1.1/S1.2 did.
+
+## Agent S1.5 — RFQ Quality agent (logged 2026-09-21)
+
+**Shipped (dark):** two-phase `POST /api/v1/rfq` behind `agents_enabled.rfq_quality` + cohort (services only);
+shared precheck `rfq-quality.ts` (union rule, cap 3, stub/fallback questions in en/hi/ta/te); prompt
+`rfq_quality@v1` + 33-case golden set + `eval --set rfq_quality`; migration **0035** (`fanout_at` backfilled,
+`quality_*`); `releaseDeferredRfq` as the ONE release path; buyer routes `quality/answer` + `quality/send`;
+cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before we send this" card; runbook
+`docs/agents/RFQ_QUALITY.md`; `verify-rfq-quality.ts`.
+
+- **`budget_below_floor` is skipped.** `CATEGORIES` (`packages/shared/src/categories.ts`) carries no
+  `minBudgetPaise`; the precheck notes `budget_floor_unavailable` instead of guessing. Add the field per
+  category (founder numbers) and the rule turns on by itself.
+- **Generic gaps are template-aware (prompt said unconditional).** `quantity` / `location` fire only when the
+  category template names such a field (unfilled) or there is no template; `timeline` / `budget` are
+  satisfied by a filled urgency/timeline/budget-like template field. Six of the eight seeded categories are
+  professional services (legal, tax, registrations, finance, licensing, marketing) where "how many?" or
+  "which city?" would be noise on every request; the motivating "need printing" case has no template and
+  still gets all four. Tests pin both behaviours.
+- **The 72-hour clock does not pause during the hold** (founder decision). A deferred RFQ that sits the full
+  30 minutes loses 30 of its 4,320 minutes — accepted; if the hold is ever raised near hours, revisit.
+- **Voice-first buyers answer by typing or dictating per question**; S1.8 turns this into a one-round
+  conversation. The mobile card mounts the full `VoiceRfqRecorder` per question on demand.
+- **Model-failure path in the rig** needs a second local server started with an unreachable LLM endpoint
+  and a fake key (`FAIL_BASE_URL`); recorded as a skip when not provided.
+- **Cron guard proof** follows the S1.3 rule (no prod sweep from a dev box): the exact selection predicate is
+  asserted on an aged fixture, and `releaseDeferredRfq` is exercised directly (with `server-only` resolved to
+  its empty build) for race + idempotence; when that import is not possible on a rig, the same guarded
+  UPDATE is raced through `POST /quality/send`.
+- **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
