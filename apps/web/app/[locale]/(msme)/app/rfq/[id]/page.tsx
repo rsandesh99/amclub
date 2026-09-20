@@ -10,6 +10,7 @@ import { getLocale } from 'next-intl/server'
 import { GoodsSpecCard, type GoodsSpecView } from '@/components/mart/GoodsSpecCard'
 import { getMartCategory } from '@/lib/mart/config'
 import { createAdminClient } from '@/lib/supabase/server'
+import { computeCompare, getComparePointers, isComparePointersEnabledFor, toPointerLocale } from '@/lib/rfq/compare'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
@@ -23,8 +24,16 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
   const rfq = await getRfqForBuyer(user.id, id)
   if (!rfq) notFound()
   // AMC Mart M2 — goods RFQ: category name for the spec card (row exists only when the flag is on).
-  const goodsCat = rfq.kind === 'goods' && rfq.martCategorySlug ? await getMartCategory(await createAdminClient(), rfq.martCategorySlug) : null
+  const admin = await createAdminClient()
+  const goodsCat = rfq.kind === 'goods' && rfq.martCategorySlug ? await getMartCategory(admin, rfq.martCategorySlug) : null
   const locale = await getLocale()
+  // S1.2 — deterministic flags + normalised totals (never a model); pointers only from the
+  // cache here (the client loads fresh ones after mount when enabled, so the table never waits).
+  const compare = computeCompare(rfq.kind, rfq.quotes)
+  const pointersEnabled = await isComparePointersEnabledFor(admin, user.id)
+  const pointerOutcome = pointersEnabled
+    ? await getComparePointers(admin, { rfqId: rfq.id, kind: rfq.kind, quotes: rfq.quotes, results: compare, userId: user.id, locale: toPointerLocale(locale), allowModel: false })
+    : null
 
   const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')
 
@@ -74,7 +83,7 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
         <GoodsSpecCard spec={rfq.goodsSpec as unknown as GoodsSpecView} categoryName={goodsCat ? pickLocale(goodsCat.name_i18n, locale) : null} showPhone />
       )}
 
-      <QuoteCompare rfq={rfq} />
+      <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} />
     </div>
   )
 }

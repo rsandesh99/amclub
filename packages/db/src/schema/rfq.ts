@@ -24,6 +24,9 @@ export const rfqs = pgTable('rfqs', {
   kind: text('kind').default('service').notNull(),
   martCategorySlug: text('mart_category_slug'),
   goodsSpec: jsonb('goods_spec'),
+  // S1.2 (0033) — one-slot pointer cache { hash, locale, pointers, model, stub, created_at }.
+  comparePointers: jsonb('compare_pointers'),
+  comparePointersAt: timestamp('compare_pointers_at', { withTimezone: true }),
   // open | quoted | accepted | expired | cancelled
   status: text('status').default('open').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -73,6 +76,15 @@ export const quotes = pgTable('quotes', {
   // S1.1 (0032) — the confirmed quote_extractions row (FK in SQL; no import here to avoid a cycle).
   extractionId: uuid('extraction_id'),
   extractionConfirmedAt: timestamp('extraction_confirmed_at', { withTimezone: true }),
+  // S1.2 (0033) — buyer decline: reason (QUOTE_DECLINE_REASONS ∪ another_quote_accepted), the
+  // buyer's private note (column-privilege-hidden from clients), the delivered message.
+  declineReason: text('decline_reason'),
+  declineNote: text('decline_note'),
+  declineMessage: text('decline_message'),
+  declineMessageLocale: text('decline_message_locale'),
+  declinedBy: text('declined_by'), // buyer | system
+  declinedAt: timestamp('declined_at', { withTimezone: true }),
+  declineDecisionId: uuid('decline_decision_id'), // FK → ai_decisions in SQL
   // submitted | withdrawn | accepted | declined | expired
   status: text('status').default('submitted').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),

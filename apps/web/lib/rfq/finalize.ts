@@ -1,4 +1,5 @@
 import 'server-only'
+import { canTransitionQuote } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
 import { addQuoteEvent, addQuoteEvents } from './events'
@@ -48,10 +49,14 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     payload: { order_id: orderId, rfq_id: quote.rfq_id },
   })
 
-  // Politely decline the rest (still 'submitted').
+  // Politely decline the rest (still 'submitted'). S1.2: the .eq('status',
+  // 'submitted') guard IS the QUOTE_TRANSITIONS rule (submitted → declined);
+  // assert it against the one map without changing behaviour, and stamp WHY.
+  if (!canTransitionQuote('submitted', 'declined')) throw new Error('QUOTE_TRANSITIONS drift: submitted → declined must be allowed')
+  const declinedAt = new Date().toISOString()
   const { data: declined } = await admin
     .from('quotes')
-    .update({ status: 'declined', updated_at: new Date().toISOString() })
+    .update({ status: 'declined', decline_reason: 'another_quote_accepted', declined_by: 'system', declined_at: declinedAt, updated_at: declinedAt })
     .eq('rfq_id', quote.rfq_id)
     .eq('status', 'submitted')
     .neq('id', quote.id)

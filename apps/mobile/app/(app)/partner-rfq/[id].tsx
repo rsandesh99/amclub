@@ -148,6 +148,14 @@ export default function ProviderRfqScreen() {
               <Text className="mt-1 text-sm text-foreground">{formatINR(rfq.myQuote.pricePaise)} · {t('rfq.delivery_days', { days: rfq.myQuote.deliveryDays })}</Text>
             )}
             <Text className="mt-1 text-sm text-foreground-secondary">{rfq.myQuote.scope}</Text>
+            {/* S1.2 — buyer declined: reason label + the courteous message (never the buyer's note). */}
+            {rfq.myQuote.status === 'declined' && (
+              <View className="mt-2 rounded-lg border border-border bg-background p-2">
+                <Text className="text-sm font-medium text-foreground">{t('rfq.quote_declined_title')}</Text>
+                {rfq.myQuote.declineReason ? <Text className="text-xs text-foreground-secondary">{t('rfq.quote_declined_reason')}: {t(`rfq.declined_reason_label_${rfq.myQuote.declineReason}`)}</Text> : null}
+                {rfq.myQuote.declineMessage ? <Text className="mt-1 text-sm text-foreground">{rfq.myQuote.declineMessage}</Text> : null}
+              </View>
+            )}
           </View>
         ) : rfq.canQuote ? (
           <View className="rounded-xl border border-border bg-surface p-4 gap-3">

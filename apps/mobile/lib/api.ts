@@ -260,6 +260,27 @@ export async function extractQuote(
   }
 }
 
+/** S1.2 — deterministic compare results (+ pointers when the agent is on for this buyer). */
+export async function fetchCompare(rfqId: string, locale: string): Promise<{ results: any[]; pointers: { pointers: { quote_id: string; lines: string[] }[] } | null } | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/compare?locale=${encodeURIComponent(locale)}`, { headers: await authHeaders() })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
+}
+
+/** S1.2 — buyer declines one quote with a reason (+ optional private note). */
+export async function declineQuote(rfqId: string, quoteId: string, body: { reason: string; note?: string }) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quote/${quoteId}/decline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify(body),
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
 export async function fetchMatchedRfqs() {
   const res = await fetch(`${API_URL}/api/v1/rfq/matched`, { headers: await authHeaders() })
   if (!res.ok) return []

@@ -114,6 +114,8 @@ export const AGENT_TOOLS = [
   { name: 'place_order', persona: 'buyer', confirm: true, wraps: 'POST /checkout' },
   { name: 'track_order', persona: 'buyer', confirm: false, wraps: 'GET /orders/[id]' },
   { name: 'draft_dispute', persona: 'buyer', confirm: true, wraps: 'POST /orders/[id]/transition (disputed)' },
+  // S1.2 — buyer declines a quote with a reason; a quotes.status write, so confirm-gated.
+  { name: 'decline_quote', persona: 'buyer', confirm: true, wraps: 'POST /rfq/[id]/quote/[quoteId]/decline' },
   // provider
   { name: 'extract_requirements', persona: 'provider', confirm: false, taskClass: 'rfq_parse', wraps: 'GET /rfq/matched' },
   { name: 'draft_quote', persona: 'provider', confirm: false, taskClass: 'quote_draft', wraps: 'local (draft only)' },

@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
-import { effectiveCostAfterItcPaise } from '@amclub/shared'
+import { effectiveCostAfterItcPaise, goodsQuoteMoney, resolveDeclineLocale } from '@amclub/shared'
 import { RFQ_GOODS_LIST_COLS, QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -57,11 +57,11 @@ export function mapQuoteGoods(q: any): QuoteGoodsTerms | null {
   const unitPricePaise = Number(q.unit_price_paise)
   const qty = Number(q.qty)
   const gstRateBps = Number(q.gst_rate_bps)
-  const taxablePaise = unitPricePaise * qty
-  const gstPaise = Math.round((taxablePaise * gstRateBps) / 10000)
+  // S1.2 — the M2 math lives in shared (goodsQuoteMoney) so compareQuotes and display agree byte-for-byte.
+  const { taxablePaise, gstPaise, totalInclGstPaise } = goodsQuoteMoney({ unitPricePaise, qty, gstRateBps })
   return {
     unitPricePaise, qty, gstRateBps, hsnCode: q.hsn_code, productId: q.product_id ?? null,
-    taxablePaise, gstPaise, totalInclGstPaise: taxablePaise + gstPaise,
+    taxablePaise, gstPaise, totalInclGstPaise,
     afterItcPaise: effectiveCostAfterItcPaise({ taxablePaise }),
     unitInclGstPaise: unitPricePaise + Math.round((unitPricePaise * gstRateBps) / 10000),
   }
@@ -76,7 +76,43 @@ export interface QuoteForBuyer extends QuoteTerms {
   scope: string
   message: string | null
   createdAt: string
-  provider: { id: string; displayName: string; slug: string; avgRating: number; reviewCount: number; completedOrders: number; state: string | null; medianResponseMinutes: number | null; udyamVerified: boolean }
+  /** S1.2 — part of the pointer-cache key. */
+  updatedAt: string | null
+  /** S1.2 — why it was declined (buyer reason or another_quote_accepted); never the note. */
+  declineReason: string | null
+  provider: {
+    id: string; displayName: string; slug: string; avgRating: number; reviewCount: number; completedOrders: number; state: string | null; medianResponseMinutes: number | null; udyamVerified: boolean
+    /** S1.2 — the locale a decline message would be written in (languages[] → preferred_locale → en). */
+    messageLocale: 'en' | 'hi' | 'ta' | 'te'
+  }
+}
+
+/**
+ * S1.2 — the ONE select for a buyer's quotes (page + compare route share it;
+ * staged goods columns stay inside QUOTE_GOODS_COLS). Ordered by price as quoted.
+ */
+export async function loadBuyerQuotes(admin: Awaited<ReturnType<typeof createAdminClient>>, rfqId: string): Promise<QuoteForBuyer[]> {
+  const { data: quotes } = await admin
+    .from('quotes')
+    .select('id, status, price_paise, delivery_days, scope, message, created_at, updated_at, gst_included, transport_included, valid_until, advance_percent, decline_reason' + QUOTE_GOODS_COLS + ', provider:provider_profiles!inner(id, user_id, display_name, slug, avg_rating, review_count, completed_orders, state, median_response_minutes, udyam_verified, languages)')
+    .eq('rfq_id', rfqId)
+    .order('price_paise', { ascending: true })
+  const rows = (quotes ?? []) as any[]
+  const userIds = [...new Set(rows.map((q) => q.provider?.user_id).filter(Boolean))] as string[]
+  const { data: users } = userIds.length ? await admin.from('users').select('id, preferred_locale').in('id', userIds) : { data: [] }
+  const preferred = new Map(((users ?? []) as any[]).map((u) => [u.id, u.preferred_locale as string | null]))
+  return rows.map((q: any) => ({
+    id: q.id, status: q.status, goods: mapQuoteGoods(q), pricePaise: Number(q.price_paise), deliveryDays: q.delivery_days,
+    scope: q.scope, message: q.message, createdAt: q.created_at, updatedAt: q.updated_at ?? null, declineReason: q.decline_reason ?? null,
+    ...mapQuoteTerms(q),
+    provider: {
+      id: q.provider.id, displayName: q.provider.display_name, slug: q.provider.slug,
+      avgRating: Number(q.provider.avg_rating ?? 0), reviewCount: q.provider.review_count ?? 0,
+      completedOrders: q.provider.completed_orders ?? 0, state: q.provider.state ?? null,
+      medianResponseMinutes: q.provider.median_response_minutes ?? null, udyamVerified: !!q.provider.udyam_verified,
+      messageLocale: resolveDeclineLocale(q.provider.languages ?? null, preferred.get(q.provider.user_id) ?? null),
+    },
+  }))
 }
 
 export interface RfqDetailForBuyer {
@@ -133,11 +169,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
   if (!rfq) return null
   const r = rfq as any
 
-  const { data: quotes } = await admin
-    .from('quotes')
-    .select('id, status, price_paise, delivery_days, scope, message, created_at, gst_included, transport_included, valid_until, advance_percent' + QUOTE_GOODS_COLS + ', provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state, median_response_minutes, udyam_verified)')
-    .eq('rfq_id', rfqId)
-    .order('price_paise', { ascending: true })
+  const quotes = await loadBuyerQuotes(admin, rfqId)
 
   return {
     id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: r.attachments ?? [],
@@ -145,17 +177,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
     categoryId: r.category_id ?? null, categorySlug: r.category?.slug ?? null,
     kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
     quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at, createdAt: r.created_at,
-    quotes: (quotes ?? []).map((q: any) => ({
-      id: q.id, status: q.status, goods: mapQuoteGoods(q), pricePaise: Number(q.price_paise), deliveryDays: q.delivery_days,
-      scope: q.scope, message: q.message, createdAt: q.created_at,
-      ...mapQuoteTerms(q),
-      provider: {
-        id: q.provider.id, displayName: q.provider.display_name, slug: q.provider.slug,
-        avgRating: Number(q.provider.avg_rating ?? 0), reviewCount: q.provider.review_count ?? 0,
-        completedOrders: q.provider.completed_orders ?? 0, state: q.provider.state ?? null,
-        medianResponseMinutes: q.provider.median_response_minutes ?? null, udyamVerified: !!q.provider.udyam_verified,
-      },
-    })),
+    quotes,
   }
 }
 
@@ -223,7 +245,7 @@ export interface RfqDetailForProvider {
   canQuote: boolean
   /** S0.4: set when this provider declined the match (or the window lapsed). */
   declinedAt: string | null
-  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; status: string; goods: QuoteGoodsTerms | null } & QuoteTerms) | null
+  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; status: string; goods: QuoteGoodsTerms | null; declineReason: string | null; declineMessage: string | null } & QuoteTerms) | null
 }
 
 /** RFQ detail for a matched provider; marks viewed_at on open. */
@@ -251,7 +273,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
 
   const { data: myQuote } = await admin
     .from('quotes')
-    .select('id, price_paise, delivery_days, scope, status, gst_included, transport_included, valid_until, advance_percent' + QUOTE_GOODS_COLS)
+    .select('id, price_paise, delivery_days, scope, status, gst_included, transport_included, valid_until, advance_percent, decline_reason, decline_message' + QUOTE_GOODS_COLS)
     .eq('rfq_id', rfqId)
     .eq('provider_id', actor.providerId)
     .maybeSingle()
@@ -268,7 +290,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
     quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at,
     canQuote: active && slotsLeft && notExpired && !myQuote && !match.declined_at,
     declinedAt: (match as any).declined_at ?? null,
-    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, status: (myQuote as any).status, goods: mapQuoteGoods(myQuote), ...mapQuoteTerms(myQuote) } : null,
+    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, status: (myQuote as any).status, goods: mapQuoteGoods(myQuote), declineReason: (myQuote as any).decline_reason ?? null, declineMessage: (myQuote as any).decline_message ?? null, ...mapQuoteTerms(myQuote) } : null,
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

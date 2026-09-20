@@ -223,38 +223,56 @@ async function main() {
 
     skip('goods RFQ path', 'MART_ENABLED is off on this rig (goods RFQs cannot be created)')
   } finally {
+    // Cleanup — PostgREST returns { error } and never throws, so every delete is
+    // checked, and the order follows the FK graph: price book → quotes (they
+    // point at extractions via extraction_id) → extractions → RFQs → ai_* →
+    // profiles → users. A silent FK failure here left kill-test rows in prod once.
+    const failures: string[] = []
+    const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {
+      const { error } = await q
+      if (error) failures.push(`${label}: ${error.message}`)
+    }
     try {
       if (created.rfqIds.length) {
         const { data: qs } = await admin.from('quotes').select('id').in('rfq_id', created.rfqIds)
         const quoteIds = (qs ?? []).map((q) => q.id as string)
         if (quoteIds.length) {
-          await admin.from('provider_price_book').delete().in('source_quote_id', quoteIds)
-          await admin.from('quote_events').delete().in('quote_id', quoteIds)
+          await del('provider_price_book', admin.from('provider_price_book').delete().in('source_quote_id', quoteIds))
+          await del('quote_events', admin.from('quote_events').delete().in('quote_id', quoteIds))
         }
-        await admin.from('quote_extractions').delete().in('rfq_id', created.rfqIds)
-        await admin.from('quotes').delete().in('rfq_id', created.rfqIds)
-        await admin.from('rfq_matches').delete().in('rfq_id', created.rfqIds)
-        await admin.from('rfqs').delete().in('id', created.rfqIds)
+        await del('quotes', admin.from('quotes').delete().in('rfq_id', created.rfqIds))
+        await del('quote_extractions', admin.from('quote_extractions').delete().in('rfq_id', created.rfqIds))
+        await del('rfq_matches', admin.from('rfq_matches').delete().in('rfq_id', created.rfqIds))
+        await del('rfqs', admin.from('rfqs').delete().in('id', created.rfqIds))
       }
       if (created.users.length) {
-        await admin.from('ai_decisions').delete().in('decided_by', created.users).eq('feature', 'quote_extraction')
-        await admin.from('ai_invocations').delete().in('user_id', created.users)
-        await admin.from('notifications').delete().in('user_id', created.users)
+        await del('quote_extractions (by user)', admin.from('quote_extractions').delete().in('user_id', created.users))
+        await del('ai_decisions', admin.from('ai_decisions').delete().in('decided_by', created.users))
+        await del('ai_invocations', admin.from('ai_invocations').delete().in('user_id', created.users))
+        await del('notifications', admin.from('notifications').delete().in('user_id', created.users))
       }
       if (created.providerIds.length) {
-        await admin.from('provider_categories').delete().in('provider_id', created.providerIds)
-        await admin.from('provider_profiles').delete().in('id', created.providerIds)
+        await del('provider_price_book (by provider)', admin.from('provider_price_book').delete().in('provider_id', created.providerIds))
+        await del('provider_categories', admin.from('provider_categories').delete().in('provider_id', created.providerIds))
+        await del('provider_profiles', admin.from('provider_profiles').delete().in('id', created.providerIds))
       }
-      if (created.msmeIds.length) await admin.from('msme_profiles').delete().in('id', created.msmeIds)
+      if (created.msmeIds.length) await del('msme_profiles', admin.from('msme_profiles').delete().in('id', created.msmeIds))
       for (const [key, before] of settingsBefore) {
         if (before.existed) await setSetting(key, before.value)
-        else await admin.from('agent_settings').delete().eq('key', key)
+        else await del(`agent_settings.${key}`, admin.from('agent_settings').delete().eq('key', key))
       }
       for (const uid of created.users) {
-        await admin.from('users').delete().eq('id', uid)
-        await admin.auth.admin.deleteUser(uid)
+        await del('users', admin.from('users').delete().eq('id', uid))
+        const { error } = await admin.auth.admin.deleteUser(uid)
+        if (error) failures.push(`auth.users ${uid.slice(0, 8)}: ${error.message}`)
       }
-      record('cleanup', 'pass', `${created.users.length} users, ${created.rfqIds.length} RFQs, settings restored`)
+      if (failures.length) {
+        record('cleanup', 'FAIL', failures.join('; '))
+      } else {
+        const { count: usersLeft } = await admin.from('users').select('id', { count: 'exact', head: true }).like('email', `${tag}_%`)
+        const { count: rfqsLeft } = await admin.from('rfqs').select('id', { count: 'exact', head: true }).like('title', `${tag} %`)
+        check('cleanup: zero residue for this tag (users, RFQs), settings restored', (usersLeft ?? 0) === 0 && (rfqsLeft ?? 0) === 0, `users ${usersLeft} rfqs ${rfqsLeft}; ${created.users.length} users, ${created.rfqIds.length} RFQs removed`)
+      }
     } catch (e) {
       record('cleanup', 'FAIL', (e as Error).message)
     }

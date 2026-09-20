@@ -5,6 +5,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { getProviderReadiness } from '@/lib/payments/readiness-server'
 import { MART_ENABLED } from '@/lib/flags'
 import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
+import { isComparePointersEnabledFor } from '@/lib/rfq/compare'
 
 /** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
@@ -30,6 +31,8 @@ export async function GET() {
   const payoutReadiness = provider ? (await getProviderReadiness(admin, provider.id)).readiness : null
   // S1.1 — quote extraction for THIS user (flag + agent switch + cohort); providers only.
   const quoteExtractEnabled = provider ? await isQuoteExtractEnabledFor(admin, userId) : false
+  // S1.2 — compare pointers for buyers only (flags themselves need no flag).
+  const comparePointersEnabled = msme ? await isComparePointersEnabledFor(admin, userId) : false
 
   const primaryRole =
     roles.includes('admin') || roles.includes('ops')
@@ -52,6 +55,7 @@ export async function GET() {
     // a build-time env; it reads this field). No client branches on it yet.
     martEnabled: MART_ENABLED,
     quoteExtractEnabled,
+    comparePointersEnabled,
   }
   return NextResponse.json(
     body,

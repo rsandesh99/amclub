@@ -98,6 +98,25 @@ export const QUOTE_STATUSES = [
 ] as const
 export type QuoteStatus = (typeof QUOTE_STATUSES)[number]
 
+/**
+ * S1.2 — the ONE quote transition map (rule 8). It codifies what the code
+ * already did: a submitted quote is accepted by the paid checkout, declined by
+ * the buyer (new route) or by finalizeQuoteAcceptance (system), withdrawn by
+ * the provider, or expired by the cron. Every other state is terminal — there
+ * is no declined → submitted.
+ */
+export const QUOTE_TRANSITIONS: Record<QuoteStatus, readonly QuoteStatus[]> = {
+  submitted: ['accepted', 'declined', 'withdrawn', 'expired'],
+  accepted: [],
+  declined: [],
+  withdrawn: [],
+  expired: [],
+}
+
+export function canTransitionQuote(from: QuoteStatus, to: QuoteStatus): boolean {
+  return (QUOTE_TRANSITIONS[from] as readonly string[]).includes(to)
+}
+
 // ── Payout ────────────────────────────────────────────────────────────────────
 
 export const PAYOUT_STATUSES = ['scheduled', 'processing', 'paid', 'failed', 'held'] as const

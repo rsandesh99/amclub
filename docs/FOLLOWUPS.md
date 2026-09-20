@@ -714,3 +714,45 @@ tile, and `verify-payout-dossier.ts`. Runbook: `docs/agents/PAYOUT_DOSSIER.md`.
   block with the S1.1 strings was added — everything else falls back to English via deepMerge.
 - **Mobile flag-on lifecycle** is not exercised by the verify script (HTTP-level only); the screen mirrors the web
   card and reads `quoteExtractEnabled` from `/profile/me`.
+
+---
+
+## Agent S1.2 — side-by-side compare, comparability flags, buyer decline loop (logged 2026-09-20)
+
+**Shipped:** `compareQuotes` (shared, deterministic, 12 flags + normalised totals), `QUOTE_TRANSITIONS` +
+`canTransitionQuote` (codifies existing behaviour; no new transition), the buyer decline route
+(`POST /api/v1/rfq/[id]/quote/[quoteId]/decline`), the compare route + cached pointers, migration **0033**
+(`quotes.decline_*`, `rfqs.compare_pointers`), the side-by-side table, mobile parity, two dark agents
+(`compare_pointers`, `decline_message`) and `verify-compare-decline.ts`. Runbook: `docs/agents/COMPARE_DECLINE.md`.
+
+- **Auto-declines on accept are template-only.** `finalizeQuoteAcceptance` stamps `another_quote_accepted` /
+  `system` and keeps the existing bulk notification — no model call for up to six losers at once. The
+  per-provider courteous message for that path is the S2.2 Digital Munshi candidate.
+- **Provider-safe read = column privileges.** The repo's precedent for hiding a column is the
+  `provider_profiles` REVOKE + column-list GRANT (0004), not a view: `order_safe_view` only adds a masked
+  phone, it hides nothing on `orders`. 0033 revokes SELECT on `quotes` from clients and re-grants every
+  column except `decline_note`; the staged Mart goods columns are granted inside the guarded Mart block.
+  No client selects `quotes` through PostgREST today (grep), so nothing breaks; a future client
+  `select('*')` on quotes would fail until the list is extended — add new columns to BOTH grant lists.
+- **`quote_count` is not decremented on decline.** The cap counts submissions; a declined slot does not reopen.
+- **`decline_note` retention.** The buyer's private words are kept on the quote row. Proposal: a 180-day purge
+  (null the column) in S2.4 alongside the rating data policy; nothing reads it after the message is composed.
+- **Pointer banned-phrase guard at runtime is proven offline** (`sanitizePointers` in the verify script and the
+  shared tests); the HTTP path cannot inject a stub. Live gate: `eval --set quote_compare` ≥ 90 % with zero
+  banned phrases and `--set decline_message` ≥ 90 % + 5/5 injection, both NOT YET RUN (no LLM key here).
+- **Tamil/Telugu strings** were added for the new keys only (ta 15 → +new, te 72 → +new), English fallback
+  for the rest (deepMerge), as S1.1 did.
+- **Shortlist is sessionStorage on web and component state on mobile** — per-viewer convenience, never
+  server state; a cross-device shortlist would need a table (not requested).
+- **Goods-RFQ compare path** is exercised only when `MART_ENABLED` is on a rig (the verify script skips it
+  on prod); the money math is the shared `goodsQuoteMoney` that `mapQuoteGoods` now calls, so the two
+  cannot drift.
+- **Verify-script cleanup was silently failing (found at the S1.2 gate, fixed here).** PostgREST resolves
+  `.delete()` with `{ error }` and never throws, so the `finally` blocks in `verify-compare-decline.ts` and
+  `verify-quote-extraction.ts` reported "cleanup pass" while FK-blocked deletes (`checkout_sessions.order_id`
+  before `orders`; `quotes.extraction_id` before `quote_extractions`; `ai_decisions` referenced by quotes,
+  extractions and dossiers) left kill-test buyers, providers, RFQs and orders in prod from the S1.1 gate runs.
+  Both scripts now check every delete, follow the FK order, and end with a zero-residue assertion for their
+  tag; `cleanup-test-data.ts` surfaces `{ error }` and covers the agent-era tables. Prod was swept clean on
+  2026-09-20 (janitor + one FK-ordered transaction; seed demo providers untouched). Any new verify script must
+  copy the checked-`del` pattern.

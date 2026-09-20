@@ -26,4 +26,6 @@ export interface ProfileMeResponse {
   martEnabled: boolean
   /** S1.1 — quote extraction for THIS user (AGENT_ENABLED + agents_enabled.quote_extract + cohort). */
   quoteExtractEnabled: boolean
+  /** S1.2 — compare pointers for THIS buyer (AGENT_ENABLED + agents_enabled.compare_pointers + cohort). Flags render regardless. */
+  comparePointersEnabled: boolean
 }

@@ -18,6 +18,8 @@ import { z } from 'zod'
  */
 export const AGENT_NAMES = [
   'quote_extract',  // S1.1
+  'compare_pointers', // S1.2
+  'decline_message',  // S1.2
   'payout_dossier', // S1.4
   'rfq_quality',    // S1.5
   'onboarding',     // S1.6

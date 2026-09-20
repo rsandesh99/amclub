@@ -20,7 +20,8 @@
     "whatsapp:verify": "tsx scripts/verify-whatsapp.ts",
     "evidence:verify": "tsx scripts/verify-evidence.ts",
     "agents:verify:dossier": "tsx scripts/verify-payout-dossier.ts",
-    "agents:verify:quote": "tsx scripts/verify-quote-extraction.ts"
+    "agents:verify:quote": "tsx scripts/verify-quote-extraction.ts",
+    "agents:verify:compare": "tsx scripts/verify-compare-decline.ts"
   },
   "dependencies": {
     "@amclub/agent-core": "workspace:*",
