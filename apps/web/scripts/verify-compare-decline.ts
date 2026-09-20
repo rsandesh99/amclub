@@ -21,6 +21,8 @@
  *     system; no model rows.
  *   Pointers: flag OFF → null; ON (stub) → one entry per quote, rfqs.compare_pointers
  *     written, second call is a cache hit (no second ai_invocations row).
+ *   Render: buyer /app/rfq/[id] and provider /partner/rfqs/[id] (cookie sessions) show the
+ *     table / declined block against this DB.
  *   Provider RLS read (anon key + provider token): decline_note not readable,
  *     decline_message readable.
  *
@@ -31,6 +33,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { randomUUID } from 'crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
 import { declineMessageTemplate, sanitizePointers } from '@amclub/shared'
 
 const BASE = (process.env['BASE_URL'] || '').replace(/\/$/, '')
@@ -169,14 +172,15 @@ async function main() {
       const enabledBefore = (settingsBefore.get('agents_enabled')?.value ?? {}) as Record<string, boolean>
       await setSetting('agents_enabled', { ...enabledBefore, decline_message: false, compare_pointers: false })
     }
-    r = await api(buyer.token, `/api/v1/rfq/${rfq1}/quote/${q3}/decline`, { reason: 'price_high', note: 'Way above our budget; call me on 9876543210' }); d = await json(r)
+    const NOTE = 'Way above our budget; call me on 9876543210'
+    r = await api(buyer.token, `/api/v1/rfq/${rfq1}/quote/${q3}/decline`, { reason: 'price_high', note: NOTE }); d = await json(r)
     check('buyer declines q3 → 200 { status: declined }', r.status === 200 && d['status'] === 'declined', `status ${r.status} ${JSON.stringify(d).slice(0, 120)}`)
     check('agent off → message_source template', d['message_source'] === 'template', String(d['message_source']))
     const { data: q3row } = await admin.from('quotes').select('status, decline_reason, decline_note, decline_message, decline_message_locale, declined_by, declined_at, decline_decision_id').eq('id', q3).maybeSingle()
     check('quotes row: declined / price_high / buyer / declined_at / note stored', q3row?.status === 'declined' && q3row?.decline_reason === 'price_high' && q3row?.declined_by === 'buyer' && !!q3row?.declined_at && (q3row?.decline_note ?? '').includes('budget'))
     check("template message in the provider's locale (ta) and no decision id", q3row?.decline_message_locale === 'ta' && q3row?.decline_message === declineMessageTemplate('price_high', 'ta').message && q3row?.decline_decision_id === null, `${q3row?.decline_message_locale} ${q3row?.decline_decision_id}`)
     const { data: ev } = await admin.from('quote_events').select('reason, payload, actor').eq('quote_id', q3).eq('event_type', 'declined').maybeSingle()
-    check('quote_events.declined: reason + note_len, never the note text', ev?.reason === 'price_high' && (ev?.payload as Record<string, unknown>)?.['note_len'] === 45 && !JSON.stringify(ev?.payload).includes('9876543210'), JSON.stringify(ev?.payload))
+    check('quote_events.declined: reason + note_len, never the note text', ev?.reason === 'price_high' && (ev?.payload as Record<string, unknown>)?.['note_len'] === NOTE.length && !JSON.stringify(ev?.payload).includes('9876543210'), JSON.stringify(ev?.payload))
     const { count: notifCount } = await admin.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', p3.uid).eq('kind', 'quote_declined')
     check('quote_declined notification row for the provider', (notifCount ?? 0) === 1, `count ${notifCount}`)
     const { count: invOff } = await admin.from('ai_invocations').select('id', { count: 'exact', head: true }).eq('user_id', buyer.uid).eq('feature', 'decline_message')
@@ -194,6 +198,23 @@ async function main() {
     const starRead = await p3Client.from('quotes').select('*').eq('id', q3).maybeSingle()
     record('provider select(*) on quotes', 'pass', starRead.error ? `errors (${starRead.error.code}) — column privileges bite; no client does this` : `ok, decline_note ${Object.prototype.hasOwnProperty.call(starRead.data ?? {}, 'decline_note') ? 'PRESENT (unexpected)' : 'absent'}`)
     if (!starRead.error && Object.prototype.hasOwnProperty.call(starRead.data ?? {}, 'decline_note')) check('select(*) must not expose decline_note', false)
+
+    // ── Render: buyer + provider RFQ pages (cookie sessions) against this DB ──
+    // Only VISIBLE markup counts — next-intl inlines the full message bundle in a <script>.
+    const visible = (html: string) => html.replace(/<script[\s\S]*?<\/script>/g, '')
+    const cookieFor = async (email: string) => {
+      const jar: Record<string, string> = {}
+      const ssr = createServerClient(SUPA_URL, ANON, { cookies: { getAll() { return Object.entries(jar).map(([name, value]) => ({ name, value })) }, setAll(list) { for (const { name, value } of list) jar[name] = value } } })
+      await ssr.auth.signInWithPassword({ email, password: 'Test1234!' })
+      return Object.entries(jar).map(([n, v]) => `${n}=${v}`).join('; ')
+    }
+    const bp = await fetch(`${BASE}/app/rfq/${rfq1}`, { headers: { cookie: await cookieFor(`${tag}_buyer@killtest.amclub`) } })
+    const bHtml = visible(await bp.text())
+    check('buyer RFQ page renders: compare table with ₹10,620 normalised total + "Declined — price" on q3', bp.status === 200 && bHtml.includes('Compare quotes') && bHtml.includes('10,620') && bHtml.includes('Declined — price'), `status ${bp.status} table=${bHtml.includes('Compare quotes')} total=${bHtml.includes('10,620')} declined=${bHtml.includes('Declined — price')}`)
+    const pp = await fetch(`${BASE}/partner/rfqs/${rfq1}`, { headers: { cookie: await cookieFor(`${tag}_p3@killtest.amclub`) } })
+    const pHtml = visible(await pp.text())
+    const taHead = declineMessageTemplate('price_high', 'ta').message.slice(0, 24)
+    check('provider RFQ page renders: declined block + Tamil message, never the buyer note', pp.status === 200 && pHtml.includes('This quote was declined') && pHtml.includes(taHead) && !pHtml.includes('9876543210') && !pHtml.includes('budget'), `status ${pp.status} block=${pHtml.includes('This quote was declined')} msg=${pHtml.includes(taHead)}`)
 
     // ── Flag ON: decline q2 with the agent on (stub) ──────────────────────
     if (flagOn) {
@@ -254,55 +275,75 @@ async function main() {
       check('declining on an accepted RFQ → 409', r.status === 409, `status ${r.status} ${d['error']}`)
     }
   } finally {
+    // Cleanup — PostgREST returns { error } and never throws, so every delete is
+    // checked, and the order follows the FK graph: checkout_sessions → order
+    // children → orders → price book → quotes → extractions → RFQs → ai_* →
+    // profiles → users. A silent FK failure here left kill-test rows in prod once.
+    const failures: string[] = []
+    const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {
+      const { error } = await q
+      if (error) failures.push(`${label}: ${error.message}`)
+    }
     try {
       const msmeIds = created.msmeIds
       if (msmeIds.length) {
+        // checkout_sessions.order_id has no cascade — sessions go BEFORE orders.
+        await del('checkout_sessions', admin.from('checkout_sessions').delete().in('msme_id', msmeIds))
         const { data: orders } = await admin.from('orders').select('id').in('msme_id', msmeIds)
         const orderIds = (orders ?? []).map((o) => o.id as string)
         if (orderIds.length) {
-          await admin.from('payouts').delete().in('order_id', orderIds)
-          await admin.from('order_events').delete().in('order_id', orderIds)
-          await admin.from('invoices').delete().in('order_id', orderIds)
+          await del('payout_dossiers', admin.from('payout_dossiers').delete().in('order_id', orderIds))
+          await del('evidence_photo_hashes', admin.from('evidence_photo_hashes').delete().in('order_id', orderIds))
+          await del('payouts', admin.from('payouts').delete().in('order_id', orderIds))
+          await del('order_events', admin.from('order_events').delete().in('order_id', orderIds))
+          await del('invoices', admin.from('invoices').delete().in('order_id', orderIds))
           const { data: pays } = await admin.from('payments').select('id').in('order_id', orderIds)
           const payIds = (pays ?? []).map((p) => p.id as string)
-          if (payIds.length) await admin.from('refunds').delete().in('payment_id', payIds)
-          await admin.from('payments').delete().in('order_id', orderIds)
-          await admin.from('orders').delete().in('id', orderIds)
+          if (payIds.length) await del('refunds', admin.from('refunds').delete().in('payment_id', payIds))
+          await del('payments', admin.from('payments').delete().in('order_id', orderIds))
+          await del('orders', admin.from('orders').delete().in('id', orderIds))
         }
-        await admin.from('checkout_sessions').delete().in('msme_id', msmeIds)
       }
       if (created.rfqIds.length) {
         const { data: qs } = await admin.from('quotes').select('id').in('rfq_id', created.rfqIds)
         const quoteIds = (qs ?? []).map((q) => q.id as string)
         if (quoteIds.length) {
-          await admin.from('provider_price_book').delete().in('source_quote_id', quoteIds)
-          await admin.from('quote_events').delete().in('quote_id', quoteIds)
-          await admin.from('quote_messages').delete().in('quote_id', quoteIds)
+          await del('provider_price_book', admin.from('provider_price_book').delete().in('source_quote_id', quoteIds))
+          await del('quote_events', admin.from('quote_events').delete().in('quote_id', quoteIds))
         }
-        await admin.from('quote_extractions').delete().in('rfq_id', created.rfqIds)
-        await admin.from('quotes').delete().in('rfq_id', created.rfqIds)
-        await admin.from('rfq_matches').delete().in('rfq_id', created.rfqIds)
-        await admin.from('rfqs').delete().in('id', created.rfqIds)
+        // quotes.extraction_id / decline_decision_id point at extractions and
+        // decisions — quotes go first, then extractions, then (below) decisions.
+        await del('quotes', admin.from('quotes').delete().in('rfq_id', created.rfqIds))
+        await del('quote_extractions', admin.from('quote_extractions').delete().in('rfq_id', created.rfqIds))
+        await del('rfq_matches', admin.from('rfq_matches').delete().in('rfq_id', created.rfqIds))
+        await del('rfqs', admin.from('rfqs').delete().in('id', created.rfqIds))
       }
       if (created.users.length) {
-        await admin.from('ai_decisions').delete().in('decided_by', created.users).eq('feature', 'decline_message')
-        await admin.from('ai_invocations').delete().in('user_id', created.users)
-        await admin.from('notifications').delete().in('user_id', created.users)
+        await del('ai_decisions', admin.from('ai_decisions').delete().in('decided_by', created.users))
+        await del('ai_invocations', admin.from('ai_invocations').delete().in('user_id', created.users))
+        await del('notifications', admin.from('notifications').delete().in('user_id', created.users))
       }
       if (created.providerIds.length) {
-        await admin.from('provider_categories').delete().in('provider_id', created.providerIds)
-        await admin.from('provider_profiles').delete().in('id', created.providerIds)
+        await del('provider_categories', admin.from('provider_categories').delete().in('provider_id', created.providerIds))
+        await del('provider_profiles', admin.from('provider_profiles').delete().in('id', created.providerIds))
       }
-      if (msmeIds.length) await admin.from('msme_profiles').delete().in('id', msmeIds)
+      if (msmeIds.length) await del('msme_profiles', admin.from('msme_profiles').delete().in('id', msmeIds))
       for (const [key, before] of settingsBefore) {
         if (before.existed) await setSetting(key, before.value)
-        else await admin.from('agent_settings').delete().eq('key', key)
+        else await del(`agent_settings.${key}`, admin.from('agent_settings').delete().eq('key', key))
       }
       for (const uid of created.users) {
-        await admin.from('users').delete().eq('id', uid)
-        await admin.auth.admin.deleteUser(uid)
+        await del('users', admin.from('users').delete().eq('id', uid))
+        const { error } = await admin.auth.admin.deleteUser(uid)
+        if (error) failures.push(`auth.users ${uid.slice(0, 8)}: ${error.message}`)
       }
-      record('cleanup', 'pass', `${created.users.length} users, ${created.rfqIds.length} RFQs, settings restored`)
+      if (failures.length) {
+        record('cleanup', 'FAIL', failures.join('; '))
+      } else {
+        const { count: usersLeft } = await admin.from('users').select('id', { count: 'exact', head: true }).like('email', `${tag}_%`)
+        const { count: rfqsLeft } = await admin.from('rfqs').select('id', { count: 'exact', head: true }).like('title', `${tag} %`)
+        check('cleanup: zero residue for this tag (users, RFQs), settings restored', (usersLeft ?? 0) === 0 && (rfqsLeft ?? 0) === 0, `users ${usersLeft} rfqs ${rfqsLeft}; ${created.users.length} users, ${created.rfqIds.length} RFQs removed`)
+      }
     } catch (e) {
       record('cleanup', 'FAIL', (e as Error).message)
     }

@@ -747,3 +747,12 @@ tile, and `verify-payout-dossier.ts`. Runbook: `docs/agents/PAYOUT_DOSSIER.md`.
 - **Goods-RFQ compare path** is exercised only when `MART_ENABLED` is on a rig (the verify script skips it
   on prod); the money math is the shared `goodsQuoteMoney` that `mapQuoteGoods` now calls, so the two
   cannot drift.
+- **Verify-script cleanup was silently failing (found at the S1.2 gate, fixed here).** PostgREST resolves
+  `.delete()` with `{ error }` and never throws, so the `finally` blocks in `verify-compare-decline.ts` and
+  `verify-quote-extraction.ts` reported "cleanup pass" while FK-blocked deletes (`checkout_sessions.order_id`
+  before `orders`; `quotes.extraction_id` before `quote_extractions`; `ai_decisions` referenced by quotes,
+  extractions and dossiers) left kill-test buyers, providers, RFQs and orders in prod from the S1.1 gate runs.
+  Both scripts now check every delete, follow the FK order, and end with a zero-residue assertion for their
+  tag; `cleanup-test-data.ts` surfaces `{ error }` and covers the agent-era tables. Prod was swept clean on
+  2026-09-20 (janitor + one FK-ordered transaction; seed demo providers untouched). Any new verify script must
+  copy the checked-`del` pattern.

@@ -24,7 +24,16 @@ const APPLY = process.env['APPLY'] === '1'
 const admin = createClient(URL, SERVICE, { auth: { persistSession: false } })
 
 const ids = <T extends { id: string }>(rows: T[] | null) => (rows ?? []).map((r) => r.id)
-const t = (p: PromiseLike<unknown>) => Promise.resolve(p).catch((e) => console.error('  ! delete error', e?.message ?? e))
+// PostgREST resolves with { error } and never rejects — surface both shapes, or a
+// blocked FK delete passes in silence (2026-09-20: kill-test rows survived in prod).
+const t = async (p: PromiseLike<unknown>) => {
+  try {
+    const r = (await p) as { error?: { message: string } | null } | null
+    if (r?.error) console.error('  ! delete error', r.error.message)
+  } catch (e) {
+    console.error('  ! delete error', (e as Error)?.message ?? e)
+  }
+}
 
 async function main() {
   console.log(`\n🧪 Test-data cleanup → ${URL}   [${APPLY ? 'APPLY — deleting' : 'DRY RUN — nothing deleted'}]\n`)
@@ -91,8 +100,19 @@ async function main() {
     await t(admin.from('order_documents').delete().eq('order_id', oid))
     await t(admin.from('order_events').delete().eq('order_id', oid))
   }
+  // Agent-era tables (S1.1 / S1.2 / S1.4), FK-ordered: dossiers + photo hashes before
+  // orders, price book before quotes, extractions after quotes (quotes.extraction_id),
+  // ai_decisions last (quotes / extractions / dossiers all point at it).
+  for (const oid of orderIds) {
+    await t(admin.from('payout_dossiers').delete().eq('order_id', oid))
+    await t(admin.from('evidence_photo_hashes').delete().eq('order_id', oid))
+  }
+  for (const pid of providerIds) await t(admin.from('provider_price_book').delete().eq('provider_id', pid))
   for (const rid of rfqIds) {
+    const { data: qs } = await admin.from('quotes').select('id').eq('rfq_id', rid)
+    for (const q of qs ?? []) await t(admin.from('provider_price_book').delete().eq('source_quote_id', q.id))
     await t(admin.from('quotes').delete().eq('rfq_id', rid))
+    await t(admin.from('quote_extractions').delete().eq('rfq_id', rid))
     await t(admin.from('rfq_matches').delete().eq('rfq_id', rid))
   }
   for (const mid of msmeIds) {
@@ -108,6 +128,7 @@ async function main() {
     await t(admin.from('provider_categories').delete().eq('provider_id', pid))
     await t(admin.from('provider_bank_accounts').delete().eq('provider_id', pid))
     await t(admin.from('provider_verifications').delete().eq('provider_id', pid))
+    await t(admin.from('quote_extractions').delete().eq('provider_id', pid))
     await t(admin.from('provider_profiles').delete().eq('id', pid))
   }
   for (const mid of msmeIds) await t(admin.from('msme_profiles').delete().eq('id', mid))
@@ -119,6 +140,9 @@ async function main() {
     await t(admin.from('audit_logs').delete().eq('actor_id', uid))
     await t(admin.from('notifications').delete().eq('user_id', uid))
     await t(admin.from('saved_providers').delete().eq('msme_id', uid)) // no-op if none
+    await t(admin.from('quote_extractions').delete().eq('user_id', uid))
+    await t(admin.from('ai_decisions').delete().eq('decided_by', uid))
+    await t(admin.from('ai_invocations').delete().eq('user_id', uid))
     await t(admin.from('users').delete().eq('id', uid))
     await admin.auth.admin.deleteUser(uid).catch(() => {})
   }
@@ -126,7 +150,7 @@ async function main() {
   // ── 3. Verify nothing remains ───────────────────────────────────────────────
   const { count: usersLeft } = await admin.from('users').select('id', { count: 'exact', head: true }).like('email', '%@killtest.amclub')
   const { data: catsLeft } = await admin.from('categories').select('id').or('slug.like.p7-%-cat,name_i18n->>en.eq.P7 Test Cat')
-  const { data: provLeft } = await admin.from('provider_profiles').select('id').or('slug.like.p6\\_%,slug.like.p7\\_%,slug.like.rfqv\\_%')
+  const { data: provLeft } = await admin.from('provider_profiles').select('id').or('slug.like.p6\\_%,slug.like.p7\\_%,slug.like.rfqv\\_%,slug.like.kt\\_%,slug.like.grfq\\_%')
   console.log(`\n✅ Done. Remaining test artifacts → users: ${usersLeft ?? 0}, test categories: ${(catsLeft ?? []).length}, test-slug providers: ${(provLeft ?? []).length}`)
 
   // Confirm seed/demo providers are untouched.
