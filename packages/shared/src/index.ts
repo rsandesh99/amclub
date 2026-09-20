@@ -40,6 +40,9 @@ export * from './agent-settings'
 // Services evidence engine: milestone machine + payout release gate (S0.3)
 export * from './evidence'
 
+// Trust mechanics: quote-or-decline reasons, configurable quote cap (S0.4)
+export * from './trust'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

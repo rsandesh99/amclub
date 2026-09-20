@@ -6,11 +6,11 @@ import { useRouter } from '@/i18n/navigation'
 import { Link } from '@/i18n/navigation'
 import { MessageSquare, Star, ShieldCheck } from 'lucide-react'
 import type { RfqDetailForBuyer, QuoteForBuyer } from '@/lib/rfq/queries'
-import { formatINR, formatINRExact } from '@/lib/format'
+import { formatINR, formatINRExact, formatResponseTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { QuoteTermsRow } from './QuoteTermsRow'
 
-type Sort = 'price' | 'delivery' | 'rating'
+type Sort = 'price' | 'delivery' | 'rating' | 'response'
 
 export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
   const t = useTranslations('rfq')
@@ -27,6 +27,15 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
     // Goods: compare the unit price the seller quoted (qty may differ by MOQ).
     if (sort === 'price') return goods && a.goods && b.goods ? a.goods.unitPricePaise - b.goods.unitPricePaise : a.pricePaise - b.pricePaise
     if (sort === 'delivery') return a.deliveryDays - b.deliveryDays
+    if (sort === 'response') {
+      // S0.4 responsiveness: faster median response first; providers with no
+      // sample yet (null) sort last. No new data — provider_stats cron owns it.
+      const ra = a.provider.medianResponseMinutes, rb = b.provider.medianResponseMinutes
+      if (ra == null && rb == null) return 0
+      if (ra == null) return 1
+      if (rb == null) return -1
+      return ra - rb
+    }
     return b.provider.avgRating - a.provider.avgRating
   })
 
@@ -99,6 +108,7 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
             <option value="price">{t('sort_price')}</option>
             <option value="delivery">{t('sort_delivery')}</option>
             <option value="rating">{t('sort_rating')}</option>
+            <option value="response">{t('sort_response')}</option>
           </select>
         </label>
       </div>
@@ -114,7 +124,13 @@ export function QuoteCompare({ rfq }: { rfq: RfqDetailForBuyer }) {
                 <p className="mt-0.5 flex items-center gap-2 text-xs text-foreground-secondary">
                   {q.provider.avgRating > 0 ? <span className="inline-flex items-center gap-0.5"><Star className="h-3 w-3 fill-accent text-accent" />{q.provider.avgRating.toFixed(1)} ({q.provider.reviewCount})</span> : <span>{t('new_label')}</span>}
                   <span>· {t('delivery_days', { days: q.deliveryDays })}</span>
+                  {formatResponseTime(q.provider.medianResponseMinutes) && <span>· {t('responds_in', { time: formatResponseTime(q.provider.medianResponseMinutes) as string })}</span>}
                 </p>
+                {q.provider.udyamVerified && (
+                  <span className="mt-1 inline-flex items-center gap-1 rounded-chip border border-trust/30 bg-trust/10 px-2 py-0.5 text-[11px] font-medium text-trust">
+                    <ShieldCheck className="h-3 w-3" aria-hidden /> {t('udyam_verified')}
+                  </span>
+                )}
               </div>
               <div className="text-right">
                 {goods && q.goods ? (

@@ -3,7 +3,7 @@ import type { KycClient } from './types'
 import { stubKycClient } from './stub'
 import { makeSurepassClient } from './surepass'
 
-export type { KycClient, GstinVerifyResult, BankVerifyResult } from './types'
+export type { KycClient, GstinVerifyResult, BankVerifyResult, UdyamVerifyResult } from './types'
 
 const PLACEHOLDER_VALUES = ['<surepass-or-signzy-key>', 'placeholder', '']
 

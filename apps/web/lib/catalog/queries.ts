@@ -144,7 +144,12 @@ async function getProviderBadges(providerId: string): Promise<VerificationBadge[
       .select('kind, status')
       .eq('provider_id', providerId)
       .in('status', ['manually_approved', 'api_verified'])
-    return (data ?? []).map((v) => ({ kind: v.kind, status: v.status }))
+    const badges = (data ?? []).map((v) => ({ kind: v.kind, status: v.status }))
+    // S0.4 — "Udyam verified" is a profile fact set only by a real (non-stub)
+    // /kyc/verify-udyam result, not a provider_verifications row.
+    const { data: prof } = await admin.from('provider_profiles').select('udyam_verified').eq('id', providerId).maybeSingle()
+    if (prof?.udyam_verified) badges.push({ kind: 'udyam', status: 'api_verified' })
+    return badges
   } catch (e) {
     console.error('[getProviderBadges]', e)
     return []

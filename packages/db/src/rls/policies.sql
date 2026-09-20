@@ -311,6 +311,20 @@ CREATE POLICY "gstin_verifications: admin read" ON gstin_verifications
 -- No INSERT/UPDATE/DELETE policies by design (service role writes only).
 REVOKE INSERT, UPDATE, DELETE ON gstin_verifications FROM anon, authenticated;
 
+-- ─── udyam_verifications (0029) — mirror of gstin_verifications ──────────────
+ALTER TABLE udyam_verifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "udyam_verifications: self read" ON udyam_verifications;
+CREATE POLICY "udyam_verifications: self read" ON udyam_verifications
+  FOR SELECT USING (user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "udyam_verifications: admin read" ON udyam_verifications;
+CREATE POLICY "udyam_verifications: admin read" ON udyam_verifications
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- No INSERT/UPDATE/DELETE policies by design (service role writes only).
+REVOKE INSERT, UPDATE, DELETE ON udyam_verifications FROM anon, authenticated;
+
 -- ─── agent_runs / agent_events (0026) — self read + admin read; service writes ─
 -- Mirrors migration 0026 (H0 agent groundwork, ADR-008). agent_events carries
 -- the same append-only guard as order_events; raise_append_only() from 0017.

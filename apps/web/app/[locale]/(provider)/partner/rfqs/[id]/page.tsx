@@ -4,6 +4,7 @@ import { getSessionUser, getProviderProfile } from '@/lib/auth/session'
 import { getRfqForProvider } from '@/lib/rfq/queries'
 import { Badge } from '@/components/ui/badge'
 import { QuoteComposer } from '@/components/rfq/QuoteComposer'
+import { DeclineRfqButton } from '@/components/rfq/DeclineRfqButton'
 import { QuoteTermsRow } from '@/components/rfq/QuoteTermsRow'
 import { formatINR, formatINRExact } from '@/lib/format'
 import { pickLocale } from '@amclub/shared'
@@ -93,8 +94,16 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
           <p className="mt-2 whitespace-pre-wrap text-sm text-foreground-secondary">{rfq.myQuote.scope}</p>
           <div className="mt-3"><QuoteTermsRow terms={rfq.myQuote} compact /></div>
         </div>
+      ) : rfq.declinedAt ? (
+        <div className="rounded-card border border-border bg-muted p-4 text-center text-sm text-foreground-secondary">
+          {t('you_declined')}
+        </div>
       ) : rfq.canQuote ? (
-        <QuoteComposer rfqId={rfq.id} goods={goods ?? undefined} />
+        <div className="space-y-3">
+          <QuoteComposer rfqId={rfq.id} goods={goods ?? undefined} />
+          {/* S0.4 quote-or-decline: an honest "no" beside "Quote". */}
+          <div className="flex justify-end"><DeclineRfqButton rfqId={rfq.id} /></div>
+        </div>
       ) : (
         <div className="rounded-card border border-border bg-muted p-4 text-center text-sm text-foreground-secondary">
           {t('rfq_closed')}

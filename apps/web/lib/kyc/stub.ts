@@ -6,7 +6,7 @@
  *   Set KYC_API_KEY to a real Surepass or Signzy key in .env.local.
  *   The stub will be bypassed automatically once the key is present.
  */
-import type { KycClient, GstinVerifyResult, BankVerifyResult } from './types'
+import type { KycClient, GstinVerifyResult, BankVerifyResult, UdyamVerifyResult } from './types'
 
 export const stubKycClient: KycClient = {
   async verifyGstin(_gstin: string): Promise<GstinVerifyResult> {
@@ -22,6 +22,13 @@ export const stubKycClient: KycClient = {
       isActive: true,
       stub: true,
     }
+  },
+
+  async verifyUdyam(_udyamNumber: string): Promise<UdyamVerifyResult> {
+    // Never log the Udyam number (PII in logs).
+    console.warn('[KYC STUB] verifyUdyam called — not a real API call (no KYC_API_KEY).')
+    await new Promise((r) => setTimeout(r, 400))
+    return { verified: true, enterpriseName: 'Stub Enterprise', majorActivity: 'Services', state: 'MH', registrationDate: '2021-01-01', stub: true }
   },
 
   async verifyBankAccount(params): Promise<BankVerifyResult> {

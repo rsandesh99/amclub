@@ -31,6 +31,40 @@ Deferred / notes:
 - **evidence_required_from is null on prod** — the gate is inert until the
   founder sets a date at /admin/agents; the milestone capture UI is live.
 
+## Agent S0.4 — trust mechanics (2026-09-20)
+
+Landed: quote cap as config (`rfq_max_quotes`, unset = legacy 7 so prod is
+unchanged until set); quote-or-decline (`POST /api/v1/rfq/[id]/decline`,
+`rfq_matches.declined_at/decline_reason`, cron auto-decline `window_lapsed`
+after `quote_window_hours` + buyer notification, inbox "Declined" badge,
+score view treats declines as decisions); Udyam verified chip
+(`udyam_verifications` mirror of 0021, `POST /api/v1/kyc/verify-udyam`,
+boolean set only from a real non-stub result, chips on cards/storefront/compare);
+Responsiveness sort on compare (no new data). Migration 0029.
+
+Conflicts / deferred:
+- **`match_declined` in quote_events** — the plan asks for it, but
+  `quote_events.quote_id` is NOT NULL and a declined match has no quote row.
+  The CHECK is widened for forward-compat; the source of truth is
+  `rfq_matches.declined_at` (the plan's own column) and the score view reads
+  it. No quote_events row is written for a match decline.
+- **Cutover proxy**: `evidence_required_from` (S0.3) compares against
+  `orders.created_at`, not the quote/package created_at — simpler, monotonic,
+  present on every order.
+- **Mobile parity**: Decline button, Udyam chip and Responsiveness sort are web
+  only this stage (docs/MOBILE_PARITY.md).
+- **Surepass Udyam response shape** is mapped defensively (enterprise_name /
+  name_of_enterprise, two date keys); confirm against a real key before
+  enabling the paid path.
+- **verify-trust "real path" branch** needs the server started with
+  `KYC_FAKE=verified` (never in prod); skipped otherwise.
+- **Window sweep ships DARK** (`quote_window_hours` default null, founder call
+  2026-09-20): the plan said default 48, but that would auto-decline every
+  open RFQ's >48h-silent matches and email buyers on the first cron run after
+  deploy. Set 48 in /admin/agents to turn it on; the cron sweep is a no-op
+  until then. verify-trust's cron branch runs only with CRON_SECRET and
+  without SKIP_CRON (it would sweep real prod matches from a dev box).
+
 ## Agent S0.2 — admin console + grants UI + kill switch (2026-09-20)
 
 Landed the founder console at `/admin/agents` (spend today/month + AI share of

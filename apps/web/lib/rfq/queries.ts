@@ -76,7 +76,7 @@ export interface QuoteForBuyer extends QuoteTerms {
   scope: string
   message: string | null
   createdAt: string
-  provider: { id: string; displayName: string; slug: string; avgRating: number; reviewCount: number; completedOrders: number; state: string | null }
+  provider: { id: string; displayName: string; slug: string; avgRating: number; reviewCount: number; completedOrders: number; state: string | null; medianResponseMinutes: number | null; udyamVerified: boolean }
 }
 
 export interface RfqDetailForBuyer {
@@ -135,7 +135,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
 
   const { data: quotes } = await admin
     .from('quotes')
-    .select('id, status, price_paise, delivery_days, scope, message, created_at, gst_included, transport_included, valid_until, advance_percent' + QUOTE_GOODS_COLS + ', provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state)')
+    .select('id, status, price_paise, delivery_days, scope, message, created_at, gst_included, transport_included, valid_until, advance_percent' + QUOTE_GOODS_COLS + ', provider:provider_profiles!inner(id, display_name, slug, avg_rating, review_count, completed_orders, state, median_response_minutes, udyam_verified)')
     .eq('rfq_id', rfqId)
     .order('price_paise', { ascending: true })
 
@@ -153,6 +153,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
         id: q.provider.id, displayName: q.provider.display_name, slug: q.provider.slug,
         avgRating: Number(q.provider.avg_rating ?? 0), reviewCount: q.provider.review_count ?? 0,
         completedOrders: q.provider.completed_orders ?? 0, state: q.provider.state ?? null,
+        medianResponseMinutes: q.provider.median_response_minutes ?? null, udyamVerified: !!q.provider.udyam_verified,
       },
     })),
   }
@@ -170,6 +171,7 @@ export interface ProviderRfqItem {
   expiresAt: string
   viewed: boolean
   quoted: boolean
+  declined: boolean
 }
 
 /** RFQs matched to this provider that are still active (open/quoted). */
@@ -180,7 +182,7 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
 
   const { data: matches } = await admin
     .from('rfq_matches')
-    .select('rfq_id, viewed_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug))')
+    .select('rfq_id, viewed_at, declined_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug))')
     .eq('provider_id', actor.providerId)
     .order('notified_at', { ascending: false })
   if (!matches) return []
@@ -198,7 +200,7 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
     .map((m) => ({
       rfqId: m.rfq_id, title: m.rfq.title, status: m.rfq.status, kind: m.rfq.kind === 'goods' ? 'goods' : 'service', martCategorySlug: m.rfq.mart_category_slug ?? null, categorySlug: m.rfq.category?.slug ?? null,
       quoteCount: m.rfq.quote_count, maxQuotes: m.rfq.max_quotes, expiresAt: m.rfq.expires_at,
-      viewed: !!m.viewed_at, quoted: quotedSet.has(m.rfq_id),
+      viewed: !!m.viewed_at, quoted: quotedSet.has(m.rfq_id), declined: !!m.declined_at,
     }))
 }
 
@@ -219,6 +221,8 @@ export interface RfqDetailForProvider {
   maxQuotes: number
   expiresAt: string
   canQuote: boolean
+  /** S0.4: set when this provider declined the match (or the window lapsed). */
+  declinedAt: string | null
   myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; status: string; goods: QuoteGoodsTerms | null } & QuoteTerms) | null
 }
 
@@ -230,7 +234,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
 
   const { data: match } = await admin
     .from('rfq_matches')
-    .select('viewed_at')
+    .select('viewed_at, declined_at')
     .eq('rfq_id', rfqId)
     .eq('provider_id', actor.providerId)
     .maybeSingle()
@@ -262,7 +266,8 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
     categorySlug: r.category?.slug ?? null,
     kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
     quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at,
-    canQuote: active && slotsLeft && notExpired && !myQuote,
+    canQuote: active && slotsLeft && notExpired && !myQuote && !match.declined_at,
+    declinedAt: (match as any).declined_at ?? null,
     myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, status: (myQuote as any).status, goods: mapQuoteGoods(myQuote), ...mapQuoteTerms(myQuote) } : null,
   }
 }

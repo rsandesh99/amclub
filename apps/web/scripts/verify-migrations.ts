@@ -149,6 +149,16 @@ const MANIFEST: Entry[] = [
     file: '0028_order_milestone_evidence.sql',
     note: 'column additions + partial unique index on order_milestones; RLS read-only for parties',
   },
+  {
+    // Trust mechanics (S0.4). rfq_matches decline columns, quote_events CHECK
+    // widened, udyam_verifications (mirror of 0021), provider_profiles
+    // .udyam_verified, provider_score_inputs_v1 rebuilt (appended columns).
+    // Applied to prod before/with the writer (NOT staged).
+    file: '0029_trust_mechanics.sql',
+    tables: ['udyam_verifications'],
+    views: ['provider_score_inputs_v1'],
+    note: 'rfq_matches.declined_at/decline_reason; provider_profiles.udyam_verified; score view appended columns',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

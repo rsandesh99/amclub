@@ -60,6 +60,8 @@ export const providerProfiles = pgTable('provider_profiles', {
   reviewCount: integer('review_count').default(0).notNull(),
   completedOrders: integer('completed_orders').default(0).notNull(),
   medianResponseMinutes: integer('median_response_minutes'),
+  // S0.4 (0029): set ONLY from a real (non-stub) Udyam verification.
+  udyamVerified: boolean('udyam_verified').default(false).notNull(),
   capacityPaused: boolean('capacity_paused').default(false).notNull(),
   topRated: boolean('top_rated').default(false).notNull(),
   // AMC Mart (0022) — goods selling activated; gated on a verified GSTIN
@@ -126,6 +128,21 @@ export const bankAccountVerifications = pgTable('bank_account_verifications', {
   verified: boolean('verified').notNull(),
   stub: boolean('stub').default(false).notNull(),
   // 'surepass' | 'stub'
+  provider: text('provider').notNull(),
+  result: jsonb('result'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+})
+
+// Server-side record of /kyc/verify-udyam results (0029) — mirror of
+// gstin_verifications (0021): every attempt recorded, stub never counts as
+// verified, self + admin read, service-role writes only.
+export const udyamVerifications = pgTable('udyam_verifications', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id').notNull(),
+  udyamNumber: text('udyam_number').notNull(),
+  verified: boolean('verified').notNull(),
+  stub: boolean('stub').default(false).notNull(),
+  // 'surepass' | 'stub' | 'admin_attest'
   provider: text('provider').notNull(),
   result: jsonb('result'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),

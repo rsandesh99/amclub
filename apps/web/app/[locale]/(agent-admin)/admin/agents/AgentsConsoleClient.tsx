@@ -12,8 +12,8 @@ interface SettingRow { key: AgentSettingKey; value: unknown; set: boolean; updat
 interface SpendBucket { ai_paise: number; commission_paise: number; ai_share_pct: number | null }
 interface Spend { today: SpendBucket; month: SpendBucket }
 
-const NUMBER_KEYS: AgentSettingKey[] = ['budget_run_paise', 'budget_user_day_paise', 'budget_month_paise']
-const TEXT_KEYS: AgentSettingKey[] = ['whatsapp_opt_in_text_version']
+const NUMBER_KEYS: AgentSettingKey[] = ['budget_run_paise', 'budget_user_day_paise', 'budget_month_paise', 'rfq_max_quotes', 'quote_window_hours']
+const TEXT_KEYS: AgentSettingKey[] = ['whatsapp_opt_in_text_version', 'evidence_required_from']
 // everything else that is not agents_enabled edits as JSON (cohort_user_ids).
 
 const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
@@ -193,6 +193,9 @@ function toText(key: AgentSettingKey, value: unknown): string {
 }
 
 function fromText(key: AgentSettingKey, text: string): unknown {
+  // An emptied field clears the key (null) for nullable keys such as
+  // rfq_max_quotes / evidence_required_from; the registry rejects null elsewhere.
+  if (text.trim() === '') return null
   if (NUMBER_KEYS.includes(key)) return Number(text)
   if (TEXT_KEYS.includes(key)) return text
   return JSON.parse(text)

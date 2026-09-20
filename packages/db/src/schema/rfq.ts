@@ -42,6 +42,9 @@ export const rfqMatches = pgTable('rfq_matches', {
   providerId: uuid('provider_id').references(() => providerProfiles.id, { onDelete: 'cascade' }).notNull(),
   notifiedAt: timestamp('notified_at', { withTimezone: true }).default(sql`now()`).notNull(),
   viewedAt: timestamp('viewed_at', { withTimezone: true }),
+  // S0.4 quote-or-decline (0029): a decline is an active decision, never silence.
+  declinedAt: timestamp('declined_at', { withTimezone: true }),
+  declineReason: text('decline_reason'), // DECLINE_REASONS | window_lapsed
 }, (table) => [
   primaryKey({ columns: [table.rfqId, table.providerId] }),
 ])

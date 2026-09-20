@@ -7,8 +7,9 @@
  * Endpoints used:
  *   GSTIN:       POST https://kyc-api.surepass.io/api/v1/corporate/gstin
  *   Bank verify: POST https://kyc-api.surepass.io/api/v1/bank-verification
+ *   Udyam:       POST https://kyc-api.surepass.io/api/v1/corporate/udyam
  */
-import type { KycClient, GstinVerifyResult, BankVerifyResult } from './types'
+import type { KycClient, GstinVerifyResult, BankVerifyResult, UdyamVerifyResult } from './types'
 
 const BASE = 'https://kyc-api.surepass.io/api/v1'
 
@@ -41,6 +42,22 @@ export function makeSurepassClient(apiKey: string): KycClient {
           state: d.state_jurisdiction,
           registrationDate: d.date_of_registration,
           isActive: d.taxpayer_type !== 'Cancelled',
+        }
+      } catch (e: unknown) {
+        return { verified: false, error: e instanceof Error ? e.message : 'KYC error' }
+      }
+    },
+
+    async verifyUdyam(udyamNumber: string): Promise<UdyamVerifyResult> {
+      try {
+        const data = await post('/corporate/udyam', { id_number: udyamNumber }, apiKey)
+        const d = data?.data ?? {}
+        return {
+          verified: data.success === true,
+          enterpriseName: d.enterprise_name ?? d.name_of_enterprise,
+          majorActivity: d.major_activity,
+          state: d.state,
+          registrationDate: d.date_of_registration ?? d.date_of_udyam_registration,
         }
       } catch (e: unknown) {
         return { verified: false, error: e instanceof Error ? e.message : 'KYC error' }

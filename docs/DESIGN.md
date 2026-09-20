@@ -306,7 +306,7 @@ amclub/
 
 1. Need is non-standard → `/app/rfq/new`: pick category → category-specific dynamic form (from `rfq_templates`) + free text + attachments + budget range (optional) + deadline.
 2. Submit → matching fan-out job: providers matching category + state(s) + verified + capacity get notified. RFQ visible in their `/partner/rfqs` for 72h.
-3. Providers submit quotes: price, scope, timeline, message. Buyer notified per quote; max 7 quotes shown, then RFQ auto-closes to new quotes.
+3. Providers submit quotes: price, scope, timeline, message. Buyer notified per quote; max 7 quotes shown, then RFQ auto-closes to new quotes. *(S0.4: the cap is config — `agent_settings.rfq_max_quotes`, 3–7; unset = legacy 7. Matched providers quote OR decline with a reason; matches silent past `quote_window_hours` (default 48) are auto-declined by the rfq-expire cron and the buyer is told how many could not take it up.)*
 4. Buyer compares quotes on one screen (sortable table: price / timeline / rating) → can chat-clarify within the quote thread (contact-info masked pre-payment, see §9) → **Accept quote** → checkout (same rail as Buy Now) → quote converts to order; other quotes auto-declined politely.
 5. Expiry handling: no quotes in 72h → suggest top providers to contact directly + option to rebroadcast with edits.
 

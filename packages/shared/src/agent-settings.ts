@@ -80,6 +80,20 @@ export const AGENT_SETTING_DEFS = {
     default: 'v1',
     hint: 'Version tag of the WhatsApp consent text captured in agent_grants.consent (S0.5). Bump when the wording changes.',
   },
+  // ── S0.4 trust mechanics ─────────────────────────────────────────────────
+  rfq_max_quotes: {
+    // null = unset => the route falls back to the legacy 7 (effectiveQuoteCap),
+    // so deploying this key changes nothing until the founder sets it.
+    schema: z.number().int().min(3).max(7).nullable(),
+    default: null,
+    hint: "S0.4 quote cap applied to NEW RFQs (3..7). Unset = 7 (the historical hard-coded cap), so existing behaviour holds until the founder sets it.",
+  },
+  quote_window_hours: {
+    // null = sweep OFF (ships dark; founder sets e.g. 48 in /admin/agents).
+    schema: z.number().int().min(6).max(168).nullable(),
+    default: null,
+    hint: "S0.4 quote-or-decline window (hours). null = the rfq-expire sweep is OFF. When set, matches older than this with no quote and no decline are auto-declined (window_lapsed) and the buyer is told.",
+  },
   evidence_required_from: {
     schema: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').nullable(),
     default: null,

@@ -61,11 +61,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Provider must be matched to this RFQ (fan-out wrote the row).
   const { data: match } = await admin
     .from('rfq_matches')
-    .select('rfq_id')
+    .select('rfq_id, declined_at')
     .eq('rfq_id', rfqId)
     .eq('provider_id', actor.providerId)
     .maybeSingle()
   if (!match) return NextResponse.json({ error: 'Not matched to this request' }, { status: 403 })
+  // S0.4 quote-or-decline is exclusive: a declined match (provider decline or
+  // window lapse) can no longer quote — enforced here, not only in the UI, so
+  // mobile/direct callers cannot bypass it and the score never double-counts.
+  if (match.declined_at) return NextResponse.json({ error: 'declined', declined_at: match.declined_at }, { status: 409 })
 
   // One quote per provider per RFQ.
   const { data: existing } = await admin

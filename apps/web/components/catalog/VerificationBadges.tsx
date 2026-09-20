@@ -16,11 +16,13 @@ const KIND_LABEL: Record<string, string> = {
   ca: 'ca',
   credential: 'credential',
   msme_cert: 'msme_cert',
+  // S0.4 — synthetic badge from provider_profiles.udyam_verified (real KYC only).
+  udyam: 'udyam',
 }
 
 function iconFor(kind: string) {
   if (kind === 'bank') return Landmark
-  if (kind === 'gstin' || kind === 'pan') return ShieldCheck
+  if (kind === 'gstin' || kind === 'pan' || kind === 'udyam') return ShieldCheck
   return BadgeCheck
 }
 

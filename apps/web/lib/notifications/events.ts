@@ -136,6 +136,26 @@ async function notifyDispute(admin: Admin, order: any): Promise<void> {
   }
 }
 
+/** S0.4 quote-or-decline: tell the buyer how many matched providers could not
+ *  take the RFQ up (declines + window lapses) — polite, translated, no model call. */
+export async function notifyQuoteWindowLapsed(admin: Admin, rfq: any, counts: { unavailable: number; total: number }): Promise<void> {
+  const { data: m } = await admin.from('msme_profiles').select('user_id').eq('id', rfq.msme_id).maybeSingle()
+  const userId = m?.user_id as string | undefined
+  if (!userId) return
+  const title = rfq.title ?? 'your request'
+  await createNotification(admin, {
+    userId,
+    kind: 'rfq_providers_unavailable',
+    titleI18n: { en: 'An update on your request', hi: 'आपके अनुरोध पर एक अपडेट' },
+    bodyI18n: {
+      en: `${counts.unavailable} of ${counts.total} providers could not take up "${title}". The others can still quote — you can also rebroadcast to reach more.`,
+      hi: `"${title}" के लिए ${counts.total} में से ${counts.unavailable} प्रदाता इसे नहीं ले सके। बाकी अभी भी कोट कर सकते हैं — आप और प्रदाताओं तक पहुँचने के लिए दोबारा भेज भी सकते हैं।`,
+    },
+    link: `/app/rfq/${rfq.id}`,
+    channels: ['email'],
+  })
+}
+
 const MILESTONE_LABELS: Record<MilestoneKind, { en: string; hi: string }> = {
   accepted: { en: 'Provider accepted', hi: 'प्रदाता ने स्वीकार किया' },
   site_or_materials: { en: 'Reached site / materials ready', hi: 'साइट पर पहुँचे / सामग्री तैयार' },

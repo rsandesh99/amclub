@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { rfqSchema } from '@amclub/shared'
+import { rfqSchema, effectiveQuoteCap } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { createAdminClient } from '@/lib/supabase/server'
@@ -8,6 +8,7 @@ import { resolveActor } from '@/lib/orders/actor'
 import { fanoutRfq } from '@/lib/rfq/fanout'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { getAgentSetting } from '@/lib/agent/settings'
 import { MART_ENABLED } from '@/lib/flags'
 import { getMartCategory } from '@/lib/mart/config'
 
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
     categoryId = category.id
   }
 
+  const maxQuotes = effectiveQuoteCap(await getAgentSetting(admin, 'rfq_max_quotes'))
   const { data: rfq, error } = await admin
     .from('rfqs')
     .insert({
@@ -82,7 +84,8 @@ export async function POST(request: NextRequest) {
       // review + training signal). Pure storage; matching is unaffected.
       voice_meta: d.voice_meta ?? null,
       status: 'open',
-      max_quotes: 7,
+      // S0.4: quote cap is config (agent_settings.rfq_max_quotes, 3..7); unset => legacy 7.
+      max_quotes: maxQuotes,
       quote_count: 0,
       expires_at: new Date(Date.now() + RFQ_TTL_MS).toISOString(),
     })

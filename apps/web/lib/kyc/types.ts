@@ -9,6 +9,16 @@ export interface GstinVerifyResult {
   stub?: boolean
 }
 
+export interface UdyamVerifyResult {
+  verified: boolean
+  enterpriseName?: string
+  majorActivity?: string
+  state?: string
+  registrationDate?: string
+  error?: string
+  stub?: boolean
+}
+
 export interface BankVerifyResult {
   verified: boolean
   accountHolderName?: string
@@ -18,6 +28,8 @@ export interface BankVerifyResult {
 
 export interface KycClient {
   verifyGstin(gstin: string): Promise<GstinVerifyResult>
+  /** S0.4 — Udyam registration lookup (Surepass /corporate/udyam). */
+  verifyUdyam(udyamNumber: string): Promise<UdyamVerifyResult>
   verifyBankAccount(params: {
     accountNumber: string
     ifsc: string
