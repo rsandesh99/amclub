@@ -36,6 +36,8 @@ export default async function PartnerRfqsPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {r.kind === 'goods' && <Badge variant="default">{t('goods_badge')}</Badge>}
+                  {/* S1.3 — my unanswered question on this RFQ (the "new answers" badge is a FOLLOWUP). */}
+                  {r.hasUnansweredMine && <Badge variant="warning">{t('clarify_mine_open_chip')}</Badge>}
                   {r.quoted ? <Badge variant="success">{t('quoted_badge')}</Badge> : r.declined ? <Badge variant="default">{t('declined_badge')}</Badge> : !r.viewed ? <Badge variant="info">{t('new_label')}</Badge> : null}
                 </div>
               </Link>

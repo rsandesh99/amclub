@@ -226,6 +226,33 @@ DROP POLICY IF EXISTS "rfq_matches: admin all" ON rfq_matches;
 CREATE POLICY "rfq_matches: admin all" ON rfq_matches
   FOR ALL USING (has_role('admin') OR has_role('ops'));
 
+-- ─── rfq_clarifications (0034, S1.3) ──────────────────────────────────────────
+-- The RFQ's buyer and EVERY matched provider read the whole thread (fairness;
+-- the API never returns provider_id to a provider). No client writes — the
+-- routes insert/update with the service role after the party check.
+
+ALTER TABLE rfq_clarifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "rfq_clarifications: buyer read own rfq" ON rfq_clarifications;
+CREATE POLICY "rfq_clarifications: buyer read own rfq" ON rfq_clarifications
+  FOR SELECT USING (
+    deleted_at IS NULL
+    AND rfq_id IN (
+      SELECT id FROM rfqs
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "rfq_clarifications: matched provider read" ON rfq_clarifications;
+CREATE POLICY "rfq_clarifications: matched provider read" ON rfq_clarifications
+  FOR SELECT USING (deleted_at IS NULL AND is_provider_matched_to_rfq(rfq_id));
+
+DROP POLICY IF EXISTS "rfq_clarifications: admin all" ON rfq_clarifications;
+CREATE POLICY "rfq_clarifications: admin all" ON rfq_clarifications
+  FOR ALL USING (has_role('admin') OR has_role('ops'));
+
+REVOKE INSERT, UPDATE, DELETE ON rfq_clarifications FROM anon, authenticated;
+
 -- ─── quotes ───────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "quotes: provider crud own" ON quotes;
@@ -258,7 +285,8 @@ GRANT SELECT (
   gst_included, transport_included, valid_until, advance_percent,
   status, created_at, updated_at,
   extraction_id, extraction_confirmed_at,
-  decline_reason, decline_message, decline_message_locale, declined_by, declined_at, decline_decision_id
+  decline_reason, decline_message, decline_message_locale, declined_by, declined_at, decline_decision_id,
+  revision, revised_at
 ) ON quotes TO anon, authenticated;
 
 -- ─── quote_events (0016) — append-only; read-only for every client role ──────

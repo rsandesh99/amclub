@@ -1,17 +1,19 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { editedExtractFields, quoteSchema, type QuoteExtraction } from '@amclub/shared'
+import { MAX_QUOTE_REVISIONS, editedExtractFields, quoteRevisionSchema, quoteSchema, type QuoteExtraction } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
-import { RFQ_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
+import { QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { createNotification } from '@/lib/notifications/create'
 import { addQuoteEvent } from '@/lib/rfq/events'
+import { loadRfqRowForQuote, quoteRowColumns, quoteTermsSnapshot, resolveQuoteTerms } from '@/lib/rfq/quote-terms'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
 import { recordAiDecision } from '@/lib/mart/events'
 import { recordPriceBookEntry } from '@/lib/agent/price-book'
+import { captureServerEvent } from '@/lib/analytics/server'
 import { AGENT_ENABLED } from '@/lib/flags'
 
 const bodySchema = quoteSchema.omit({ rfq_id: true })
@@ -20,7 +22,9 @@ const bodySchema = quoteSchema.omit({ rfq_id: true })
  *  enforced atomically via claim_quote_slot — the 8th quote is rejected (409).
  *  S1.1: an optional `extraction_id` links the provider's one-tap confirmation
  *  of a model prefill — recorded in ai_decisions (feature quote_extraction) and
- *  on the quote; the provider's Submit is still the ONLY quote write. */
+ *  on the quote; the provider's Submit is still the ONLY quote write.
+ *  S1.3: goods validation + price computation live in lib/rfq/quote-terms.ts,
+ *  shared with PATCH (revision) — one price path, never a fork. */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -59,28 +63,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // AMC Mart M2 — a goods RFQ needs goods terms; the total is qty × unit price,
-  // computed HERE (the client's price_paise is ignored for goods).
-  const { data: rfqData } = await admin.from('rfqs').select('id' + RFQ_GOODS_COLS).eq('id', rfqId).maybeSingle()
-  const rfqRow = rfqData as unknown as { id: string; kind?: string; goods_spec?: unknown; mart_category_slug?: string | null } | null
-  const isGoods = isGoodsRow(rfqRow)
-  let goods: { unit_price_paise: number; qty: number; gst_rate_bps: number; hsn_code: string; product_id: string | null } | null = null
-  if (isGoods) {
-    if (!d.goods) return NextResponse.json({ error: 'goods_terms_required' }, { status: 422 })
-    const spec = (rfqRow!.goods_spec ?? {}) as { qty?: number }
-    const qty = d.goods.qty ?? Number(spec.qty ?? 0)
-    if (!(qty > 0)) return NextResponse.json({ error: 'goods_terms_required' }, { status: 422 })
-    if (d.goods.product_id) {
-      // The linked listing must be the seller's own, live, and in the RFQ's Mart
-      // category — the order line takes its name from it and its category from the RFQ.
-      const { data: own } = await admin.from('products').select('id, status, category_slug').eq('id', d.goods.product_id).eq('seller_id', actor.providerId).is('deleted_at', null).maybeSingle()
-      if (!own) return NextResponse.json({ error: 'listing_not_owned' }, { status: 403 })
-      if (own.status !== 'active' || own.category_slug !== rfqRow!.mart_category_slug) return NextResponse.json({ error: 'listing_mismatch' }, { status: 422 })
-    }
-    goods = { unit_price_paise: d.goods.unit_price_paise, qty, gst_rate_bps: d.goods.gst_rate_bps, hsn_code: d.goods.hsn_code, product_id: d.goods.product_id ?? null }
-  } else if (d.goods) {
-    return NextResponse.json({ error: 'goods_terms_not_allowed' }, { status: 422 })
-  }
-  const pricePaise = goods ? goods.unit_price_paise * goods.qty : d.price_paise
+  // computed in the shared helper (the client's price_paise is ignored for goods).
+  const rfqRow = await loadRfqRowForQuote(admin, rfqId)
+  const resolved = await resolveQuoteTerms(admin, { rfqRow: rfqRow ?? { id: rfqId }, providerId: actor.providerId, body: d })
+  if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: resolved.status })
+  const { pricePaise, isGoods, goods } = resolved.value
 
   // Provider must be matched to this RFQ (fan-out wrote the row).
   const { data: match } = await admin
@@ -116,16 +103,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .insert({
       rfq_id: rfqId,
       provider_id: actor.providerId,
-      price_paise: pricePaise,
-      delivery_days: d.delivery_days,
-      ...(goods ? { unit_price_paise: goods.unit_price_paise, qty: goods.qty, gst_rate_bps: goods.gst_rate_bps, hsn_code: goods.hsn_code, product_id: goods.product_id } : {}),
-      scope: d.scope,
-      message: d.message ?? null,
-      // Phase 4b — optional terms; absent → NULL ("not stated").
-      gst_included: d.gst_included ?? null,
-      transport_included: d.transport_included ?? null,
-      valid_until: d.valid_until ?? null,
-      advance_percent: d.advance_percent ?? null,
+      // Price, terms (absent → NULL "not stated") and goods columns from the ONE resolution.
+      ...quoteRowColumns(resolved.value, d),
       status: 'submitted',
     })
     .select('id')
@@ -147,10 +126,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const finalTerms = {
       price_paise: pricePaise,
       delivery_days: d.delivery_days,
-      gst_included: d.gst_included ?? null,
-      transport_included: d.transport_included ?? null,
-      valid_until: d.valid_until ?? null,
-      advance_percent: d.advance_percent ?? null,
+      ...resolved.value.terms,
       goods: goods ? { unit_price_paise: goods.unit_price_paise, gst_rate_bps: goods.gst_rate_bps, hsn_code: goods.hsn_code } : null,
     }
     editedFields = editedExtractFields(extraction.proposed, finalTerms, isGoods ? 'goods' : 'services')
@@ -183,13 +159,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // History captures what was STATED at submission, including "not stated".
     payload: {
       rfq_id: rfqId,
-      price_paise: pricePaise,
-      delivery_days: d.delivery_days,
-      ...(goods ? { goods } : {}),
-      gst_included: d.gst_included ?? null,
-      transport_included: d.transport_included ?? null,
-      valid_until: d.valid_until ?? null,
-      advance_percent: d.advance_percent ?? null,
+      ...quoteTermsSnapshot(resolved.value, d),
       ...(extraction ? { extraction_id: extraction.id, edited_fields: editedFields ?? [] } : {}),
     },
   })
@@ -199,24 +169,130 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (AGENT_ENABLED) await recordPriceBookEntry(admin, { quoteId: quote.id })
 
   // Notify the buyer of the new quote.
-  const { data: rfq } = await admin
-    .from('rfqs')
-    .select('title, msme:msme_profiles!inner(user_id)')
-    .eq('id', rfqId)
-    .maybeSingle()
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  const buyerUserId = (rfq as any)?.msme?.user_id as string | undefined
-  /* eslint-enable @typescript-eslint/no-explicit-any */
-  if (buyerUserId) {
+  const rfq = await loadRfqForNotify(admin, rfqId)
+  if (rfq?.buyerUserId) {
     await createNotification(admin, {
-      userId: buyerUserId,
+      userId: rfq.buyerUserId,
       kind: 'rfq_new_quote',
       titleI18n: { en: 'New quote received', hi: 'नया कोटेशन प्राप्त हुआ' },
-      bodyI18n: { en: (rfq as { title: string }).title, hi: (rfq as { title: string }).title },
+      bodyI18n: { en: rfq.title, hi: rfq.title },
       link: `/app/rfq/${rfqId}`,
       channels: ['sms'],
     })
   }
 
   return NextResponse.json({ quoteId: quote.id, quoteCount: newCount, ...(extraction ? { extraction_id: extraction.id, edited_fields: editedFields ?? [] } : {}) })
+}
+
+/**
+ * S1.3 — provider REVISES their own submitted quote in place. Not a status
+ * change (`quotes.status` stays `submitted`; QUOTE_TRANSITIONS is untouched):
+ * every field is restated, `revision` increments under an optimistic lock, the
+ * before/after lands in quote_events ('revised'), the price book tracks the
+ * latest stated price, and the buyer is told. Same terms/price path as POST.
+ */
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await getAuthedSupabase()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const scope = await requireToolScope('revise_quote')
+  if (scope) return scope
+  const { id: rfqId } = await params
+
+  const admin = await createAdminClient()
+  const actor = await resolveActor(admin, userId)
+  if (!actor.providerId) return NextResponse.json({ error: 'Not a provider' }, { status: 403 })
+
+  const rl = await enforce(limiters.quoteSubmit, `quote:${actor.providerId}`)
+  if (!rl.ok) return tooManyRequests(rl.retryAfter)
+
+  const json = await request.json().catch(() => null)
+  const parsed = quoteRevisionSchema.safeParse(json)
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
+  const d = parsed.data
+
+  // Own quote on this RFQ, still submitted.
+  const { data: mine } = await admin
+    .from('quotes')
+    .select('id, status, revision, price_paise, delivery_days, scope, message, gst_included, transport_included, valid_until, advance_percent' + QUOTE_GOODS_COLS)
+    .eq('rfq_id', rfqId)
+    .eq('provider_id', actor.providerId)
+    .maybeSingle()
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const q = mine as any
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  if (!q) return NextResponse.json({ error: 'quote_not_found' }, { status: 404 })
+  if (q.status !== 'submitted') return NextResponse.json({ error: 'quote_not_revisable', status: q.status }, { status: 409 })
+
+  // RFQ still active and inside its window (the 72-hour clock never pauses).
+  const { data: rfqState } = await admin.from('rfqs').select('id, status, expires_at').eq('id', rfqId).maybeSingle()
+  const active = !!rfqState && (rfqState.status === 'open' || rfqState.status === 'quoted') && new Date(rfqState.expires_at).getTime() > Date.now()
+  if (!active) return NextResponse.json({ error: 'rfq_closed' }, { status: 409 })
+
+  const currentRevision = Number(q.revision ?? 1)
+  if (currentRevision >= MAX_QUOTE_REVISIONS) return NextResponse.json({ error: 'revision_cap', revision: currentRevision, max: MAX_QUOTE_REVISIONS }, { status: 409 })
+
+  // ONE terms/price path with POST (goods validation + qty × unit price).
+  const rfqRow = await loadRfqRowForQuote(admin, rfqId)
+  const resolved = await resolveQuoteTerms(admin, { rfqRow: rfqRow ?? { id: rfqId }, providerId: actor.providerId, body: d })
+  if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: resolved.status })
+
+  const before = {
+    price_paise: Number(q.price_paise),
+    delivery_days: q.delivery_days,
+    gst_included: q.gst_included ?? null,
+    transport_included: q.transport_included ?? null,
+    valid_until: q.valid_until ?? null,
+    advance_percent: q.advance_percent ?? null,
+    ...(q.unit_price_paise != null ? { goods: { unit_price_paise: Number(q.unit_price_paise), qty: q.qty, gst_rate_bps: q.gst_rate_bps, hsn_code: q.hsn_code, product_id: q.product_id ?? null } } : {}),
+  }
+  const after = quoteTermsSnapshot(resolved.value, d)
+  const nextRevision = currentRevision + 1
+  const now = new Date().toISOString()
+
+  // Optimistic lock: only the row we read (status + revision) moves; zero rows = a concurrent revision or a status change.
+  const { data: moved, error: updErr } = await admin
+    .from('quotes')
+    .update({ ...quoteRowColumns(resolved.value, d), revision: nextRevision, revised_at: now, updated_at: now })
+    .eq('id', q.id)
+    .eq('status', 'submitted')
+    .eq('revision', currentRevision)
+    .select('id')
+  if (updErr) return serverError('[quote revise]', updErr)
+  if (!moved || moved.length === 0) return NextResponse.json({ error: 'revision_conflict' }, { status: 409 })
+
+  await addQuoteEvent(admin, {
+    quoteId: q.id,
+    eventType: 'revised',
+    actor: actor.userId,
+    payload: { rfq_id: rfqId, revision: nextRevision, before, after },
+  })
+
+  // S1.1 price book: upsert on source_quote_id now UPDATES, so the book tracks the latest stated price.
+  if (AGENT_ENABLED) await recordPriceBookEntry(admin, { quoteId: q.id })
+
+  const rfq = await loadRfqForNotify(admin, rfqId)
+  if (rfq?.buyerUserId) {
+    await createNotification(admin, {
+      userId: rfq.buyerUserId,
+      kind: 'quote_revised',
+      titleI18n: { en: 'A quote was updated', hi: 'एक कोटेशन अपडेट हुआ' },
+      bodyI18n: { en: rfq.title, hi: rfq.title },
+      link: `/app/rfq/${rfqId}`,
+      channels: ['sms'],
+    })
+  }
+
+  const delta = resolved.value.pricePaise - before.price_paise
+  captureServerEvent(actor.userId, 'quote_revised', { rfq_id: rfqId, quote_id: q.id, revision: nextRevision, price_delta_sign: delta > 0 ? 'up' : delta < 0 ? 'down' : 'same', role: 'provider' })
+
+  return NextResponse.json({ quoteId: q.id, revision: nextRevision })
+}
+
+async function loadRfqForNotify(admin: Awaited<ReturnType<typeof createAdminClient>>, rfqId: string): Promise<{ title: string; buyerUserId: string | null } | null> {
+  const { data } = await admin.from('rfqs').select('title, msme:msme_profiles!inner(user_id)').eq('id', rfqId).maybeSingle()
+  if (!data) return null
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const r = data as any
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  return { title: r.title as string, buyerUserId: (r.msme?.user_id as string | undefined) ?? null }
 }

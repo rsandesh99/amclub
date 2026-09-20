@@ -29,25 +29,52 @@ export interface QuoteComposerGoods {
  * confirmation lands in ai_decisions. With the prop false the form renders
  * exactly as before. No client money arithmetic beyond rupees↔paise display.
  */
-export function QuoteComposer({ rfqId, goods, extractEnabled = false }: { rfqId: string; goods?: QuoteComposerGoods | undefined; extractEnabled?: boolean }) {
+/** S1.3 — the provider's current quote, prefilled into the composer in `mode="revise"`. */
+export interface QuoteComposerInitial {
+  pricePaise: number
+  deliveryDays: number
+  scope: string
+  message: string | null
+  gstIncluded: boolean | null
+  transportIncluded: boolean | null
+  validUntil: string | null
+  advancePercent: number | null
+  goods?: { unitPricePaise: number; qty: number; gstRateBps: number; hsnCode: string; productId: string | null } | null
+}
+
+export interface QuoteComposerProps {
+  rfqId: string
+  goods?: QuoteComposerGoods | undefined
+  extractEnabled?: boolean
+  /** S1.3 — `revise` PATCHes the provider's own submitted quote in place (every field restated). */
+  mode?: 'submit' | 'revise'
+  initial?: QuoteComposerInitial | undefined
+  onDone?: (() => void) | undefined
+  onCancel?: (() => void) | undefined
+}
+
+const triFrom = (v: boolean | null | undefined): Tri => (v == null ? '' : v ? 'yes' : 'no')
+
+export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'submit', initial, onDone, onCancel }: QuoteComposerProps) {
   const t = useTranslations('rfq')
   const router = useRouter()
   const posthog = useAnalytics()
-  const [price, setPrice] = useState('')
+  const revise = mode === 'revise'
+  const [price, setPrice] = useState(initial ? String(initial.pricePaise / 100) : '')
   // Goods terms: unit price (rupees typed → paise integer), GST slab, HSN, optional listing, qty.
-  const [unitPrice, setUnitPrice] = useState('')
-  const [gstBps, setGstBps] = useState('')
-  const [hsn, setHsn] = useState('')
-  const [listingId, setListingId] = useState('')
-  const [gQty, setGQty] = useState(goods ? String(goods.qty) : '')
-  const [days, setDays] = useState('')
-  const [scope, setScope] = useState('')
-  const [message, setMessage] = useState('')
+  const [unitPrice, setUnitPrice] = useState(initial?.goods ? String(initial.goods.unitPricePaise / 100) : '')
+  const [gstBps, setGstBps] = useState(initial?.goods ? String(initial.goods.gstRateBps) : '')
+  const [hsn, setHsn] = useState(initial?.goods?.hsnCode ?? '')
+  const [listingId, setListingId] = useState(initial?.goods?.productId ?? '')
+  const [gQty, setGQty] = useState(initial?.goods ? String(initial.goods.qty) : goods ? String(goods.qty) : '')
+  const [days, setDays] = useState(initial ? String(initial.deliveryDays) : '')
+  const [scope, setScope] = useState(initial?.scope ?? '')
+  const [message, setMessage] = useState(initial?.message ?? '')
   // Phase 4b — optional commercial terms. Untouched = not sent = NULL ("not stated").
-  const [gst, setGst] = useState<Tri>('')
-  const [transport, setTransport] = useState<Tri>('')
-  const [validUntil, setValidUntil] = useState('')
-  const [advance, setAdvance] = useState('')
+  const [gst, setGst] = useState<Tri>(triFrom(initial?.gstIncluded))
+  const [transport, setTransport] = useState<Tri>(triFrom(initial?.transportIncluded))
+  const [validUntil, setValidUntil] = useState(initial?.validUntil ?? '')
+  const [advance, setAdvance] = useState(initial?.advancePercent == null ? '' : String(initial.advancePercent))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   // S1.1 — extraction state.
@@ -147,8 +174,9 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false }: { rfqId:
     if (advanceNum !== undefined && (!Number.isInteger(advanceNum) || advanceNum < 0 || advanceNum > 100)) { setError(t('term_advance') + ': 0–100'); return }
     setLoading(true)
     try {
+      // S1.3 — revise = PATCH in place (same body shape, never an extraction_id); submit = POST.
       const res = await fetch(`/api/v1/rfq/${rfqId}/quote`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: revise ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           price_paise: pricePaise,
           delivery_days: deliveryDays,
@@ -159,15 +187,20 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false }: { rfqId:
           ...(validUntil ? { valid_until: validUntil } : {}),
           ...(advanceNum !== undefined ? { advance_percent: advanceNum } : {}),
           ...(goodsTerms ? { goods: goodsTerms } : {}),
-          ...(extractionId ? { extraction_id: extractionId } : {}),
+          ...(!revise && extractionId ? { extraction_id: extractionId } : {}),
         }),
       })
       const d = await res.json().catch(() => ({}))
       if (!res.ok) {
         if (d.error === 'already_quoted') throw new Error(t('already_quoted'))
         if (d.error === 'rfq_closed') throw new Error(t('rfq_closed'))
-        throw new Error(t('err_quote'))
+        if (d.error === 'revision_cap') throw new Error(t('revise_err_cap'))
+        if (d.error === 'revision_conflict') throw new Error(t('revise_err_conflict'))
+        if (d.error === 'quote_not_revisable' || d.error === 'quote_not_found') throw new Error(t('revise_err_not_revisable'))
+        throw new Error(revise ? t('revise_err_generic') : t('err_quote'))
       }
+      if (revise) posthog.capture('quote_revised_client', { rfq_id: rfqId, revision: d.revision, role: 'provider' })
+      onDone?.()
       router.refresh()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('err_quote'))
@@ -199,10 +232,11 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false }: { rfqId:
 
   return (
     <div className="rounded-card border border-border bg-surface p-5 shadow-card space-y-4">
-      <h2 className="text-sm font-semibold">{t('quote_title')}</h2>
+      <h2 className="text-sm font-semibold">{revise ? t('revise_title') : t('quote_title')}</h2>
+      {revise && <p className="text-xs text-foreground-secondary">{t('revise_intro')}</p>}
 
-      {/* S1.1 — Type or speak your quote (only for an enabled, cohorted provider). */}
-      {extractEnabled && (
+      {/* S1.1 — Type or speak your quote (only for an enabled, cohorted provider; never in revise mode). */}
+      {extractEnabled && !revise && (
         <div className="space-y-3 rounded-card border border-primary/30 bg-primary/5 p-4" data-testid="quote-extract-card">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -344,7 +378,14 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false }: { rfqId:
         <Textarea id="q-msg" value={message} onChange={(e) => setMessage(e.target.value)} rows={2} />
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
-      <Button onClick={submit} loading={loading} className="w-full">{loading ? t('submitting_quote') : t('submit_quote')}</Button>
+      {revise ? (
+        <div className="flex gap-2">
+          <Button onClick={submit} loading={loading} className="flex-1">{loading ? t('revise_submitting') : t('revise_submit')}</Button>
+          {onCancel && <Button variant="outline" onClick={onCancel} disabled={loading}>{t('revise_cancel')}</Button>}
+        </div>
+      ) : (
+        <Button onClick={submit} loading={loading} className="w-full">{loading ? t('submitting_quote') : t('submit_quote')}</Button>
+      )}
     </div>
   )
 }

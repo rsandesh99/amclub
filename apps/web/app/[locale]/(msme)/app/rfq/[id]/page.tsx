@@ -11,6 +11,8 @@ import { GoodsSpecCard, type GoodsSpecView } from '@/components/mart/GoodsSpecCa
 import { getMartCategory } from '@/lib/mart/config'
 import { createAdminClient } from '@/lib/supabase/server'
 import { computeCompare, getComparePointers, isComparePointersEnabledFor, toPointerLocale } from '@/lib/rfq/compare'
+import { isInClarification, rfqIsActive } from '@amclub/shared'
+import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
@@ -36,14 +38,19 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
     : null
 
   const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')
+  // S1.3 — derived, never a status: active RFQ with an unanswered provider question.
+  const active = rfqIsActive(rfq.status) && new Date(rfq.expiresAt).getTime() > Date.now()
+  const inClarification = isInClarification(rfq.status, rfq.clarifications) && active
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
       <div className="rounded-card border border-border bg-surface p-5 shadow-card">
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-xl font-bold">{rfq.title}</h1>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {rfq.kind === 'goods' && <Badge variant="info">{t('goods_badge')}</Badge>}
+            {/* S1.3 — derived "in clarification": a chip beside the status, never a status text change. */}
+            {inClarification && <Badge variant="warning">{t('clarify_awaiting_chip')}</Badge>}
             <Badge variant={VARIANT[rfq.status] ?? 'default'}>{t(`status_${rfq.status}` as 'status_open')}</Badge>
           </div>
         </div>
@@ -82,6 +89,9 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
       {rfq.kind === 'goods' && rfq.goodsSpec && (
         <GoodsSpecCard spec={rfq.goodsSpec as unknown as GoodsSpecView} categoryName={goodsCat ? pickLocale(goodsCat.name_i18n, locale) : null} showPhone />
       )}
+
+      {/* S1.3 — questions from providers, above the compare table; answers are visible to every matched provider. */}
+      <ClarificationsCard rfqId={rfq.id} role="buyer" initial={rfq.clarifications} canWrite={active} closed={!active} />
 
       <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} />
     </div>

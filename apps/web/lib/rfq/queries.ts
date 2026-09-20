@@ -1,8 +1,9 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
-import { effectiveCostAfterItcPaise, goodsQuoteMoney, resolveDeclineLocale } from '@amclub/shared'
+import { effectiveCostAfterItcPaise, goodsQuoteMoney, resolveDeclineLocale, type ClarificationView } from '@amclub/shared'
 import { RFQ_GOODS_LIST_COLS, QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
+import { countOpenQuestions, listClarifications, rfqsWithMyOpenQuestion } from '@/lib/rfq/clarifications'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -18,6 +19,8 @@ export interface RfqListItem {
   categorySlug: string | null
   createdAt: string
   expiresAt: string
+  /** S1.3 — unanswered provider questions (list badge "N questions waiting"); derived, never a status. */
+  openQuestions: number
 }
 
 /** Phase 4 — optional commercial terms; null = "not stated" (UI shows a hint, never a blank). */
@@ -67,6 +70,14 @@ export function mapQuoteGoods(q: any): QuoteGoodsTerms | null {
   }
 }
 
+/** S1.3 — one `quote_events.revised` row, reduced to what the buyer's history popover shows. */
+export interface QuoteRevisionRecord {
+  revision: number
+  at: string
+  before: { pricePaise: number; deliveryDays: number }
+  after: { pricePaise: number; deliveryDays: number }
+}
+
 export interface QuoteForBuyer extends QuoteTerms {
   id: string
   status: string
@@ -80,6 +91,11 @@ export interface QuoteForBuyer extends QuoteTerms {
   updatedAt: string | null
   /** S1.2 — why it was declined (buyer reason or another_quote_accepted); never the note. */
   declineReason: string | null
+  /** S1.3 — submissions so far (1 = original); revised_at set once revised. */
+  revision: number
+  revisedAt: string | null
+  /** S1.3 — quote_events.revised history (oldest first) so the buyer sees the movement. */
+  revisions: QuoteRevisionRecord[]
   provider: {
     id: string; displayName: string; slug: string; avgRating: number; reviewCount: number; completedOrders: number; state: string | null; medianResponseMinutes: number | null; udyamVerified: boolean
     /** S1.2 — the locale a decline message would be written in (languages[] → preferred_locale → en). */
@@ -94,16 +110,32 @@ export interface QuoteForBuyer extends QuoteTerms {
 export async function loadBuyerQuotes(admin: Awaited<ReturnType<typeof createAdminClient>>, rfqId: string): Promise<QuoteForBuyer[]> {
   const { data: quotes } = await admin
     .from('quotes')
-    .select('id, status, price_paise, delivery_days, scope, message, created_at, updated_at, gst_included, transport_included, valid_until, advance_percent, decline_reason' + QUOTE_GOODS_COLS + ', provider:provider_profiles!inner(id, user_id, display_name, slug, avg_rating, review_count, completed_orders, state, median_response_minutes, udyam_verified, languages)')
+    .select('id, status, price_paise, delivery_days, scope, message, created_at, updated_at, gst_included, transport_included, valid_until, advance_percent, decline_reason, revision, revised_at' + QUOTE_GOODS_COLS + ', provider:provider_profiles!inner(id, user_id, display_name, slug, avg_rating, review_count, completed_orders, state, median_response_minutes, udyam_verified, languages)')
     .eq('rfq_id', rfqId)
     .order('price_paise', { ascending: true })
   const rows = (quotes ?? []) as any[]
   const userIds = [...new Set(rows.map((q) => q.provider?.user_id).filter(Boolean))] as string[]
   const { data: users } = userIds.length ? await admin.from('users').select('id, preferred_locale').in('id', userIds) : { data: [] }
   const preferred = new Map(((users ?? []) as any[]).map((u) => [u.id, u.preferred_locale as string | null]))
+  // S1.3 — revision history only for quotes that were revised (no query otherwise).
+  const revisedIds = rows.filter((q) => Number(q.revision ?? 1) > 1).map((q) => q.id as string)
+  const history = new Map<string, QuoteRevisionRecord[]>()
+  if (revisedIds.length) {
+    const { data: evs } = await admin.from('quote_events').select('quote_id, payload, created_at').eq('event_type', 'revised').in('quote_id', revisedIds).order('created_at', { ascending: true })
+    for (const e of (evs ?? []) as any[]) {
+      const p = (e.payload ?? {}) as { revision?: number; before?: { price_paise?: number; delivery_days?: number }; after?: { price_paise?: number; delivery_days?: number } }
+      const rec: QuoteRevisionRecord = {
+        revision: Number(p.revision ?? 0), at: e.created_at,
+        before: { pricePaise: Number(p.before?.price_paise ?? 0), deliveryDays: Number(p.before?.delivery_days ?? 0) },
+        after: { pricePaise: Number(p.after?.price_paise ?? 0), deliveryDays: Number(p.after?.delivery_days ?? 0) },
+      }
+      history.set(e.quote_id, [...(history.get(e.quote_id) ?? []), rec])
+    }
+  }
   return rows.map((q: any) => ({
     id: q.id, status: q.status, goods: mapQuoteGoods(q), pricePaise: Number(q.price_paise), deliveryDays: q.delivery_days,
     scope: q.scope, message: q.message, createdAt: q.created_at, updatedAt: q.updated_at ?? null, declineReason: q.decline_reason ?? null,
+    revision: Number(q.revision ?? 1), revisedAt: q.revised_at ?? null, revisions: history.get(q.id) ?? [],
     ...mapQuoteTerms(q),
     provider: {
       id: q.provider.id, displayName: q.provider.display_name, slug: q.provider.slug,
@@ -134,6 +166,8 @@ export interface RfqDetailForBuyer {
   expiresAt: string
   createdAt: string
   quotes: QuoteForBuyer[]
+  /** S1.3 — the clarification thread (unanswered first); the buyer sees who asked. */
+  clarifications: ClarificationView[]
 }
 
 /** Buyer's own RFQs (newest first). */
@@ -147,10 +181,14 @@ export async function listMyRfqs(userId: string): Promise<RfqListItem[]> {
     .eq('msme_id', actor.msmeId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
-  return (data ?? []).map((r: any) => ({
+  const rows = (data ?? []) as any[]
+  // S1.3 — open questions per RFQ for the "N questions waiting" badge (one query for the whole list).
+  const open = await countOpenQuestions(admin, rows.map((r) => r.id as string))
+  return rows.map((r: any) => ({
     id: r.id, title: r.title, status: r.status, quoteCount: r.quote_count, maxQuotes: r.max_quotes,
     kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null,
     categorySlug: r.category?.slug ?? null, createdAt: r.created_at, expiresAt: r.expires_at,
+    openQuestions: open.get(r.id) ?? 0,
   }))
 }
 
@@ -169,7 +207,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
   if (!rfq) return null
   const r = rfq as any
 
-  const quotes = await loadBuyerQuotes(admin, rfqId)
+  const [quotes, clarifications] = await Promise.all([loadBuyerQuotes(admin, rfqId), listClarifications(admin, rfqId, { role: 'buyer' })])
 
   return {
     id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: r.attachments ?? [],
@@ -178,6 +216,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
     kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
     quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at, createdAt: r.created_at,
     quotes,
+    clarifications,
   }
 }
 
@@ -194,6 +233,9 @@ export interface ProviderRfqItem {
   viewed: boolean
   quoted: boolean
   declined: boolean
+  /** S1.3 — unanswered questions on the RFQ (all providers) and whether one of them is mine. */
+  openQuestions: number
+  hasUnansweredMine: boolean
 }
 
 /** RFQs matched to this provider that are still active (open/quoted). */
@@ -216,6 +258,8 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
     const { data: myQuotes } = await admin.from('quotes').select('rfq_id').eq('provider_id', actor.providerId).in('rfq_id', rfqIds)
     for (const q of myQuotes ?? []) quotedSet.add((q as any).rfq_id)
   }
+  // S1.3 — open questions per RFQ + "one of them is mine" (two queries for the whole list).
+  const [open, mineOpen] = await Promise.all([countOpenQuestions(admin, rfqIds), rfqsWithMyOpenQuestion(admin, rfqIds, actor.providerId)])
 
   return (matches as any[])
     .filter((m) => m.rfq && (m.rfq.status === 'open' || m.rfq.status === 'quoted'))
@@ -223,6 +267,7 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
       rfqId: m.rfq_id, title: m.rfq.title, status: m.rfq.status, kind: m.rfq.kind === 'goods' ? 'goods' : 'service', martCategorySlug: m.rfq.mart_category_slug ?? null, categorySlug: m.rfq.category?.slug ?? null,
       quoteCount: m.rfq.quote_count, maxQuotes: m.rfq.max_quotes, expiresAt: m.rfq.expires_at,
       viewed: !!m.viewed_at, quoted: quotedSet.has(m.rfq_id), declined: !!m.declined_at,
+      openQuestions: open.get(m.rfq_id) ?? 0, hasUnansweredMine: mineOpen.has(m.rfq_id),
     }))
 }
 
@@ -245,7 +290,9 @@ export interface RfqDetailForProvider {
   canQuote: boolean
   /** S0.4: set when this provider declined the match (or the window lapsed). */
   declinedAt: string | null
-  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; status: string; goods: QuoteGoodsTerms | null; declineReason: string | null; declineMessage: string | null } & QuoteTerms) | null
+  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; message: string | null; status: string; goods: QuoteGoodsTerms | null; declineReason: string | null; declineMessage: string | null; revision: number; revisedAt: string | null } & QuoteTerms) | null
+  /** S1.3 — the whole thread (every provider's questions); `mine` marks this provider's. Never a provider id. */
+  clarifications: ClarificationView[]
 }
 
 /** RFQ detail for a matched provider; marks viewed_at on open. */
@@ -271,12 +318,15 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
   if (!rfq) return null
   const r = rfq as any
 
-  const { data: myQuote } = await admin
-    .from('quotes')
-    .select('id, price_paise, delivery_days, scope, status, gst_included, transport_included, valid_until, advance_percent, decline_reason, decline_message' + QUOTE_GOODS_COLS)
-    .eq('rfq_id', rfqId)
-    .eq('provider_id', actor.providerId)
-    .maybeSingle()
+  const [{ data: myQuote }, clarifications] = await Promise.all([
+    admin
+      .from('quotes')
+      .select('id, price_paise, delivery_days, scope, message, status, gst_included, transport_included, valid_until, advance_percent, decline_reason, decline_message, revision, revised_at' + QUOTE_GOODS_COLS)
+      .eq('rfq_id', rfqId)
+      .eq('provider_id', actor.providerId)
+      .maybeSingle(),
+    listClarifications(admin, rfqId, { role: 'provider', providerId: actor.providerId }),
+  ])
 
   const active = r.status === 'open' || r.status === 'quoted'
   const slotsLeft = r.quote_count < r.max_quotes
@@ -290,7 +340,8 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
     quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at,
     canQuote: active && slotsLeft && notExpired && !myQuote && !match.declined_at,
     declinedAt: (match as any).declined_at ?? null,
-    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, status: (myQuote as any).status, goods: mapQuoteGoods(myQuote), declineReason: (myQuote as any).decline_reason ?? null, declineMessage: (myQuote as any).decline_message ?? null, ...mapQuoteTerms(myQuote) } : null,
+    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, message: (myQuote as any).message ?? null, status: (myQuote as any).status, goods: mapQuoteGoods(myQuote), declineReason: (myQuote as any).decline_reason ?? null, declineMessage: (myQuote as any).decline_message ?? null, revision: Number((myQuote as any).revision ?? 1), revisedAt: (myQuote as any).revised_at ?? null, ...mapQuoteTerms(myQuote) } : null,
+    clarifications,
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

@@ -756,3 +756,35 @@ tile, and `verify-payout-dossier.ts`. Runbook: `docs/agents/PAYOUT_DOSSIER.md`.
   tag; `cleanup-test-data.ts` surfaces `{ error }` and covers the agent-era tables. Prod was swept clean on
   2026-09-20 (janitor + one FK-ordered transaction; seed demo providers untouched). Any new verify script must
   copy the checked-`del` pattern.
+
+## Agent S1.3 — RFQ clarification threads + quote revision (logged 2026-09-21)
+
+**Shipped (no model, no agent flag — spine work):** `rfq_clarifications` (migration **0034**; RLS: the buyer and
+EVERY matched provider read; no client writes), `POST/GET /api/v1/rfq/[id]/clarifications`,
+`POST /api/v1/rfq/[id]/clarifications/[cid]/answer`, `PATCH /api/v1/rfq/[id]/quote` (in-place revision,
+`quotes.revision` / `revised_at`, `quote_events.revised`), the ONE terms/price path `lib/rfq/quote-terms.ts` shared by
+POST and PATCH, three tools registered `confirm: true` (`ask_clarification`, `answer_clarification`, `revise_quote`),
+web + mobile UI, `verify-clarifications.ts`.
+
+- **Provider "N new answers" badge is out of scope.** The list shows a "Your question is pending" chip
+  (`hasUnansweredMine`); a per-provider read marker for answers would need a `seen_at` per (clarification,
+  provider) — not requested. Log here for S1.5.
+- **Buyer follow-up to the asking provider: NOT in V1.** A two-party follow-up thread is negotiation-adjacent
+  (NOT-NOW §8.3). The buyer answers once, publicly; a provider asks again if needed (cap 3 open).
+- **Notification fan-out cost:** every answer notifies every matched non-declined provider (≤ 7) over WhatsApp
+  (`rfq_answer`, opt-in gated) — up to 7 × answers per RFQ. Acceptable at pilot scale; batch/digest if the BSP
+  bill says otherwise.
+- **The expiry cron is proven by predicate, not by running it.** The prompt asked the verify script to run the
+  rfq-expire handler against a past-`expires_at` fixture; the standing rule is "never run the prod cron sweep
+  from a dev box" (it would sweep real rows too). The script sets the fixture's `expires_at` in the past and
+  asserts the cron's exact selection predicate (`status IN (open, quoted) AND expires_at <= now()`) picks it up
+  despite its open question, and that ask/answer on it → 409 `rfq_closed`. The cron code is byte-identical.
+- **`revision` CHECK 1..3 in SQL** (`quotes_revision_range`) in addition to the route's cap — a direct write
+  cannot exceed the product rule either.
+- **Column grant:** `revision, revised_at` joined the 0033 fixed `GRANT SELECT` list on `quotes` (policies.sql),
+  not the staged Mart block; the migration grants the two columns incrementally (column grants accumulate).
+- **Mobile `Date.now()` in render** tripped the React Compiler lint (`Cannot call impure function during render`);
+  the "active RFQ" flag is now computed at load time into state on both RFQ screens.
+- **Goods revision** is exercised only on a rig with `MART_ENABLED` (the verify script skips it on prod); the goods
+  path is the same `resolveQuoteTerms` call as POST, so it cannot drift.
+- **Tamil/Telugu:** new keys only (18 each), English fallback for the rest, as S1.1/S1.2 did.

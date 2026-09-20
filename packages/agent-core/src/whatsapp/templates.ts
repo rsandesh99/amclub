@@ -40,6 +40,10 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   quote_accepted: { names: { en: 'amc_quote_accepted_en', hi: 'amc_quote_accepted_hi' }, params: titleBody },
   quote_declined: { names: { en: 'amc_quote_declined_en', hi: 'amc_quote_declined_hi' }, params: titleBody },
   quote_message: { names: { en: 'amc_quote_message_en', hi: 'amc_quote_message_hi' }, params: titleBody },
+  // S1.3 — clarification threads (buyer ← question; every matched provider ← answer) and quote revision (buyer).
+  rfq_question: { names: { en: 'amc_rfq_question_en', hi: 'amc_rfq_question_hi' }, params: titleBody },
+  rfq_answer: { names: { en: 'amc_rfq_answer_en', hi: 'amc_rfq_answer_hi' }, params: titleBody },
+  quote_revised: { names: { en: 'amc_quote_revised_en', hi: 'amc_quote_revised_hi' }, params: titleBody },
   payout_paid: { names: { en: 'amc_payout_paid_en', hi: 'amc_payout_paid_hi' }, params: titleBody },
   // S1.4 — founder one-tap (ops user; requires the founder's own WhatsApp opt-in grant).
   payout_dossier_ready: { names: { en: 'amc_payout_dossier_ready_en', hi: 'amc_payout_dossier_ready_hi' }, params: titleBody },

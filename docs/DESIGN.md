@@ -312,6 +312,8 @@ amclub/
 
 *S1.2 — comparability + buyer decline.* Step 4's compare screen shows a side-by-side table with a **normalised total** per quote (GST added only when the quote says it is excluded; silence is flagged, never assumed; transport is a flag, never a rate) and twelve deterministic **comparability flags** computed in `@amclub/shared` `compareQuotes` at read time — never a model. The buyer may **decline** a quote with a reason (`POST /api/v1/rfq/[id]/quote/[quoteId]/decline`, the first buyer-initiated `quotes.status` write, guarded on `submitted` and governed by the one `QUOTE_TRANSITIONS` map); the provider receives a courteous two-line message in their own language (a fixed template, or the `decline_message` agent's text when that agent is on for the buyer). Optional per-quote **pointers** in the buyer's language (the `compare_pointers` agent) only restate the flags and can never rank or recommend (strict schema + a banned-phrase gate). Auto-declines on accept keep the existing bulk notification.
 
+*S1.3 — clarification threads + quote revision (spine work; no model, no agent flag).* Between steps 3 and 4 a matched provider may **ask a clarification** on an active RFQ (`rfq_clarifications`, RFQ-level, ≤ 3 open per provider; a provider who already quoted may still ask) and the buyer **answers once**; every question and answer is visible to **every matched provider** (fairness, no duplicate questions) and no provider learns who asked. Both free-text fields cross parties, so they are contact-masked before storage (§9.3) with a `*_redacted` flag. **"In clarification" is derived** — an active RFQ with an unanswered question — never an RFQ status: the 72-hour window and the expiry cron are untouched, and a closed RFQ takes no answers (the rescue UI re-broadcasts). A provider may **revise** their own `submitted` quote in place (`PATCH /api/v1/rfq/[id]/quote`, every field restated, at most three submissions, optimistic-locked on `quotes.revision`); it is not a status change, the buyer sees a "rev N" chip and the before/after history from `quote_events.revised`, and POST and PATCH share one terms/price path (`lib/rfq/quote-terms.ts`). Three tools (`ask_clarification`, `answer_clarification`, `revise_quote`) are registered `confirm: true` for later agents.
+
 ## 3.6 Core Journey 3 — Provider lists a package
 
 `/partner/listings/new`: category/subcategory → title (with i18n hint) → scope builder (included items checklist, excluded items) → deliverables → buyer-requirements template → price (₹) + optional discount % + AMC-member extra discount → delivery days → revision count → FAQs → preview → publish (live instantly if provider verified; flagged sample audited by ops).
@@ -342,6 +344,10 @@ Payout to provider releases ONLY from `completed` or `resolved_release/partial`.
 - **Offline (PWA):** cached shell + "You're offline" banner; orders list served from cache read-only.
 - **Provider unverified:** dashboard shows verification checklist with per-item status, not a dead end.
 - **Skeletons everywhere** listings/cards load; never spinner-on-white.
+- **Clarification thread empty (S1.3):** "No questions yet" inside the card, with the "visible to all providers who received this request" hint; never a blank card.
+- **Clarification cap reached (S1.3):** the ask box disables with "You have 3 open questions on this request — wait for an answer before asking another" (server 409 `clarification_cap` says the same).
+- **RFQ closed — thread read-only (S1.3):** questions and answers stay visible; the ask/answer boxes are replaced by "This request is closed — the thread is read-only" (server 409 `rfq_closed`).
+- **Answer race (S1.3):** a second answer to the same question gets 409 `already_answered`; the UI shows "This question was just answered — refreshing" and reloads the thread.
 
 ## 3.9 Redirect map
 
@@ -868,6 +874,7 @@ Gateway funnel (Phase 8a): `gateway_viewed · gateway_door_chosen · gateway_wiz
 Voice RFQ funnel (Phase 8b): `voice_rfq_started · voice_rfq_transcribed · voice_rfq_parsed · voice_rfq_edited · voice_rfq_submitted · voice_rfq_failed` (props: `surface ('rfq_form'|'gateway'), original_language, uncertain, duration_ms, field` — `voice_rfq_edited` fires once per corrected field; `voice_rfq_submitted` marks an RFQ created with voice_meta attached).
 Quote extraction (agent S1.1): `agent_quote_extract_requested` (server; props `rfq_id, kind, source, stub, uncertain_count`) · `quote_extract_filled` · `quote_extract_cleared` (client; props `rfq_id, uncertain_count, stub`). The confirmation itself rides the existing `quote_submitted` / `quote_events.submitted` payload (`extraction_id`, `edited_fields`).
 Buyer compare + decline (agent S1.2): `compare_viewed` (server; props `rfq_id, quote_count, flags_total, pointers ('cached'|'fresh'|'off'|'error')`) · `quote_declined` (server; props `rfq_id, quote_id, reason, has_note, message_source ('agent'|'template'), locale`).
+Clarifications + revision (S1.3): `rfq_question_asked` (server; props `rfq_id, kind, redacted, open_count`) · `rfq_question_answered` (server; props `rfq_id, hours_to_answer, redacted, notified`) · `quote_revised` (server; props `rfq_id, quote_id, revision, price_delta_sign ('up'|'down'|'same')`) · `quote_revised_client` (client; props `rfq_id, revision`).
 Every event carries: `role, state, category_id, locale, device`. These power the §1.9 funnel — instrument in the same PR as the feature, not after.
 
 ## Appendix B — Glossary

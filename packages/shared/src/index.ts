@@ -13,6 +13,7 @@ export * from './credentials'
 
 // RFQ template fields + contact masking
 export * from './rfq'
+export * from './clarifications'
 
 // Voice RFQ specialization vocabulary (Phase 8b)
 export * from './specializations'

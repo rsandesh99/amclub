@@ -85,6 +85,9 @@ export const quotes = pgTable('quotes', {
   declinedBy: text('declined_by'), // buyer | system
   declinedAt: timestamp('declined_at', { withTimezone: true }),
   declineDecisionId: uuid('decline_decision_id'), // FK → ai_decisions in SQL
+  // S1.3 (0034) — in-place revision: counts submissions (1 = original, max 3); optimistic lock key.
+  revision: integer('revision').default(1).notNull(),
+  revisedAt: timestamp('revised_at', { withTimezone: true }),
   // submitted | withdrawn | accepted | declined | expired
   status: text('status').default('submitted').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
@@ -108,4 +111,26 @@ export const quoteEvents = pgTable('quote_events', {
 }, (table) => [
   index('quote_events_quote_idx').on(table.quoteId),
   index('quote_events_type_idx').on(table.eventType),
+])
+
+// S1.3 (0034) — RFQ clarification threads: a matched provider asks, the buyer
+// answers in place; every matched provider reads the whole thread (the API
+// never returns provider_id to a provider). Soft-deleted per §2.5 rule 4.
+// "In clarification" is derived (rfqIsActive + open questions), never a status.
+export const rfqClarifications = pgTable('rfq_clarifications', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  rfqId: uuid('rfq_id').references(() => rfqs.id, { onDelete: 'cascade' }).notNull(),
+  providerId: uuid('provider_id').references(() => providerProfiles.id).notNull(),
+  question: text('question').notNull(), // ≤ 500 (CHECK), stored after redactContactInfo
+  questionRedacted: boolean('question_redacted').default(false).notNull(),
+  answer: text('answer'), // ≤ 1000 (CHECK), stored after redactContactInfo
+  answerRedacted: boolean('answer_redacted').default(false).notNull(),
+  askedAt: timestamp('asked_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  answeredAt: timestamp('answered_at', { withTimezone: true }),
+  answeredBy: uuid('answered_by'), // FK → users in SQL
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => [
+  index('rfq_clarifications_rfq_asked_idx').on(table.rfqId, table.askedAt),
 ])

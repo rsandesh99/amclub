@@ -43,8 +43,10 @@ export default async function MyRfqsPage() {
                   <p className="truncate font-medium">{r.title}</p>
                   <p className="text-xs text-foreground-secondary">{t('quotes_n', { n: r.quoteCount, max: r.maxQuotes })}</p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   {r.kind === 'goods' && <Badge variant="default">{t('goods_badge')}</Badge>}
+                  {/* S1.3 — derived badge: unanswered provider questions (never a status). */}
+                  {r.openQuestions > 0 && (r.status === 'open' || r.status === 'quoted') && <Badge variant="warning">{t('clarify_waiting_badge', { n: r.openQuestions })}</Badge>}
                   <Badge variant={VARIANT[r.status] ?? 'default'}>{t(`status_${r.status}` as 'status_open')}</Badge>
                 </div>
               </Link>

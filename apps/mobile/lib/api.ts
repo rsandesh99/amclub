@@ -281,6 +281,60 @@ export async function declineQuote(rfqId: string, quoteId: string, body: { reaso
   return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
 }
 
+/** S1.3 — the RFQ's clarification thread for the caller (buyer or matched provider). */
+export async function fetchClarifications(rfqId: string): Promise<{ clarifications: any[]; role: 'buyer' | 'provider' } | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/clarifications`, { headers: await authHeaders() })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
+}
+
+/** S1.3 — a matched provider asks one question (≤ 3 open at a time; contact info masked server-side). */
+export async function askClarification(rfqId: string, question: string) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/clarifications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ question }),
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
+/** S1.3 — the buyer answers one question, once (visible to every matched provider). */
+export async function answerClarification(rfqId: string, clarificationId: string, answer: string) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/clarifications/${clarificationId}/answer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ answer }),
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
+/** S1.3 — revise the provider's own submitted quote in place (every field restated; never an extraction_id). */
+export async function reviseQuote(
+  rfqId: string,
+  body: {
+    price_paise: number
+    delivery_days: number
+    scope: string
+    message?: string
+    gst_included?: boolean
+    transport_included?: boolean
+    valid_until?: string
+    advance_percent?: number
+    goods?: GoodsQuoteTermsInput
+  },
+) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quote`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify(body),
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
 export async function fetchMatchedRfqs() {
   const res = await fetch(`${API_URL}/api/v1/rfq/matched`, { headers: await authHeaders() })
   if (!res.ok) return []

@@ -3,7 +3,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useState, useEffect, useCallback } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useI18n } from '@/lib/i18n'
-import { fetchRfq, submitQuote, fetchMe, extractQuote } from '@/lib/api'
+import { fetchRfq, submitQuote, fetchMe, extractQuote, reviseQuote } from '@/lib/api'
+import { ClarificationsBlock } from '@/components/ClarificationsBlock'
 import { formatINR } from '@/lib/format'
 import { GST_RATE_BPS_OPTIONS } from '@amclub/shared'
 import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
@@ -42,10 +43,16 @@ export default function ProviderRfqScreen() {
   const [uncertain, setUncertain] = useState<Set<ExtractField>>(new Set())
   const [stubPreview, setStubPreview] = useState(false)
   const [extractMsg, setExtractMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  // S1.3 — revising the submitted quote in place: the same form, prefilled; PATCH on submit.
+  const [revising, setRevising] = useState(false)
+
+  // S1.3 — computed at load time (not in render): active RFQ = open|quoted and inside its window.
+  const [active, setActive] = useState(false)
 
   const load = useCallback(async () => {
     const [d, me] = await Promise.all([fetchRfq(id), fetchMe()])
     setRfq(d?.rfq ?? null)
+    setActive(!!d?.rfq && (d.rfq.status === 'open' || d.rfq.status === 'quoted') && new Date(d.rfq.expiresAt).getTime() > Date.now())
     if (d?.rfq?.kind === 'goods' && d.rfq.goodsSpec?.qty) setGQty(String(d.rfq.goodsSpec.qty))
     setExtractEnabled(me?.quoteExtractEnabled === true)
     setLoading(false)
@@ -88,6 +95,23 @@ export default function ProviderRfqScreen() {
   }
   function clearSuggestion() { setExtractionId(null); setUncertain(new Set()); setStubPreview(false); setExtractMsg(null) }
 
+  // S1.3 — prefill every field from the current quote (goods included), drop any extraction, open the form.
+  function startRevise() {
+    const q = rfq?.myQuote
+    if (!q) return
+    clearSuggestion()
+    setError('')
+    setPrice(String(q.pricePaise / 100))
+    setDays(String(q.deliveryDays))
+    setScope(q.scope ?? '')
+    setGst(q.gstIncluded ?? null)
+    setTransport(q.transportIncluded ?? null)
+    setValidUntil(q.validUntil ?? '')
+    setAdvance(q.advancePercent == null ? '' : String(q.advancePercent))
+    if (q.goods) { setUnitPrice(String(q.goods.unitPricePaise / 100)); setGstBps(q.goods.gstRateBps); setHsn(q.goods.hsnCode ?? ''); setGQty(String(q.goods.qty)) }
+    setRevising(true)
+  }
+
   async function submit() {
     setError('')
     const dd = Number(days)
@@ -105,17 +129,30 @@ export default function ProviderRfqScreen() {
     if (adv !== undefined && (!Number.isInteger(adv) || adv < 0 || adv > 100)) { setError(t('rfq.term_advance') + ': 0–100'); return }
     if (validUntil && !/^\d{4}-\d{2}-\d{2}$/.test(validUntil)) { setError(t('rfq.term_valid_until') + ': YYYY-MM-DD'); return }
     setBusy(true)
-    const res = await submitQuote(id, {
+    const body = {
       price_paise: p, delivery_days: dd, scope: scope.trim(),
       ...(gst !== null ? { gst_included: gst } : {}),
       ...(transport !== null ? { transport_included: transport } : {}),
       ...(validUntil ? { valid_until: validUntil } : {}),
       ...(adv !== undefined ? { advance_percent: adv } : {}),
       ...(goodsTerms ? { goods: goodsTerms } : {}),
-      ...(extractionId ? { extraction_id: extractionId } : {}),
-    })
+    }
+    // S1.3 — revise = PATCH in place (never an extraction_id); submit = POST.
+    const res = revising ? await reviseQuote(id, body) : await submitQuote(id, { ...body, ...(extractionId ? { extraction_id: extractionId } : {}) })
     setBusy(false)
-    if (!res.ok) { setError(res.data?.error === 'already_quoted' ? t('rfq.already_quoted') : res.data?.error === 'rfq_closed' ? t('rfq.rfq_closed') : t('rfq.err_quote')); return }
+    if (!res.ok) {
+      const e = res.data?.error
+      setError(
+        e === 'already_quoted' ? t('rfq.already_quoted')
+        : e === 'rfq_closed' ? t('rfq.rfq_closed')
+        : e === 'revision_cap' ? t('rfq.revise_err_cap')
+        : e === 'revision_conflict' ? t('rfq.revise_err_conflict')
+        : e === 'quote_not_revisable' || e === 'quote_not_found' ? t('rfq.revise_err_not_revisable')
+        : revising ? t('rfq.revise_err_generic') : t('rfq.err_quote'),
+      )
+      return
+    }
+    if (revising) { setRevising(false); setLoading(true); await load(); return }
     router.back()
   }
 
@@ -139,15 +176,33 @@ export default function ProviderRfqScreen() {
           ))}
         </View>
 
-        {rfq.myQuote ? (
+        {/* S1.3 — ask before quoting + the whole thread ("you asked" on mine); read-only once closed. */}
+        <ClarificationsBlock
+          rfqId={id}
+          role="provider"
+          initial={rfq.clarifications ?? []}
+          canWrite={active && !rfq.declinedAt}
+          closed={!active}
+        />
+
+        {rfq.myQuote && !revising ? (
           <View className="rounded-xl border border-success/40 bg-success/5 p-4">
-            <Text className="text-sm font-semibold text-success">{t('rfq.your_quote')}</Text>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-sm font-semibold text-success">{t('rfq.your_quote')}</Text>
+              {rfq.myQuote.revision > 1 ? <Text className="rounded-full border border-[#b45309]/40 bg-[#f5ebdd] px-2 py-0.5 text-[11px] font-medium text-[#b45309]">{t('rfq.revise_count', { n: rfq.myQuote.revision - 1 })}</Text> : null}
+            </View>
             {rfq.myQuote.goods ? (
               <Text className="mt-1 text-sm text-foreground">{formatINR(rfq.myQuote.goods.unitPricePaise)} / {rfq.goodsSpec?.unit} × {rfq.myQuote.goods.qty} · {t('rfq.goods_col_incl')} {formatINR(rfq.myQuote.goods.totalInclGstPaise)} · {t('rfq.delivery_days', { days: rfq.myQuote.deliveryDays })}</Text>
             ) : (
               <Text className="mt-1 text-sm text-foreground">{formatINR(rfq.myQuote.pricePaise)} · {t('rfq.delivery_days', { days: rfq.myQuote.deliveryDays })}</Text>
             )}
             <Text className="mt-1 text-sm text-foreground-secondary">{rfq.myQuote.scope}</Text>
+            {/* S1.3 — revise in place while submitted, RFQ active and under the cap (server re-checks). */}
+            {rfq.myQuote.status === 'submitted' && active && (rfq.myQuote.revision ?? 1) < 3 ? (
+              <TouchableOpacity onPress={startRevise} className="mt-3 self-start rounded-lg border border-border px-3 py-1.5">
+                <Text className="text-sm font-medium text-foreground">{t('rfq.revise_button')}</Text>
+              </TouchableOpacity>
+            ) : null}
             {/* S1.2 — buyer declined: reason label + the courteous message (never the buyer's note). */}
             {rfq.myQuote.status === 'declined' && (
               <View className="mt-2 rounded-lg border border-border bg-background p-2">
@@ -157,12 +212,13 @@ export default function ProviderRfqScreen() {
               </View>
             )}
           </View>
-        ) : rfq.canQuote ? (
+        ) : rfq.canQuote || revising ? (
           <View className="rounded-xl border border-border bg-surface p-4 gap-3">
-            <Text className="text-sm font-semibold text-foreground">{t('rfq.quote_title')}</Text>
+            <Text className="text-sm font-semibold text-foreground">{revising ? t('rfq.revise_title') : t('rfq.quote_title')}</Text>
+            {revising ? <Text className="text-xs text-foreground-secondary">{t('rfq.revise_intro')}</Text> : null}
 
             {/* S1.1 — Type or speak your quote (only when the server says this provider is enabled). */}
-            {extractEnabled && (
+            {extractEnabled && !revising && (
               <View className="rounded-xl border border-primary/30 bg-primary/5 p-3 gap-2">
                 <View className="flex-row items-start justify-between gap-2">
                   <View className="flex-1">
@@ -240,9 +296,16 @@ export default function ProviderRfqScreen() {
               <View className="flex-1 gap-1"><Text className="text-xs text-foreground-secondary">{t('rfq.term_advance')}</Text><TextInput value={advance} onChangeText={(v) => { setAdvance(v); settle('advance_percent') }} keyboardType="numeric" placeholder="0–100" placeholderTextColor="#9CA3AF" className={box('advance_percent')} />{hint('advance_percent')}</View>
             </View>
             {error ? <Text className="text-sm text-danger">{error}</Text> : null}
-            <TouchableOpacity onPress={submit} disabled={busy} className="items-center rounded-lg bg-primary py-2.5">
-              {busy ? <ActivityIndicator color="#fff" /> : <Text className="font-semibold text-white">{t('rfq.submit_quote')}</Text>}
-            </TouchableOpacity>
+            <View className="flex-row gap-2">
+              <TouchableOpacity onPress={submit} disabled={busy} className="flex-1 items-center rounded-lg bg-primary py-2.5">
+                {busy ? <ActivityIndicator color="#fff" /> : <Text className="font-semibold text-white">{revising ? t('rfq.revise_submit') : t('rfq.submit_quote')}</Text>}
+              </TouchableOpacity>
+              {revising ? (
+                <TouchableOpacity onPress={() => { setRevising(false); setError('') }} disabled={busy} className="items-center justify-center rounded-lg border border-border px-4">
+                  <Text className="text-sm font-medium text-foreground">{t('rfq.revise_cancel')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         ) : (
           <View className="rounded-xl border border-border bg-surface p-4"><Text className="text-center text-sm text-foreground-secondary">{t('rfq.rfq_closed')}</Text></View>

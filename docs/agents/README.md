@@ -19,6 +19,7 @@ Per-agent runbooks land with their stages and live here:
 | `WHATSAPP.md` | S0.5 | BSP/Meta setup, template list, testing |
 | `QUOTE_EXTRACTION.md` | S1.1 | prompt id, golden set |
 | `COMPARE_DECLINE.md` | S1.2 | flag table, normalisation, pointers + decline-message prompts, templates |
+| *(no runbook)* | S1.3 | spine work, no agent: RFQ clarification threads + in-place quote revision; registers `ask_clarification`, `answer_clarification`, `revise_quote` (`confirm: true`, `requireToolScope` on the routes) for S1.5 / S2.2 / S3.1 |
 | `PAYOUT_DOSSIER.md` | S1.4 | how to read a dossier; what "hold" means |
 | `ONBOARDING.md` | S1.6 | interview script, templates, founder review |
 | `DISPUTE_TRIAGE.md` | S1.7 | triage card, evidence links |
