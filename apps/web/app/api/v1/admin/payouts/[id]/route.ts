@@ -1,17 +1,16 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { isValidPayoutTransition, type PayoutStatus } from '@amclub/shared'
+import { isValidPayoutTransition, payoutReleaseBodySchema, type PayoutStatus } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { getPaymentGateway } from '@/lib/payments'
 import { runPayouts } from '@/lib/payments/payout'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { writeAudit } from '@/lib/audit/log'
 import { getGoodsDossier } from '@/lib/mart/release'
 import { getServicesEvidence } from '@/lib/orders/evidence'
-
-const bodySchema = z.object({ action: z.literal('retry') })
+import { closeDossierApprove, getDossier, type DossierRow } from '@/lib/agent/dossiers'
 
 /**
  * Phase 8 §7 — payout release/retry: failed|held → scheduled, validated against
@@ -20,21 +19,40 @@ const bodySchema = z.object({ action: z.literal('retry') })
  * 'held'), this action IS the money-moving moment: after rescheduling, it runs
  * the transfer immediately for this order so "release" settles under the
  * admin's finger rather than waiting for the next daily cron.
+ *
+ * S1.4: the body may carry `dossier_id` (+ `note`). When present and matching
+ * this payout, the founder's tap ALSO closes the payout dossier as 'approve'
+ * (one ai_decisions row, feature payout_dossier). Without it, behaviour is
+ * unchanged. No agent tool wraps this route: any delegated token is refused
+ * (requireNotDelegated) — the runtime can never release money.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireAdmin()
   if (gate.error) return gate.error
+  const delegated = await requireNotDelegated('POST /admin/payouts/[id]')
+  if (delegated) return delegated
 
   const rl = await enforce(limiters.adminMutation, `admin:${gate.userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null))
+  const parsed = payoutReleaseBodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
 
   const { id } = await params
   const admin = await createAdminClient()
   const { data: payout } = await admin.from('payouts').select('id, status, order_id, provider_id, amount_paise').eq('id', id).maybeSingle()
   if (!payout) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // S1.4 — validate the dossier BEFORE anything moves: it must belong to this
+  // payout and be undecided (a decision is written once → 409 on a second tap).
+  let dossier: DossierRow | null = null
+  if (parsed.data.dossier_id) {
+    dossier = await getDossier(admin, parsed.data.dossier_id)
+    if (!dossier || (dossier.payout_id && dossier.payout_id !== id) || dossier.order_id !== payout.order_id) {
+      return NextResponse.json({ error: 'dossier_mismatch' }, { status: 422 })
+    }
+    if (dossier.decision) return NextResponse.json({ error: 'dossier_already_decided', decision: dossier.decision }, { status: 409 })
+  }
 
   const from = payout.status as PayoutStatus
   if (!isValidPayoutTransition(from, 'scheduled')) {
@@ -46,9 +64,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // open return still hold. Services orders (kind='service') skip this block.
   const { data: ord } = await admin.from('orders').select('*').eq('id', payout.order_id).maybeSingle()
   if (ord?.kind === 'goods') {
-    const dossier = await getGoodsDossier(admin, ord)
-    if (!dossier.gate.ok) {
-      return NextResponse.json({ error: 'goods_release_gate', reasons: dossier.gate.reasons, dossier }, { status: 409 })
+    const goods = await getGoodsDossier(admin, ord)
+    if (!goods.gate.ok) {
+      return NextResponse.json({ error: 'goods_release_gate', reasons: goods.gate.reasons, dossier: goods }, { status: 409 })
     }
   } else if (ord) {
     // Services evidence gate (S0.3): only enforced for orders placed on/after
@@ -70,8 +88,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     order_id: payout.order_id,
     actor_id: gate.userId,
     event: 'payout_released',
-    payload: { payout_id: id, from_status: from, amount_paise: Number(payout.amount_paise) },
+    payload: { payout_id: id, from_status: from, amount_paise: Number(payout.amount_paise), ...(dossier ? { dossier_id: dossier.id } : {}) },
   })
+
+  // S1.4 — the founder's tap closes the dossier as approve (recorded once).
+  let dossierDecisionId: string | null = null
+  if (dossier) {
+    const r = await closeDossierApprove(admin, dossier, gate.userId, parsed.data.note ?? null)
+    if (r.ok) dossierDecisionId = r.decisionId
+    else console.error('[payout release] dossier close failed', r.error, dossier.id)
+  }
 
   // Settle immediately (release = pay now). A transfer failure marks the
   // payout 'failed' inside runPayouts — visible in the monitor for retry.
@@ -85,8 +111,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     entity: 'payouts',
     entityId: id,
     before: { status: from },
-    after: { status: finalStatus, amount_paise: Number(payout.amount_paise), simulated: run.simulated },
+    after: {
+      status: finalStatus,
+      amount_paise: Number(payout.amount_paise),
+      simulated: run.simulated,
+      ...(dossier ? { dossier_id: dossier.id, dossier_decision_id: dossierDecisionId, recommendation: dossier.recommendation } : {}),
+    },
   })
 
-  return NextResponse.json({ ok: finalStatus === 'paid', status: finalStatus })
+  return NextResponse.json({
+    ok: finalStatus === 'paid',
+    status: finalStatus,
+    ...(dossier ? { dossier_id: dossier.id, dossier_decision: 'approve', dossier_decision_id: dossierDecisionId } : {}),
+  })
 }

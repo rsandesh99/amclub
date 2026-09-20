@@ -94,6 +94,24 @@ export const AGENT_SETTING_DEFS = {
     default: null,
     hint: "S0.4 quote-or-decline window (hours). null = the rfq-expire sweep is OFF. When set, matches older than this with no quote and no decline are auto-declined (window_lapsed) and the buyer is told.",
   },
+  // ── S1.4 payout dossier ─────────────────────────────────────────────────
+  ops_user_id: {
+    // null = no ops identity => the dossier trigger is a no-op even when the
+    // agent flag is on (ships dark). Must hold the admin role + an active ops grant.
+    schema: z.string().uuid().nullable(),
+    default: null,
+    hint: 'S1.4 the founder/ops user the ops persona runs on behalf of (payout dossiers). Must hold the admin role and an active ops grant (persona ops, channel web). null = the Payout-Evidence agent never runs.',
+  },
+  dossier_max_photos: {
+    schema: z.number().int().min(1).max(12),
+    default: 6,
+    hint: 'S1.4 max evidence photos per dossier sent to the vision tier (latest per milestone kind first). Caps model cost per dossier.',
+  },
+  dossier_dup_hamming_max: {
+    schema: z.number().int().min(0).max(20),
+    default: 6,
+    hint: 'S1.4 dHash Hamming distance at/below which two evidence photos count as duplicates (same provider, different order => anomaly). 0 = exact only.',
+  },
   evidence_required_from: {
     schema: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').nullable(),
     default: null,

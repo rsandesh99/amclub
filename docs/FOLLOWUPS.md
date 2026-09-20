@@ -636,3 +636,49 @@ follows it for consistency rather than forking mid-phase.
 0000-adjacent bootstrap-prelude file) so migrations are self-sufficient; or
 have bootstrap.ts create the helpers in its shim step. Verify with a scratch
 bootstrap run (pairs with the stale restore-drill item).
+
+---
+
+## Agent S1.4 — Payout-Evidence agent (logged 2026-09-20)
+
+**Shipped dark:** `payout_dossiers` + `evidence_photo_hashes` (migration
+**0031** — the prompt said 0030, but 0030 is the S0.5 WhatsApp rails in this
+tree; codebase numbering wins), the ops `read_order_evidence` tool, the
+evidence read, the runtime agent on queue `agent.payout_dossier`, the founder
+one-tap on `/admin/payouts` + `/admin/orders/[id]`, the `/admin/agents`
+tile, and `verify-payout-dossier.ts`. Runbook: `docs/agents/PAYOUT_DOSSIER.md`.
+
+- **WhatsApp one-tap arrives with S0.5.** The founder notification is by kind
+  (`payout_dossier_ready`, channels email + whatsapp). S0.5 is in this tree
+  (unpushed at the time of writing) and the template
+  `amc_payout_dossier_ready_{en,hi}` is registered in
+  `agent-core/whatsapp/templates.ts`; delivery needs the BSP/Meta credentials,
+  template approval (PRE_LAUNCH_CHECKLIST 1.3) and the founder's own START opt-in.
+  Until then the kind reaches in-app + email.
+- **Cohort applies to the ops user.** The trigger requires `ops_user_id` to be
+  in `cohort_user_ids` (registry semantics: "empty = no one"). The S1.4 prompt
+  listed only the grant + `ops_user_id` + `agents_enabled`; documented in the
+  runbook bootstrap. Revisit if a "system agents ignore cohort" rule is wanted.
+- **Approve is refused to any delegated token.** `requireNotDelegated` on the
+  release route and the hold route 403s a token carrying `amc_persona` — not
+  just a scoped one — because no tool wraps an admin mutation (ADR-008 §4).
+- **`notified_at` column** (not in the prompt's column list) backs the
+  idempotent notify route; additive.
+- **Observed live cost per dossier** is not recorded yet (no LLM key here);
+  fill the runbook table after the first ten live dossiers.
+- **Duplicate detection is per provider, cross-order only.** Hashes are stored
+  from the moment the agent first runs; photos uploaded before enablement are
+  not back-hashed. A backfill job (hash every existing evidence photo) is a
+  small follow-up if re-use across old orders matters.
+- **Vision eval live threshold** (≥ 80 % on synthetic fixtures) has not been run
+  with a key; run `pnpm --filter @amclub/agent-core eval --set photo_plausibility`
+  with `OPENROUTER_API_KEY` before enabling for a cohort and iterate the prompt
+  if it fails.
+- **Runtime image needs sharp's musl build.** `sharp@0.34.5` is a runtime
+  dependency; `pnpm install` on `node:22-alpine` pulls
+  `@img/sharp-linuxmusl-x64`. If the Fly build ever lacks it, add
+  `RUN apk add --no-cache libc6-compat` or switch the base to `node:22-slim`.
+- **Mobile parity:** no dossier surface in `apps/mobile` (admin-only; the founder
+  works from web). The notification deep link opens the web panel.
+- **pg-boss archive** keeps job payloads (order/payout ids only, no PII) per its
+  default retention; fine for now.

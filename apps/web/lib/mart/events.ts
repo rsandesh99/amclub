@@ -23,11 +23,19 @@ export async function addProductEvent(
  * ai_decisions (§4.6): record proposed vs final for an AI output a human
  * confirmed/corrected. Refs only. Best-effort — must never block the flow.
  */
-export async function recordAiDecision(admin: Admin, decidedBy: string, d: AiDecisionInput): Promise<string | null> {
+export async function recordAiDecision(
+  admin: Admin,
+  decidedBy: string,
+  d: AiDecisionInput,
+  /** S1.4 — runtime confirm-gate linkage (0027 columns); absent for Mart confirm-and-correct. */
+  link?: { runId?: string | null; tool?: string | null },
+): Promise<string | null> {
   const { data, error } = await admin
     .from('ai_decisions')
     .insert({
       feature: d.feature,
+      ...(link?.runId !== undefined ? { run_id: link.runId } : {}),
+      ...(link?.tool !== undefined ? { tool: link.tool } : {}),
       input_refs: d.input_refs,
       proposed: d.proposed,
       final: d.final,

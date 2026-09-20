@@ -41,6 +41,8 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   quote_declined: { names: { en: 'amc_quote_declined_en', hi: 'amc_quote_declined_hi' }, params: titleBody },
   quote_message: { names: { en: 'amc_quote_message_en', hi: 'amc_quote_message_hi' }, params: titleBody },
   payout_paid: { names: { en: 'amc_payout_paid_en', hi: 'amc_payout_paid_hi' }, params: titleBody },
+  // S1.4 — founder one-tap (ops user; requires the founder's own WhatsApp opt-in grant).
+  payout_dossier_ready: { names: { en: 'amc_payout_dossier_ready_en', hi: 'amc_payout_dossier_ready_hi' }, params: titleBody },
   // System templates used by the inbound job (opt-in / opt-out / holding reply).
   wa_opt_in_confirmed: { names: { en: 'amc_wa_opt_in_en', hi: 'amc_wa_opt_in_hi' }, params: () => [] },
   wa_opt_out_confirmed: { names: { en: 'amc_wa_opt_out_en', hi: 'amc_wa_opt_out_hi' }, params: () => [] },

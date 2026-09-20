@@ -40,12 +40,26 @@ export interface ChatParts {
   trusted?: string[]
   /** Third-party content — MUST be Envelopes; rendered inside <untrusted> tags. */
   untrusted?: Envelope[]
+  /**
+   * Images for a vision call (S1.4): each becomes an OpenAI-compatible
+   * image_url part, preceded by its label as a text part so the model can name
+   * it in the output. Signed URLs or data: URLs. Stub mode ignores them.
+   */
+  images?: ChatImage[]
+}
+
+export interface ChatImage {
+  url: string
+  mime: string
+  /** Stable label the model echoes back (e.g. the order_documents id). */
+  label?: string
 }
 
 export interface ChatJsonParams<T> {
   taskClass: AgentTaskClass
   prompt: PromptRef
-  schema: z.ZodType<T>
+  /** Output type T; the input shape may differ (defaults), so ZodType<T, Def, unknown>. */
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>
   parts?: ChatParts
   temperature?: number
   /** Optional JSON Schema for strict response_format; falls back to JSON mode + Zod. */
@@ -78,6 +92,8 @@ export interface GatewayConfig {
   forceStub: boolean
   referer?: string
   title?: string
+  /** Transport override (tests / fake vendors). Defaults to global fetch. */
+  fetchImpl?: typeof fetch
 }
 
 export function gatewayConfigFromEnv(): GatewayConfig {
@@ -110,16 +126,32 @@ function usageFrom(raw: unknown): ChatUsage {
   }
 }
 
-function buildMessages(prompt: PromptRef, parts: ChatParts | undefined, userLead: string) {
+type UserContent = string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>
+
+export function buildMessages(prompt: PromptRef, parts: ChatParts | undefined, userLead: string): Array<{ role: 'system' | 'user'; content: UserContent }> {
   const trusted = parts?.trusted ?? []
   const untrusted = parts?.untrusted ?? []
+  const images = parts?.images ?? []
   for (const e of untrusted) assertEnvelope(e)
   const system = untrusted.length > 0 ? `${prompt.text}\n\n${UNTRUSTED_SYSTEM_NOTE}` : prompt.text
   const userBlocks = [userLead, ...trusted]
   if (untrusted.length > 0) userBlocks.push(renderUntrustedAll(untrusted))
+  const text = userBlocks.filter(Boolean).join('\n\n')
+  if (images.length === 0) {
+    return [
+      { role: 'system', content: system },
+      { role: 'user', content: text },
+    ]
+  }
+  // Multimodal (S1.4): one text part with everything textual, then label + image pairs.
+  const content: Exclude<UserContent, string> = [{ type: 'text', text }]
+  for (const img of images) {
+    if (img.label) content.push({ type: 'text', text: `Image label: ${img.label}` })
+    content.push({ type: 'image_url', image_url: { url: img.url } })
+  }
   return [
-    { role: 'system' as const, content: system },
-    { role: 'user' as const, content: userBlocks.filter(Boolean).join('\n\n') },
+    { role: 'system', content: system },
+    { role: 'user', content },
   ]
 }
 
@@ -144,7 +176,7 @@ export function createGateway(config: GatewayConfig = gatewayConfigFromEnv()): G
       const onAbort = () => ctrl.abort()
       if (signal) signal.addEventListener('abort', onAbort, { once: true })
       try {
-        const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body), signal: ctrl.signal })
+        const res = await (config.fetchImpl ?? fetch)(url, { method: 'POST', headers: headers(), body: JSON.stringify(body), signal: ctrl.signal })
         if (res.status === 429 || res.status >= 500) {
           lastErr = new Error(`gateway ${res.status}`)
         } else if (!res.ok) {

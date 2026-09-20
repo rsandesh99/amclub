@@ -77,3 +77,11 @@ Scale the runtime to 0 to stop ingesting.
 Only vendor ids, phone (E.164), text, and media object paths are stored; media
 sits in a **private** bucket and is read via signed URLs. Nothing here is
 exposed to a client role (no RLS policies except admin/ops read).
+
+## S1.4 note — founder one-tap
+
+The Payout-Evidence agent notifies the ops user by kind `payout_dossier_ready`
+(template `amc_payout_dossier_ready_{en,hi}`, opt-in gated: the founder must
+have an active WhatsApp grant from their own START). The message deep-links to
+`/admin/payouts?dossier=<id>`; Approve/Hold are taps on the web panel, never
+in-chat replies. Add the template to the approval batch in PRE_LAUNCH_CHECKLIST 1.3.

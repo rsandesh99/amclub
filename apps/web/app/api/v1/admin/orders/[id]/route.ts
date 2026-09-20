@@ -9,6 +9,8 @@ import { getPaymentGateway } from '@/lib/payments'
 import { runPayouts } from '@/lib/payments/payout'
 import { processRefund } from '@/lib/orders/transitions'
 import { serverError } from '@/lib/api/errors'
+import { AGENT_ENABLED } from '@/lib/flags'
+import { getLatestDossierForOrder } from '@/lib/agent/dossiers'
 
 /** GET — full order detail: timeline, payment, payout, refund, documents. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,7 +32,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     ? await admin.from('refunds').select('id, status, amount_paise, created_at').eq('payment_id', payment.id).maybeSingle()
     : { data: null }
 
-  return NextResponse.json({ order, events: events ?? [], payment, payout, refund, documents: docs ?? [] })
+  // S1.4 — the latest payout dossier for the Dossier panel (agent surface: flag-gated, inert otherwise).
+  const dossier = AGENT_ENABLED ? await getLatestDossierForOrder(admin, id).catch(() => null) : null
+  return NextResponse.json({ order, events: events ?? [], payment, payout, refund, documents: docs ?? [], ...(AGENT_ENABLED ? { dossier } : {}) })
 }
 
 const bodySchema = z.discriminatedUnion('action', [

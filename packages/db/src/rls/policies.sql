@@ -421,6 +421,27 @@ CREATE POLICY "agent_grants: admin read" ON agent_grants
 REVOKE UPDATE, DELETE ON agent_grants FROM anon, authenticated;
 GRANT UPDATE (revoked_at) ON agent_grants TO authenticated;
 
+-- ─── payout_dossiers / evidence_photo_hashes (0031, S1.4) — admin read; service write ─
+ALTER TABLE payout_dossiers ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "payout_dossiers: admin read" ON payout_dossiers;
+CREATE POLICY "payout_dossiers: admin read" ON payout_dossiers
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- A decision is written once (function created in 0031).
+DROP TRIGGER IF EXISTS payout_dossiers_decision_guard ON payout_dossiers;
+CREATE TRIGGER payout_dossiers_decision_guard
+  BEFORE UPDATE ON payout_dossiers
+  FOR EACH ROW EXECUTE FUNCTION payout_dossiers_decision_once();
+REVOKE INSERT, UPDATE, DELETE ON payout_dossiers FROM anon, authenticated;
+
+ALTER TABLE evidence_photo_hashes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "evidence_photo_hashes: admin read" ON evidence_photo_hashes;
+CREATE POLICY "evidence_photo_hashes: admin read" ON evidence_photo_hashes
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON evidence_photo_hashes FROM anon, authenticated;
+
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
 -- raise_append_only() is created in 0017 (bootstrap runs migrations first).

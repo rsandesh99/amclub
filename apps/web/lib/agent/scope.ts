@@ -15,10 +15,7 @@ import { decodeJwtClaims } from './jwt'
  * zero behaviour change for existing traffic.
  */
 export async function requireToolScope(tool: AgentToolName): Promise<NextResponse | null> {
-  const h = await headers()
-  const authz = h.get('authorization')
-  if (!authz?.startsWith('Bearer ')) return null
-  const claims = decodeJwtClaims(authz.slice(7))
+  const claims = await bearerClaims()
   const scopes = claims?.['amc_scopes']
   // No scope claim => ordinary session (or a full-persona delegated token): allow.
   if (!Array.isArray(scopes)) return null
@@ -26,4 +23,26 @@ export async function requireToolScope(tool: AgentToolName): Promise<NextRespons
     return NextResponse.json({ error: 'tool_out_of_scope', tool }, { status: 403 })
   }
   return null
+}
+
+/**
+ * S1.4 — routes NO tool wraps (admin mutations such as the payout release).
+ * ANY delegated token (one carrying `amc_persona`, scoped or full-persona) is
+ * refused with the same 403 shape, so an agent can never reach them even under
+ * an admin's own grant. Ordinary sessions (no `amc_persona` claim) pass.
+ */
+export async function requireNotDelegated(route: string): Promise<NextResponse | null> {
+  const claims = await bearerClaims()
+  if (!claims) return null
+  if (typeof claims['amc_persona'] === 'string' || Array.isArray(claims['amc_scopes'])) {
+    return NextResponse.json({ error: 'tool_out_of_scope', tool: null, route }, { status: 403 })
+  }
+  return null
+}
+
+async function bearerClaims(): Promise<Record<string, unknown> | null> {
+  const h = await headers()
+  const authz = h.get('authorization')
+  if (!authz?.startsWith('Bearer ')) return null
+  return decodeJwtClaims(authz.slice(7))
 }

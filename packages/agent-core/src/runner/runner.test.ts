@@ -8,6 +8,7 @@ import type { PromptRef } from '../prompts/registry'
 import { envelope } from '../untrusted/envelope'
 import {
   AgentRun,
+  resolveToolRoute,
   BudgetExceededError,
   ConfirmationNotApprovedError,
   isReadOnlyOrLocal,
@@ -252,5 +253,26 @@ describe('runAgent wrapper', () => {
     )
     expect(res.status).toBe('failed')
     expect(runs.get(res.runId)?.status).toBe('failed')
+  })
+})
+
+describe('S1.4 — ops evidence read route', () => {
+  it('read_order_evidence resolves to the admin evidence GET and nothing else', () => {
+    const r = resolveToolRoute('read_order_evidence', { order_id: 'ord-1' })
+    expect(r).toEqual({ method: 'GET', path: '/api/v1/admin/orders/ord-1/evidence' })
+    expect(isReadOnlyOrLocal(agentTool('read_order_evidence'))).toBe(true)
+  })
+
+  it('no wired tool route reaches an admin mutation (the payout release route stays unreachable)', () => {
+    for (const t of AGENT_TOOLS) {
+      let route: { method: string; path: string } | null = null
+      try {
+        route = resolveToolRoute(t.name, { order_id: 'x', q: 'x' })
+      } catch {
+        route = null // unwired tools throw tool_route_unwired — fine
+      }
+      if (!route) continue
+      expect(`${route.method} ${route.path}`).not.toMatch(/^POST \/api\/v1\/admin\//)
+    }
   })
 })

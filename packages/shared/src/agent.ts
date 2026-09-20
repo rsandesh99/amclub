@@ -124,6 +124,9 @@ export const AGENT_TOOLS = [
   { name: 'summarize_dispute', persona: 'ops', confirm: false, taskClass: 'dispute_summary', wraps: 'GET /admin/disputes/[id]' },
   { name: 'triage_verification', persona: 'ops', confirm: false, wraps: 'GET /admin/providers/[id]' },
   { name: 'recommend_payout_release', persona: 'ops', confirm: false, wraps: 'GET /admin/payouts (read-only)' },
+  // S1.4 — the Payout-Evidence agent's ONLY data path: one admin read (RLS +
+  // requireAdmin apply under the founder's delegated ops token). Never a POST.
+  { name: 'read_order_evidence', persona: 'ops', confirm: false, wraps: 'GET /admin/orders/[id]/evidence' },
 ] as const satisfies readonly AgentToolSpec[]
 
 export type AgentToolName = (typeof AGENT_TOOLS)[number]['name']

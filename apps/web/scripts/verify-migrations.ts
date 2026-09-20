@@ -166,6 +166,15 @@ const MANIFEST: Entry[] = [
     tables: ['wa_conversations', 'wa_messages'],
     triggers: [['wa_conversations', 'wa_conversations_set_updated_at']],
   },
+  {
+    // Payout dossiers (S1.4): evidence bundle + RULE recommendation + founder
+    // decision (written once — trigger), and per-photo dHash telemetry.
+    // Applied to prod before/with the writer (NOT staged).
+    file: '0031_payout_dossiers.sql',
+    tables: ['payout_dossiers', 'evidence_photo_hashes'],
+    triggers: [['payout_dossiers', 'payout_dossiers_decision_guard']],
+    note: 'payout_dossiers (UNIQUE order_id+run_id; decision columns immutable once set) + evidence_photo_hashes',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

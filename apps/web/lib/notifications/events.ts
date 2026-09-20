@@ -252,3 +252,29 @@ export async function notifyReviewReply(admin: Admin, review: any): Promise<void
   })
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+/**
+ * S1.4 — a payout dossier is ready for the founder's one-tap. Sent to the ops
+ * user (agent_settings.ops_user_id) once per dossier (the notify route claims
+ * notified_at first). Channels by KIND: email today; WhatsApp the moment the
+ * S0.5 rails are live (template payout_dossier_ready, opt-in gated).
+ */
+export async function notifyPayoutDossierReady(
+  admin: Admin,
+  d: { opsUserId: string; dossierId: string; orderNumber: string; amountPaise: number; recommendation: 'approve' | 'hold' },
+): Promise<void> {
+  const rupees = `₹${(d.amountPaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  const recEn = d.recommendation === 'approve' ? 'approve' : 'hold'
+  const recHi = d.recommendation === 'approve' ? 'स्वीकृत करें' : 'रोकें'
+  await createNotification(admin, {
+    userId: d.opsUserId,
+    kind: 'payout_dossier_ready',
+    titleI18n: { en: `Payout ${rupees} for ${d.orderNumber} — recommendation: ${recEn}`, hi: `${d.orderNumber} का भुगतान ${rupees} — सिफ़ारिश: ${recHi}` },
+    bodyI18n: {
+      en: `The evidence dossier is ready. Approve releases the payout; Hold keeps it held. Nothing moves until you tap.`,
+      hi: `साक्ष्य डोज़ियर तैयार है। स्वीकृत करने पर भुगतान जारी होगा; रोकने पर रुका रहेगा। आपके टैप के बिना कुछ नहीं बदलेगा।`,
+    },
+    link: `/admin/payouts?dossier=${d.dossierId}`,
+    channels: ['email', 'whatsapp'],
+  })
+}

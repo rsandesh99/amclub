@@ -15,6 +15,7 @@ import { notifyOrderTransition, notifyAutoCancelled, notifyAutoAccepted } from '
 import { getGoodsDossier } from '@/lib/mart/release'
 import { getTdsConfig } from '@/lib/mart/config'
 import { getServicesEvidence } from '@/lib/orders/evidence'
+import { maybeEnqueuePayoutDossier } from '@/lib/agent/dossier-trigger'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -143,6 +144,10 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
       scheduled_for: scheduledFor,
       ...(held ? { reasons: holdReasons } : {}),
     })
+    // S1.4 — Payout-Evidence agent: assemble a dossier for a payout born HELD.
+    // Best-effort, after the money write, never inside it; a no-op unless
+    // AGENT_ENABLED + agents_enabled.payout_dossier + ops_user_id (+ cohort).
+    if (held) await maybeEnqueuePayoutDossier(admin, order, payoutId)
   }
 }
 

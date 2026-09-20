@@ -39,3 +39,14 @@ money never moved — an unacceptable state once real rails are live.
   established during the pilot.
 - Verified in production: `verify-money-loop.ts` (gate-aware) proves payouts
   are born `held` and that the live payout cron leaves held rows untouched.
+
+## Note (2026-09-20, agent programme S1.4) — recommendation only; gate unchanged
+
+The Payout-Evidence agent (`docs/agents/PAYOUT_DOSSIER.md`) assembles a
+dossier for every payout born `held` and RECOMMENDS approve/hold from
+deterministic checks + vision findings. It changes nothing above: payouts are
+still born held, `PAYOUT_AUTO_RELEASE` semantics are untouched, and the only
+money-moving moment is still the founder's tap on
+`POST /api/v1/admin/payouts/[id]` (which now optionally closes the dossier and
+records one `ai_decisions` row). Hold does nothing — the payout simply stays
+held. No agent tool wraps the release route; a delegated token is refused there.

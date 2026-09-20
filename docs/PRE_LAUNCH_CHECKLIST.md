@@ -48,6 +48,7 @@ noted; these are what `packages/agent-core/src/whatsapp/templates.ts` sends):
 | quote_declined | `amc_quote_declined_en`, `amc_quote_declined_hi` |
 | quote_message | `amc_quote_message_en`, `amc_quote_message_hi` |
 | payout_paid | `amc_payout_paid_en`, `amc_payout_paid_hi` |
+| payout_dossier_ready (S1.4, ops user; opt-in gated) | `amc_payout_dossier_ready_en`, `amc_payout_dossier_ready_hi` |
 | (system, no params) opt-in confirmed | `amc_wa_opt_in_en`, `amc_wa_opt_in_hi` |
 | (system, no params) opt-out confirmed | `amc_wa_opt_out_en`, `amc_wa_opt_out_hi` |
 | (system, no params) holding reply | `amc_wa_holding_en`, `amc_wa_holding_hi` |
@@ -65,6 +66,17 @@ TDS section/rate (`mart_settings.tds`) and the fee-bearing line (ADR-004).
 Terms/privacy/provider addendum sign-off (`docs/COMPLIANCE.md`).
 
 ## Agent programme enablement (per cohort, DESIGN.md §8.2)
+
+### Payout-Evidence agent (S1.4) — ops grant bootstrap
+Founder-only, one time, in this order (details: `docs/agents/PAYOUT_DOSSIER.md`):
+1. Runtime deployed + `AGENT_RUNTIME_URL`/`AGENT_RUNTIME_SECRET` on the web app; `AGENT_ENABLED=true`.
+2. Create the ops grant from your profile's *AI assistant* section: persona **ops**,
+   scopes `read_order_evidence`, `recommend_payout_release`, channel **web**.
+3. `/admin/agents`: set `ops_user_id` (your user id), add it to `cohort_user_ids`,
+   then flip `agents_enabled.payout_dossier`.
+4. Optional: send START from your own WhatsApp number once the S0.5 rails are live
+   to receive the one-tap there too.
+
 Fly: `FLY_API_TOKEN`; web: `SUPABASE_JWT_SECRET`, `AGENT_RUNTIME_SECRET`,
 `AGENT_RUNTIME_URL`; LLM key. Then `AGENT_ENABLED=true` and flip each agent in
 `/admin/agents` with a cohort (`docs/agents/RUNTIME.md`).

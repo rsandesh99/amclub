@@ -61,6 +61,24 @@ once `FLY_API_TOKEN` is a repo secret; until then the deploy step is skipped.
 - Internal endpoints (`/internal/runs/:id/resume`, `/internal/jobs/:name`)
   require a valid `AMC-Runtime` HMAC and are not publicly usable.
 
+### Smoke: enqueue a payout dossier by hand (S1.4)
+
+The web trigger does this automatically when a payout is born held; to exercise
+the job directly (local runtime, `DATABASE_URL` set, `AGENT_ENABLED=true` on
+the web, ops grant + `ops_user_id` set — see `docs/agents/PAYOUT_DOSSIER.md`):
+
+```bash
+# credential = signRuntimeCredential(AGENT_RUNTIME_SECRET, { userId: <ops_user_id>, persona: 'ops', runId: '00000000-0000-0000-0000-000000000000' })
+curl -X POST "$AGENT_RUNTIME_URL/internal/jobs/payout_dossier" \
+  -H "Authorization: AMC-Runtime $CRED" -H "Content-Type: application/json" \
+  -d '{"open":{"userId":"<ops_user_id>","surface":"system","subjectType":"order","subjectId":"<order_id>"},"input":{"orderId":"<order_id>","payoutId":"<payout_id>"}}'
+```
+
+The job lands on queue `agent.payout_dossier` (retryLimit 2, retryDelay 300 s);
+`agent_disabled` / `no_ops_grant` fail the run without a retry. Result:
+a `payout_dossiers` row for the order and one `payout_dossier_ready`
+notification to the ops user.
+
 ## Rollback
 
 The runtime holds no state of its own (runs/events live in Postgres). To stop it

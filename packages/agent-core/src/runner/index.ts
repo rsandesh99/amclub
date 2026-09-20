@@ -82,7 +82,7 @@ export interface RunContext {
 export interface ModelCallOptions<T> {
   taskClass: AgentTaskClass
   prompt: PromptRef
-  schema: z.ZodType<T>
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>
   parts?: ChatParts
   temperature?: number
   stub?: () => T
@@ -119,6 +119,10 @@ export function resolveToolRoute(
       return { method: 'POST', path: '/api/v1/rfq', body: payload }
     case 'place_order':
       return { method: 'POST', path: '/api/v1/checkout', body: payload }
+    // S1.4 — the ops evidence read. The payout RELEASE route is deliberately
+    // absent here: no tool wraps it, so the runtime can never call it.
+    case 'read_order_evidence':
+      return { method: 'GET', path: `/api/v1/admin/orders/${id('order_id')}/evidence` }
     default:
       throw new AgentRunError('tool_route_unwired', `no /api/v1 route wired for tool '${tool}' yet`)
   }
@@ -136,6 +140,12 @@ export class AgentRun {
 
   get runId(): string {
     return this.ctx.runId
+  }
+  get userId(): string {
+    return this.ctx.userId
+  }
+  get persona(): AgentPersona {
+    return this.ctx.persona
   }
   get isTainted(): boolean {
     return this.tainted

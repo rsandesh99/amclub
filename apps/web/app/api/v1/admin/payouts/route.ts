@@ -4,6 +4,8 @@ import { PAYOUT_STATUSES } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
 import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
+import { AGENT_ENABLED } from '@/lib/flags'
+import { latestDossiersByOrder } from '@/lib/agent/dossiers'
 
 /** Statuses that are still waiting on us — aged oldest-first (Phase 3c). */
 const OPEN = new Set(['held', 'scheduled', 'failed'])
@@ -74,12 +76,16 @@ export async function GET(request: NextRequest) {
     reasonsByOrder.set(e.order_id, reasons)
   }
 
+  // S1.4 — latest payout dossier per order (agent surface: only when the flag is on).
+  const dossiers = AGENT_ENABLED ? await latestDossiersByOrder(admin, rows.map((r) => r.order_id).filter(Boolean)) : new Map()
+
   const now = Date.now()
   const payouts = rows.map((r) => {
     const facts = bankFacts(bankByProvider.get(r.provider_id))
     const open = OPEN.has(r.status)
     return {
       ...r,
+      ...(AGENT_ENABLED ? { dossier: dossiers.get(r.order_id) ?? null } : {}),
       readiness: payoutReadiness(facts),
       days_pending: open ? Math.floor((now - new Date(r.created_at).getTime()) / 86_400_000) : null,
       hold_reasons: open ? (reasonsByOrder.get(r.order_id) ?? []) : [],

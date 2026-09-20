@@ -84,6 +84,10 @@ async function http() {
     '/api/v1/agent/admin/settings',
     '/api/v1/agent/admin/runs',
     '/api/v1/agent/admin/spend',
+    // S1.4
+    '/api/v1/agent/admin/dossiers',
+    '/api/v1/agent/admin/dossiers/stats',
+    '/api/v1/agent/admin/dossiers/00000000-0000-0000-0000-000000000000',
   ]
 
   // Probe the flag via the token endpoint (404 while AGENT_ENABLED=false).

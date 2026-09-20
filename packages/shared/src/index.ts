@@ -43,6 +43,9 @@ export * from './evidence'
 // Trust mechanics: quote-or-decline reasons, configurable quote cap (S0.4)
 export * from './trust'
 
+// S1.4 — payout dossier contract (checks, photo findings, recommendation rule)
+export * from './dossier'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

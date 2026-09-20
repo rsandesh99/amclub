@@ -6,6 +6,7 @@ import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { DossierPanel } from '@/components/admin/DossierPanel'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -39,7 +40,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   }
 
   if (loading || !data) return <p className="text-sm text-foreground-secondary">{t('loading')}</p>
-  const { order, events, payment, payout, refund } = data
+  const { order, events, payment, payout, refund, dossier } = data
   const payoutStuck = payout && (payout.status === 'failed' || payout.status === 'held')
 
   return (
@@ -61,6 +62,13 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         {payoutStuck && <Button onClick={() => act({ action: 'retry_payout' })} loading={busy}>{t('retry_payout')}</Button>}
         {payment && !refund && <Button variant="outline" onClick={manualRefund} loading={busy}>{t('manual_refund')}</Button>}
       </div>
+
+      {/* S1.4 — the Payout-Evidence agent's dossier (the detail route returns `dossier` only while AGENT_ENABLED). */}
+      {dossier && (
+        <div className="rounded-card border border-border bg-surface p-4">
+          <DossierPanel dossierId={dossier.id} onChanged={load} />
+        </div>
+      )}
 
       <div className="rounded-card border border-border bg-surface p-4">
         <h2 className="mb-2 text-sm font-semibold">{t('timeline')}</h2>

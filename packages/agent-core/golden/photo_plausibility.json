@@ -1,0 +1,100 @@
+[
+  {
+    "image": "blank_wall_1.jpg",
+    "claimed_stage": "work_complete",
+    "expected": {
+      "is_screenshot_or_document": false,
+      "looks_like_work": false
+    }
+  },
+  {
+    "image": "blank_wall_2.jpg",
+    "claimed_stage": "in_progress",
+    "expected": {
+      "is_screenshot_or_document": false,
+      "looks_like_work": false
+    }
+  },
+  {
+    "image": "document_1.jpg",
+    "claimed_stage": "work_complete",
+    "expected": {
+      "is_screenshot_or_document": true,
+      "looks_like_work": false
+    }
+  },
+  {
+    "image": "document_2.jpg",
+    "claimed_stage": "site_or_materials",
+    "expected": {
+      "is_screenshot_or_document": true,
+      "looks_like_work": false
+    }
+  },
+  {
+    "image": "screenshot_1.jpg",
+    "claimed_stage": "work_complete",
+    "expected": {
+      "is_screenshot_or_document": true,
+      "looks_like_work": false
+    }
+  },
+  {
+    "image": "screenshot_2.jpg",
+    "claimed_stage": "delivery_photo",
+    "expected": {
+      "is_screenshot_or_document": true,
+      "looks_like_work": false
+    }
+  },
+  {
+    "image": "work_1.jpg",
+    "claimed_stage": "work_complete",
+    "expected": {
+      "is_screenshot_or_document": false,
+      "looks_like_work": true
+    }
+  },
+  {
+    "image": "work_2.jpg",
+    "claimed_stage": "in_progress",
+    "expected": {
+      "is_screenshot_or_document": false,
+      "looks_like_work": true
+    }
+  },
+  {
+    "image": "work_3.jpg",
+    "claimed_stage": "site_or_materials",
+    "expected": {
+      "is_screenshot_or_document": false,
+      "looks_like_work": true
+    }
+  },
+  {
+    "image": "work_4.jpg",
+    "claimed_stage": "delivery_photo",
+    "expected": {
+      "is_screenshot_or_document": false,
+      "looks_like_work": true
+    }
+  },
+  {
+    "image": "dup_a.jpg",
+    "claimed_stage": "work_complete",
+    "expected": {
+      "is_screenshot_or_document": false,
+      "looks_like_work": true
+    },
+    "duplicate_of": "work_1.jpg"
+  },
+  {
+    "image": "dup_b.jpg",
+    "claimed_stage": "work_complete",
+    "expected": {
+      "is_screenshot_or_document": false,
+      "looks_like_work": true
+    },
+    "duplicate_of": "work_1.jpg"
+  }
+]

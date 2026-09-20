@@ -19,6 +19,8 @@ its invariants true.
 | `budget` | Upstash counters run / user-day / month, checked before each model call. |
 | `auth/runtime-credential` | HMAC the runtime presents to mint a delegated JWT (±5 min window). |
 | `whatsapp` | adapter (`meta_cloud` / `interakt` / `stub`), template registry, opt-in keywords; the runtime hosts the webhook, web sends templates. |
+| `media/dhash` | 64-bit dHash (pure bit math) + `dhashFromImage` via the OPTIONAL peer `sharp` (clear error when absent). S1.4 duplicate-photo detection. |
+| `dossier/checks` | `computeDossierChecks(evidence, findings, duplicates)` — the deterministic S1.4 checks + anomalies; `recommendDossier` (shared) turns them into approve/hold. Fixtures exported for the web verify script. |
 | `runner` | `runAgent()` / `AgentRun`: step + money budgets, taint law, the confirm gate (park → `resume` verifies an `ai_decisions` row), tool execution via `fetch(/api/v1)` under the delegated token. |
 
 ## Scripts

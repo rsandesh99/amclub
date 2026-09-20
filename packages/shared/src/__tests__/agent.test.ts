@@ -67,6 +67,16 @@ describe('agent contract — tools and personas', () => {
     }
   })
 
+  it('every confirm:false tool is read-only or local (a GET or a local computation)', () => {
+    for (const t of AGENT_TOOLS) {
+      if (t.confirm) continue
+      expect(t.wraps.startsWith('GET ') || t.wraps.startsWith('local'), `${t.name} wraps ${t.wraps}`).toBe(true)
+    }
+    // S1.4: the ops evidence read is exactly that — a GET.
+    expect(agentTool('read_order_evidence').wraps).toBe('GET /admin/orders/[id]/evidence')
+    expect(agentTool('read_order_evidence').confirm).toBe(false)
+  })
+
   it('no tool wraps an admin mutation', () => {
     for (const t of AGENT_TOOLS) {
       expect(t.wraps).not.toMatch(/^(POST|PATCH|PUT|DELETE) \/admin/)

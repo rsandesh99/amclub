@@ -8,6 +8,7 @@ import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
+import { DossierPanel } from '@/components/admin/DossierPanel'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -15,7 +16,10 @@ import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
  *  state with order/provider context; failed|held rows get a retry action.
  *  Phase 3a/3c: readiness badge on rows whose provider cannot be paid yet,
  *  days-pending (oldest first for open statuses) + hold reasons. Default view
- *  is 'held' — with PAYOUT_AUTO_RELEASE off that is the founder's worklist. */
+ *  is 'held' — with PAYOUT_AUTO_RELEASE off that is the founder's worklist.
+ *  S1.4: rows with a payout dossier get a Dossier button (the list route only
+ *  returns `dossier` while AGENT_ENABLED); `?dossier=<id>&action=approve|hold`
+ *  opens that dossier with the action focused — never auto-submitted. */
 export default function AdminPayoutsPage() {
   const t = useTranslations('admin_ops')
   const { toast } = useToast()
@@ -24,6 +28,7 @@ export default function AdminPayoutsPage() {
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
+  const [openDossier, setOpenDossier] = useState<{ id: string; action: 'approve' | 'hold' | null } | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -38,6 +43,16 @@ export default function AdminPayoutsPage() {
   }, [status])
 
   useEffect(() => { load() }, [load])
+
+  // Deep link from the founder notification: /admin/payouts?dossier=<id>&action=approve|hold
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const sp = new URLSearchParams(window.location.search)
+    const id = sp.get('dossier')
+    if (!id) return
+    const a = sp.get('action')
+    setOpenDossier({ id, action: a === 'approve' || a === 'hold' ? a : null })
+  }, [])
 
   async function retry(id: string) {
     setBusy(id)
@@ -148,16 +163,39 @@ export default function AdminPayoutsPage() {
                     {p.status === 'paid' ? fmtIST(p.paid_at) : fmtIST(p.scheduled_for)}
                   </td>
                   <td className="p-3 text-right">
-                    {(p.status === 'failed' || p.status === 'held') && (
-                      <Button size="sm" variant="outline" onClick={() => retry(p.id)} loading={busy === p.id}>
-                        {t('retry_payout')}
-                      </Button>
-                    )}
+                    <div className="flex flex-wrap justify-end gap-1">
+                      {/* S1.4 — the agent's dossier for this payout (only present while AGENT_ENABLED). */}
+                      {p.dossier && (
+                        <Button size="sm" variant={p.dossier.decision ? 'ghost' : 'outline'} onClick={() => setOpenDossier({ id: p.dossier.id, action: null })}>
+                          {p.dossier.decision
+                            ? t('dossier_row_decided', { decision: t(p.dossier.decision === 'approve' ? 'dossier_rec_approve' : 'dossier_rec_hold') })
+                            : t('dossier_row_label', { rec: t(p.dossier.recommendation === 'approve' ? 'dossier_rec_approve' : 'dossier_rec_hold') })}
+                        </Button>
+                      )}
+                      {(p.status === 'failed' || p.status === 'held') && (
+                        <Button size="sm" variant="outline" onClick={() => retry(p.id)} loading={busy === p.id}>
+                          {t('retry_payout')}
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {openDossier && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" role="dialog" aria-modal="true" aria-label={t('dossier_title')}>
+          <div className="my-8 w-full max-w-3xl rounded-card border border-border bg-surface p-4 shadow-card">
+            <DossierPanel
+              dossierId={openDossier.id}
+              initialAction={openDossier.action}
+              onClose={() => setOpenDossier(null)}
+              onChanged={load}
+            />
+          </div>
         </div>
       )}
     </div>

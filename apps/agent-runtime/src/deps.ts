@@ -63,6 +63,10 @@ export async function mintRuntimeToken(args: { runId: string; persona: AgentPers
     headers: { 'Content-Type': 'application/json', Authorization: `AMC-Runtime ${cred}` },
     body: '{}',
   })
+  // S1.4 guard: the web flag is off (404) or the user has no active grant for
+  // this persona (403) are TERMINAL for a run — the worker never retries them.
+  if (res.status === 404) throw new Error('agent_disabled')
+  if (res.status === 403) throw new Error(`no_${args.persona}_grant`)
   if (!res.ok) throw new Error(`token exchange failed: ${res.status}`)
   const json = (await res.json()) as { token: string }
   return json.token
