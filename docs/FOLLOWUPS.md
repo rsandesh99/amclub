@@ -682,3 +682,35 @@ tile, and `verify-payout-dossier.ts`. Runbook: `docs/agents/PAYOUT_DOSSIER.md`.
   works from web). The notification deep link opens the web panel.
 - **pg-boss archive** keeps job payloads (order/payout ids only, no PII) per its
   default retention; fine for now.
+
+---
+
+## Agent S1.1 — quote extraction with one-tap confirm + price-book intake (logged 2026-09-20)
+
+**Shipped dark:** `quote_extractions` + `provider_price_book` + `quotes.extraction_id / extraction_confirmed_at`
+(migration **0032**), the bounded single-shot helper (`@amclub/agent-core` `runBoundedChatJson` +
+`apps/web/lib/agent/bounded.ts`), `POST /api/v1/rfq/[id]/quote/extract`, the submit-route confirmation
+(`ai_decisions` feature `quote_extraction`), the composer card on web + mobile, and
+`verify-quote-extraction.ts`. Runbook: `docs/agents/QUOTE_EXTRACTION.md`.
+
+- **Pure functions moved to packages with a test runner.** The prompt placed `clampQuoteExtraction` /
+  `buildQuoteExtractParts` in `apps/web/lib/agent/quote-extract.ts`; apps/web has no vitest, so the clamp +
+  edited-fields diff live in `@amclub/shared` (tested) and the parts builder + bounded core in
+  `@amclub/agent-core` (tested); the web module re-exports them. Behaviour as specified.
+- **No `is_admin()` helper exists.** RLS uses the codebase's `has_role('admin') OR has_role('ops')` for the
+  admin-read policies on both new tables.
+- **`rfqs` has no `specialization` column** → `provider_price_book.specialization` is always null today.
+- **No server-side PostHog SDK.** `apps/web/lib/analytics/server.ts` posts to the PostHog HTTP capture API
+  (best-effort, 2 s timeout) for `agent_quote_extract_requested`; consider `posthog-node` if server events grow.
+- **The voice parser still bypasses agent-core** (`lib/voice/parser.ts` has its own OpenRouter fetch); the
+  bounded helper is the drop-in — a small S1.8 refactor candidate.
+- **Price book is not back-filled** from quotes submitted before the flag was on; an optional
+  `price-book:backfill` script (idempotent on `source_quote_id`) would close that.
+- **`extract_quote` is `local`**: no `/api/v1` route is wrapped, so no `agent_grants` / scopes are involved;
+  `requireToolScope('submit_quote')` is unchanged on the submit route.
+- **Live eval not yet run** (no LLM key here). `pnpm --filter @amclub/agent-core eval --set quote_extract` with a key
+  must clear the 90 % + all-injections gate before any cohort is enabled; record the score in the runbook.
+- **ta.json had no `rfq` block** (the prompt assumed the composer shipped in four locales); a partial `rfq`
+  block with the S1.1 strings was added — everything else falls back to English via deepMerge.
+- **Mobile flag-on lifecycle** is not exercised by the verify script (HTTP-level only); the screen mirrors the web
+  card and reads `quoteExtractEnabled` from `/profile/me`.

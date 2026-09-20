@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { getProviderReadiness } from '@/lib/payments/readiness-server'
 import { MART_ENABLED } from '@/lib/flags'
+import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
 
 /** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
@@ -27,6 +28,8 @@ export async function GET() {
 
   // Phase 3b (ii): mobile shows the same payout-hold banner as web.
   const payoutReadiness = provider ? (await getProviderReadiness(admin, provider.id)).readiness : null
+  // S1.1 — quote extraction for THIS user (flag + agent switch + cohort); providers only.
+  const quoteExtractEnabled = provider ? await isQuoteExtractEnabledFor(admin, userId) : false
 
   const primaryRole =
     roles.includes('admin') || roles.includes('ops')
@@ -48,6 +51,7 @@ export async function GET() {
     // S2.3 — server-authoritative Mart flag delivery (mobile cannot dark-toggle
     // a build-time env; it reads this field). No client branches on it yet.
     martEnabled: MART_ENABLED,
+    quoteExtractEnabled,
   }
   return NextResponse.json(
     body,

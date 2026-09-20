@@ -46,6 +46,9 @@ export * from './trust'
 // S1.4 — payout dossier contract (checks, photo findings, recommendation rule)
 export * from './dossier'
 
+// S1.1 — quote extraction contract (schema, clamp, edited-fields diff)
+export * from './quote-extraction'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

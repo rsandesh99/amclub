@@ -117,6 +117,8 @@ export const AGENT_TOOLS = [
   // provider
   { name: 'extract_requirements', persona: 'provider', confirm: false, taskClass: 'rfq_parse', wraps: 'GET /rfq/matched' },
   { name: 'draft_quote', persona: 'provider', confirm: false, taskClass: 'quote_draft', wraps: 'local (draft only)' },
+  // S1.1 — free text → quote form prefill; the provider's Submit is the only write (confirm-gated submit_quote).
+  { name: 'extract_quote', persona: 'provider', confirm: false, taskClass: 'quote_extract', wraps: 'local (prefill only)' },
   { name: 'submit_quote', persona: 'provider', confirm: true, wraps: 'POST /rfq/[id]/quote' },
   { name: 'reply_thread', persona: 'provider', confirm: true, wraps: 'POST /quotes/[quoteId]/messages' },
   { name: 'list_deadlines', persona: 'provider', confirm: false, wraps: 'GET /orders (provider)' },

@@ -2,6 +2,7 @@
  *  API as web (§ Phase 3). Auth'd calls attach the Supabase access token. */
 import Constants from 'expo-constants'
 import { supabase } from './supabase'
+import type { ProfileMeResponse, QuoteExtractResponse } from '@amclub/shared'
 
 const API_URL =
   (Constants.expoConfig?.extra?.['apiUrl'] as string | undefined) ??
@@ -230,6 +231,35 @@ export async function fetchRfq(rfqId: string) {
   return res.json()
 }
 
+/** S1.1 — server-authoritative flags for this user (quoteExtractEnabled, martEnabled). null on failure. */
+export async function fetchMe(): Promise<Partial<ProfileMeResponse> | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/profile/me`, { headers: await authHeaders() })
+    if (!res.ok) return null
+    return (await res.json()) as Partial<ProfileMeResponse>
+  } catch {
+    return null
+  }
+}
+
+/** S1.1 — free text → quote-form prefill (bounded model call; nothing is submitted). 404 while dark. */
+export async function extractQuote(
+  rfqId: string,
+  body: { text: string; source: 'typed' | 'voice' },
+): Promise<{ ok: true; status: number; data: QuoteExtractResponse } | { ok: false; status: number; data: { error?: string } }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quote/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json().catch(() => ({}))
+    return res.ok ? { ok: true, status: res.status, data: data as QuoteExtractResponse } : { ok: false, status: res.status, data }
+  } catch {
+    return { ok: false, status: 0, data: { error: 'network' } }
+  }
+}
+
 export async function fetchMatchedRfqs() {
   const res = await fetch(`${API_URL}/api/v1/rfq/matched`, { headers: await authHeaders() })
   if (!res.ok) return []
@@ -250,6 +280,8 @@ export async function submitQuote(
     advance_percent?: number
     /** AMC Mart M2 — required on a goods RFQ. */
     goods?: GoodsQuoteTermsInput
+    /** S1.1 — the extraction the provider confirmed with this submit (omit = typed by hand). */
+    extraction_id?: string
   },
 ) {
   const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quote`, {

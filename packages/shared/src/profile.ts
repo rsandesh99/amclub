@@ -24,4 +24,6 @@ export interface ProfileMeResponse {
   payoutReadiness: string | null
   /** AMC Mart feature flag (server-evaluated MART_ENABLED; default false). */
   martEnabled: boolean
+  /** S1.1 — quote extraction for THIS user (AGENT_ENABLED + agents_enabled.quote_extract + cohort). */
+  quoteExtractEnabled: boolean
 }

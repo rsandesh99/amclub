@@ -231,6 +231,8 @@ export const quoteSchema = z.object({
   advance_percent: z.number().int().min(0).max(100).optional(),
   /** AMC Mart M2 — present on a goods RFQ; the server recomputes price_paise from it. */
   goods: goodsQuoteTermsSchema.optional(),
+  /** S1.1 — the quote_extractions row the provider confirmed with this submit (omitted = typed by hand). */
+  extraction_id: uuidSchema.optional(),
 })
 
 export type QuoteInput = z.infer<typeof quoteSchema>

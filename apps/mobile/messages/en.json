@@ -209,7 +209,22 @@
     "goods_col_incl": "Total incl. GST",
     "goods_col_after_itc": "After ITC",
     "goods_itc_hint": "GST-registered buyers claim the GST back as input tax credit — the after-ITC figure is what the goods really cost.",
-    "goods_ask_cta": "Ask for a bulk quote"
+    "goods_ask_cta": "Ask for a bulk quote",
+    "quote_extract_title": "Type or speak your quote",
+    "quote_extract_subtitle": "Write it the way you would say it — Hinglish is fine. The form fills itself; you check and submit.",
+    "quote_extract_placeholder": "₹2.4 lakh, 3 weeks, GST extra, transport at actuals, 30% advance",
+    "quote_extract_fill": "Fill the form",
+    "quote_extract_filling": "Reading your quote…",
+    "quote_extract_clear": "Clear suggestion",
+    "quote_extract_dictate_hint": "or dictate:",
+    "quote_extract_uncertain_hint": "Please check — the model was not sure",
+    "quote_extract_stub_pill": "AI preview (no model key)",
+    "quote_extract_filled": "Form filled. Check the highlighted fields, then submit.",
+    "quote_extract_nothing": "Nothing to fill yet — try adding the price and the timeline.",
+    "quote_extract_err_short": "Write a little more (at least 5 characters).",
+    "quote_extract_err_budget": "AI help is paused for today; please fill the form.",
+    "quote_extract_err_unavailable": "AI help is unavailable; please fill the form.",
+    "quote_extract_err_rate": "Too many tries; wait a minute."
   },
   "checkout": {
     "title": "Checkout",

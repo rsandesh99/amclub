@@ -442,6 +442,29 @@ CREATE POLICY "evidence_photo_hashes: admin read" ON evidence_photo_hashes
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 REVOKE INSERT, UPDATE, DELETE ON evidence_photo_hashes FROM anon, authenticated;
 
+-- ─── quote_extractions / provider_price_book (0032, S1.1) — provider read own; admin read; service write ─
+ALTER TABLE quote_extractions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "quote_extractions: provider read own" ON quote_extractions;
+CREATE POLICY "quote_extractions: provider read own" ON quote_extractions
+  FOR SELECT USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "quote_extractions: admin read" ON quote_extractions;
+CREATE POLICY "quote_extractions: admin read" ON quote_extractions
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON quote_extractions FROM anon, authenticated;
+
+ALTER TABLE provider_price_book ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "provider_price_book: provider read own" ON provider_price_book;
+CREATE POLICY "provider_price_book: provider read own" ON provider_price_book
+  FOR SELECT USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "provider_price_book: admin read" ON provider_price_book;
+CREATE POLICY "provider_price_book: admin read" ON provider_price_book
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON provider_price_book FROM anon, authenticated;
+
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
 -- raise_append_only() is created in 0017 (bootstrap runs migrations first).

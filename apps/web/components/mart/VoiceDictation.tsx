@@ -9,11 +9,13 @@ import { VoiceRfqRecorder } from '@/components/voice/VoiceRfqRecorder'
 /**
  * Catalog dictation (FRONTEND.md §7 "photos + voice"): wraps the Voice-RFQ
  * recorder in transcript-only mode — one paid STT call, no LLM parse — and
- * hands the English text to the wizard, which appends it to the description.
+ * hands the English text to the caller, which appends it to a text box.
  * Every path that yields text (transcript-only reply, a full parse, or a
- * parse failure that kept the transcript) ends in `onText`.
+ * parse failure that kept the transcript) ends in `onText`. S1.1 reuses it in
+ * the quote composer with `surface="quote_composer"` (analytics only; the STT
+ * path is unchanged — never a second one).
  */
-export function VoiceDictation({ onText }: { onText: (text: string) => void }) {
+export function VoiceDictation({ onText, surface = 'mart_catalog' }: { onText: (text: string) => void; surface?: 'mart_catalog' | 'quote_composer' }) {
   const t = useTranslations('mart')
   const locale = useLocale()
   const posthog = useAnalytics()
@@ -21,8 +23,8 @@ export function VoiceDictation({ onText }: { onText: (text: string) => void }) {
 
   const track = useCallback(
     (event: string, props?: Record<string, unknown>) =>
-      posthog.capture(event, { locale, device: 'web', ...props, surface: 'mart_catalog' }),
-    [posthog, locale],
+      posthog.capture(event, { locale, device: 'web', ...props, surface }),
+    [posthog, locale, surface],
   )
 
   const deliver = useCallback(

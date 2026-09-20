@@ -72,6 +72,9 @@ export const limiters = {
   voiceParse: build(3, '1 m', 'rl:voice-parse'),
   /** Voice RFQ parse per user, hourly spend budget. */
   voiceParseHourly: build(15, '1 h', 'rl:voice-parse-h'),
+  /** S1.1 quote extraction per provider — one paid routine-tier call each; burst + hourly pair (voice-parse precedent). */
+  quoteExtract: build(5, '1 m', 'rl:quote-extract'),
+  quoteExtractHourly: build(40, '1 h', 'rl:quote-extract-h'),
 } as const
 
 export interface RateLimitResult {
@@ -103,4 +106,13 @@ export function clientIp(request: Request): string {
   const xff = request.headers.get('x-forwarded-for')
   if (xff) return xff.split(',')[0]!.trim()
   return request.headers.get('x-real-ip')?.trim() || '0.0.0.0'
+}
+
+/**
+ * S1.1 — the ONE Upstash client, shared with agent-core's budget counters
+ * (createRedisBudget) so a bounded model call never constructs a second
+ * connection. null when Upstash is not configured (budgets then no-op).
+ */
+export function getRedis(): Redis | null {
+  return redis
 }
