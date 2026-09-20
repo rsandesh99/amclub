@@ -124,7 +124,11 @@ async function main() {
     const { data: matchRows } = await admin.from('rfq_matches').select('provider_id').eq('rfq_id', rfq1)
     const matchedIds = new Set((matchRows ?? []).map((m: any) => m.provider_id))
     check('fan-out matched p1, p2, p4 and NOT p3', matchedIds.has(p1.providerId) && matchedIds.has(p2.providerId) && matchedIds.has(p4.providerId) && !matchedIds.has(p3.providerId), `${matchedIds.size} matches`)
-    await admin.from('rfq_matches').update({ declined_at: new Date().toISOString(), decline_reason: 'not_my_scope' }).eq('rfq_id', rfq1).eq('provider_id', p4.providerId)
+    // p4 declines the match through the real S0.4 route (a valid DECLINE_REASONS value; a direct
+    // update with an invalid reason would fail the CHECK silently — checked here, not assumed).
+    const dec = await api(p4.token, `/api/v1/rfq/${rfq1}/decline`, { reason: 'capacity' }); await json(dec)
+    const { data: p4match } = await admin.from('rfq_matches').select('declined_at').eq('rfq_id', rfq1).eq('provider_id', p4.providerId).single()
+    check('fixture: p4 declined the match via POST /rfq/[id]/decline', dec.status === 200 && !!p4match?.declined_at, `status ${dec.status}`)
     const { data: rfqBefore } = await admin.from('rfqs').select('status, expires_at').eq('id', rfq1).single()
 
     // ── Authz ─────────────────────────────────────────────────────────────
