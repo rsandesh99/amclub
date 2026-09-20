@@ -238,6 +238,20 @@ export const quoteSchema = z.object({
 
 export type QuoteInput = z.infer<typeof quoteSchema>
 
+/**
+ * S1.3 — quote revision (PATCH /rfq/[id]/quote). A revision RESTATES every
+ * field: a partial patch is ambiguous with "not stated" (= NULL terms), so the
+ * body is the full quote minus the RFQ id and the S1.1 extraction link (a
+ * revision is never a confirmation). `.strict()` so a stray `extraction_id`
+ * or `rfq_id` is a 422, not silently dropped. Goods-terms rules are the same
+ * as on submit; the server recomputes `price_paise` for goods on both paths.
+ */
+export const quoteRevisionSchema = quoteSchema.omit({ rfq_id: true, extraction_id: true }).strict()
+export type QuoteRevisionInput = z.infer<typeof quoteRevisionSchema>
+
+/** `quotes.revision` counts submissions: 1 = the original, so at most two revisions. */
+export const MAX_QUOTE_REVISIONS = 3
+
 /** S1.2 — buyer declines one quote with a reason (chose_other is reserved for the system path). */
 export const quoteDeclineSchema = z.object({
   reason: quoteDeclineReasonSchema,

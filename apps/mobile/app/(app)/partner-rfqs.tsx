@@ -33,6 +33,8 @@ export default function PartnerRfqsScreen() {
                 <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>{r.title}</Text>
                 <Text className="mt-1 text-xs text-foreground-secondary">{t('rfq.quotes_n', { n: r.quoteCount, max: r.maxQuotes })}</Text>
               </View>
+              {/* S1.3 — my unanswered question on this RFQ (derived, never a status). */}
+              {r.hasUnansweredMine ? <View className="mr-2 rounded-full bg-[#f5ebdd] px-2 py-1"><Text className="text-[11px] font-medium text-[#b45309]">{t('rfq.clarify_mine_open_chip')}</Text></View> : null}
               {r.quoted ? <View className="rounded-full bg-success/10 px-2 py-1"><Text className="text-[11px] font-medium text-success">{t('rfq.quoted_badge')}</Text></View> : null}
             </TouchableOpacity>
           ))}

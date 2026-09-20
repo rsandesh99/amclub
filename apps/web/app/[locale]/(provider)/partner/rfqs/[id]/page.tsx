@@ -15,6 +15,9 @@ import { listSellerListingsInCategory } from '@/lib/mart/goods-rfq'
 import { createAdminClient } from '@/lib/supabase/server'
 import type { QuoteComposerGoods } from '@/components/rfq/QuoteComposer'
 import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
+import { MAX_QUOTE_REVISIONS, rfqIsActive } from '@amclub/shared'
+import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
+import { ReviseQuote } from '@/components/rfq/ReviseQuote'
 
 export default async function ProviderRfqPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -46,6 +49,11 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
   const extractEnabled = await isQuoteExtractEnabledFor(await createAdminClient(), user.id)
 
   const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')
+  // S1.3 — the thread is writable while the RFQ is active and this provider has not declined
+  // (a provider who already quoted may still ask); read-only once closed.
+  const active = rfqIsActive(rfq.status) && new Date(rfq.expiresAt).getTime() > Date.now()
+  const canAsk = active && !rfq.declinedAt
+  const canRevise = !!rfq.myQuote && rfq.myQuote.status === 'submitted' && active && rfq.myQuote.revision < MAX_QUOTE_REVISIONS
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
@@ -85,9 +93,15 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
         <GoodsSpecCard spec={rfq.goodsSpec as unknown as GoodsSpecView} categoryName={goodsCatName} />
       )}
 
+      {/* S1.3 — ask before quoting + every provider's questions (mine marked); read-only once closed. */}
+      <ClarificationsCard rfqId={rfq.id} role="provider" initial={rfq.clarifications} canWrite={canAsk} closed={!active} />
+
       {rfq.myQuote ? (
         <div className="rounded-card border border-success/40 bg-success/5 p-5">
-          <p className="text-sm font-semibold text-success">{t('your_quote')}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-success">{t('your_quote')}</p>
+            {rfq.myQuote.revision > 1 && <Badge variant="warning">{t('revise_count', { n: rfq.myQuote.revision - 1 })}</Badge>}
+          </div>
           {rfq.myQuote.goods ? (
             <p className="mt-1 text-sm tabular-nums">
               {formatINRExact(rfq.myQuote.goods.unitPricePaise)} {t('goods_per_unit', { unit: goods?.unit ?? '' })} × {rfq.myQuote.goods.qty} = {formatINRExact(rfq.myQuote.goods.taxablePaise)} · {t('goods_col_gst')} {rfq.myQuote.goods.gstRateBps / 100}% · {t('goods_col_incl')} {formatINRExact(rfq.myQuote.goods.totalInclGstPaise)} · {t('delivery_days', { days: rfq.myQuote.deliveryDays })}
@@ -97,6 +111,19 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
           )}
           <p className="mt-2 whitespace-pre-wrap text-sm text-foreground-secondary">{rfq.myQuote.scope}</p>
           <div className="mt-3"><QuoteTermsRow terms={rfq.myQuote} compact /></div>
+          {/* S1.3 — revise in place (PATCH): same composer, prefilled, no extraction box. */}
+          {canRevise && (
+            <ReviseQuote
+              rfqId={rfq.id}
+              revision={rfq.myQuote.revision}
+              goods={goods ?? undefined}
+              initial={{
+                pricePaise: rfq.myQuote.pricePaise, deliveryDays: rfq.myQuote.deliveryDays, scope: rfq.myQuote.scope, message: rfq.myQuote.message,
+                gstIncluded: rfq.myQuote.gstIncluded, transportIncluded: rfq.myQuote.transportIncluded, validUntil: rfq.myQuote.validUntil, advancePercent: rfq.myQuote.advancePercent,
+                goods: rfq.myQuote.goods ? { unitPricePaise: rfq.myQuote.goods.unitPricePaise, qty: rfq.myQuote.goods.qty, gstRateBps: rfq.myQuote.goods.gstRateBps, hsnCode: rfq.myQuote.goods.hsnCode, productId: rfq.myQuote.goods.productId } : null,
+              }}
+            />
+          )}
           {/* S1.2 — the buyer declined: reason label + the courteous message that was sent (never the buyer's note). */}
           {rfq.myQuote.status === 'declined' && (
             <div className="mt-3 rounded-button border border-border bg-muted/40 p-3 text-sm">

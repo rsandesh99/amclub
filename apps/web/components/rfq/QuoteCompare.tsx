@@ -230,12 +230,31 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     </div>
   )
   const price = (q: QuoteForBuyer) => (goods && q.goods ? `${formatINRExact(q.goods.unitPricePaise)} ${t('goods_per_unit', { unit: specUnit })}` : formatINR(q.pricePaise))
+  // S1.3 — "rev N" beside the price once revised; the popover lists quote_events.revised (before → after).
+  const RevChip = ({ q }: { q: QuoteForBuyer }) => {
+    if (q.revision <= 1) return null
+    return (
+      <details className="relative inline-block align-middle">
+        <summary className="cursor-pointer list-none rounded-chip border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning" title={t('revise_history_title')}>
+          {t('revise_chip', { n: q.revision })}
+        </summary>
+        <div className="absolute left-0 z-20 mt-1 w-64 rounded-button border border-border bg-surface p-2 text-left text-[11px] shadow-card">
+          <p className="font-semibold">{t('revise_history_title')}</p>
+          <ul className="mt-1 space-y-0.5 text-foreground-secondary">
+            {q.revisions.map((r) => (
+              <li key={r.revision}>{t('revise_history_row', { n: r.revision, from: formatINR(r.before.pricePaise), to: formatINR(r.after.pricePaise), daysFrom: r.before.deliveryDays, daysTo: r.after.deliveryDays })}</li>
+            ))}
+          </ul>
+        </div>
+      </details>
+    )
+  }
   const yesNoUnstated = (v: boolean | null) => (v == null ? t('term_not_stated') : v ? t('term_yes') : t('term_no'))
   const dateOrUnstated = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`)) : t('term_not_stated'))
 
   const rows: { key: string; label: string; cell: (q: QuoteForBuyer) => React.ReactNode }[] = [
     { key: 'provider', label: t('compare_table_provider'), cell: (q) => <Provider q={q} /> },
-    { key: 'price', label: t('compare_table_price'), cell: (q) => <span className="font-display text-base font-bold text-primary tabular-nums">{price(q)}</span> },
+    { key: 'price', label: t('compare_table_price'), cell: (q) => <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-display text-base font-bold text-primary tabular-nums">{price(q)}</span><RevChip q={q} /></span> },
     { key: 'total', label: t('compare_normalized'), cell: (q) => <span className="tabular-nums font-semibold" title={notesOf(q).length ? `${t('compare_normalized_why')}: ${notesOf(q).map(noteText).join('; ')}` : t('compare_normalized_why_none')}>{formatINRExact(totalOf(q))}{notesOf(q).length > 0 && <span className="ml-1 text-[11px] font-normal text-foreground-secondary" aria-hidden>ⓘ</span>}</span> },
     { key: 'delivery', label: t('compare_delivery'), cell: (q) => <span>{t('delivery_days', { days: q.deliveryDays })}</span> },
     { key: 'gst', label: t('term_gst'), cell: (q) => <span>{goods && q.goods ? `${q.goods.gstRateBps / 100}%` : yesNoUnstated(q.gstIncluded)}</span> },
@@ -296,7 +315,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
             <div className="flex flex-wrap items-start justify-between gap-3">
               <Provider q={q} />
               <div className="text-right">
-                <p className="font-display text-lg font-bold text-primary tabular-nums">{price(q)}</p>
+                <p className="flex flex-wrap items-center justify-end gap-1.5 font-display text-lg font-bold text-primary tabular-nums">{price(q)}<RevChip q={q} /></p>
                 <p className="text-xs text-foreground-secondary">{t('compare_normalized')}: <span className="font-semibold text-foreground">{formatINRExact(totalOf(q))}</span></p>
                 <p className="text-xs text-foreground-secondary">{t('delivery_days', { days: q.deliveryDays })}{formatResponseTime(q.provider.medianResponseMinutes) ? ` · ${t('responds_in', { time: formatResponseTime(q.provider.medianResponseMinutes) as string })}` : ''}</p>
               </div>

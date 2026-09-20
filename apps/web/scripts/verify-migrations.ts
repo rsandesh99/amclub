@@ -195,6 +195,12 @@ const MANIFEST: Entry[] = [
     tables: [],
     note: 'quotes.decline_*; rfqs.compare_pointers cache; quotes column privileges (decline_note hidden)',
   },
+  {
+    file: '0034_rfq_clarifications.sql',
+    tables: ['rfq_clarifications'],
+    triggers: [['rfq_clarifications', 'rfq_clarifications_set_updated_at']],
+    note: 'RFQ clarification threads (RLS: buyer + every matched provider read; no client writes); quotes.revision/revised_at join the 0033 column grant; quote_events CHECK gains revised',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

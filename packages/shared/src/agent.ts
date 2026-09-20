@@ -116,6 +116,8 @@ export const AGENT_TOOLS = [
   { name: 'draft_dispute', persona: 'buyer', confirm: true, wraps: 'POST /orders/[id]/transition (disputed)' },
   // S1.2 — buyer declines a quote with a reason; a quotes.status write, so confirm-gated.
   { name: 'decline_quote', persona: 'buyer', confirm: true, wraps: 'POST /rfq/[id]/quote/[quoteId]/decline' },
+  // S1.3 — buyer answers a provider's clarification (visible to every matched provider); a write, so confirm-gated.
+  { name: 'answer_clarification', persona: 'buyer', confirm: true, wraps: 'POST /rfq/[id]/clarifications/[cid]/answer' },
   // provider
   { name: 'extract_requirements', persona: 'provider', confirm: false, taskClass: 'rfq_parse', wraps: 'GET /rfq/matched' },
   { name: 'draft_quote', persona: 'provider', confirm: false, taskClass: 'quote_draft', wraps: 'local (draft only)' },
@@ -123,6 +125,9 @@ export const AGENT_TOOLS = [
   { name: 'extract_quote', persona: 'provider', confirm: false, taskClass: 'quote_extract', wraps: 'local (prefill only)' },
   { name: 'submit_quote', persona: 'provider', confirm: true, wraps: 'POST /rfq/[id]/quote' },
   { name: 'reply_thread', persona: 'provider', confirm: true, wraps: 'POST /quotes/[quoteId]/messages' },
+  // S1.3 — RFQ-level clarification (every matched provider reads it) and in-place quote revision; both writes, confirm-gated.
+  { name: 'ask_clarification', persona: 'provider', confirm: true, wraps: 'POST /rfq/[id]/clarifications' },
+  { name: 'revise_quote', persona: 'provider', confirm: true, wraps: 'PATCH /rfq/[id]/quote' },
   { name: 'list_deadlines', persona: 'provider', confirm: false, wraps: 'GET /orders (provider)' },
   // ops — recommendations only; never executes an admin action
   { name: 'summarize_dispute', persona: 'ops', confirm: false, taskClass: 'dispute_summary', wraps: 'GET /admin/disputes/[id]' },

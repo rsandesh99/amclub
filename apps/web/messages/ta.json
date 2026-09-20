@@ -193,6 +193,24 @@
     "decline_quote_failed": "நிராகரிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
     "quote_declined_title": "இந்த விலைப்புள்ளி நிராகரிக்கப்பட்டது",
     "quote_declined_reason": "காரணம்",
-    "quote_declined_message_label": "உங்களுக்கு அனுப்பப்பட்ட செய்தி"
+    "quote_declined_message_label": "உங்களுக்கு அனுப்பப்பட்ட செய்தி",
+    "clarify_title_buyer": "வழங்குநர்களின் கேள்விகள்",
+    "clarify_title_provider": "மேற்கோளுக்கு முன் கேளுங்கள்",
+    "clarify_visible_hint": "இந்தக் கோரிக்கையைப் பெற்ற அனைத்து வழங்குநர்களுக்கும் தெரியும்",
+    "clarify_empty": "இன்னும் கேள்விகள் இல்லை",
+    "clarify_ask_button": "கேளுங்கள்",
+    "clarify_answer_button": "பதிலளிக்கவும்",
+    "clarify_answered_label": "பதிலளிக்கப்பட்டது",
+    "clarify_unanswered_label": "உங்கள் பதிலுக்காகக் காத்திருக்கிறது",
+    "clarify_pending_label": "பதிலுக்காகக் காத்திருக்கிறது",
+    "clarify_you_asked": "நீங்கள் கேட்டீர்கள்",
+    "clarify_redacted_pill": "தொடர்புத் தகவல் மறைக்கப்பட்டது",
+    "clarify_closed": "இந்தக் கோரிக்கை மூடப்பட்டது — படிக்க மட்டுமே.",
+    "revise_button": "மேற்கோளைத் திருத்து",
+    "revise_title": "உங்கள் மேற்கோளைத் திருத்துங்கள்",
+    "revise_submit": "திருத்திய மேற்கோளை அனுப்பு",
+    "revise_cancel": "ரத்து",
+    "revise_count": "×{n} திருத்தப்பட்டது",
+    "revise_chip": "திருத்தம் {n}"
   }
 }

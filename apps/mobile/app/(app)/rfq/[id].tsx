@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useI18n } from '@/lib/i18n'
 import { fetchRfq, acceptQuote, fetchQuoteMessages, sendQuoteMessage, fetchCompare, declineQuote, fetchMe } from '@/lib/api'
+import { ClarificationsBlock } from '@/components/ClarificationsBlock'
 import { formatINR } from '@/lib/format'
 import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
 
@@ -28,10 +29,13 @@ export default function BuyerRfqScreen() {
   const [shortlistOnly, setShortlistOnly] = useState(false)
   const [declining, setDeclining] = useState<any | null>(null)
   const [localDeclined, setLocalDeclined] = useState<Record<string, string>>({})
+  // S1.3 — computed at load time (not in render): active RFQ = open|quoted and inside its window.
+  const [active, setActive] = useState(false)
 
   const load = useCallback(async () => {
     const [d, me] = await Promise.all([fetchRfq(id), fetchMe()])
     setRfq(d?.rfq ?? null)
+    setActive(!!d?.rfq && (d.rfq.status === 'open' || d.rfq.status === 'quoted') && new Date(d.rfq.expiresAt).getTime() > Date.now())
     setPointersEnabled(me?.comparePointersEnabled === true)
     setLoading(false)
     if (d?.rfq?.quotes?.length) {
@@ -63,30 +67,43 @@ export default function BuyerRfqScreen() {
   const goods = rfq.kind === 'goods' && rfq.goodsSpec ? rfq.goodsSpec : null
   const statusOf = (q: any) => (localDeclined[q.id] ? 'declined' : q.status)
   const reasonOf = (q: any) => localDeclined[q.id] ?? q.declineReason
+  // S1.3 — derived, never a status: active RFQ (computed at load) + unanswered provider questions.
+  const openQ =((rfq.clarifications ?? []) as any[]).filter((c) => c.answeredAt === null).length
+  const clar = <View className="px-4 pt-4"><ClarificationsBlock rfqId={id} role="buyer" initial={rfq.clarifications ?? []} canWrite={active} closed={!active} /></View>
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <View className="border-b border-border bg-surface px-4 py-3">
         <Text className="text-base font-bold text-foreground" numberOfLines={1}>{rfq.title}</Text>
         <Text className="text-xs text-foreground-secondary">{t(`rfq.status_${rfq.status}`)} · {t('rfq.quotes_n', { n: rfq.quoteCount, max: rfq.maxQuotes })}</Text>
+        {/* S1.3 — "awaiting your answer" chip: derived state, no status text change. */}
+        {active && openQ > 0 ? <Text className="mt-1 self-start rounded-full border border-[#b45309]/40 bg-[#f5ebdd] px-2 py-0.5 text-[11px] font-medium text-[#b45309]">{t('rfq.clarify_awaiting_chip')}</Text> : null}
       </View>
 
       {goods && <GoodsSpecBlock spec={goods} t={t} />}
 
       {rfq.status === 'expired' ? (
-        <View className="m-4 rounded-xl border border-border bg-surface p-5">
-          <Text className="text-base font-semibold text-foreground">{t('rfq.expired_title')}</Text>
-          <Text className="mt-1 text-sm text-foreground-secondary">{t('rfq.rescue')}</Text>
-          <TouchableOpacity onPress={() => router.push('/rfq/new' as never)} className="mt-3 self-start rounded-lg bg-primary px-4 py-2">
-            <Text className="text-sm font-semibold text-white">{t('rfq.post_cta')}</Text>
-          </TouchableOpacity>
-        </View>
+        <ScrollView>
+          <View className="m-4 rounded-xl border border-border bg-surface p-5">
+            <Text className="text-base font-semibold text-foreground">{t('rfq.expired_title')}</Text>
+            <Text className="mt-1 text-sm text-foreground-secondary">{t('rfq.rescue')}</Text>
+            <TouchableOpacity onPress={() => router.push('/rfq/new' as never)} className="mt-3 self-start rounded-lg bg-primary px-4 py-2">
+              <Text className="text-sm font-semibold text-white">{t('rfq.post_cta')}</Text>
+            </TouchableOpacity>
+          </View>
+          {/* Closed → the thread is read-only. */}
+          {clar}
+        </ScrollView>
       ) : allQuotes.length === 0 ? (
-        <View className="m-4 rounded-xl border border-dashed border-border bg-surface p-8">
-          <Text className="text-center text-sm text-foreground-secondary">{t('rfq.no_quotes_yet')}</Text>
-        </View>
+        <ScrollView>
+          {clar}
+          <View className="m-4 rounded-xl border border-dashed border-border bg-surface p-8">
+            <Text className="text-center text-sm text-foreground-secondary">{t('rfq.no_quotes_yet')}</Text>
+          </View>
+        </ScrollView>
       ) : (
         <ScrollView>
+          {clar}
           <View className="flex-row items-center justify-between px-4 pt-4">
             <Text className="text-xs text-foreground-secondary">{t('rfq.swipe_hint')}</Text>
             {shortlist.size > 0 && (

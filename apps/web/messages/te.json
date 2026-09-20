@@ -779,6 +779,24 @@
     "decline_quote_failed": "తిరస్కరించలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
     "quote_declined_title": "ఈ కొటేషన్ తిరస్కరించబడింది",
     "quote_declined_reason": "కారణం",
-    "quote_declined_message_label": "మీకు పంపిన సందేశం"
+    "quote_declined_message_label": "మీకు పంపిన సందేశం",
+    "clarify_title_buyer": "ప్రొవైడర్ల ప్రశ్నలు",
+    "clarify_title_provider": "కోట్ ఇచ్చే ముందు అడగండి",
+    "clarify_visible_hint": "ఈ అభ్యర్థన అందుకున్న ప్రొవైడర్లందరికీ కనిపిస్తుంది",
+    "clarify_empty": "ఇంకా ప్రశ్నలు లేవు",
+    "clarify_ask_button": "అడగండి",
+    "clarify_answer_button": "సమాధానం ఇవ్వండి",
+    "clarify_answered_label": "సమాధానం ఇవ్వబడింది",
+    "clarify_unanswered_label": "మీ సమాధానం కోసం వేచి ఉంది",
+    "clarify_pending_label": "సమాధానం కోసం వేచి ఉంది",
+    "clarify_you_asked": "మీరు అడిగారు",
+    "clarify_redacted_pill": "సంప్రదింపు వివరాలు దాచబడ్డాయి",
+    "clarify_closed": "ఈ అభ్యర్థన మూసివేయబడింది — చదవడానికి మాత్రమే.",
+    "revise_button": "కోట్‌ను సవరించండి",
+    "revise_title": "మీ కోట్‌ను సవరించండి",
+    "revise_submit": "సవరించిన కోట్ పంపండి",
+    "revise_cancel": "రద్దు",
+    "revise_count": "×{n} సవరించబడింది",
+    "revise_chip": "సవరణ {n}"
   }
 }

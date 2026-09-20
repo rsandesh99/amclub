@@ -21,7 +21,8 @@
     "evidence:verify": "tsx scripts/verify-evidence.ts",
     "agents:verify:dossier": "tsx scripts/verify-payout-dossier.ts",
     "agents:verify:quote": "tsx scripts/verify-quote-extraction.ts",
-    "agents:verify:compare": "tsx scripts/verify-compare-decline.ts"
+    "agents:verify:compare": "tsx scripts/verify-compare-decline.ts",
+    "rfq:verify:clarify": "tsx scripts/verify-clarifications.ts"
   },
   "dependencies": {
     "@amclub/agent-core": "workspace:*",

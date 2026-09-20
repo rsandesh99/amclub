@@ -17,7 +17,7 @@ export async function recordPriceBookEntry(admin: SupabaseClient, args: { quoteI
   try {
     const { data: q } = await admin
       .from('quotes')
-      .select('id, rfq_id, provider_id, price_paise, delivery_days, gst_included, transport_included, created_at' + QUOTE_GOODS_COLS)
+      .select('id, rfq_id, provider_id, price_paise, delivery_days, gst_included, transport_included, created_at, revised_at' + QUOTE_GOODS_COLS)
       .eq('id', args.quoteId)
       .maybeSingle()
     const quote = q as any
@@ -48,9 +48,12 @@ export async function recordPriceBookEntry(admin: SupabaseClient, args: { quoteI
         gst_included: quote.gst_included ?? null,
         transport_included: quote.transport_included ?? null,
         source_quote_id: quote.id,
-        confirmed_at: quote.created_at ?? new Date().toISOString(),
+        // S1.3 — a revision restates the price: the row is UPDATED in place (ON CONFLICT DO
+        // UPDATE), so the book tracks the latest stated price; confirmed_at = the revision time.
+        confirmed_at: quote.revised_at ?? quote.created_at ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       },
-      { onConflict: 'source_quote_id', ignoreDuplicates: true },
+      { onConflict: 'source_quote_id' },
     )
     if (error) {
       console.error('[price-book] insert failed', error.message)

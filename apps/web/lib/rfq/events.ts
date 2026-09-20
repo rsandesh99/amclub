@@ -10,6 +10,8 @@ export type QuoteEventType =
   | 'accepted'
   | 'expired'
   | 'auto_declined'
+  // S1.3 — in-place revision of a submitted quote (payload carries before/after + revision).
+  | 'revised'
 
 export interface QuoteEventInput {
   quoteId: string
