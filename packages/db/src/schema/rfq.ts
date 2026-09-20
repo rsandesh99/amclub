@@ -70,6 +70,9 @@ export const quotes = pgTable('quotes', {
   gstRateBps: integer('gst_rate_bps'),
   hsnCode: text('hsn_code'),
   productId: uuid('product_id'),
+  // S1.1 (0032) — the confirmed quote_extractions row (FK in SQL; no import here to avoid a cycle).
+  extractionId: uuid('extraction_id'),
+  extractionConfirmedAt: timestamp('extraction_confirmed_at', { withTimezone: true }),
   // submitted | withdrawn | accepted | declined | expired
   status: text('status').default('submitted').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),

@@ -175,6 +175,18 @@ const MANIFEST: Entry[] = [
     triggers: [['payout_dossiers', 'payout_dossiers_decision_guard']],
     note: 'payout_dossiers (UNIQUE order_id+run_id; decision columns immutable once set) + evidence_photo_hashes',
   },
+  {
+    // Quote extraction (S1.1): the bounded-call proposals + the provider price
+    // book; quotes.extraction_id / extraction_confirmed_at. Applied to prod
+    // before/with the writer (NOT staged).
+    file: '0032_quote_extraction.sql',
+    tables: ['quote_extractions', 'provider_price_book'],
+    triggers: [
+      ['quote_extractions', 'quote_extractions_set_updated_at'],
+      ['provider_price_book', 'provider_price_book_set_updated_at'],
+    ],
+    note: 'quote_extractions + provider_price_book; quotes.extraction_id (partial unique) + extraction_confirmed_at',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

@@ -14,6 +14,7 @@ import { getMartCategory } from '@/lib/mart/config'
 import { listSellerListingsInCategory } from '@/lib/mart/goods-rfq'
 import { createAdminClient } from '@/lib/supabase/server'
 import type { QuoteComposerGoods } from '@/components/rfq/QuoteComposer'
+import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
 
 export default async function ProviderRfqPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -40,6 +41,9 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
     const spec = rfq.goodsSpec as unknown as GoodsSpecView
     goods = { unit: spec.unit, qty: spec.qty, listings }
   }
+
+  // S1.1 — "Type or speak your quote": AGENT_ENABLED + agents_enabled.quote_extract + cohort, for THIS provider.
+  const extractEnabled = await isQuoteExtractEnabledFor(await createAdminClient(), user.id)
 
   const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')
 
@@ -100,7 +104,7 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
         </div>
       ) : rfq.canQuote ? (
         <div className="space-y-3">
-          <QuoteComposer rfqId={rfq.id} goods={goods ?? undefined} />
+          <QuoteComposer rfqId={rfq.id} goods={goods ?? undefined} extractEnabled={extractEnabled} />
           {/* S0.4 quote-or-decline: an honest "no" beside "Quote". */}
           <div className="flex justify-end"><DeclineRfqButton rfqId={rfq.id} /></div>
         </div>

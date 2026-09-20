@@ -209,7 +209,22 @@
     "goods_col_incl": "कुल GST सहित",
     "goods_col_after_itc": "ITC के बाद",
     "goods_itc_hint": "GST-पंजीकृत खरीदार GST को इनपुट टैक्स क्रेडिट में वापस पाते हैं — ITC के बाद का आँकड़ा ही असली लागत है।",
-    "goods_ask_cta": "थोक कोटेशन माँगें"
+    "goods_ask_cta": "थोक कोटेशन माँगें",
+    "quote_extract_title": "अपना कोटेशन लिखें या बोलें",
+    "quote_extract_subtitle": "जैसे बोलते हैं वैसे लिखें — हिंग्लिश चलेगी। फ़ॉर्म अपने आप भर जाएगा; आप जाँचें और भेजें।",
+    "quote_extract_placeholder": "₹2.4 लाख, 3 हफ़्ते, GST अलग, ट्रांसपोर्ट actuals पर, 30% एडवांस",
+    "quote_extract_fill": "फ़ॉर्म भरें",
+    "quote_extract_filling": "आपका कोटेशन पढ़ा जा रहा है…",
+    "quote_extract_clear": "सुझाव हटाएँ",
+    "quote_extract_dictate_hint": "या बोलकर लिखवाएँ:",
+    "quote_extract_uncertain_hint": "कृपया जाँचें — मॉडल निश्चित नहीं था",
+    "quote_extract_stub_pill": "AI प्रीव्यू (मॉडल की नहीं)",
+    "quote_extract_filled": "फ़ॉर्म भर गया। हाइलाइट किए गए फ़ील्ड जाँचें, फिर भेजें।",
+    "quote_extract_nothing": "भरने को कुछ नहीं मिला — कीमत और समय जोड़कर देखें।",
+    "quote_extract_err_short": "थोड़ा और लिखें (कम से कम 5 अक्षर)।",
+    "quote_extract_err_budget": "AI मदद आज के लिए रुकी है; कृपया फ़ॉर्म भरें।",
+    "quote_extract_err_unavailable": "AI मदद उपलब्ध नहीं; कृपया फ़ॉर्म भरें।",
+    "quote_extract_err_rate": "बहुत बार कोशिश हुई; एक मिनट रुकें।"
   },
   "checkout": {
     "title": "चेकआउट",

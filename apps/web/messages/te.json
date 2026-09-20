@@ -742,6 +742,21 @@
     "goods_ask_cta": "బల్క్ కొటేషన్ అడగండి",
     "goods_ask_hint": "లిస్ట్ చేసిన దానికంటే ఎక్కువ కావాలా, లేదా ప్రత్యేక స్పెక్? ధృవీకరించిన అమ్మకందారులు 72 గంటల్లో కొటేషన్ ఇస్తారు.",
     "goods_empty_ask_cta": "సరుకుల అభ్యర్థన పోస్ట్ చేయండి",
-    "goods_accept_note": "అంగీకరిస్తే {qty} {unit}కి {total} GSTతో సరుకుల ఆర్డర్ అవుతుంది."
+    "goods_accept_note": "అంగీకరిస్తే {qty} {unit}కి {total} GSTతో సరుకుల ఆర్డర్ అవుతుంది.",
+    "quote_extract_title": "మీ కొటేషన్ టైప్ చేయండి లేదా చెప్పండి",
+    "quote_extract_subtitle": "మాట్లాడినట్టే రాయండి. ఫారం దానంతట అదే నిండుతుంది; మీరు సరిచూసి పంపండి.",
+    "quote_extract_placeholder": "₹2.4 లక్షలు, 3 వారాలు, GST వేరు, రవాణా actuals, 30% అడ్వాన్స్",
+    "quote_extract_fill": "ఫారం నింపండి",
+    "quote_extract_filling": "మీ కొటేషన్ చదువుతోంది…",
+    "quote_extract_clear": "సూచనను తీసివేయండి",
+    "quote_extract_dictate_hint": "లేదా చెప్పండి:",
+    "quote_extract_uncertain_hint": "దయచేసి సరిచూడండి — మోడల్‌కు ఖచ్చితంగా తెలియదు",
+    "quote_extract_stub_pill": "AI ప్రివ్యూ (మోడల్ కీ లేదు)",
+    "quote_extract_filled": "ఫారం నిండింది. హైలైట్ చేసిన ఫీల్డ్‌లు సరిచూసి పంపండి.",
+    "quote_extract_nothing": "నింపడానికి ఏమీ లేదు — ధర, సమయం జోడించి చూడండి.",
+    "quote_extract_err_short": "ఇంకొంచెం రాయండి (కనీసం 5 అక్షరాలు).",
+    "quote_extract_err_budget": "AI సహాయం ఈరోజుకు ఆగింది; దయచేసి ఫారం నింపండి.",
+    "quote_extract_err_unavailable": "AI సహాయం అందుబాటులో లేదు; దయచేసి ఫారం నింపండి.",
+    "quote_extract_err_rate": "చాలా ప్రయత్నాలు; ఒక నిమిషం ఆగండి."
   }
 }

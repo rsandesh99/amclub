@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { quoteSchema } from '@amclub/shared'
+import { editedExtractFields, quoteSchema, type QuoteExtraction } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
@@ -10,11 +10,17 @@ import { createNotification } from '@/lib/notifications/create'
 import { addQuoteEvent } from '@/lib/rfq/events'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { recordAiDecision } from '@/lib/mart/events'
+import { recordPriceBookEntry } from '@/lib/agent/price-book'
+import { AGENT_ENABLED } from '@/lib/flags'
 
 const bodySchema = quoteSchema.omit({ rfq_id: true })
 
 /** Provider submits ONE quote on a matched, active RFQ. The N-quote cap (7) is
- *  enforced atomically via claim_quote_slot — the 8th quote is rejected (409). */
+ *  enforced atomically via claim_quote_slot — the 8th quote is rejected (409).
+ *  S1.1: an optional `extraction_id` links the provider's one-tap confirmation
+ *  of a model prefill — recorded in ai_decisions (feature quote_extraction) and
+ *  on the quote; the provider's Submit is still the ONLY quote write. */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -33,6 +39,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   const d = parsed.data
+
+  // S1.1 — a claimed extraction must be this provider's, for this RFQ, and not
+  // yet confirmed. Checked BEFORE the slot claim so a bad id never burns a slot.
+  let extraction: { id: string; proposed: QuoteExtraction } | null = null
+  if (d.extraction_id) {
+    const { data: ex } = await admin.from('quote_extractions').select('id, rfq_id, provider_id, decision_id, proposed').eq('id', d.extraction_id).maybeSingle()
+    const row = ex as { id: string; rfq_id: string; provider_id: string; decision_id: string | null; proposed: QuoteExtraction } | null
+    if (!row || row.rfq_id !== rfqId || row.provider_id !== actor.providerId) {
+      return NextResponse.json({ error: 'extraction_mismatch' }, { status: 422 })
+    }
+    if (row.decision_id) {
+      // Own extraction, already confirmed: a re-submit is the one-quote-per-provider
+      // case (409 already_quoted), never a fresh quote on a used extraction.
+      const { data: dup } = await admin.from('quotes').select('id').eq('rfq_id', rfqId).eq('provider_id', actor.providerId).maybeSingle()
+      return NextResponse.json({ error: dup ? 'already_quoted' : 'extraction_mismatch' }, { status: dup ? 409 : 422 })
+    }
+    extraction = { id: row.id, proposed: row.proposed }
+  }
 
   // AMC Mart M2 — a goods RFQ needs goods terms; the total is qty × unit price,
   // computed HERE (the client's price_paise is ignored for goods).
@@ -114,6 +138,44 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     return serverError('[quote insert]', insErr)
   }
+
+  // S1.1 — the provider's one-tap confirmation of a model prefill: link the
+  // extraction to the quote, diff proposed vs final, record ONE ai_decisions
+  // row (best-effort telemetry; the quote is already the provider's).
+  let editedFields: string[] | null = null
+  if (extraction) {
+    const finalTerms = {
+      price_paise: pricePaise,
+      delivery_days: d.delivery_days,
+      gst_included: d.gst_included ?? null,
+      transport_included: d.transport_included ?? null,
+      valid_until: d.valid_until ?? null,
+      advance_percent: d.advance_percent ?? null,
+      goods: goods ? { unit_price_paise: goods.unit_price_paise, gst_rate_bps: goods.gst_rate_bps, hsn_code: goods.hsn_code } : null,
+    }
+    editedFields = editedExtractFields(extraction.proposed, finalTerms, isGoods ? 'goods' : 'services')
+    const now = new Date().toISOString()
+    const { error: linkErr } = await admin.from('quotes').update({ extraction_id: extraction.id, extraction_confirmed_at: now, updated_at: now }).eq('id', quote.id)
+    if (linkErr) console.error('[quote submit] extraction link failed', linkErr.message)
+    const decisionId = await recordAiDecision(
+      admin,
+      actor.userId,
+      {
+        feature: 'quote_extraction',
+        input_refs: { extraction_id: extraction.id, rfq_id: rfqId, quote_id: quote.id },
+        proposed: extraction.proposed as unknown as Record<string, unknown>,
+        final: finalTerms as unknown as Record<string, unknown>,
+      },
+      { runId: null, tool: 'extract_quote' },
+    )
+    if (decisionId) {
+      const { error: decErr } = await admin.from('quote_extractions').update({ decision_id: decisionId }).eq('id', extraction.id)
+      if (decErr) console.error('[quote submit] extraction decision link failed', decErr.message)
+    } else {
+      console.error('[quote submit] ai_decisions row not recorded for extraction', extraction.id)
+    }
+  }
+
   await addQuoteEvent(admin, {
     quoteId: quote.id,
     eventType: 'submitted',
@@ -128,8 +190,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       transport_included: d.transport_included ?? null,
       valid_until: d.valid_until ?? null,
       advance_percent: d.advance_percent ?? null,
+      ...(extraction ? { extraction_id: extraction.id, edited_fields: editedFields ?? [] } : {}),
     },
   })
+
+  // S1.1 — price-book intake for EVERY submitted quote while the agent flag is
+  // on (flag-off stays byte-identical). Data, not money; failures only logged.
+  if (AGENT_ENABLED) await recordPriceBookEntry(admin, { quoteId: quote.id })
 
   // Notify the buyer of the new quote.
   const { data: rfq } = await admin
@@ -151,5 +218,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
   }
 
-  return NextResponse.json({ quoteId: quote.id, quoteCount: newCount })
+  return NextResponse.json({ quoteId: quote.id, quoteCount: newCount, ...(extraction ? { extraction_id: extraction.id, edited_fields: editedFields ?? [] } : {}) })
 }
