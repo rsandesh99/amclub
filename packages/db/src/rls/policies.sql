@@ -247,6 +247,20 @@ DROP POLICY IF EXISTS "quotes: admin all" ON quotes;
 CREATE POLICY "quotes: admin all" ON quotes
   FOR ALL USING (has_role('admin') OR has_role('ops'));
 
+-- ─── quotes column privileges (0033, S1.2) — decline_note is the buyer's private words ─
+-- Same mechanism as provider_profiles above: RLS is row-level, so the column is
+-- hidden via grants. Every quote read in the app goes through /api/v1 with the
+-- service role (the buyer sees the note there); no client selects quotes directly.
+-- Staged Mart columns (0024) are granted inside the guarded Mart block below.
+REVOKE SELECT ON quotes FROM anon, authenticated;
+GRANT SELECT (
+  id, rfq_id, provider_id, price_paise, delivery_days, scope, message,
+  gst_included, transport_included, valid_until, advance_percent,
+  status, created_at, updated_at,
+  extraction_id, extraction_confirmed_at,
+  decline_reason, decline_message, decline_message_locale, declined_by, declined_at, decline_decision_id
+) ON quotes TO anon, authenticated;
+
 -- ─── quote_events (0016) — append-only; read-only for every client role ──────
 
 DROP POLICY IF EXISTS "quote_events: provider read own" ON quote_events;
@@ -769,6 +783,9 @@ BEGIN
   -- The column-grant block above re-applies 0004's fixed list on every run,
   -- which drops 0022's sells_goods grant; the public catalog policies read it.
   EXECUTE 'GRANT SELECT (sells_goods) ON provider_profiles TO anon, authenticated';
+  -- 0033 revokes SELECT on quotes and re-grants a fixed column list; the staged
+  -- goods terms (0024) exist only where Mart is applied — grant them here.
+  EXECUTE 'GRANT SELECT (unit_price_paise, qty, gst_rate_bps, hsn_code, product_id) ON quotes TO anon, authenticated';
 
   EXECUTE 'DROP POLICY IF EXISTS "mart_categories: public read active" ON mart_categories';
   EXECUTE 'CREATE POLICY "mart_categories: public read active" ON mart_categories FOR SELECT USING (is_active = true)';

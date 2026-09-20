@@ -310,6 +310,8 @@ amclub/
 4. Buyer compares quotes on one screen (sortable table: price / timeline / rating) → can chat-clarify within the quote thread (contact-info masked pre-payment, see §9) → **Accept quote** → checkout (same rail as Buy Now) → quote converts to order; other quotes auto-declined politely.
 5. Expiry handling: no quotes in 72h → suggest top providers to contact directly + option to rebroadcast with edits.
 
+*S1.2 — comparability + buyer decline.* Step 4's compare screen shows a side-by-side table with a **normalised total** per quote (GST added only when the quote says it is excluded; silence is flagged, never assumed; transport is a flag, never a rate) and twelve deterministic **comparability flags** computed in `@amclub/shared` `compareQuotes` at read time — never a model. The buyer may **decline** a quote with a reason (`POST /api/v1/rfq/[id]/quote/[quoteId]/decline`, the first buyer-initiated `quotes.status` write, guarded on `submitted` and governed by the one `QUOTE_TRANSITIONS` map); the provider receives a courteous two-line message in their own language (a fixed template, or the `decline_message` agent's text when that agent is on for the buyer). Optional per-quote **pointers** in the buyer's language (the `compare_pointers` agent) only restate the flags and can never rank or recommend (strict schema + a banned-phrase gate). Auto-declines on accept keep the existing bulk notification.
+
 ## 3.6 Core Journey 3 — Provider lists a package
 
 `/partner/listings/new`: category/subcategory → title (with i18n hint) → scope builder (included items checklist, excluded items) → deliverables → buyer-requirements template → price (₹) + optional discount % + AMC-member extra discount → delivery days → revision count → FAQs → preview → publish (live instantly if provider verified; flagged sample audited by ops).
@@ -865,6 +867,7 @@ Gateway funnel (Phase 8a): `gateway_viewed · gateway_door_chosen · gateway_wiz
 
 Voice RFQ funnel (Phase 8b): `voice_rfq_started · voice_rfq_transcribed · voice_rfq_parsed · voice_rfq_edited · voice_rfq_submitted · voice_rfq_failed` (props: `surface ('rfq_form'|'gateway'), original_language, uncertain, duration_ms, field` — `voice_rfq_edited` fires once per corrected field; `voice_rfq_submitted` marks an RFQ created with voice_meta attached).
 Quote extraction (agent S1.1): `agent_quote_extract_requested` (server; props `rfq_id, kind, source, stub, uncertain_count`) · `quote_extract_filled` · `quote_extract_cleared` (client; props `rfq_id, uncertain_count, stub`). The confirmation itself rides the existing `quote_submitted` / `quote_events.submitted` payload (`extraction_id`, `edited_fields`).
+Buyer compare + decline (agent S1.2): `compare_viewed` (server; props `rfq_id, quote_count, flags_total, pointers ('cached'|'fresh'|'off'|'error')`) · `quote_declined` (server; props `rfq_id, quote_id, reason, has_note, message_source ('agent'|'template'), locale`).
 Every event carries: `role, state, category_id, locale, device`. These power the §1.9 funnel — instrument in the same PR as the feature, not after.
 
 ## Appendix B — Glossary

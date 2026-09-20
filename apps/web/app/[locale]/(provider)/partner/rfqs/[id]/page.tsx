@@ -97,6 +97,18 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
           )}
           <p className="mt-2 whitespace-pre-wrap text-sm text-foreground-secondary">{rfq.myQuote.scope}</p>
           <div className="mt-3"><QuoteTermsRow terms={rfq.myQuote} compact /></div>
+          {/* S1.2 — the buyer declined: reason label + the courteous message that was sent (never the buyer's note). */}
+          {rfq.myQuote.status === 'declined' && (
+            <div className="mt-3 rounded-button border border-border bg-muted/40 p-3 text-sm">
+              <p className="font-medium">{t('quote_declined_title')}</p>
+              {rfq.myQuote.declineReason && (
+                <p className="mt-1 text-xs text-foreground-secondary">{t('quote_declined_reason')}: {t(`declined_reason_label_${rfq.myQuote.declineReason}` as 'declined_reason_label_other')}</p>
+              )}
+              {rfq.myQuote.declineMessage && (
+                <p className="mt-2 whitespace-pre-wrap text-sm"><span className="text-xs text-foreground-secondary">{t('quote_declined_message_label')}: </span>{rfq.myQuote.declineMessage}</p>
+              )}
+            </div>
+          )}
         </div>
       ) : rfq.declinedAt ? (
         <div className="rounded-card border border-border bg-muted p-4 text-center text-sm text-foreground-secondary">

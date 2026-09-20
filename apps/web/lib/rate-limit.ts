@@ -75,6 +75,8 @@ export const limiters = {
   /** S1.1 quote extraction per provider — one paid routine-tier call each; burst + hourly pair (voice-parse precedent). */
   quoteExtract: build(5, '1 m', 'rl:quote-extract'),
   quoteExtractHourly: build(40, '1 h', 'rl:quote-extract-h'),
+  /** S1.2 compare pointers per buyer — one reasoning-tier call per cache miss. */
+  comparePointers: build(6, '10 m', 'rl:compare-pointers'),
 } as const
 
 export interface RateLimitResult {

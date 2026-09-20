@@ -49,6 +49,11 @@ export * from './dossier'
 // S1.1 — quote extraction contract (schema, clamp, edited-fields diff)
 export * from './quote-extraction'
 
+// S1.2 — comparability engine (deterministic flags + normalised totals), pointer + decline-message contracts
+export * from './compare'
+export * from './compare-pointers'
+export * from './decline-message'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

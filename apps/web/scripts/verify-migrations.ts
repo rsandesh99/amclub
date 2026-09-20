@@ -187,6 +187,14 @@ const MANIFEST: Entry[] = [
     ],
     note: 'quote_extractions + provider_price_book; quotes.extraction_id (partial unique) + extraction_confirmed_at',
   },
+  {
+    // Buyer decline + compare pointers (S1.2): quotes.decline_* columns (+ column-level
+    // privileges hiding decline_note from clients), rfqs.compare_pointers cache.
+    // Applied to prod before/with the writer (NOT staged).
+    file: '0033_quote_compare_decline.sql',
+    tables: [],
+    note: 'quotes.decline_*; rfqs.compare_pointers cache; quotes column privileges (decline_note hidden)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

@@ -3,6 +3,7 @@ import { ORDER_STATUSES, RFQ_STATUSES, QUOTE_STATUSES, PAYOUT_STATUSES } from '.
 import { CATEGORY_SLUGS } from '../categories'
 import { SUPPORTED_LOCALES, PROVIDER_LANGUAGES } from '../locales'
 import { goodsRfqSpecSchema, goodsQuoteTermsSchema } from '../mart/goods'
+import { quoteDeclineReasonSchema } from '../decline-message'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -236,6 +237,21 @@ export const quoteSchema = z.object({
 })
 
 export type QuoteInput = z.infer<typeof quoteSchema>
+
+/** S1.2 — buyer declines one quote with a reason (chose_other is reserved for the system path). */
+export const quoteDeclineSchema = z.object({
+  reason: quoteDeclineReasonSchema,
+  /** The buyer's private words (never shown to the provider; used to write the courteous note). */
+  note: z.string().trim().max(200).optional(),
+})
+export type QuoteDeclineInput = z.infer<typeof quoteDeclineSchema>
+
+export const quoteDeclineResponseSchema = z.object({
+  quoteId: uuidSchema,
+  status: z.literal('declined'),
+  message_pending: z.boolean(),
+})
+export type QuoteDeclineResponse = z.infer<typeof quoteDeclineResponseSchema>
 
 /** A message on a quote thread (pre-payment; server masks contact info). */
 export const quoteMessageSchema = z.object({
