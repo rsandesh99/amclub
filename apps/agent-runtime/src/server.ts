@@ -10,7 +10,8 @@ import {
 import { agentToolNameSchema } from '@amclub/shared'
 import { missingRuntimeConfig, RUNTIME_ENV } from './env'
 import { buildRunContext } from './deps'
-import { enqueueJob } from './worker'
+import { enqueueJob, enqueueWaInbound } from './worker'
+import { ingestWaWebhook, waVerifyChallenge } from './whatsapp/inbound'
 
 /**
  * The runtime's HTTP surface (ADR-008 §2). Internal endpoints require the
@@ -60,6 +61,26 @@ app.post('/internal/jobs/:name', async (c) => {
   } catch (e) {
     return c.json({ error: (e as Error).message }, 503)
   }
+})
+
+// S0.5 — WhatsApp webhook. GET answers the Meta verify challenge; POST verifies
+// the vendor signature, stores conversation + message idempotently, downloads
+// media to the private wa-media bucket and enqueues wa.inbound. Always 200 after
+// a successful store (vendors retry on non-2xx). No runtime credential here —
+// the vendor signature IS the auth.
+app.get('/webhooks/whatsapp', (c) => {
+  const challenge = waVerifyChallenge(c.req.query())
+  return challenge === null ? c.text('forbidden', 403) : c.text(challenge, 200)
+})
+app.post('/webhooks/whatsapp', async (c) => {
+  const raw = await c.req.text()
+  const headers: Record<string, string | undefined> = {
+    'x-hub-signature-256': c.req.header('x-hub-signature-256'),
+    'x-interakt-secret': c.req.header('x-interakt-secret'),
+  }
+  const result = await ingestWaWebhook(raw, headers, enqueueWaInbound)
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ ok: true, stored: result.stored, statuses: result.statuses })
 })
 
 export function startServer(): void {

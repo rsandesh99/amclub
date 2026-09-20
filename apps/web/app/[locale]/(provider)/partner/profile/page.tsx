@@ -6,6 +6,7 @@ import { getSessionUser } from '@/lib/auth/session'
 import { Badge } from '@/components/ui/badge'
 import { ProviderProfileForm, type ProviderProfileInitial } from '@/components/profile/ProviderProfileForm'
 import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
+import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
 import { AGENT_ENABLED } from '@/lib/flags'
 
 export default async function ProviderProfilePage() {
@@ -64,6 +65,7 @@ export default async function ProviderProfilePage() {
       <ProviderProfileForm initial={initial} />
 
       {AGENT_ENABLED && <AgentGrantsSection persona="provider" />}
+      {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}
     </div>
   )
 }

@@ -17,6 +17,8 @@ const BUCKETS: { name: string; public: boolean }[] = [
   { name: 'kyc-documents', public: false },
   { name: 'order-documents', public: false },
   { name: 'invoices', public: false },
+  // WhatsApp inbound media (S0.5) — private; runtime writes, signed reads.
+  { name: 'wa-media', public: false },
   // Public-read, server-only-write (CMS banner images, marketing assets).
   { name: 'public-assets', public: true },
 ]

@@ -23,7 +23,8 @@ import { RUNTIME_ENV } from './env'
  */
 
 let _admin: SupabaseClient | null = null
-function admin(): SupabaseClient {
+/** Service-role client — agent-owned telemetry + WhatsApp store ONLY (never user data reads). */
+export function admin(): SupabaseClient {
   if (!_admin) {
     _admin = createClient(RUNTIME_ENV.SUPABASE_URL, RUNTIME_ENV.SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },

@@ -18,6 +18,7 @@ its invariants true.
 | `ledger` | the only writer of `agent_runs` / `agent_events` / `ai_invocations` / `ai_decisions` (service role, agent-owned telemetry only). Pure cost math lives here and `apps/web/lib/voice/invocations.ts` re-imports it. |
 | `budget` | Upstash counters run / user-day / month, checked before each model call. |
 | `auth/runtime-credential` | HMAC the runtime presents to mint a delegated JWT (±5 min window). |
+| `whatsapp` | adapter (`meta_cloud` / `interakt` / `stub`), template registry, opt-in keywords; the runtime hosts the webhook, web sends templates. |
 | `runner` | `runAgent()` / `AgentRun`: step + money budgets, taint law, the confirm gate (park → `resume` verifies an `ai_decisions` row), tool execution via `fetch(/api/v1)` under the delegated token. |
 
 ## Scripts

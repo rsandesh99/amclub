@@ -23,6 +23,8 @@ const publicEnvSchema = z.object({
   // Supabase dashboard (Auth → Settings → CAPTCHA), not here. When unset, the
   // captcha widget is skipped (dev/local).
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional(),
+  // S0.5 — the business WhatsApp number users message (E.164 digits) for the wa.me deep link.
+  NEXT_PUBLIC_WHATSAPP_NUMBER: z.string().optional(),
 })
 
 const serverEnvSchema = z.object({
@@ -33,6 +35,14 @@ const serverEnvSchema = z.object({
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   MSG91_AUTH_KEY: z.string().optional(),
   WHATSAPP_API_KEY: z.string().optional(),
+  // S0.5 WhatsApp rails. Driver is stub (no bill) unless WHATSAPP_DRIVER + creds are set.
+  WHATSAPP_DRIVER: z.enum(['meta_cloud', 'interakt', 'stub']).optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_APP_SECRET: z.string().optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
+  INTERAKT_API_KEY: z.string().optional(),
+  INTERAKT_WEBHOOK_SECRET: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   KYC_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),

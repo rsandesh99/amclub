@@ -965,7 +965,15 @@
     "revoke": "Revoke",
     "granted": "Assistant allowed.",
     "revoked": "Assistant access revoked.",
-    "action_failed": "That didn't work. Try again."
+    "action_failed": "That didn't work. Try again.",
+    "whatsapp_title": "WhatsApp updates",
+    "whatsapp_subtitle": "Get order and request updates on WhatsApp, and talk to the assistant there once it's on.",
+    "whatsapp_bound": "Connected: {number}",
+    "whatsapp_stop": "Stop WhatsApp updates",
+    "whatsapp_message_us": "Message us on WhatsApp",
+    "whatsapp_not_available": "WhatsApp updates aren't available yet.",
+    "whatsapp_hint": "Send START from your registered number to opt in, STOP any time to opt out. Order and payment updates are sent regardless of opt-in; everything else needs it.",
+    "whatsapp_revoked": "WhatsApp updates stopped."
   },
   "evidence": {
     "title": "Progress",

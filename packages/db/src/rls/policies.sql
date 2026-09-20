@@ -325,6 +325,19 @@ CREATE POLICY "udyam_verifications: admin read" ON udyam_verifications
 -- No INSERT/UPDATE/DELETE policies by design (service role writes only).
 REVOKE INSERT, UPDATE, DELETE ON udyam_verifications FROM anon, authenticated;
 
+-- ─── wa_conversations / wa_messages (0030) — no client policies; admin read ──
+ALTER TABLE wa_conversations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "wa_conversations: admin read" ON wa_conversations;
+CREATE POLICY "wa_conversations: admin read" ON wa_conversations
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON wa_conversations FROM anon, authenticated;
+
+ALTER TABLE wa_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "wa_messages: admin read" ON wa_messages;
+CREATE POLICY "wa_messages: admin read" ON wa_messages
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON wa_messages FROM anon, authenticated;
+
 -- ─── agent_runs / agent_events (0026) — self read + admin read; service writes ─
 -- Mirrors migration 0026 (H0 agent groundwork, ADR-008). agent_events carries
 -- the same append-only guard as order_events; raise_append_only() from 0017.

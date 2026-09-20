@@ -1,0 +1,221 @@
+import {
+  classifyKeyword,
+  createWhatsAppProvider,
+  metaVerifyChallenge,
+  templateFor,
+  whatsappConfigFromEnv,
+  whatsappIsLive,
+  type InboundMessage,
+  type WaLocale,
+} from '@amclub/agent-core'
+import type { AgentPersona } from '@amclub/shared'
+import { admin } from '../deps'
+import { RUNTIME_ENV } from '../env'
+
+/**
+ * WhatsApp inbound (S0.5). Two halves:
+ *  - ingestWaWebhook: verify → parse → upsert conversation → insert message
+ *    idempotently on vendor_message_id → download media → enqueue wa.inbound.
+ *    Status callbacks update wa_messages.status. Never replies.
+ *  - handleWaInbound (the job): opt-in keyword → agent_grants row for the user
+ *    matched by phone (channel=whatsapp) + confirmation template; STOP →
+ *    revoke + confirmation; anything else while no agent is enabled → a polite
+ *    holding reply at most once per 24h. ALL replies are gated on the
+ *    runtime's AGENT_ENABLED (dark ⇒ store only, reply nothing) and on a live
+ *    driver (stub ⇒ logs). Service role touches only wa_* + agent_grants (the
+ *    user's own consent row, created from their own phone).
+ */
+
+const HOLDING_REPLY_GAP_MS = 24 * 3600 * 1000
+const WINDOW_MS = 24 * 3600 * 1000
+
+export function waVerifyChallenge(query: Record<string, string | undefined>): string | null {
+  const cfg = whatsappConfigFromEnv()
+  return metaVerifyChallenge(query, cfg.verifyToken)
+}
+
+export interface IngestResult {
+  ok: boolean
+  status: 200 | 401 | 400
+  error?: string
+  stored: number
+  statuses: number
+}
+
+/** Enqueue hook (injected by the server) so this module never imports the worker — no import cycle. */
+export type EnqueueFn = (messageId: string) => Promise<string | null>
+
+export async function ingestWaWebhook(rawBody: string, headers: Record<string, string | undefined>, enqueue: EnqueueFn): Promise<IngestResult> {
+  const cfg = whatsappConfigFromEnv()
+  const provider = createWhatsAppProvider(cfg)
+  // A live driver must prove the vendor signature; the stub accepts (dev only).
+  if (whatsappIsLive(cfg) && !provider.verifySignature(rawBody, headers)) {
+    return { ok: false, status: 401, error: 'bad_signature', stored: 0, statuses: 0 }
+  }
+  let body: unknown
+  try {
+    body = JSON.parse(rawBody)
+  } catch {
+    return { ok: false, status: 400, error: 'bad_json', stored: 0, statuses: 0 }
+  }
+  const parsed = provider.parseInbound(body)
+  const db = admin()
+  let stored = 0
+  for (const m of parsed.messages) {
+    const conv = await upsertConversation(m.fromE164, m.timestamp)
+    const mediaRef = await storeMedia(provider, conv.id, m).catch((e) => {
+      console.error('[wa] media download failed', (e as Error).message)
+      return null
+    })
+    const { data: inserted, error } = await db
+      .from('wa_messages')
+      .insert({
+        conversation_id: conv.id,
+        direction: 'in',
+        vendor_message_id: m.vendorMessageId,
+        kind: m.kind,
+        body: m.body,
+        media_ref: mediaRef,
+        mime: m.mime,
+        status: 'received',
+        payload: m.raw as Record<string, unknown>,
+      })
+      .select('id')
+      .maybeSingle()
+    if (error) {
+      // 23505 = replayed webhook (vendor_message_id unique) → idempotent no-op.
+      if ((error as { code?: string }).code !== '23505') console.error('[wa] message insert failed', error.message)
+      continue
+    }
+    if (inserted?.id) {
+      stored++
+      await enqueue(inserted.id as string)
+    }
+  }
+  let statuses = 0
+  for (const s of parsed.statuses) {
+    const { error } = await db.from('wa_messages').update({ status: s.status }).eq('vendor_message_id', s.vendorMessageId)
+    if (!error) statuses++
+  }
+  return { ok: true, status: 200, stored, statuses }
+}
+
+async function upsertConversation(phoneE164: string, inboundAtIso: string): Promise<{ id: string; user_id: string | null; locale: string }> {
+  const db = admin()
+  const windowUntil = new Date(new Date(inboundAtIso).getTime() + WINDOW_MS).toISOString()
+  const { data: existing } = await db.from('wa_conversations').select('id, user_id, locale').eq('phone_e164', phoneE164).maybeSingle()
+  if (existing) {
+    await db.from('wa_conversations').update({ last_inbound_at: inboundAtIso, window_open_until: windowUntil }).eq('id', existing.id)
+    if (!existing.user_id) {
+      const user = await userByPhone(phoneE164)
+      if (user) await db.from('wa_conversations').update({ user_id: user.id, locale: user.locale }).eq('id', existing.id)
+      return { id: existing.id as string, user_id: user?.id ?? null, locale: user?.locale ?? (existing.locale as string) }
+    }
+    return existing as { id: string; user_id: string | null; locale: string }
+  }
+  const user = await userByPhone(phoneE164)
+  const { data: created, error } = await db
+    .from('wa_conversations')
+    .insert({ phone_e164: phoneE164, user_id: user?.id ?? null, locale: user?.locale ?? 'en', last_inbound_at: inboundAtIso, window_open_until: windowUntil })
+    .select('id, user_id, locale')
+    .single()
+  if (error || !created) throw new Error(`wa_conversations insert: ${error?.message}`)
+  return created as { id: string; user_id: string | null; locale: string }
+}
+
+/** users.phone is stored WITH the leading '+' (Supabase auth format); vendors send bare digits. */
+async function userByPhone(digits: string): Promise<{ id: string; locale: WaLocale; roles: string[] } | null> {
+  const { data } = await admin().from('users').select('id, preferred_locale, roles').eq('phone', `+${digits}`).maybeSingle()
+  if (!data) return null
+  const pl = (data as { preferred_locale?: string }).preferred_locale
+  return { id: (data as { id: string }).id, locale: pl === 'hi' || pl === 'te' ? pl : 'en', roles: ((data as { roles?: string[] }).roles ?? []) }
+}
+
+async function storeMedia(provider: ReturnType<typeof createWhatsAppProvider>, conversationId: string, m: InboundMessage): Promise<string | null> {
+  if (!m.mediaRef || provider.name === 'stub') return null
+  const { bytes, mime } = await provider.downloadMedia(m.mediaRef)
+  const ext = mime.includes('jpeg') ? 'jpg' : mime.includes('png') ? 'png' : mime.includes('ogg') ? 'ogg' : mime.includes('pdf') ? 'pdf' : 'bin'
+  const path = `${conversationId}/${m.vendorMessageId.replace(/[^A-Za-z0-9._-]/g, '_')}.${ext}`
+  const { error } = await admin().storage.from(RUNTIME_ENV.WA_MEDIA_BUCKET).upload(path, bytes, { contentType: mime, upsert: true })
+  if (error) throw new Error(error.message)
+  return path
+}
+
+// ── the wa.inbound job ───────────────────────────────────────────────────────
+
+export async function handleWaInbound(messageId: string): Promise<void> {
+  const db = admin()
+  const { data: msg } = await db.from('wa_messages').select('id, conversation_id, kind, body').eq('id', messageId).maybeSingle()
+  if (!msg) return
+  const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at').eq('id', msg.conversation_id).maybeSingle()
+  if (!conv) return
+  const locale = (conv.locale === 'hi' || conv.locale === 'te' ? conv.locale : 'en') as WaLocale
+  const intent = classifyKeyword(msg.body as string | null)
+
+  if (intent === 'opt_in') {
+    if (conv.user_id) {
+      await grantWhatsApp(conv.user_id as string, conv.phone_e164 as string, locale)
+      await reply(conv, 'wa_opt_in_confirmed', locale)
+    } else {
+      // Unknown number: nothing to grant; a holding reply explains how to link.
+      await holdingReply(conv, locale)
+    }
+    return
+  }
+  if (intent === 'opt_out') {
+    if (conv.user_id) {
+      await db.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', conv.user_id).eq('channel', 'whatsapp').is('revoked_at', null)
+    }
+    await reply(conv, 'wa_opt_out_confirmed', locale)
+    return
+  }
+  // Anything else: no agent handles WhatsApp yet (S1.4+ / S2.3) → polite holding reply, ≤ 1 per 24h.
+  await holdingReply(conv, locale)
+}
+
+async function grantWhatsApp(userId: string, phoneE164: string, locale: WaLocale): Promise<void> {
+  const db = admin()
+  const { data: user } = await db.from('users').select('roles').eq('id', userId).maybeSingle()
+  const roles = ((user as { roles?: string[] } | null)?.roles ?? []) as string[]
+  const persona: AgentPersona = roles.includes('msme') ? 'buyer' : roles.includes('provider') ? 'provider' : 'buyer'
+  const { data: setting } = await db.from('agent_settings').select('value').eq('key', 'whatsapp_opt_in_text_version').maybeSingle()
+  const textVersion = typeof setting?.value === 'string' ? setting.value : 'v1'
+  // Revoke any stale active grant on this channel, then insert the fresh consent (scopes empty: S0.5 grants no tools yet).
+  await db.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', userId).eq('persona', persona).eq('channel', 'whatsapp').is('revoked_at', null)
+  await db.from('agent_grants').insert({
+    user_id: userId,
+    persona,
+    scopes: [],
+    channel: 'whatsapp',
+    channel_identity: `+${phoneE164}`,
+    consent: { locale, surface: 'whatsapp', ip: null, user_agent: 'whatsapp', text_version: textVersion, keyword: 'START', at: new Date().toISOString() },
+  })
+}
+
+async function holdingReply(conv: { id: unknown; phone_e164: unknown; last_holding_reply_at?: unknown }, locale: WaLocale): Promise<void> {
+  const last = conv.last_holding_reply_at ? new Date(String(conv.last_holding_reply_at)).getTime() : 0
+  if (Date.now() - last < HOLDING_REPLY_GAP_MS) return
+  const sent = await reply(conv, 'wa_holding_reply', locale)
+  if (sent) await admin().from('wa_conversations').update({ last_holding_reply_at: new Date().toISOString() }).eq('id', conv.id as string)
+}
+
+/** Send a system template. Gated on runtime AGENT_ENABLED; stub logs; records the outbound row. */
+async function reply(conv: { id: unknown; phone_e164: unknown }, kind: string, locale: WaLocale): Promise<boolean> {
+  if (!RUNTIME_ENV.AGENT_ENABLED) return false // dark: store only, reply nothing
+  const tpl = templateFor(kind, locale)
+  if (!tpl) return false
+  const cfg = whatsappConfigFromEnv()
+  const provider = createWhatsAppProvider(cfg)
+  const r = await provider.sendTemplate(String(conv.phone_e164), tpl.name, locale, [])
+  await admin().from('wa_messages').insert({
+    conversation_id: conv.id as string,
+    direction: 'out',
+    vendor_message_id: r.vendorMessageId,
+    kind: 'template',
+    template_name: tpl.name,
+    status: r.ok ? (r.detail === 'stub' ? 'stub' : 'sent') : 'failed',
+    payload: { detail: r.detail },
+  })
+  if (r.ok) await admin().from('wa_conversations').update({ last_outbound_at: new Date().toISOString() }).eq('id', conv.id as string)
+  return r.ok
+}

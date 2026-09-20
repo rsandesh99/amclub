@@ -919,7 +919,15 @@
     "revoke": "रद्द करें",
     "granted": "सहायक को अनुमति दी गई।",
     "revoked": "सहायक की पहुँच रद्द कर दी गई।",
-    "action_failed": "यह काम नहीं हुआ। फिर से प्रयास करें।"
+    "action_failed": "यह काम नहीं हुआ। फिर से प्रयास करें।",
+    "whatsapp_title": "WhatsApp अपडेट",
+    "whatsapp_subtitle": "ऑर्डर और अनुरोध के अपडेट WhatsApp पर पाएँ, और सहायक चालू होने पर वहीं बात करें।",
+    "whatsapp_bound": "जुड़ा हुआ: {number}",
+    "whatsapp_stop": "WhatsApp अपडेट बंद करें",
+    "whatsapp_message_us": "WhatsApp पर संदेश भेजें",
+    "whatsapp_not_available": "WhatsApp अपडेट अभी उपलब्ध नहीं हैं।",
+    "whatsapp_hint": "ऑप्ट-इन के लिए अपने पंजीकृत नंबर से START भेजें, ऑप्ट-आउट के लिए कभी भी STOP। ऑर्डर और भुगतान अपडेट ऑप्ट-इन के बिना भी भेजे जाते हैं; बाकी सब के लिए ऑप्ट-इन ज़रूरी है।",
+    "whatsapp_revoked": "WhatsApp अपडेट बंद कर दिए गए।"
   },
   "evidence": {
     "title": "प्रगति",

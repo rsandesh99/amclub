@@ -87,6 +87,12 @@ async function fanout(
     .select('id, email, phone, preferred_locale')
     .in('id', userIds)
   const byId = new Map((users ?? []).map((u) => [u.id, u]))
+  // S0.5 — who has opted in to WhatsApp (an active whatsapp grant). One query per batch.
+  const optIn = new Set<string>()
+  if (extra.includes('whatsapp')) {
+    const { data: grants } = await admin.from('agent_grants').select('user_id').in('user_id', userIds).eq('channel', 'whatsapp').is('revoked_at', null)
+    for (const g of grants ?? []) optIn.add((g as { user_id: string }).user_id)
+  }
 
   const tasks: Promise<ChannelResult>[] = []
   for (const userId of userIds) {
@@ -95,6 +101,7 @@ async function fanout(
     const locale: Locale = pl === 'hi' || pl === 'te' ? pl : 'en'
     const msg: ChannelMessage = {
       toUserId: userId,
+      whatsappOptIn: optIn.has(userId),
       email: u?.email ?? null,
       phone: u?.phone ?? null,
       locale,

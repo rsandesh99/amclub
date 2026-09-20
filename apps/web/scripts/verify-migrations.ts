@@ -159,6 +159,13 @@ const MANIFEST: Entry[] = [
     views: ['provider_score_inputs_v1'],
     note: 'rfq_matches.declined_at/decline_reason; provider_profiles.udyam_verified; score view appended columns',
   },
+  {
+    // WhatsApp rails (S0.5): conversation store + message log, service-role
+    // writes, admin read. Applied to prod before/with the writer (NOT staged).
+    file: '0030_whatsapp_rails.sql',
+    tables: ['wa_conversations', 'wa_messages'],
+    triggers: [['wa_conversations', 'wa_conversations_set_updated_at']],
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

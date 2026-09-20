@@ -1,4 +1,5 @@
 import 'server-only'
+import { createWhatsAppProvider, templateFor, WA_ALWAYS_ALLOWED_KINDS, whatsappConfigFromEnv, whatsappIsLive } from '@amclub/agent-core'
 
 /**
  * Notification CHANNELS registry (§5.5 / §5.9 `notification.dispatch`).
@@ -13,6 +14,8 @@ import 'server-only'
 
 export interface ChannelMessage {
   toUserId: string
+  /** S0.5 — an active agent_grants row with channel=whatsapp (resolved by the dispatcher). */
+  whatsappOptIn?: boolean
   email: string | null
   phone: string | null
   locale: 'en' | 'hi' | 'te'
@@ -84,11 +87,24 @@ const smsHandler: ChannelHandler = async (msg) => {
   return stub('sms', msg, 'live-not-enabled')
 }
 
-/** STUB — Gupshup/Interakt WhatsApp. Flip to live: build the template send here. */
+/**
+ * WhatsApp (S0.5) — approved transactional templates via the agent-core adapter.
+ * Sends ONLY when (a) a real driver + credentials are configured, (b) the kind
+ * has a registered template, and (c) the recipient has an active whatsapp grant
+ * OR the kind is in the always-allowed transactional set (order/payment events
+ * to a party of the order). Otherwise 'stub' / 'skipped:no-opt-in' — never a bill.
+ */
 const whatsappHandler: ChannelHandler = async (msg) => {
   if (!msg.phone) return { channel: 'whatsapp', ok: true, detail: 'skipped:no-phone' }
-  if (!process.env['WHATSAPP_API_KEY']) return stub('whatsapp', msg)
-  return stub('whatsapp', msg, 'live-not-enabled')
+  const tpl = templateFor(msg.kind, msg.locale)
+  if (!tpl) return { channel: 'whatsapp', ok: true, detail: 'skipped:no-template' }
+  if (!WA_ALWAYS_ALLOWED_KINDS.has(msg.kind) && !msg.whatsappOptIn) return { channel: 'whatsapp', ok: true, detail: 'skipped:no-opt-in' }
+  const cfg = whatsappConfigFromEnv()
+  if (!whatsappIsLive(cfg)) return stub('whatsapp', msg)
+  const provider = createWhatsAppProvider(cfg)
+  const to = msg.phone.replace(/\D/g, '')
+  const r = await provider.sendTemplate(to, tpl.name, msg.locale, tpl.spec.params({ title: msg.title, body: msg.body, link: absoluteLink(msg.link) }))
+  return { channel: 'whatsapp', ok: r.ok, detail: r.detail }
 }
 
 /** STUB — Web Push. Optional; needs a subscription store (not in V1 scope). */

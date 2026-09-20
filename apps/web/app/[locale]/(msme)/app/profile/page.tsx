@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { MsmeProfileForm, type MsmeProfileInitial } from '@/components/profile/MsmeProfileForm'
 import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
+import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
 import { AGENT_ENABLED } from '@/lib/flags'
 
 export default async function MsmeProfilePage() {
@@ -60,6 +61,7 @@ export default async function MsmeProfilePage() {
       <MsmeProfileForm initial={initial} />
 
       {AGENT_ENABLED && <AgentGrantsSection persona="buyer" />}
+      {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}
     </div>
   )
 }

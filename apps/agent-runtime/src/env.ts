@@ -15,6 +15,9 @@ export const RUNTIME_ENV = {
   /** pg-boss job queue lives in the same Postgres. */
   DATABASE_URL: process.env['DATABASE_URL'] ?? '',
   PORT: Number(process.env['PORT'] ?? process.env['AGENT_RUNTIME_PORT'] ?? 8080),
+  /** S0.5 — outbound WhatsApp replies from the inbound job are gated on this (webhook always stores). */
+  AGENT_ENABLED: process.env['AGENT_ENABLED'] === 'true',
+  WA_MEDIA_BUCKET: process.env['WA_MEDIA_BUCKET'] ?? 'wa-media',
 } as const
 
 export function missingRuntimeConfig(): string[] {

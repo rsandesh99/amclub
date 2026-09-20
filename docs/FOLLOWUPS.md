@@ -31,6 +31,32 @@ Deferred / notes:
 - **evidence_required_from is null on prod** — the gate is inert until the
   founder sets a date at /admin/agents; the milestone capture UI is live.
 
+## Agent S0.5 — WhatsApp rails (2026-09-20)
+
+Landed: the `agent-core/src/whatsapp` adapter (`meta_cloud` / `interakt` /
+`stub` drivers, template registry, opt-in keywords, recorded-fixture tests);
+`whatsappHandler` in the web dispatcher sends approved templates only when a
+real driver is configured AND (active whatsapp grant OR always-allowed
+transactional kind) — otherwise `stub` / `skipped:no-opt-in`; migration 0030
+(`wa_conversations`, `wa_messages`); the runtime webhook + `wa.inbound` job
+(START/JOIN/vernacular → whatsapp grant for the user matched by phone; STOP →
+revoke; else a holding reply at most once per 24h); the profile-page WhatsApp
+section with the wa.me START deep link. Everything stays inert: the driver is
+`stub` until credentials exist, replies are gated on the runtime's
+`AGENT_ENABLED`, and the web section is gated on `AGENT_ENABLED`.
+
+Deferred / notes:
+- **Founder tasks to go live** (docs/PRE_LAUNCH_CHECKLIST.md 1.3): BSP/Meta
+  account + number, submit the template names listed there for approval, set
+  the driver env on web + runtime, point the vendor webhook at the Fly URL.
+- **Media upload for outbound** (`sendMedia` needs a public URL): the Meta
+  upload flow is not wired; inbound media download IS.
+- **Mobile**: no mobile settings screen yet (S0.2 note) — deep link is web only.
+- **Interakt webhook auth** is a shared-secret header (no HMAC upstream);
+  documented in WHATSAPP.md.
+- **Template copy** for `wa_opt_in_confirmed` / `wa_opt_out_confirmed` /
+  `wa_holding_reply` is written at BSP submission time (names reserved here).
+
 ## Agent S0.4 — trust mechanics (2026-09-20)
 
 Landed: quote cap as config (`rfq_max_quotes`, unset = legacy 7 so prod is
