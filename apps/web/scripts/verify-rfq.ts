@@ -218,7 +218,6 @@ async function main() {
     const { data: orders } = await admin.from('orders').select('id').eq('msme_id', mid)
     for (const o of orders ?? []) {
       await t(admin.from('payouts').delete().eq('order_id', o.id))
-      await t(admin.from('refunds').delete().eq('order_id', o.id))
       await t(admin.from('payments').delete().eq('order_id', o.id))
       await t(admin.from('invoices').delete().eq('order_id', o.id))
       await t(admin.from('reviews').delete().eq('order_id', o.id))
