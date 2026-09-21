@@ -158,6 +158,21 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
   const locale = (conv.locale === 'hi' || conv.locale === 'te' ? conv.locale : 'en') as WaLocale
   const intent = classifyKeyword(msg.body as string | null)
 
+  if (intent === 'opt_out') {
+    if (conv.user_id) {
+      await db.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', conv.user_id).eq('channel', 'whatsapp').is('revoked_at', null)
+    }
+    await reply(conv, 'wa_opt_out_confirmed', locale)
+    return
+  }
+  // S1.6 — dispatcher order: STOP (above; opt-out always wins) → active onboarding session → opt-in keywords →
+  // JOIN → holding reply. An active session routes EVERY other message into the interview (one turn per message):
+  // a typed "yes" / "ok" / "hi" is an answer there, not an opt-in (the user already holds a grant). Without an
+  // active session the S0.5 order is unchanged.
+  if (RUNTIME_ENV.AGENT_ENABLED && conv.user_id && conv.active_session_id && hooks.enqueueOnboarding) {
+    await hooks.enqueueOnboarding({ kind: 'message', sessionId: String(conv.active_session_id), messageId })
+    return
+  }
   if (intent === 'opt_in') {
     if (conv.user_id) {
       await grantWhatsApp(conv.user_id as string, conv.phone_e164 as string, locale)
@@ -166,19 +181,6 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
       // Unknown number: nothing to grant; a holding reply explains how to link.
       await holdingReply(conv, locale)
     }
-    return
-  }
-  if (intent === 'opt_out') {
-    if (conv.user_id) {
-      await db.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', conv.user_id).eq('channel', 'whatsapp').is('revoked_at', null)
-    }
-    await reply(conv, 'wa_opt_out_confirmed', locale)
-    return
-  }
-  // S1.6 — dispatcher order: keywords (above) → active onboarding session → JOIN → holding reply.
-  // An active session routes EVERY other message into the interview (one turn per message).
-  if (RUNTIME_ENV.AGENT_ENABLED && conv.user_id && conv.active_session_id && hooks.enqueueOnboarding) {
-    await hooks.enqueueOnboarding({ kind: 'message', sessionId: String(conv.active_session_id), messageId })
     return
   }
   if (intent === 'onboard') {

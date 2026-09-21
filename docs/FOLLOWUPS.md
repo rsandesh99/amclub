@@ -859,6 +859,14 @@ partner-dashboard suggested listings, admin "Onboarding interview" section, cron
   prod, so `verify-onboarding.ts` drives `runOnboardingTurn` + `handleWaInbound` in-process with the provider's own
   session token in place of the delegated one; the HMAC exchange, the pg-boss queue and the webhook are S0.1/S0.5/S1.4-
   proven legs recorded as skips. `/profile/provider` needs `COLUMN_ENCRYPTION_KEY` on the local server.
+- **Dispatcher order while a session is active: STOP → session → everything else.** The prompt's order (keywords →
+  active session) would swallow a typed "yes" / "ok" / "hi" mid-interview into the S0.5 opt-in branch (the rig caught it:
+  "yes" on review re-granted instead of re-sending the buttons). Now only the opt-OUT keyword outranks an active session;
+  opt-in words are answers while a session is active (the user already holds a grant). Without an active session the S0.5
+  order is unchanged.
+- **`runAgent` now reports `AgentRunError.code` (e.g. `budget_run_cap`) instead of the message** ("budget exceeded:
+  run_cap"), so the workers' `NO_RETRY` regexes actually match budget/step breaches (a latent S1.4 gap: the dossier
+  worker would have retried a budget failure twice). The `agent_runs.error` column already carried the code.
 - **The real delegated path is unexercised until the first Fly deploy** (founder decision, S1.6 review): before ANY
   onboarding cohort is enabled, the deployed runtime must run one full interview against the deployed web app once —
   WhatsApp grant → `POST /api/v1/agent/token` (HMAC → run-bound JWT) → `POST /api/v1/rfq/voice-parse` under that

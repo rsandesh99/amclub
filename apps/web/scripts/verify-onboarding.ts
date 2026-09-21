@@ -40,6 +40,7 @@ import {
   createGateway,
   createRedisBudget,
   createSupabaseLedger,
+  loadDefaultPrompts,
   makeStubDriver,
   promptFor,
   renderDraftSummary,
@@ -153,6 +154,9 @@ async function http() {
   }
   const api = (token: string, p: string, body?: unknown, method = 'POST') =>
     fetch(`${BASE}${p}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, ...(body ? { body: JSON.stringify(body) } : {}) })
+  // /profile/provider is cookie-only (getSessionUser), like the wizard that calls it.
+  const cookieApi = (cookie: string, p: string, body: unknown, method = 'POST') =>
+    fetch(`${BASE}${p}`, { method, headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) })
   const visible = (html: string) => html.replace(/<script[\s\S]*?<\/script>/g, '')
   const cookieFor = async (email: string) => {
     const jar: Record<string, string> = {}
@@ -212,8 +216,13 @@ async function http() {
     process.env['AGENT_ENABLED'] = 'true'
     process.env['API_URL'] = BASE
     process.env['WHATSAPP_DRIVER'] = 'stub'
-    const rt = (await import('../../agent-runtime/src/agents/onboarding/index')) as typeof import('../../agent-runtime/src/agents/onboarding/index')
-    const inbound = (await import('../../agent-runtime/src/whatsapp/inbound')) as typeof import('../../agent-runtime/src/whatsapp/inbound')
+    // require (tsx CJS hook) rather than import(): the runtime is an ESM package and Node's CJS→ESM named-export
+    // detection cannot see through agent-core's TypeScript re-export chain; require gets the real module objects.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rt = require('../../agent-runtime/src/agents/onboarding/index') as typeof import('../../agent-runtime/src/agents/onboarding/index')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const inbound = require('../../agent-runtime/src/whatsapp/inbound') as typeof import('../../agent-runtime/src/whatsapp/inbound')
+    loadDefaultPrompts() // the runtime's main.ts does this at boot; in-process the rig must register the prompt set itself
     const stubLog: string[] = []
     const whatsapp = makeStubDriver((l) => stubLog.push(l))
     const store = new Map<string, number>()
@@ -405,11 +414,12 @@ async function http() {
     check('GET draft → the confirmed draft, redacted answers, 2 signed photo URLs, decisionId, gstin', dv.status === 200 && dvb.sessionId === sessionId && onboardingDraftSchema.safeParse(dvb.draft).success && dvb.decisionId === dec?.id && Array.isArray(dvb.photoUrls) && dvb.photoUrls.length === 2 && dvb.answers.some((a: any) => a.redacted && !String(a.text).includes('98765')) && dvb.gstin === '29ABCDE1234F1Z5', `status ${dv.status}`)
     const page1 = visible(await (await fetch(`${BASE}/partner/onboarding`, { headers: { cookie: cookieP } })).text())
     check('wizard page renders with the prefill chips and the prefilled display name', page1.includes('From your WhatsApp interview') && page1.includes('Kill Test Tax Services'))
-    const foreign = await api(other.token, '/api/v1/profile/provider', { legalName: 'X Ltd', displayName: 'X', categorySlugs: ['web-tech'], state: 'KA', bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: 'X', onboardingSessionId: sessionId })
+    const cookieO = await cookieFor(other.email)
+    const foreign = await cookieApi(cookieO, '/api/v1/profile/provider', { legalName: 'X Co Ltd', displayName: 'X Co', categorySlugs: ['web-tech'], state: 'KA', bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: 'X Co', onboardingSessionId: sessionId })
     await json(foreign)
     check("POST /profile/provider with another user's session id → 403 (before any write)", foreign.status === 403, `status ${foreign.status}`)
     await admin.from('terms_acceptances').insert((['terms', 'privacy', 'provider_addendum'] as const).map((doc) => ({ user_id: prov.uid, doc, version: LEGAL_VERSIONS[doc], payload: { surface: 'verify' } })))
-    const submit = await api(prov.token, '/api/v1/profile/provider', { legalName: 'Kill Test Tax Services', displayName: 'Kill Test Tax Services', about: 'kill test', categorySlugs: ['web-tech'], state: 'KA', city: 'Bengaluru', languages: ['en'], bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: 'Kill Test', onboardingSessionId: sessionId })
+    const submit = await cookieApi(cookieP, '/api/v1/profile/provider', { legalName: 'Kill Test Tax Services', displayName: 'Kill Test Tax Services', about: 'kill test', categorySlugs: ['web-tech'], state: 'KA', city: 'Bengaluru', languages: ['en'], bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: 'Kill Test', onboardingSessionId: sessionId })
     const subBody = (await json(submit)) as any
     let providerId: string | null = null
     if (submit.status === 200) {
@@ -446,7 +456,7 @@ async function http() {
     check('session B: second draft', b2?.draft_count === 2 && b2?.state === 'review')
     await say(convO, { kind: 'button', payload: `revise:${b2.draft_run_id}`, body: 'x' })
     const b3 = await sessionRow(sessB)
-    check('session B: a third revise → handed_off with the cap noted, NO decision, active_session_id cleared', b3?.state === 'handed_off' && b3?.failure === 'revise_cap' && b3?.draft_decision_id === null && (await outbound(convO)).some((m) => String(m.body).includes('two drafts')) && ((await admin.from('wa_conversations').select('active_session_id').eq('id', convO).single()).data as any)?.active_session_id === null)
+    check('session B: a third revise → handed_off with the cap noted, NO decision, active_session_id cleared', b3?.state === 'handed_off' && b3?.failure === 'revise_cap' && b3?.draft_decision_id === null && (await outbound(convO)).some((m) => String(m.body).includes(`/partner/onboarding?session=${sessB}`)) && ((await admin.from('wa_conversations').select('active_session_id').eq('id', convO).single()).data as any)?.active_session_id === null)
     const dvB = await api(other.token, '/api/v1/agent/onboarding/draft', undefined, 'GET')
     const dvBb = (await json(dvB)) as any
     check('GET draft for an unconfirmed hand-off → answers only, draft null', dvB.status === 200 && dvBb.draft === null && dvBb.answers.length > 0)
@@ -463,7 +473,7 @@ async function http() {
     for (const m of [{ kind: 'button' as const, payload: 'lang:en', body: 'English' }, { kind: 'text' as const, body: 'Kill Test Budget Co' }, { kind: 'text' as const, body: '29ABCDE1234F1Z5' }, { kind: 'button' as const, payload: 'udyam:skip', body: 'Skip' }, { kind: 'button' as const, payload: 'cat:legal', body: 'Legal' }, { kind: 'button' as const, payload: 'cat:done', body: 'Done' }, { kind: 'text' as const, body: 'contracts and notices' }, { kind: 'text' as const, body: 'district court, English' }, { kind: 'text' as const, body: 'depends' }]) await say(conv3, m)
     const budgetTurn = await say(conv3, { kind: 'button', payload: 'photos:skip', body: 'Skip' })
     const c1 = await sessionRow(sess3)
-    check('budget_run_paise_by_agent.onboarding = 0 → the draft turn fails cleanly (run failed budget_run_cap, state failed, answers kept, "continue on the website" sent)', budgetTurn.results[0]?.status === 'failed' && String(budgetTurn.results[0]?.error).startsWith('budget_run_cap') && c1?.state === 'failed' && c1?.failure === 'budget_run_cap' && (c1?.answers ?? []).length >= 6 && (await outbound(conv3)).some((m) => String(m.body).includes('continue on the website')), JSON.stringify(budgetTurn.results[0]).slice(0, 160))
+    check('budget_run_paise_by_agent.onboarding = 0 → the draft turn fails cleanly (run failed budget_run_cap, state failed, answers kept, "continue on the website" sent)', budgetTurn.results[0]?.status === 'failed' && budgetTurn.results[0]?.error === 'budget_run_cap' && c1?.state === 'failed' && c1?.failure === 'budget_run_cap' && (c1?.answers ?? []).length >= 6 && (await outbound(conv3)).some((m) => String(m.body).includes('continue on the website')), JSON.stringify(budgetTurn.results[0]).slice(0, 160))
     const inv3 = ((await admin.from('ai_invocations').select('id').eq('user_id', prov3.uid).eq('task_class', 'onboarding_interview')).data ?? []).length
     check('budget breach happened BEFORE the call: no ai_invocations row for the budget session', inv3 === 0)
     const dv3 = (await json(await api(prov3.token, '/api/v1/agent/onboarding/draft', undefined, 'GET'))) as any

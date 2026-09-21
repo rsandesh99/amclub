@@ -80,8 +80,8 @@ exposed to a client role (no RLS policies except admin/ops read).
 
 ## S1.6 — the onboarding interview
 
-**Dispatcher order** (`apps/agent-runtime/src/whatsapp/inbound.ts`): keywords
-(START/STOP) → **active session** (`wa_conversations.active_session_id` routes
+**Dispatcher order** (`apps/agent-runtime/src/whatsapp/inbound.ts`): STOP
+(opt-out always wins) → **active session** (`wa_conversations.active_session_id` routes
 every other message into the interview, one `agent.onboarding` job per
 message) → **JOIN** (`ONBOARDING_KEYWORDS`: with a grant and
 `agents_enabled.onboarding` + cohort it attaches the user's web-started session

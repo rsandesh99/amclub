@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   AgentRun,
+  AgentRunError,
   buildOnboardingParts,
   getPrompt,
   onboardingDraftSchema,
@@ -386,7 +387,7 @@ function onboardingAgent(deps: OnboardingRuntimeDeps, session: SessionRow): Agen
         try {
           out = await run.callModel({ taskClass: prompt.taskClass, prompt, schema: onboardingDraftSchema, parts, temperature: 0.2, feature: 'onboarding', stub: () => stubDraftFor(s) })
         } catch (e) {
-          const failure = (e as Error).message.slice(0, 200)
+          const failure = (e instanceof AgentRunError ? e.code : (e as Error).message).slice(0, 200)
           await patchSession('drafting', { state: 'failed', failure })
           await clearActiveSession()
           const n = await send(promptFor('failed', s, { link }), 'failed', link)

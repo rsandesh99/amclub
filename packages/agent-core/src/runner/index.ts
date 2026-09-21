@@ -367,7 +367,9 @@ export async function runAgent<I, O>(
     await run.complete()
     return { runId, status: 'completed', output }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    // An AgentRunError reports its CODE (budget_run_cap, step_budget, tool_out_of_scope, …) so workers' no-retry
+    // rules match what agent_runs.error already holds; anything else reports its message.
+    const message = e instanceof AgentRunError ? e.code : e instanceof Error ? e.message : String(e)
     await run.fail(message)
     return { runId, status: 'failed', error: message }
   }

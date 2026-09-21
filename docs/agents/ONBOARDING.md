@@ -102,10 +102,13 @@ Inside the 24 h window the runtime sends text and interactive buttons
 
 ## Dispatcher order (runtime `whatsapp/inbound.ts`)
 
-keywords (START/STOP) → **active session** (`wa_conversations.active_session_id`
-routes every message into the interview) → **JOIN** (with a grant and the
-agent enabled: attach the user's web-started session or create one, enqueue
-`start`; without a grant JOIN keeps its S0.5 opt-in meaning) → holding reply.
+**STOP** (opt-out always wins) → **active session** (`wa_conversations.active_session_id`
+routes every other message into the interview — a typed "yes"/"ok"/"hi" is an
+answer, not an opt-in, while a session is active) → **START/YES/…** (opt-in) →
+**JOIN** (with a grant and the agent enabled: attach the user's web-started
+session or create one, enqueue `start`; without a grant JOIN keeps its S0.5
+opt-in meaning) → holding reply. Without an active session the S0.5 order is
+unchanged.
 
 ## Confirmation rule
 

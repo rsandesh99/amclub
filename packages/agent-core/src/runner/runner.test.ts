@@ -169,6 +169,14 @@ describe('S1.6 local confirm gate (confirm_onboarding_draft)', () => {
     await run.complete()
     expect(runs.get(id)?.status).toBe('completed')
   })
+  it('runAgent reports the AgentRunError CODE on failure (budget_run_cap), matching agent_runs.error', async () => {
+    const { ledger, runs } = makeFakeLedger()
+    const deps = { ledger, gateway: fakeGateway, makeBudget: () => budget(false), apiBaseUrl: 'http://x', makeToken: () => 't' }
+    const r = await runAgent({ name: 'onboarding', persona: 'provider' as const, run: async (run) => run.callModel({ taskClass: 'onboarding_interview', prompt: PROMPT, schema: SCHEMA, stub: () => ({ ok: true as const }) }) }, deps, { userId: 'p1', surface: 'whatsapp' }, {})
+    expect(r.status).toBe('failed')
+    if (r.status === 'failed') expect(r.error).toBe('budget_run_cap')
+    expect(runs.get(r.runId)?.status).toBe('failed')
+  })
   it('runAgent passes the agent name to makeBudget (per-agent caps)', async () => {
     const { ledger } = makeFakeLedger()
     const seen: string[] = []
