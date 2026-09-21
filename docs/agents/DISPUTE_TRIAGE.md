@@ -151,3 +151,16 @@ dispute photos; `dispute_summary` task class unused by any agent; mobile has
 no raise-dispute action at all (pre-existing) — statements only; the scope
 refusal (a delegated token without `summarize_dispute`) is proven on the route
 by the S1.4 pattern, not minted on the laptop rig.
+
+## Verified on this laptop (S1.7 gate, 2026-09-21)
+
+`agents:verify:triage` ran against a local production server on the prod
+database: flag OFF after 0037 (the statement spine is proven dark post-
+migration because the route reads `disputes.triage_id`, migration-first deploy
+rule), then flag ON with the runtime agent driven in-process under the ops
+session token, the S1.4 precedent. Three things are recorded skips, not
+passes, until the first Fly deploy exercises the real delegated path (the
+S1.6 FOLLOWUPS gate): the `AMC-Runtime` HMAC token mint, the pg-boss queue
+hop (`agent.dispute_triage`), and the runtime → web notify (`AGENT_RUNTIME_SECRET`
+absent locally, so `notified_at` stays null). The goods lifecycle is skipped
+while `MART_ENABLED` is off on prod (unit tests + golden cover it).

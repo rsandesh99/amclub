@@ -846,6 +846,16 @@ persona, queue `agent.dispute_triage`, two GET tools, one frontier call on the s
   the rig skips the goods lifecycle because `MART_ENABLED` is off on prod.
 - **Golden doc refs** use the fixtures' short ids (`doc:b2`) while the runtime cites real uuids; the eval adds the short
   form to the allow-list so the clamp is exercised on both.
+- **Laptop gate skips (same recording as S1.6):** the flag-on rig drives the runtime agent in-process under the ops
+  session token, so the `AMC-Runtime` HMAC mint, the pg-boss hop (`agent.dispute_triage`) and the runtime → web notify
+  (`AGENT_RUNTIME_SECRET` absent; `notified_at` stays null) are recorded skips until the first Fly deploy exercises the
+  real delegated path once (the S1.6 first-deploy gate). The statement spine was proven flag-off AFTER 0037 was applied
+  (the route reads `disputes.triage_id`; migration-first deploy rule).
+- **Rig residue found at this gate (rig-only fixes, in the S1.7 PR):** the Phase 7 rig's cleanup deleted orders before
+  their checkout sessions and swallowed the FK error (2 users, a provider, a category, 3 orders left on prod after green
+  runs); `verify-mart.ts` deleted its `order_documents` rows but never the objects the documents route uploaded (4 8-byte
+  goods photos under two deleted orders, from a 2026-09-19 run) — both swept, both rigs now remove what they create and
+  the triage rig recounts `order-documents` objects to zero. Every rig that uploads must recount storage, not only rows.
 
 ## Agent S1.6 — Onboarding agent (logged 2026-09-21)
 
