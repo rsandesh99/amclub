@@ -25,7 +25,8 @@
     "rfq:verify:clarify": "tsx scripts/verify-clarifications.ts",
     "agents:verify:rfq-quality": "tsx scripts/verify-rfq-quality.ts",
     "agents:verify:onboarding": "tsx scripts/verify-onboarding.ts",
-    "agents:verify:triage": "tsx scripts/verify-dispute-triage.ts"
+    "agents:verify:triage": "tsx scripts/verify-dispute-triage.ts",
+    "voice:verify:v2": "tsx scripts/verify-voice-v2.ts"
   },
   "dependencies": {
     "@amclub/agent-core": "workspace:*",

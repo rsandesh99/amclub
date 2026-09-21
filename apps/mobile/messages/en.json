@@ -487,7 +487,17 @@
     "consent_note": "By recording, you agree your voice is sent to a transcription service to fill this form. The audio is not stored after processing.",
     "err_stt": "We couldn't hear you clearly. Try again from a quieter spot, speaking close to the phone.",
     "err_busy": "Our understanding service is busy right now — please type your requirement below, or try voice again in a minute.",
-    "err_quota": "Voice input is temporarily unavailable. Please type your requirement below — everything else works normally."
+    "err_quota": "Voice input is temporarily unavailable. Please type your requirement below — everything else works normally.",
+    "clarify_title": "One quick question",
+    "clarify_audio_unavailable": "Audio is off — read the question and answer below.",
+    "clarify_answer_voice": "Answer by voice",
+    "clarify_type_instead": "Type instead",
+    "clarify_type_placeholder": "Type your answer",
+    "clarify_send": "Send answer",
+    "clarify_skip": "Skip",
+    "clarify_skip_back": "Back",
+    "clarify_answered_note": "Thanks — the form was updated with your answer.",
+    "clarify_skipped_note": "Skipped — check the form and fill anything missing."
   },
   "legal_gate": {
     "title": "Please review our updated terms",
