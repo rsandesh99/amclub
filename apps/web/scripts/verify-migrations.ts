@@ -224,6 +224,12 @@ const MANIFEST: Entry[] = [
     ],
     note: 'S1.7 party statements (spine; one per party, contact-masked, parties + admin read) and dispute_triages (agent-owned, strict card, decision written once by the resolve route); disputes.triage_id',
   },
+  {
+    file: '0038_rfq_intake.sql',
+    tables: ['rfq_intake_extractions'],
+    triggers: [['rfq_intake_extractions', 'rfq_intake_extractions_set_updated_at']],
+    note: 'S1.8 voice RFQ v2 / document intake: rfq_intake_extractions (agent-owned; clarify / document / drawing results the buyer confirms with the Create tap; rfq_id + decision_id link); ai_decisions feature CHECK gains rfq_intake',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

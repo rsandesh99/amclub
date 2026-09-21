@@ -494,6 +494,22 @@ CREATE POLICY "dispute_triages: admin read" ON dispute_triages
 
 REVOKE INSERT, UPDATE, DELETE ON dispute_triages FROM anon, authenticated;
 
+-- ─── rfq_intake_extractions (0038, S1.8) ─────────────────────────────────────
+-- Agent-owned intake results (clarify question / document facts / drawing
+-- summary) the buyer confirms with the Create tap. Own rows + admin/ops read;
+-- no client writes (the routes insert with the service role after auth).
+ALTER TABLE rfq_intake_extractions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "rfq_intake_extractions: own read" ON rfq_intake_extractions;
+CREATE POLICY "rfq_intake_extractions: own read" ON rfq_intake_extractions
+  FOR SELECT USING (deleted_at IS NULL AND user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "rfq_intake_extractions: admin read" ON rfq_intake_extractions;
+CREATE POLICY "rfq_intake_extractions: admin read" ON rfq_intake_extractions
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+REVOKE INSERT, UPDATE, DELETE ON rfq_intake_extractions FROM anon, authenticated;
+
 -- ─── onboarding_sessions / provider_capability_facts (0036, S1.6) — self + admin read; service write ─
 -- The provider reads their own interview; admin/ops read all; NO client writes
 -- (the runtime and the two web routes write with the service role).
