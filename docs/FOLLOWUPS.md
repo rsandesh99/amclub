@@ -859,6 +859,11 @@ partner-dashboard suggested listings, admin "Onboarding interview" section, cron
   prod, so `verify-onboarding.ts` drives `runOnboardingTurn` + `handleWaInbound` in-process with the provider's own
   session token in place of the delegated one; the HMAC exchange, the pg-boss queue and the webhook are S0.1/S0.5/S1.4-
   proven legs recorded as skips. `/profile/provider` needs `COLUMN_ENCRYPTION_KEY` on the local server.
+- **The real delegated path is unexercised until the first Fly deploy** (founder decision, S1.6 review): before ANY
+  onboarding cohort is enabled, the deployed runtime must run one full interview against the deployed web app once —
+  WhatsApp grant → `POST /api/v1/agent/token` (HMAC → run-bound JWT) → `POST /api/v1/rfq/voice-parse` under that
+  Bearer → `POST /api/v1/agent/runs/[id]/decision` under that Bearer → `/internal/runs/[id]/resume` — the three legs
+  the laptop rig records as skips (HMAC exchange, pg-boss queue, webhook ingestion).
 - **Wizard listing prefill URL** is `/partner/listings/new?onboarding_session=…&pkg=N` (the tree's route; the prompt said
   `/partner/packages/new`).
 - **Tamil/Telugu:** new keys only (28 each), English fallback for the rest; the interview copy itself is en/hi/te.

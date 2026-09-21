@@ -550,9 +550,15 @@ async function http() {
       if (created.convIds.length) {
         const { count } = await admin.from('wa_conversations').select('id', { count: 'exact', head: true }).in('id', created.convIds)
         if (count) residue.push(`wa_conversations=${count}`)
+        // Storage: the uploaded objects (voice note, photos) must be gone too, not only the rows that reference them.
+        for (const convId of created.convIds) {
+          const { data: objs, error } = await admin.storage.from(BUCKET).list(convId)
+          if (error) residue.push(`storage(${convId.slice(0, 8)}):${error.message}`)
+          else if ((objs ?? []).length) residue.push(`storage(${convId.slice(0, 8)})=${objs!.length}`)
+        }
       }
       if (errors.length) record('cleanup', 'FAIL', errors.join(' | '))
-      else check(`cleanup: zero residue (${created.users.length} users, ${created.convIds.length} conversations, ${created.objects.length} objects, settings restored)`, residue.length === 0, residue.join(', '))
+      else check(`cleanup: zero residue incl. storage (${created.users.length} users, ${created.convIds.length} conversations, ${created.objects.length} objects removed and recounted, settings restored)`, residue.length === 0, residue.join(', '))
     } catch (e) {
       record('cleanup', 'FAIL', (e as Error).message)
     }

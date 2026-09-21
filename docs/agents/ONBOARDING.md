@@ -43,7 +43,14 @@ turn a child (`parent_run_id`); only the draft turn spends budget.
    (₹15 per run; absent = the global `budget_run_paise`); optionally
    `onboarding_session_ttl_hours` (default 72, sliding on each answer).
 4. The four templates below approved in en/hi/te.
-5. **Live eval gate:** `pnpm --filter @amclub/agent-core eval --set onboarding_interview`
+5. **Delegated-path gate (once, on the first deploy):** the laptop rig drives the
+   runtime turn function in-process with the provider's own session token, so three
+   legs are recorded as **skips** — the HMAC token exchange (`AMC-Runtime` →
+   run-bound JWT), the `agent.onboarding` pg-boss queue, and the WhatsApp webhook
+   ingestion. Before any cohort, run one real interview on the deployed runtime
+   against the deployed web app: grant → token mint → voice-parse under the Bearer →
+   decision route under the Bearer → runtime resume (FOLLOWUPS S1.6).
+6. **Live eval gate:** `pnpm --filter @amclub/agent-core eval --set onboarding_interview`
    with an LLM key must clear **≥ 85 %** with **5/5 injection** cases passing.
    As of the S1.6 PR it has run in **stub mode only** (24/24, 5/5); the live
    score is **not yet recorded** — do not enable a cohort until it is.
