@@ -16,6 +16,12 @@ export * from './rfq'
 export * from './clarifications'
 export * from './rfq-quality'
 
+// S1.8 — voice RFQ v2 / document intake: contracts, the clarify rule, deterministic STEP / DXF summaries
+export * from './intake'
+export * from './intake-rules'
+export * from './drawings/step'
+export * from './drawings/dxf'
+
 // Voice RFQ specialization vocabulary (Phase 8b)
 export * from './specializations'
 

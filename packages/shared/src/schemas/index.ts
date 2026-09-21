@@ -163,12 +163,51 @@ export const voiceParseSchema = z.object({
 })
 export type VoiceParse = z.infer<typeof voiceParseSchema>
 
+// ── Voice RFQ v2 (S1.8) — one clarifying question, one round ─────────────────
+
+/** The ONE question the buyer hears after an uncertain / incomplete parse. `gap` echoes the rule's input. */
+export const clarifyQuestionSchema = z
+  .object({
+    question: z.string().min(5).max(200),
+    /** Template field name, or 'category' | 'state' | 'scope'. */
+    gap: z.string().max(60),
+    locale: z.string().max(16),
+  })
+  .strict()
+export type ClarifyQuestion = z.infer<typeof clarifyQuestionSchema>
+
+/** Round two: what the client sends back with the answer (multipart field `prior`, JSON). */
+export const voiceParsePriorSchema = z.object({
+  transcript_english: z.string().max(4000),
+  parse: voiceParseSchema,
+  question: clarifyQuestionSchema,
+  answer_text: z.string().max(1000).optional(),
+})
+export type VoiceParsePrior = z.infer<typeof voiceParsePriorSchema>
+
+/** Persisted inside rfqs.voice_meta when a clarify round happened (or was skipped). */
+export const voiceMetaClarifySchema = z.object({
+  question: z.string().max(200),
+  gap: z.string().max(60),
+  answer_transcript: z.string().max(2000),
+  answered_by: z.enum(['voice', 'text', 'skipped']),
+})
+export type VoiceMetaClarify = z.infer<typeof voiceMetaClarifySchema>
+
 /** /api/v1/rfq/voice-parse response body. */
 export const voiceParseResponseSchema = z.object({
   transcript_english: z.string(),
   parse: voiceParseSchema,
   /** True when a vendor ran in stub mode (no API key) — clients show a hint. */
   stub: z.boolean(),
+  /** S1.8 — present ONLY on round one, flag on + cohort, when the rule found a gap. Never with `prior`. */
+  clarify: clarifyQuestionSchema
+    .extend({
+      /** data:audio/… when clarify_tts_enabled and a TTS key exist (≤ 400 KB), else null. */
+      audio_data_url: z.string().max(400_000).nullable(),
+      extraction_id: uuidSchema,
+    })
+    .optional(),
 })
 export type VoiceParseResponse = z.infer<typeof voiceParseResponseSchema>
 
@@ -183,6 +222,8 @@ export const voiceMetaSchema = z.object({
     stt: z.string().max(40),
     parser: z.string().max(80),
   }),
+  /** S1.8 — the clarify round, when one happened (or was skipped). */
+  clarify: voiceMetaClarifySchema.optional(),
 })
 export type VoiceMeta = z.infer<typeof voiceMetaSchema>
 
@@ -202,6 +243,8 @@ export const rfqSchema = z
     needed_by: z.string().date().optional(),
     /** Present only when the RFQ began as a voice recording (Phase 8b). */
     voice_meta: voiceMetaSchema.optional(),
+    /** S1.8 — rfq_intake_extractions rows (clarify / document / drawing) this RFQ was prefilled from; the Create tap confirms them. */
+    intake_extraction_ids: z.array(uuidSchema).max(4).default([]),
     // AMC Mart M2 — goods RFQ: a Mart category + a goods spec instead of a services template.
     mart_category_slug: z.string().min(1).max(60).optional(),
     goods_spec: goodsRfqSpecSchema.optional(),

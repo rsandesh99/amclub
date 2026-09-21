@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval": "tsx scripts/eval.ts",
-    "gen:photos": "tsx scripts/gen-photo-fixtures.ts"
+    "gen:photos": "tsx scripts/gen-photo-fixtures.ts",
+    "gen:documents": "tsx scripts/gen-document-fixtures.ts"
   },
   "dependencies": {
     "@amclub/shared": "workspace:*",
