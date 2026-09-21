@@ -62,7 +62,8 @@ async function loadRelease(): Promise<null | ((admin: SupabaseClient, rfqId: str
   try {
     const m = Module as unknown as { _resolveFilename: (request: string, ...rest: unknown[]) => string }
     const orig = m._resolveFilename
-    const empty = path.join(path.dirname(require.resolve('server-only/package.json')), 'empty.js')
+    // `server-only` exports only '.', so resolve the throwing index.js and take its sibling empty.js.
+    const empty = path.join(path.dirname(require.resolve('server-only')), 'empty.js')
     m._resolveFilename = function (request: string, ...rest: unknown[]) {
       if (request === 'server-only') return empty
       return orig.call(this, request, ...rest)
@@ -105,6 +106,14 @@ async function main() {
   }
   const api = (base: string, token: string, p: string, body?: unknown, method = 'POST') =>
     fetch(`${base}${p}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, ...(body ? { body: JSON.stringify(body) } : {}) })
+  // Page renders (cookie session) — next-intl inlines the message bundle in a <script>, so only visible markup counts.
+  const visible = (html: string) => html.replace(/<script[\s\S]*?<\/script>/g, '')
+  const cookieFor = async (email: string) => {
+    const jar: Record<string, string> = {}
+    const ssr = createServerClient(SUPA_URL, ANON, { cookies: { getAll() { return Object.entries(jar).map(([name, value]) => ({ name, value })) }, setAll(l) { for (const { name, value } of l) jar[name] = value } } })
+    await ssr.auth.signInWithPassword({ email, password: 'Test1234!' })
+    return Object.entries(jar).map(([n, v]) => `${n}=${v}`).join('; ')
+  }
   const rfqRow = (id: string) => admin.from('rfqs').select('id, status, fanout_at, quality_report, quality_checked_at, quality_decision, quality_decision_at, quality_decision_id, details, created_at').eq('id', id).single()
   const matches = async (id: string) => (await admin.from('rfq_matches').select('provider_id', { count: 'exact', head: true }).eq('rfq_id', id)).count ?? 0
   const invocations = async (uid: string) => (await admin.from('ai_invocations').select('id, run_id, task_class, status').eq('user_id', uid).eq('feature', 'rfq_quality')).data ?? []
@@ -156,6 +165,14 @@ async function main() {
       const { data: row } = await rfqRow(d['rfqId'] as string)
       check('single phase: fanout_at set, matches written, quality_report null, decision null', !!row?.fanout_at && (await matches(row!.id)) === 2 && row?.quality_report === null && row?.quality_decision === null, JSON.stringify({ fanout_at: row?.fanout_at, matches: await matches(row!.id) }))
       check('single phase: no ai_invocations / ai_decisions rows for the buyer', (await invocations(buyer.uid)).length === 0 && (await decisions(buyer.uid)).length === 0)
+      // Render: the create page and the detail page of a single-phase RFQ (against this DB, cookie session).
+      const cookie = await cookieFor(buyer.email)
+      const createPage = await fetch(`${BASE}/app/rfq/new`, { headers: { cookie } })
+      const createHtml = visible(await createPage.text())
+      check('buyer create page renders (200, "Post a requirement")', createPage.status === 200 && createHtml.includes('Post a requirement'), `status ${createPage.status}`)
+      const detailPage = await fetch(`${BASE}/app/rfq/${d['rfqId']}`, { headers: { cookie } })
+      const detailHtml = visible(await detailPage.text())
+      check('buyer detail page renders a single-phase RFQ (200, title, no quality card)', detailPage.status === 200 && detailHtml.includes(`${tag} single-phase incomplete`) && !detailHtml.includes('Before we send this'), `status ${detailPage.status}`)
     }
 
     if (!flagOn) {
@@ -178,7 +195,8 @@ async function main() {
       }
 
       // ── Incomplete fixture → deferred ──
-      const { status: s2, d: d2 } = await create(BASE, buyer.token, { ...INCOMPLETE, title: 'GST help' })
+      // ≥ 10 chars for rfqSchema, still vague after stop-words ("help", "needed" are stop-words → one content word).
+      const { status: s2, d: d2 } = await create(BASE, buyer.token, { ...INCOMPLETE, title: 'GST help needed' })
       const rfqD = d2['rfqId'] as string
       const report = d2['quality'] as any
       const missing = (report?.missing ?? []) as { field: string; source: string; question: string }[]
@@ -194,12 +212,9 @@ async function main() {
 
       // ── Render: the buyer page shows the questions card while deferred ──
       {
-        const jar: Record<string, string> = {}
-        const ssr = createServerClient(SUPA_URL, ANON, { cookies: { getAll() { return Object.entries(jar).map(([name, value]) => ({ name, value })) }, setAll(l) { for (const { name, value } of l) jar[name] = value } } })
-        await ssr.auth.signInWithPassword({ email: buyer.email, password: 'Test1234!' })
-        const cookie = Object.entries(jar).map(([n, v]) => `${n}=${v}`).join('; ')
+        const cookie = await cookieFor(buyer.email)
         const res = await fetch(`${BASE}/app/rfq/${rfqD}`, { headers: { cookie } })
-        const html = (await res.text()).replace(/<script[\s\S]*?<\/script>/g, '')
+        const html = visible(await res.text())
         check('buyer page renders the questions card + "Questions before sending" chip while deferred', res.status === 200 && html.includes('Before we send this') && html.includes('Questions before sending') && html.includes('Send as is'), `status ${res.status} card=${html.includes('Before we send this')} chip=${html.includes('Questions before sending')}`)
       }
 
