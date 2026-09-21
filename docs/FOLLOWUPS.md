@@ -856,8 +856,21 @@ persona, queue `agent.dispute_triage`, two GET tools, one frontier call on the s
   runs); `verify-mart.ts` deleted its `order_documents` rows but never the objects the documents route uploaded (4 8-byte
   goods photos under two deleted orders, from a 2026-09-19 run) — both swept, both rigs now remove what they create and
   the triage rig recounts `order-documents` objects to zero. Every rig that uploads must recount storage, not only rows.
+- **Unconsumed fetch bodies (sweep):** `fetch(...).then((r) => (r.ok ? r.json() : null))` never reads a non-2xx body; Chromium
+  keeps such a request "in flight" until GC, so a page never reaches `networkidle` (the CI axe scan waits for it). Fixed
+  in the S1.6 wizard fallback (this PR); the same idiom remains on authenticated pages the scan never visits —
+  `AgentsConsoleClient.tsx` (spend / dossier / triage stats), `AgentRunsClient.tsx`, `mart/PoolJoin.tsx` — drain them in a
+  cleanup PR (`const j = await r.json().catch(() => null); return r.ok ? j : null`).
 
 ## Agent S1.6 — Onboarding agent (logged 2026-09-21)
+
+**Merged with the CI accessibility job RED (found at the S1.7 gate, 2026-09-21).** PR #9 was merged on the
+lint/typecheck/test/build job + Vercel; the axe job (`Accessibility (axe — public surfaces)`) had failed with a scan
+error, zero violations: `/partner/signup` never reached `networkidle` because the new wizard fallback fetched
+`/api/v1/profile/me` as an anonymous visitor and never read the 401 body (`r.ok ? r.json() : null`) — Chromium keeps an
+unread body "in flight", the 45 s navigation timed out, master went red on that job at `aecdcb2`. Fixed in the S1.7 PR
+(both fallback fetches drain their bodies). Lesson: `gh pr checks N --watch` must be read to the end — every job, not
+the first green ones — and a scan-error is a failure even with zero violations.
 
 **Shipped (dark):** scripted WhatsApp provider interview in the runtime (queue `agent.onboarding`), ONE model call
 per draft (max two per session; `onboarding_interview@v1` + 24-case golden set + `eval --set onboarding_interview`),
