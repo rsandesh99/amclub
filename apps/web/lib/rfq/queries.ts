@@ -1,3 +1,4 @@
+import { signRfqAttachments } from '@/lib/rfq/attachments'
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
@@ -240,7 +241,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
 
   return {
     quality,
-    id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: r.attachments ?? [],
+    id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: await signRfqAttachments(admin, (r.attachments ?? []) as { url: string; name: string }[]),
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
     categoryId: r.category_id ?? null, categorySlug: r.category?.slug ?? null,
     kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
@@ -363,7 +364,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
   const notExpired = new Date(r.expires_at).getTime() > Date.now()
 
   return {
-    id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: r.attachments ?? [],
+    id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: await signRfqAttachments(admin, (r.attachments ?? []) as { url: string; name: string }[]),
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
     categorySlug: r.category?.slug ?? null,
     kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
