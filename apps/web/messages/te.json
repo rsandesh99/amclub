@@ -837,7 +837,8 @@
     "intake_err_rate_limited": "ఒక నిమిషంలో చాలా పత్రాలు — కాస్త ఆగండి.",
     "intake_err_failed": "ఇప్పుడు పత్రం చదవలేకపోయాం. జతచేసి వివరాలు టైప్ చేయవచ్చు.",
     "intake_stub_note": "మోడల్ కీ లేకుండా పత్రం చదవడం నడుస్తోంది — వాస్తవాలు పరిమితం.",
-    "intake_attached_only": "జతచేశాం (చదవలేదు)"
+    "intake_attached_only": "జతచేశాం (చదవలేదు)",
+    "attachments_title": "జతపరచినవి"
   },
   "provider_signup": {
     "wa_card_title": "WhatsAppలో పూర్తి చేయండి",

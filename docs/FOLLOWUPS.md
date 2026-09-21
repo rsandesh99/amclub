@@ -819,7 +819,46 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
-## Agent S1.7 — Dispute-Triage agent (logged 2026-09-21)
+## Agent S1.8 — Voice RFQ v2: one clarifying question + document / drawing intake (logged 2026-09-21)
+
+**Shipped (dark):** the Phase 8b parser moved into the registry (`rfq_parse@v1` = the Phase 8b text; `@v2` for
+the prior round) and onto `boundedChatJson`; ONE clarifying question after an uncertain / incomplete voice parse
+(`agents_enabled.rfq_clarify`; one round enforced server-side; optional Sarvam TTS behind `clarify_tts_enabled`);
+document intake `POST /api/v1/rfq/document-extract` (`agents_enabled.document_intake`; images / text PDFs →
+`document_extract@v1`; STEP / DXF parsed deterministically in shared `drawings/`); spine `rfq-attachments` bucket +
+`POST /api/v1/rfq/attachments`; `rfq_intake_extractions` linked on Create with ONE `ai_decisions` row (feature
+`rfq_intake`); migration **0038**; runbook `docs/agents/VOICE_RFQ_V2.md`; rig `verify-voice-v2.ts`.
+
+- **Closed:** the S1.1 item "the voice parser still bypasses agent-core" — the parser is a registry prompt through the
+  bounded helper; the route's own parse-step `ai_invocations` rows are gone (the helper writes one per call).
+- **Prompt file vs runtime lists:** `rfq_parse@v1` is byte-equal to the Phase 8b constant for the lead sentence and
+  the rules block (asserted against `phase8b.fixture.ts`); the three interpolated lists (categories,
+  specializations, states) cannot live in a static registry file and travel in the trusted block instead
+  (`buildRfqParseParts`, asserted to enumerate every slug and state code). The message layout differs (lists in the
+  user turn), the vocabulary and rules do not; `eval:golden` is the arbiter once a key exists.
+- **`VOICE_PARSE_MODEL` kept:** the gateway had only per-tier env overrides, so a small optional per-call `model`
+  was added to `ChatJsonParams` / the bounded helpers; the parser passes the env value through it. The CI golden
+  workflow keeps working unchanged. `vendor.parser` in `voice_meta` now reads `gateway:<model>` (was
+  `openrouter:<model>`) — telemetry only.
+- **pdf-parse 1.1.1, not 2.x:** the prompt named `pdf-parse`; 2.x pulls `@napi-rs/canvas` (a native rasteriser),
+  which the posture forbids on Vercel; 1.1.1 is pure JS (bundled pdf.js) and is kept external in `next.config`.
+  Scanned PDFs → 422 `pdf_no_text`; rasterise in the runtime later.
+- **Detail pages did not render `attachments[]`** (the prompt's ground truth assumed they did): the buyer and
+  provider RFQ pages and the mobile detail screen now list them as links (signed URLs from the loaders).
+- **DXF binary variant unsupported** (`AutoCAD Binary DXF` refused with `drawing_unreadable`); STEP bounding box
+  spans every `CARTESIAN_POINT` (axis placements included) — pinned as the parser returns it (cad1.step:
+  60.5 × 20.1 × 506.3 mm); the plan's 1 solid / 51 faces / 17 cylindrical surfaces agree.
+- **Mobile file picking:** `apps/mobile/package.json` has neither `expo-image-picker` nor `expo-document-picker` →
+  document intake is web-only this stage; the clarify bubble ships on mobile.
+- **Laptop gate skips:** `eval:golden` SKIPPED (no LLM key; exit 0), real TTS audio (needs `SARVAM_API_KEY`; the stub
+  logs a row and returns null), the 429 (rate limiting is disabled without Upstash), goods mode (`MART_ENABLED` off
+  on prod), the bucket-dependent checks until the gate creates `rfq-attachments` (the route 500s "Bucket not found"
+  before that — the rig records them as skips).
+- **Fact chips travel as `details.document_facts`** ("k: v · k: v"): the RFQ schema has no structured facts field; a
+  first-class column is a later stage if providers want them structured.
+- **Unconsumed fetch bodies sweep** (from S1.7): the new client code drains every non-2xx body.
+
+
 
 **Shipped (dark):** party statements `dispute_statements` (spine, not flag-gated; one per party, contact-masked, ≤ 5
 order documents, editable until a triage exists; web card + mobile block + admin console); Dispute-Triage agent (ops

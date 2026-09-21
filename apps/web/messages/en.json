@@ -983,7 +983,8 @@
     "intake_err_rate_limited": "Too many documents in a minute — please wait a moment.",
     "intake_err_failed": "We could not read that document right now. You can still attach it and type the details.",
     "intake_stub_note": "Document reading is running without a model key — facts are limited.",
-    "intake_attached_only": "Attached (not read)"
+    "intake_attached_only": "Attached (not read)",
+    "attachments_title": "Attachments"
   },
   "coming_soon": {
     "badge": "Coming soon",
