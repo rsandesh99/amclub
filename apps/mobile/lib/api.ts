@@ -335,6 +335,26 @@ export async function reviseQuote(
   return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
 }
 
+/** S1.5 — answer the quality questions on a DEFERRED RFQ (releases fan-out). */
+export async function answerRfqQuality(rfqId: string, answers: Record<string, string>) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quality/answer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ answers }),
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
+/** S1.5 — send a DEFERRED RFQ as is (releases fan-out without answers). */
+export async function sendRfqAsIs(rfqId: string) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/quality/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: '{}',
+  })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
 export async function fetchMatchedRfqs() {
   const res = await fetch(`${API_URL}/api/v1/rfq/matched`, { headers: await authHeaders() })
   if (!res.ok) return []

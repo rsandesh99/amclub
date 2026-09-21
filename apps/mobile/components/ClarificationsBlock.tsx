@@ -3,7 +3,6 @@ import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'reac
 import { useI18n } from '@/lib/i18n'
 import { answerClarification, askClarification } from '@/lib/api'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 const MAX_OPEN = 3
 const Q_MIN = 10

@@ -12,6 +12,8 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { VoiceRfqRecorder, type VoiceVendorTag } from '@/components/voice/VoiceRfqRecorder'
+import { QualityQuestionsCard } from '@/components/rfq/QualityQuestionsCard'
+import type { RfqQualityReport } from '@amclub/shared'
 import { INDIAN_STATES } from '@/lib/constants/india'
 
 export interface RfqCategoryOption {
@@ -52,6 +54,8 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
   const posthog = useAnalytics()
 
   const [s, setS] = useState<DraftState>({ ...EMPTY })
+  // S1.5 — set when the create reply is DEFERRED (questions before sending); replaces the form.
+  const [quality, setQuality] = useState<{ rfqId: string; report: RfqQualityReport; deadlineAt: string | null; modelUsed: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [restored, setRestored] = useState(false)
@@ -191,6 +195,11 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
         })
       }
       localStorage.removeItem(DRAFT_KEY)
+      // S1.5 — DEFERRED: the RFQ exists but is not sent yet; show the questions instead of redirecting.
+      if (d.deferred && d.quality && Array.isArray(d.quality.missing) && d.quality.missing.length > 0) {
+        setQuality({ rfqId: d.rfqId, report: d.quality as RfqQualityReport, deadlineAt: d.deadline_at ?? null, modelUsed: d.quality_meta?.model_used !== false })
+        return
+      }
       router.push(`/app/rfq/${d.rfqId}`)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('err_create'))
@@ -203,6 +212,16 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
   const voiceCategoryName = voice?.parse.category_slug
     ? categories.find((c) => c.slug === voice.parse.category_slug)?.name
     : null
+
+  // S1.5 — the request exists but is held for the buyer's answers: the card replaces the form.
+  if (quality) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-foreground-secondary">{s.title.trim()}</p>
+        <QualityQuestionsCard rfqId={quality.rfqId} report={quality.report} deadlineAt={quality.deadlineAt} modelUsed={quality.modelUsed} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

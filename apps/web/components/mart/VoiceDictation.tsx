@@ -15,7 +15,7 @@ import { VoiceRfqRecorder } from '@/components/voice/VoiceRfqRecorder'
  * the quote composer with `surface="quote_composer"` (analytics only; the STT
  * path is unchanged — never a second one).
  */
-export function VoiceDictation({ onText, surface = 'mart_catalog' }: { onText: (text: string) => void; surface?: 'mart_catalog' | 'quote_composer' }) {
+export function VoiceDictation({ onText, surface = 'mart_catalog' }: { onText: (text: string) => void; surface?: 'mart_catalog' | 'quote_composer' | 'rfq_quality' }) {
   const t = useTranslations('mart')
   const locale = useLocale()
   const posthog = useAnalytics()

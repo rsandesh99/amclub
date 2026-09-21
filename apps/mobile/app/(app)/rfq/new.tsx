@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { createRfq, fetchMartCategories, fetchMartDeliveryDefaults, type MartCategory, type GoodsDelivery } from '@/lib/api'
 import { track } from '@/lib/analytics'
 import { VoiceRfqRecorder } from '@/components/VoiceRfqRecorder'
+import { QualityQuestionsBlock } from '@/components/QualityQuestionsBlock'
 import { colors } from '@/lib/theme'
 import { rfqFieldLabel, pickLocale, PRODUCT_UNITS } from '@amclub/shared'
 
@@ -23,6 +24,8 @@ export default function NewRfqScreen() {
   const [error, setError] = useState('')
   // Phase 8b — voice_meta carried to the normal RFQ submit (never auto-sent).
   const [voice, setVoice] = useState<any>(null)
+  // S1.5 — set when the create reply is DEFERRED (questions before sending); replaces the form.
+  const [quality, setQuality] = useState<{ rfqId: string; report: any; deadlineAt: string | null; modelUsed: boolean } | null>(null)
   // AMC Mart M2 — goods mode exists only when /api/v1/mart/categories answers (flag on).
   const [martCats, setMartCats] = useState<MartCategory[]>([])
   const [mode, setMode] = useState<'service' | 'goods'>('service')
@@ -145,6 +148,11 @@ export default function NewRfqScreen() {
         locale,
       })
     }
+    // S1.5 — DEFERRED: the RFQ exists but is held for answers; show the questions instead of navigating.
+    if (res.data?.deferred && Array.isArray(res.data?.quality?.missing) && res.data.quality.missing.length > 0) {
+      setQuality({ rfqId: res.data.rfqId, report: res.data.quality, deadlineAt: res.data.deadline_at ?? null, modelUsed: res.data.quality_meta?.model_used !== false })
+      return
+    }
     router.replace(`/rfq/${res.data.rfqId}` as never)
   }
 
@@ -154,6 +162,21 @@ export default function NewRfqScreen() {
         return c ? pickLocale(c.name_i18n, locale) : voice.parse.category_slug
       })()
     : null
+
+  // S1.5 — the request exists but is held for the buyer's answers: the card replaces the form.
+  if (quality) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+        <View className="border-b border-border bg-surface px-4 py-3">
+          <Text className="text-lg font-bold text-foreground">{t('rfq.quality_title')}</Text>
+          <Text className="text-xs text-foreground-secondary" numberOfLines={1}>{title.trim()}</Text>
+        </View>
+        <ScrollView contentContainerClassName="px-4 py-4 gap-4">
+          <QualityQuestionsBlock rfqId={quality.rfqId} report={quality.report} deadlineAt={quality.deadlineAt} modelUsed={quality.modelUsed} onSent={(id) => router.replace(`/rfq/${id}` as never)} />
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>

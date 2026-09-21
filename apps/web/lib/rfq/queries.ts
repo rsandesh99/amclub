@@ -1,9 +1,10 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
-import { effectiveCostAfterItcPaise, goodsQuoteMoney, resolveDeclineLocale, type ClarificationView } from '@amclub/shared'
+import { effectiveCostAfterItcPaise, goodsQuoteMoney, resolveDeclineLocale, rfqQualityDeadline, rfqQualityReportSchema, type ClarificationView, type RfqQualityReport } from '@amclub/shared'
 import { RFQ_GOODS_LIST_COLS, QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
 import { countOpenQuestions, listClarifications, rfqsWithMyOpenQuestion } from '@/lib/rfq/clarifications'
+import { getRfqQualityHoldMinutes } from '@/lib/agent/rfq-quality'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -21,6 +22,10 @@ export interface RfqListItem {
   expiresAt: string
   /** S1.3 — unanswered provider questions (list badge "N questions waiting"); derived, never a status. */
   openQuestions: number
+  /** S1.5 — open + fanout_at NULL: the buyer still has quality questions to answer (derived, never a status). */
+  deferred: boolean
+  /** S1.5 — how many questions the report asked (for the list badge). */
+  qualityMissing: number
 }
 
 /** Phase 4 — optional commercial terms; null = "not stated" (UI shows a hint, never a blank). */
@@ -168,6 +173,16 @@ export interface RfqDetailForBuyer {
   quotes: QuoteForBuyer[]
   /** S1.3 — the clarification thread (unanswered first); the buyer sees who asked. */
   clarifications: ClarificationView[]
+  /** S1.5 — deferred = open + fanout_at NULL (derived); the report the buyer saw; when the cron guard releases. */
+  quality: RfqQualityState
+}
+
+export interface RfqQualityState {
+  deferred: boolean
+  report: RfqQualityReport | null
+  deadlineAt: string | null
+  decision: string | null
+  checkedAt: string | null
 }
 
 /** Buyer's own RFQs (newest first). */
@@ -177,7 +192,7 @@ export async function listMyRfqs(userId: string): Promise<RfqListItem[]> {
   if (!actor.msmeId) return []
   const { data } = await admin
     .from('rfqs')
-    .select('id, title, status, quote_count, max_quotes, created_at, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug)')
+    .select('id, title, status, quote_count, max_quotes, created_at, expires_at, fanout_at, quality_report' + RFQ_GOODS_LIST_COLS + ', category:categories(slug)')
     .eq('msme_id', actor.msmeId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -189,6 +204,9 @@ export async function listMyRfqs(userId: string): Promise<RfqListItem[]> {
     kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null,
     categorySlug: r.category?.slug ?? null, createdAt: r.created_at, expiresAt: r.expires_at,
     openQuestions: open.get(r.id) ?? 0,
+    // S1.5 — derived: still held for the buyer's answers (fanout_at NULL), never a status.
+    deferred: r.status === 'open' && r.fanout_at == null,
+    qualityMissing: Array.isArray(r.quality_report?.missing) ? r.quality_report.missing.length : 0,
   }))
 }
 
@@ -209,7 +227,19 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
 
   const [quotes, clarifications] = await Promise.all([loadBuyerQuotes(admin, rfqId), listClarifications(admin, rfqId, { role: 'buyer' })])
 
+  // S1.5 — derived deferred state + the report; the deadline only matters while deferred.
+  const deferred = r.status === 'open' && r.fanout_at == null
+  const parsedReport = rfqQualityReportSchema.safeParse(r.quality_report)
+  const quality: RfqQualityState = {
+    deferred,
+    report: parsedReport.success ? parsedReport.data : null,
+    deadlineAt: deferred ? rfqQualityDeadline(String(r.created_at), await getRfqQualityHoldMinutes(admin)) : null,
+    decision: r.quality_decision ?? null,
+    checkedAt: r.quality_checked_at ?? null,
+  }
+
   return {
+    quality,
     id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: r.attachments ?? [],
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
     categoryId: r.category_id ?? null, categorySlug: r.category?.slug ?? null,

@@ -208,7 +208,8 @@ async function main() {
   } finally {
   // cleanup — ALWAYS runs (even on a thrown assertion) so no residue is left.
   console.log('\n🧹 cleanup…')
-  const t = (p: PromiseLike<unknown>) => Promise.resolve(p).catch(() => {})
+  // PostgREST resolves with { error } and never rejects — surface both, or a blocked FK delete passes in silence.
+  const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }
   for (const mid of created.msmeIds) {
     // checkout_sessions.order_id references orders (no cascade) — drop the
     // sessions FIRST or every order delete below fails silently and the whole
@@ -217,7 +218,6 @@ async function main() {
     const { data: orders } = await admin.from('orders').select('id').eq('msme_id', mid)
     for (const o of orders ?? []) {
       await t(admin.from('payouts').delete().eq('order_id', o.id))
-      await t(admin.from('refunds').delete().eq('order_id', o.id))
       await t(admin.from('payments').delete().eq('order_id', o.id))
       await t(admin.from('invoices').delete().eq('order_id', o.id))
       await t(admin.from('reviews').delete().eq('order_id', o.id))
@@ -227,6 +227,14 @@ async function main() {
     }
     await t(admin.from('checkout_sessions').delete().eq('msme_id', mid))
     await t(admin.from('conversations').delete().eq('msme_id', mid)) // cascades messages
+  }
+  // S1.1/S1.5: provider_price_book.source_quote_id → quotes has no cascade — with AGENT_ENABLED every
+  // submitted quote wrote a row, so the book must go before the RFQ cascade (2026-09-21 residue).
+  if (created.rfqIds.length) {
+    const { data: qs } = await admin.from('quotes').select('id').in('rfq_id', created.rfqIds)
+    const qids = (qs ?? []).map((q) => q.id as string)
+    if (qids.length) await t(admin.from('provider_price_book').delete().in('source_quote_id', qids))
+    await t(admin.from('quote_extractions').delete().in('rfq_id', created.rfqIds))
   }
   for (const id of created.rfqIds) await t(admin.from('rfqs').delete().eq('id', id)) // cascades quotes + rfq_matches + conversations? no — conversations separate
   // conversations/messages reference quote via context_id (no FK) — clean by msme.

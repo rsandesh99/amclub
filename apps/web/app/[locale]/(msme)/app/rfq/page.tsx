@@ -45,6 +45,8 @@ export default async function MyRfqsPage() {
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   {r.kind === 'goods' && <Badge variant="default">{t('goods_badge')}</Badge>}
+                  {/* S1.5 — derived badge: held for the buyer's quality answers (fanout_at NULL; never a status). */}
+                  {r.deferred && <Badge variant="warning">{t('quality_badge_deferred', { n: r.qualityMissing || 1 })}</Badge>}
                   {/* S1.3 — derived badge: unanswered provider questions (never a status). */}
                   {r.openQuestions > 0 && (r.status === 'open' || r.status === 'quoted') && <Badge variant="warning">{t('clarify_waiting_badge', { n: r.openQuestions })}</Badge>}
                   <Badge variant={VARIANT[r.status] ?? 'default'}>{t(`status_${r.status}` as 'status_open')}</Badge>

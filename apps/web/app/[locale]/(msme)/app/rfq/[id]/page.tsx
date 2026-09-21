@@ -13,6 +13,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { computeCompare, getComparePointers, isComparePointersEnabledFor, toPointerLocale } from '@/lib/rfq/compare'
 import { isInClarification, rfqIsActive } from '@amclub/shared'
 import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
+import { QualityQuestionsCard, QualitySummary } from '@/components/rfq/QualityQuestionsCard'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
@@ -41,6 +42,8 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
   // S1.3 — derived, never a status: active RFQ with an unanswered provider question.
   const active = rfqIsActive(rfq.status) && new Date(rfq.expiresAt).getTime() > Date.now()
   const inClarification = isInClarification(rfq.status, rfq.clarifications) && active
+  // S1.5 — how many quality questions the buyer answered (their answers live in details under the field key).
+  const answeredCount = (rfq.quality.report?.missing ?? []).filter((m) => { const v = rfq.details[m.field]; return typeof v === 'string' && v.trim().length > 0 }).length
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
@@ -51,6 +54,8 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
             {rfq.kind === 'goods' && <Badge variant="info">{t('goods_badge')}</Badge>}
             {/* S1.3 — derived "in clarification": a chip beside the status, never a status text change. */}
             {inClarification && <Badge variant="warning">{t('clarify_awaiting_chip')}</Badge>}
+            {/* S1.5 — derived "deferred": open + fanout_at NULL; a chip, never a status text change. */}
+            {rfq.quality.deferred && <Badge variant="warning">{t('quality_chip_deferred')}</Badge>}
             <Badge variant={VARIANT[rfq.status] ?? 'default'}>{t(`status_${rfq.status}` as 'status_open')}</Badge>
           </div>
         </div>
@@ -90,10 +95,20 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
         <GoodsSpecCard spec={rfq.goodsSpec as unknown as GoodsSpecView} categoryName={goodsCat ? pickLocale(goodsCat.name_i18n, locale) : null} showPhone />
       )}
 
-      {/* S1.3 — questions from providers, above the compare table; answers are visible to every matched provider. */}
-      <ClarificationsCard rfqId={rfq.id} role="buyer" initial={rfq.clarifications} canWrite={active} closed={!active} />
+      {/* S1.5 — held for the buyer's answers: the questions card instead of the compare table (nobody is matched yet). */}
+      {rfq.quality.deferred && rfq.quality.report ? (
+        <QualityQuestionsCard rfqId={rfq.id} report={rfq.quality.report} deadlineAt={rfq.quality.deadlineAt} />
+      ) : (
+        <>
+          {/* After release the report stays visible, collapsed, for the buyer only. */}
+          {rfq.quality.decision && <QualitySummary report={rfq.quality.report} decision={rfq.quality.decision} answeredCount={answeredCount} />}
 
-      <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} />
+          {/* S1.3 — questions from providers, above the compare table; answers are visible to every matched provider. */}
+          <ClarificationsCard rfqId={rfq.id} role="buyer" initial={rfq.clarifications} canWrite={active} closed={!active} />
+
+          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} />
+        </>
+      )}
     </div>
   )
 }
