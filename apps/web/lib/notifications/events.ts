@@ -254,6 +254,60 @@ export async function notifyReviewReply(admin: Admin, review: any): Promise<void
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
+ * S1.7 — a party stated their side on an open dispute: the counter-party is
+ * told (in-app + email) and the ops user in-app when set. Never the body.
+ */
+export async function notifyDisputeStatement(
+  admin: Admin,
+  d: { order: { id: string; order_number: string; msme_id: string; provider_id: string }; disputeId: string; role: 'buyer' | 'provider'; edited: boolean },
+): Promise<void> {
+  const { msmeUserId, providerUserId } = await parties(admin, d.order)
+  const counterparty = d.role === 'buyer' ? providerUserId : msmeUserId
+  const r = ref(d.order)
+  const who = d.role === 'buyer' ? { en: 'The buyer', hi: 'खरीदार' } : { en: 'The provider', hi: 'प्रदाता' }
+  if (counterparty) {
+    await createNotification(admin, {
+      userId: counterparty,
+      kind: 'dispute_statement',
+      titleI18n: { en: `${who.en} ${d.edited ? 'updated their' : 'submitted a'} statement on ${r}`, hi: `${who.hi} ने ${r} पर अपना पक्ष ${d.edited ? 'अपडेट किया' : 'दर्ज किया'}` },
+      bodyI18n: { en: 'You can read it on the order and add or edit your own statement while the dispute is open.', hi: 'आप इसे ऑर्डर पर पढ़ सकते हैं और विवाद खुला रहने तक अपना पक्ष जोड़ या बदल सकते हैं।' },
+      link: d.role === 'buyer' ? `/partner/orders/${d.order.id}` : `/app/orders/${d.order.id}`,
+      channels: ['email'],
+    })
+  }
+  const { data: ops } = await admin.from('agent_settings').select('value').eq('key', 'ops_user_id').maybeSingle()
+  const opsUserId = typeof ops?.value === 'string' ? ops.value : null
+  if (opsUserId) {
+    await createNotification(admin, {
+      userId: opsUserId,
+      kind: 'dispute_statement',
+      titleI18n: { en: `${who.en} stated their side on ${r}`, hi: `${who.hi} ने ${r} पर पक्ष दर्ज किया` },
+      bodyI18n: { en: 'Open the dispute console to read both statements.', hi: 'दोनों पक्ष पढ़ने के लिए विवाद कंसोल खोलें।' },
+      link: `/admin/disputes/${d.disputeId}`,
+    })
+  }
+}
+
+/**
+ * S1.7 — a triage card is ready for the ops user. Sent once per triage (the
+ * notify route claims notified_at first). Recommendation only; nothing moves.
+ */
+export async function notifyDisputeTriageReady(
+  admin: Admin,
+  d: { opsUserId: string; triageId: string; disputeId: string; orderNumber: string; recommendation: string; confidence: string },
+): Promise<void> {
+  const rec = d.recommendation.replace(/_/g, ' ')
+  await createNotification(admin, {
+    userId: d.opsUserId,
+    kind: 'dispute_triage_ready',
+    titleI18n: { en: `Dispute triage for ${d.orderNumber} — suggests: ${rec} (${d.confidence})`, hi: `${d.orderNumber} का विवाद ट्रायेज — सुझाव: ${rec} (${d.confidence})` },
+    bodyI18n: { en: 'The card lists the timeline, each party\'s claims with evidence and the gaps. Nothing is resolved until you click.', hi: 'कार्ड में समयरेखा, दोनों पक्षों के दावे और साक्ष्य, और कमियाँ हैं। आपके क्लिक के बिना कुछ नहीं बदलेगा।' },
+    link: `/admin/disputes/${d.disputeId}?triage=${d.triageId}`,
+    channels: ['email', 'whatsapp'],
+  })
+}
+
+/**
  * S1.4 — a payout dossier is ready for the founder's one-tap. Sent to the ops
  * user (agent_settings.ops_user_id) once per dossier (the notify route claims
  * notified_at first). Channels by KIND: email today; WhatsApp the moment the

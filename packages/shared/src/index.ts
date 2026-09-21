@@ -48,6 +48,9 @@ export * from './trust'
 // S1.4 — payout dossier contract (checks, photo findings, recommendation rule)
 export * from './dossier'
 
+// S1.7 — party statements + the Dispute-Triage card (strict, recommendation only; checks + clamp are code)
+export * from './disputes'
+
 // S1.1 — quote extraction contract (schema, clamp, edited-fields diff)
 export * from './quote-extraction'
 

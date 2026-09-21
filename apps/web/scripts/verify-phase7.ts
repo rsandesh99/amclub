@@ -173,8 +173,15 @@ async function main() {
   } finally {
   // ── cleanup — ALWAYS runs (even on a thrown assertion) so no residue is left ──
   console.log('\n🧹 cleanup…')
-  const t = (p: PromiseLike<unknown>) => Promise.resolve(p).catch(() => {})
+  // Checked deletes (supabase-js resolves with { error } and never throws — the S1.2 residue lesson) and
+  // checkout_sessions BEFORE orders (FK checkout_sessions.order_id), so a swallowed FK error cannot leave rows behind.
+  const t = async (p: PromiseLike<{ error?: { message: string } | null } | unknown>) => {
+    const r = (await Promise.resolve(p).catch((e) => ({ error: e }))) as { error?: { message?: string } | null }
+    if (r && r.error) console.error('  cleanup:', r.error.message ?? String(r.error))
+  }
+  for (const mid of created.msmeIds) await t(admin.from('checkout_sessions').delete().eq('msme_id', mid))
   for (const oid of created.orderIds.filter(Boolean)) {
+    await t(admin.from('checkout_sessions').delete().eq('order_id', oid))
     const { data: pays } = await admin.from('payments').select('id').eq('order_id', oid)
     for (const pay of pays ?? []) await t(admin.from('refunds').delete().eq('payment_id', pay.id))
     await t(admin.from('disputes').delete().eq('order_id', oid))
@@ -185,7 +192,6 @@ async function main() {
     await t(admin.from('order_documents').delete().eq('order_id', oid))
     await t(admin.from('orders').delete().eq('id', oid))
   }
-  for (const mid of created.msmeIds) await t(admin.from('checkout_sessions').delete().eq('msme_id', mid))
   for (const id of created.packageIds) await t(admin.from('packages').delete().eq('id', id))
   for (const id of created.providerIds) {
     await t(admin.from('provider_bank_accounts').delete().eq('provider_id', id))

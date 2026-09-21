@@ -45,6 +45,9 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   rfq_answer: { names: { en: 'amc_rfq_answer_en', hi: 'amc_rfq_answer_hi' }, params: titleBody },
   quote_revised: { names: { en: 'amc_quote_revised_en', hi: 'amc_quote_revised_hi' }, params: titleBody },
   payout_paid: { names: { en: 'amc_payout_paid_en', hi: 'amc_payout_paid_hi' }, params: titleBody },
+  // S1.7 — a party's dispute statement (counter-party) and the ops triage card (ops user; opt-in gated).
+  dispute_statement: { names: { en: 'amc_dispute_statement_en', hi: 'amc_dispute_statement_hi' }, params: titleBody },
+  dispute_triage_ready: { names: { en: 'amc_dispute_triage_ready_en', hi: 'amc_dispute_triage_ready_hi' }, params: titleBody },
   // S1.4 — founder one-tap (ops user; requires the founder's own WhatsApp opt-in grant).
   payout_dossier_ready: { names: { en: 'amc_payout_dossier_ready_en', hi: 'amc_payout_dossier_ready_hi' }, params: titleBody },
   // S1.6 — Onboarding agent (provider; opt-in gated). Sent by the runtime outside the 24h window:

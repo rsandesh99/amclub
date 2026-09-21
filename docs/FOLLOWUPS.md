@@ -819,7 +819,58 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
+## Agent S1.7 — Dispute-Triage agent (logged 2026-09-21)
+
+**Shipped (dark):** party statements `dispute_statements` (spine, not flag-gated; one per party, contact-masked, ≤ 5
+order documents, editable until a triage exists; web card + mobile block + admin console); Dispute-Triage agent (ops
+persona, queue `agent.dispute_triage`, two GET tools, one frontier call on the strict `disputeTriageSchema`,
+`clampTriage`, `dispute_triages` + `disputes.triage_id`, idempotent notify); migration **0037**; the resolve route gains
+`requireNotDelegated` + optional `triage_id` → one `ai_decisions` row after settlement; prompt `dispute_triage@v1` +
+17-case golden set + `eval --set dispute_triage`; runbook `docs/agents/DISPUTE_TRIAGE.md`; rig `verify-dispute-triage.ts`.
+
+- **Statement versioning:** one row per party, edited in place (PATCH) until a triage exists; no history of edits
+  (the `dispute_statement` event records `edited: true`). A versions table is a later stage if reviewers need it.
+- **Vision on dispute photos:** photos are NOT sent to the model in this stage; where an S1.4 dossier exists its
+  plausibility findings pass as trusted facts. Sending the dispute's own photos (and the statements' attachments) to
+  the frontier tier is a follow-up once the S1.4 findings prove useful on real disputes.
+- **`dispute_summary` task class is now unused by any agent** (the triage uses `dispute_triage`); keep it for the S2.3
+  support agent or retire it in a cleanup PR.
+- **A buyer/provider-visible "what happens next" copy** on a disputed order (who reads the statements, typical time to
+  resolution) is not written yet — the statement card only says both statements reach the reviewer.
+- **Mobile has no raise-dispute action at all** (`apps/mobile/app/(app)/orders/[id].tsx` never offered it — the prompt
+  assumed it did); S1.7 adds the statement block (text only, no attachments) for disputes raised on the web.
+- **The scope refusal** (a delegated ops token whose grant lacks `summarize_dispute` → 403 on the admin dispute GET) is
+  the `requireToolScope` pattern proven in S1.4; the laptop rig cannot mint a delegated token (no
+  `SUPABASE_JWT_SECRET`) and records it as a skip — the first-deploy delegated-path gate (S1.6) covers it.
+- **Goods disputes** flow through the same agent (`goods_evidence` in the evidence payload; checks + golden cover them);
+  the rig skips the goods lifecycle because `MART_ENABLED` is off on prod.
+- **Golden doc refs** use the fixtures' short ids (`doc:b2`) while the runtime cites real uuids; the eval adds the short
+  form to the allow-list so the clamp is exercised on both.
+- **Laptop gate skips (same recording as S1.6):** the flag-on rig drives the runtime agent in-process under the ops
+  session token, so the `AMC-Runtime` HMAC mint, the pg-boss hop (`agent.dispute_triage`) and the runtime → web notify
+  (`AGENT_RUNTIME_SECRET` absent; `notified_at` stays null) are recorded skips until the first Fly deploy exercises the
+  real delegated path once (the S1.6 first-deploy gate). The statement spine was proven flag-off AFTER 0037 was applied
+  (the route reads `disputes.triage_id`; migration-first deploy rule).
+- **Rig residue found at this gate (rig-only fixes, in the S1.7 PR):** the Phase 7 rig's cleanup deleted orders before
+  their checkout sessions and swallowed the FK error (2 users, a provider, a category, 3 orders left on prod after green
+  runs); `verify-mart.ts` deleted its `order_documents` rows but never the objects the documents route uploaded (4 8-byte
+  goods photos under two deleted orders, from a 2026-09-19 run) — both swept, both rigs now remove what they create and
+  the triage rig recounts `order-documents` objects to zero. Every rig that uploads must recount storage, not only rows.
+- **Unconsumed fetch bodies (sweep):** `fetch(...).then((r) => (r.ok ? r.json() : null))` never reads a non-2xx body; Chromium
+  keeps such a request "in flight" until GC, so a page never reaches `networkidle` (the CI axe scan waits for it). Fixed
+  in the S1.6 wizard fallback (this PR); the same idiom remains on authenticated pages the scan never visits —
+  `AgentsConsoleClient.tsx` (spend / dossier / triage stats), `AgentRunsClient.tsx`, `mart/PoolJoin.tsx` — drain them in a
+  cleanup PR (`const j = await r.json().catch(() => null); return r.ok ? j : null`).
+
 ## Agent S1.6 — Onboarding agent (logged 2026-09-21)
+
+**Merged with the CI accessibility job RED (found at the S1.7 gate, 2026-09-21).** PR #9 was merged on the
+lint/typecheck/test/build job + Vercel; the axe job (`Accessibility (axe — public surfaces)`) had failed with a scan
+error, zero violations: `/partner/signup` never reached `networkidle` because the new wizard fallback fetched
+`/api/v1/profile/me` as an anonymous visitor and never read the 401 body (`r.ok ? r.json() : null`) — Chromium keeps an
+unread body "in flight", the 45 s navigation timed out, master went red on that job at `aecdcb2`. Fixed in the S1.7 PR
+(both fallback fetches drain their bodies). Lesson: `gh pr checks N --watch` must be read to the end — every job, not
+the first green ones — and a scan-error is a failure even with zero violations.
 
 **Shipped (dark):** scripted WhatsApp provider interview in the runtime (queue `agent.onboarding`), ONE model call
 per draft (max two per session; `onboarding_interview@v1` + 24-case golden set + `eval --set onboarding_interview`),

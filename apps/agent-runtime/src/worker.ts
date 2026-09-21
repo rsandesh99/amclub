@@ -3,6 +3,7 @@ import { runAgent } from '@amclub/agent-core'
 import { helloAgent, type HelloInput } from './agents/hello/index'
 import { payoutDossierAgent, type PayoutDossierInput } from './agents/payout-dossier/index'
 import { listExpiredOnboardingSessions, runOnboardingTurn, type OnboardingTurn } from './agents/onboarding/index'
+import { disputeTriageAgent, type DisputeTriageInput } from './agents/dispute-triage/index'
 import { admin, buildDeps, buildOnboardingDeps } from './deps'
 import { handleWaInbound } from './whatsapp/inbound'
 import { RUNTIME_ENV } from './env'
@@ -21,6 +22,8 @@ const WA_QUEUE = 'wa.inbound'
 /** S1.4 — payout dossiers: retryLimit 2, retryDelay 300 s (no retry storms). */
 const DOSSIER_QUEUE = 'agent.payout_dossier'
 const DOSSIER_RETRY = { retryLimit: 2, retryDelay: 300 } as const
+/** S1.7 — dispute triages: the dossier's retry policy (retryLimit 2, retryDelay 300 s). */
+const TRIAGE_QUEUE = 'agent.dispute_triage'
 /** S1.6 — onboarding interview turns: one retry after 60 s (a turn is idempotent through guarded state updates). */
 const ONBOARDING_QUEUE = 'agent.onboarding'
 const ONBOARDING_RETRY = { retryLimit: 1, retryDelay: 60 } as const
@@ -30,7 +33,7 @@ const ONBOARDING_RETRY = { retryLimit: 1, retryDelay: 60 } as const
  * grant, a budget/step cap, authz, or the evidence read was refused (4xx).
  * Everything else (network, 5xx, DB) is thrown so pg-boss retries per queue.
  */
-const NO_RETRY = /^(agent_disabled|no_\w+_grant|budget_|step_budget|tool_not_allowed|tool_out_of_scope|taint_violation|evidence_read_failed:4|session_terminal|session_not_found|message_not_found|message_conversation_mismatch|no_draft_to_confirm)/
+const NO_RETRY = /^(agent_disabled|no_\w+_grant|budget_|step_budget|tool_not_allowed|tool_out_of_scope|taint_violation|evidence_read_failed:4|session_terminal|session_not_found|message_not_found|message_conversation_mismatch|no_draft_to_confirm|dispute_resolved|dispute_not_found|dispute_read_failed:4|triage_cap)/
 
 interface RunJob {
   agent: string
@@ -52,6 +55,7 @@ export async function startWorker(): Promise<void> {
   await boss.createQueue(WA_QUEUE)
   await boss.createQueue(DOSSIER_QUEUE, { name: DOSSIER_QUEUE, ...DOSSIER_RETRY })
   await boss.createQueue(ONBOARDING_QUEUE, { name: ONBOARDING_QUEUE, ...ONBOARDING_RETRY })
+  await boss.createQueue(TRIAGE_QUEUE, { name: TRIAGE_QUEUE, ...DOSSIER_RETRY })
   const deps = buildDeps()
 
   await boss.work<RunJob>(QUEUE, async (jobs) => {
@@ -77,6 +81,19 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
+  await boss.work<RunJob>(TRIAGE_QUEUE, async (jobs) => {
+    for (const job of jobs) {
+      const { open, input } = job.data
+      const r = await runAgent(disputeTriageAgent, deps, { ...open, jobId: job.id }, input as DisputeTriageInput)
+      if (r.status === 'failed') {
+        if (NO_RETRY.test(r.error)) {
+          console.warn(`[worker] dispute_triage run ${r.runId} failed terminally: ${r.error}`)
+          continue
+        }
+        throw new Error(`dispute_triage run ${r.runId} failed: ${r.error}`) // → pg-boss retry (2 × 300 s)
+      }
+    }
+  })
   await boss.work<OnboardingTurn>(ONBOARDING_QUEUE, async (jobs) => {
     for (const job of jobs) {
       const r = await runOnboardingTurn(await buildOnboardingDeps(), { ...job.data, jobId: job.id })
@@ -92,7 +109,7 @@ export async function startWorker(): Promise<void> {
   await boss.work<{ messageId: string }>(WA_QUEUE, async (jobs) => {
     for (const job of jobs) await handleWaInbound(job.data.messageId, { enqueueOnboarding: enqueueOnboardingJob })
   })
-  console.log(`[worker] pg-boss started on queues ${QUEUE}, ${DOSSIER_QUEUE}, ${ONBOARDING_QUEUE}, ${WA_QUEUE}`)
+  console.log(`[worker] pg-boss started on queues ${QUEUE}, ${DOSSIER_QUEUE}, ${TRIAGE_QUEUE}, ${ONBOARDING_QUEUE}, ${WA_QUEUE}`)
 }
 
 /** S1.6 — one onboarding turn (start | message | expire) on its own queue. */
@@ -118,6 +135,7 @@ export async function enqueueJob(agent: string, data: unknown): Promise<string |
   }
   const payload = { agent, ...(data as object) } as RunJob
   if (agent === 'payout_dossier') return boss.send(DOSSIER_QUEUE, payload, { ...DOSSIER_RETRY })
+  if (agent === 'dispute_triage') return boss.send(TRIAGE_QUEUE, payload, { ...DOSSIER_RETRY })
   return boss.send(QUEUE, payload)
 }
 

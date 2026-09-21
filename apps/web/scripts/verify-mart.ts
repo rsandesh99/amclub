@@ -267,6 +267,9 @@ async function main() {
       await admin.from('payouts').delete().eq('order_id', id)
       await admin.from('disputes').delete().eq('order_id', id)
       await admin.from('payments').delete().eq('order_id', id)
+      // The rows go with the order; the objects the documents route uploaded under <orderId>/ do not — remove them too.
+      const { data: objs } = await admin.storage.from('order-documents').list(id, { limit: 100 })
+      if (objs?.length) { const { error } = await admin.storage.from('order-documents').remove(objs.map((o) => `${id}/${o.name}`)); if (error) console.error('  storage cleanup:', error.message) }
       await admin.from('order_documents').delete().eq('order_id', id)
       await admin.from('order_events').delete().eq('order_id', id)
       await admin.from('checkout_sessions').delete().eq('order_id', id)

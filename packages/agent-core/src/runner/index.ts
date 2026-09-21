@@ -123,6 +123,10 @@ export function resolveToolRoute(
     // absent here: no tool wraps it, so the runtime can never call it.
     case 'read_order_evidence':
       return { method: 'GET', path: `/api/v1/admin/orders/${id('order_id')}/evidence` }
+    // S1.7 — the Dispute-Triage agent's second read (statements, thread, documents, refund, payout).
+    // The dispute RESOLVE route is deliberately absent: no tool wraps it, and it refuses delegated tokens.
+    case 'summarize_dispute':
+      return { method: 'GET', path: `/api/v1/admin/disputes/${id('dispute_id')}` }
     // S1.6 — a LOCAL confirm gate: no /api/v1 route exists; the approved ai_decisions row is the outcome
     // and executeTool short-circuits before any fetch (see the 'local' branch there).
     case 'confirm_onboarding_draft':

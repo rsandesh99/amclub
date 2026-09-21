@@ -254,5 +254,22 @@
     "onboarding_decision": "முடிவு",
     "onboarding_masked": "மறைக்கப்பட்டது",
     "onboarding_none": "பதில்கள் பதிவு செய்யப்படவில்லை."
+  },
+  "orders": {
+    "dispute_statement_title": "உங்கள் தரப்பு",
+    "dispute_statement_intro": "என்ன நடந்தது என்பதை உங்கள் சொற்களில் எங்கள் குழுவிடம் சொல்லுங்கள். இரு தரப்பும் மதிப்பாய்வாளருக்கு அருகருகே காட்டப்படும்.",
+    "dispute_statement_placeholder": "என்ன ஒப்புக்கொள்ளப்பட்டது, என்ன வழங்கப்பட்டது, என்ன தவறானது…",
+    "dispute_statement_masking_hint": "தொலைபேசி எண்களும் மின்னஞ்சல்களும் தானாக மறைக்கப்படும்.",
+    "dispute_statement_attach": "இந்த ஆர்டரின் ஆவணங்களை இணைக்கவும் (அதிகபட்சம் 5)",
+    "dispute_statement_submit": "தரப்பைச் சமர்ப்பி",
+    "dispute_statement_update": "தரப்பைப் புதுப்பி",
+    "dispute_statement_saved": "தரப்பு சேமிக்கப்பட்டது.",
+    "dispute_statement_masked_notice": "தரப்பு சேமிக்கப்பட்டது. தொடர்பு விவரங்கள் மறைக்கப்பட்டன.",
+    "dispute_statement_locked": "மதிப்பாய்வு தொடங்கியதும் தரப்பை மாற்ற முடியாது.",
+    "dispute_statement_yours": "உங்கள் தரப்பு",
+    "dispute_statement_other_title": "மற்ற தரப்பின் அறிக்கை",
+    "dispute_statement_other_none": "மற்ற தரப்பு இன்னும் தன் தரப்பைச் சொல்லவில்லை.",
+    "dispute_statement_failed": "தரப்பைச் சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
+    "dispute_statement_min": "குறைந்தது 20 எழுத்துகள்."
   }
 }

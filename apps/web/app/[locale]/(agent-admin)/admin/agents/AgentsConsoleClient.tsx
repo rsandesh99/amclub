@@ -12,6 +12,7 @@ interface SettingRow { key: AgentSettingKey; value: unknown; set: boolean; updat
 interface SpendBucket { ai_paise: number; commission_paise: number; ai_share_pct: number | null }
 interface Spend { today: SpendBucket; month: SpendBucket }
 interface DossierStats { pending: number; decided: number; approve_rate_pct: number | null; median_completed_to_decision_min: number | null }
+interface TriageStats { pending: number; decided: number; agreement_rate_pct: number | null; needs_more_info_pct: number | null }
 
 const NUMBER_KEYS: AgentSettingKey[] = ['budget_run_paise', 'budget_user_day_paise', 'budget_month_paise', 'rfq_max_quotes', 'quote_window_hours']
 const TEXT_KEYS: AgentSettingKey[] = ['whatsapp_opt_in_text_version', 'evidence_required_from']
@@ -27,6 +28,7 @@ export function AgentsConsoleClient() {
   const [settings, setSettings] = useState<SettingRow[]>([])
   const [spend, setSpend] = useState<Spend | null>(null)
   const [dossiers, setDossiers] = useState<DossierStats | null>(null)
+  const [triages, setTriages] = useState<TriageStats | null>(null)
   const [agentsDraft, setAgentsDraft] = useState<Record<string, boolean>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -36,10 +38,11 @@ export function AgentsConsoleClient() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [s, sp, ds] = await Promise.all([
+    const [s, sp, ds, ts] = await Promise.all([
       fetch('/api/v1/agent/admin/settings', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { settings: [] })),
       fetch('/api/v1/agent/admin/spend', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
       fetch('/api/v1/agent/admin/dossiers/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/v1/agent/admin/triages/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
     const rows: SettingRow[] = s.settings ?? []
     setSettings(rows)
@@ -48,6 +51,7 @@ export function AgentsConsoleClient() {
     setDrafts(Object.fromEntries(rows.filter((r) => r.key !== 'agents_enabled').map((r) => [r.key, toText(r.key, r.value)])))
     setSpend(sp)
     setDossiers(ds)
+    setTriages(ts)
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -120,6 +124,17 @@ export function AgentsConsoleClient() {
                 {t('dossiers_approve_rate')}: {dossiers?.approve_rate_pct == null ? t('dossiers_none') : `${dossiers.approve_rate_pct}%`}
               </p>
               <Link href={'/admin/payouts' as '/admin'} className="mt-2 inline-block text-xs font-medium text-primary underline underline-offset-2">{t('dossiers_link')}</Link>
+            </div>
+            {/* S1.7 — dispute triages tile */}
+            <div className="rounded-card border border-border bg-surface p-4 shadow-card">
+              <p className="text-xs font-medium text-foreground-secondary">{t('triage_title')}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{t('triage_pending', { n: triages?.pending ?? 0 })}</p>
+              <p className="mt-1 text-xs text-foreground-secondary">
+                {t('triage_agreement')}: {triages?.agreement_rate_pct == null ? t('triage_none') : `${triages.agreement_rate_pct}%`}
+                {' · '}
+                {t('triage_nmi')}: {triages?.needs_more_info_pct == null ? '—' : `${triages.needs_more_info_pct}%`}
+              </p>
+              <Link href={'/admin/disputes' as '/admin'} className="mt-2 inline-block text-xs font-medium text-primary underline underline-offset-2">{t('triage_link')}</Link>
             </div>
           </section>
 

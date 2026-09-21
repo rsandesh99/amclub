@@ -71,7 +71,7 @@ async function loadOrder(admin: Admin, orderId: string): Promise<any | null> {
   return data
 }
 
-async function addEvent(admin: Admin, orderId: string, event: string, actorId: string | null, payload?: unknown) {
+export async function addEvent(admin: Admin, orderId: string, event: string, actorId: string | null, payload?: unknown) {
   await admin.from('order_events').insert({ order_id: orderId, actor_id: actorId, event, payload: payload ?? null })
 }
 
@@ -312,6 +312,16 @@ export async function applyTransition(
       { order_id: orderId, raised_by: actor.userId, reason: extra?.disputeReason ?? 'unspecified', status: 'open' },
       { onConflict: 'order_id', ignoreDuplicates: true },
     )
+    // S1.7 — ask the Dispute-Triage agent for a card (gated; a no-op while dark; never throws).
+    try {
+      const { data: disp } = await admin.from('disputes').select('id').eq('order_id', orderId).maybeSingle()
+      if (disp?.id) {
+        const { maybeEnqueueDisputeTriage } = await import('@/lib/agent/triage-trigger')
+        await maybeEnqueueDisputeTriage(admin, { orderId, disputeId: disp.id as string })
+      }
+    } catch (e) {
+      console.error('[raise_dispute triage trigger]', (e as Error).message)
+    }
     // Hold any scheduled payout.
     const { data: heldRows } = await admin
       .from('payouts')

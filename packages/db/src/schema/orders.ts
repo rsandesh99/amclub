@@ -199,6 +199,8 @@ export const disputes = pgTable('disputes', {
   resolutionAmountPaise: bigint('resolution_amount_paise', { mode: 'number' }),
   resolvedBy: uuid('resolved_by').references(() => users.id),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  // 0037 (S1.7): the latest dispute_triages row (FK in SQL; no import cycle here). Re-triage moves it.
+  triageId: uuid('triage_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })

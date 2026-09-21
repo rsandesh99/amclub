@@ -215,6 +215,15 @@ const MANIFEST: Entry[] = [
     ],
     note: 'S1.6 Onboarding agent: onboarding_sessions (scripted WhatsApp interview; one active per user), provider_capability_facts (confirmed facts with ai_decisions provenance), wa_conversations.active_session_id; RLS self + admin read, no client writes',
   },
+  {
+    file: '0037_dispute_triage.sql',
+    tables: ['dispute_statements', 'dispute_triages'],
+    triggers: [
+      ['dispute_statements', 'dispute_statements_set_updated_at'],
+      ['dispute_triages', 'dispute_triages_decision_guard'],
+    ],
+    note: 'S1.7 party statements (spine; one per party, contact-masked, parties + admin read) and dispute_triages (agent-owned, strict card, decision written once by the resolve route); disputes.triage_id',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

@@ -215,14 +215,17 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
     ;(async () => {
       try {
         if (waEnabledProp === undefined) {
-          const me = await fetch('/api/v1/profile/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+          // Always drain the body: an unread 401 body keeps the request "in flight" in Chromium (never networkidle).
+          const me = await fetch('/api/v1/profile/me', { cache: 'no-store' })
+            .then(async (r) => { const j = await r.json().catch(() => null); return r.ok ? j : null })
+            .catch(() => null)
           if (cancelled) return
           if (me?.onboardingWhatsAppEnabled) setWaEnabled(true)
         }
         if (waDraftProp !== undefined) return
         const res = await fetch('/api/v1/agent/onboarding/draft', { cache: 'no-store' })
-        if (!res.ok || cancelled) return
-        const v = (await res.json()) as WaDraftProp
+        const v = (await res.json().catch(() => null)) as WaDraftProp | null // drained even on 404 (flag off)
+        if (!res.ok || cancelled || !v) return
         const { next, filled } = prefillFromWa(draftRef.current, v)
         if (Object.keys(next).length > 0) setDraft((cur) => ({ ...cur, ...next }))
         if (filled.length > 0) setFromWa(filled)

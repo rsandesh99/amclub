@@ -463,6 +463,37 @@ CREATE POLICY "agent_grants: admin read" ON agent_grants
 REVOKE UPDATE, DELETE ON agent_grants FROM anon, authenticated;
 GRANT UPDATE (revoked_at) ON agent_grants TO authenticated;
 
+-- ─── dispute_statements / dispute_triages (0037, S1.7) ────────────────────────
+-- Statements: the order's parties (the "disputes: parties all" predicate) and
+-- admin/ops read; no client writes (the route inserts after the party check).
+-- Triages: admin/ops read only; no client writes (runtime + resolve route).
+ALTER TABLE dispute_statements ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "dispute_statements: parties read" ON dispute_statements;
+CREATE POLICY "dispute_statements: parties read" ON dispute_statements
+  FOR SELECT USING (
+    deleted_at IS NULL
+    AND order_id IN (
+      SELECT id FROM orders
+      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
+         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "dispute_statements: admin read" ON dispute_statements;
+CREATE POLICY "dispute_statements: admin read" ON dispute_statements
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+REVOKE INSERT, UPDATE, DELETE ON dispute_statements FROM anon, authenticated;
+
+ALTER TABLE dispute_triages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "dispute_triages: admin read" ON dispute_triages;
+CREATE POLICY "dispute_triages: admin read" ON dispute_triages
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+REVOKE INSERT, UPDATE, DELETE ON dispute_triages FROM anon, authenticated;
+
 -- ─── onboarding_sessions / provider_capability_facts (0036, S1.6) — self + admin read; service write ─
 -- The provider reads their own interview; admin/ops read all; NO client writes
 -- (the runtime and the two web routes write with the service role).
