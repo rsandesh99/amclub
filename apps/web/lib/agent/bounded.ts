@@ -47,6 +47,8 @@ export interface BoundedCallArgs<T> {
   temperature?: number
   stub?: () => T
   meta?: Record<string, unknown> | null
+  /** S1.8 — explicit model id for this call (VOICE_PARSE_MODEL precedence for the voice parser). */
+  model?: string
 }
 
 export async function boundedChatJson<T>(admin: SupabaseClient, args: BoundedCallArgs<T>): Promise<BoundedChatResult<T>> {
@@ -74,6 +76,7 @@ export async function boundedChatJson<T>(admin: SupabaseClient, args: BoundedCal
       temperature: args.temperature ?? 0,
       ...(args.stub !== undefined ? { stub: args.stub } : {}),
       ...(args.meta !== undefined ? { meta: args.meta } : {}),
+      ...(args.model ? { model: args.model } : {}),
     },
   )
 }

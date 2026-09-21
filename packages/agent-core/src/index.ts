@@ -15,6 +15,9 @@ export { comparePointersSchema, type ComparePointers } from './prompts/quote_com
 export { declineMessageSchema, type DeclineMessage } from './prompts/decline_message/schema'
 export { rfqQualityModelOutputSchema, rfqQualityReportSchema, rfqQualityPrecheck, mergeQualityReport, type RfqQualityModelOutput, type RfqQualityReport } from './prompts/rfq_quality/schema'
 export * from './rfq-quality/parts'
+// S1.8 — voice/document intake: parse (v1/v2), clarify and document parts (taint); the parser prompt lives here now
+export * from './intake/parts'
+export { rfqParseModelOutputSchema, type RfqParseModelOutput } from './prompts/rfq_parse/schema'
 // S1.6 — onboarding interview: pure state machine, prompt parts (taint), draft summary renderer
 export * from './onboarding/index'
 // S1.7 — dispute triage: prompt parts (taint); the strict card + checks + clamp live in shared

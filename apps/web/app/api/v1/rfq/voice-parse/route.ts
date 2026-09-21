@@ -6,13 +6,9 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { getTranscriber, getParser } from '@/lib/voice'
 import { VendorHttpError, classifyVendorFailure } from '@/lib/voice/types'
+import { BudgetExceededError } from '@/lib/agent/bounded'
 import { transcriberVendorTag } from '@/lib/voice/sarvam'
-import { parserVendorTag } from '@/lib/voice/parser'
-import {
-  estimateParseCostPaise,
-  estimateSttCostPaise,
-  logAiInvocation,
-} from '@/lib/voice/invocations'
+import { estimateSttCostPaise, logAiInvocation } from '@/lib/voice/invocations'
 
 /**
  * Phase 8b — voice → structured RFQ prefill. Auth required and tightly
@@ -130,21 +126,10 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const parseStart = Date.now()
   try {
-    const pr = await getParser().parse(transcript, languageCode)
-    await logAiInvocation(admin, {
-      userId,
-      step: 'parse',
-      vendor: pr.vendor,
-      status: pr.stub ? 'stub' : 'ok',
-      latencyMs: Date.now() - parseStart,
-      costEstPaise: estimateParseCostPaise(pr.usage, pr.stub),
-      inputBytes: transcript.length,
-      outputChars: JSON.stringify(pr.parse).length,
-      requestId: pr.requestId,
-      ...(pr.usage ? { meta: { usage: pr.usage } } : {}),
-    })
+    // S1.8 — the parser is a bounded registry call (rfq_parse@v1): it writes its own
+    // ai_invocations row (feature voice_rfq, task rfq_parse, ok / stub / error).
+    const pr = await getParser().parse(transcript, languageCode, { admin, userId })
     const body: VoiceParseResponse & { vendor: { stt: string; parser: string } } = {
       transcript_english: transcript,
       parse: pr.parse,
@@ -155,23 +140,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(body)
   } catch (e) {
     console.error('[voice-parse llm]', e)
-    await logAiInvocation(admin, {
-      userId,
-      step: 'parse',
-      vendor: parserVendorTag(),
-      status: 'error',
-      latencyMs: Date.now() - parseStart,
-      costEstPaise: null,
-      inputBytes: transcript.length,
-      error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
-      ...(e instanceof VendorHttpError
-        ? { meta: { vendor_status: e.status, vendor_body: e.body.slice(0, 4000) } }
-        : {}),
-    })
     // The transcript is still useful — let the client fall back to manual
-    // entry with the text pre-filled rather than dead-ending.
+    // entry with the text pre-filled rather than dead-ending. A budget-cap
+    // breach (S1.8: the parser is a bounded call) reads as 'quota' to the client.
     return NextResponse.json(
-      { error: 'parse_failed', cause: classifyVendorFailure(e), transcript_english: transcript },
+      { error: 'parse_failed', cause: e instanceof BudgetExceededError ? 'quota' : classifyVendorFailure(e), transcript_english: transcript },
       { status: 502 },
     )
   }
