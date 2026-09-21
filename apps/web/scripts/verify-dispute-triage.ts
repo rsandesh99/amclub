@@ -130,7 +130,15 @@ async function http() {
     }
     return orderId
   }
-  const disputeOf = async (orderId: string) => (await admin.from('disputes').select('id, status, triage_id, resolution, resolution_amount_paise').eq('order_id', orderId).maybeSingle()).data as any
+  const disputeOf = async (orderId: string) => {
+    const { data } = await admin.from('disputes').select('id, status, resolution, resolution_amount_paise').eq('order_id', orderId).maybeSingle()
+    if (!data) return null
+    const { data: t } = await admin.from('disputes').select('triage_id').eq('id', (data as any).id).maybeSingle() // absent before 0037
+    return { ...(data as any), triage_id: (t as any)?.triage_id ?? null }
+  }
+  // 0037 applied? (the statement route reads disputes.triage_id and writes dispute_statements — migration-first deploy rule)
+  // A head-only count does not surface a missing table in supabase-js; a real select does.
+  const migrated = !(await admin.from('dispute_statements').select('id').limit(1)).error
   const triagesOf = async (disputeId: string) => ((await admin.from('dispute_triages').select('id, run_id, triage, checks, decision, decision_id, notified_at, created_at, stub').eq('dispute_id', disputeId).order('created_at', { ascending: true })).data ?? []) as any[]
 
   console.log(`\nverify-dispute-triage → ${BASE}\n`)
@@ -168,14 +176,35 @@ async function http() {
     const o1 = await placeAndComplete(buyer, prov, pkg!.id)
     const { data: ord1 } = await admin.from('orders').select('total_paise, provider_earning_paise').eq('id', o1).single()
     const total = Number(ord1!.total_paise), earning = Number(ord1!.provider_earning_paise)
-    const stmtBefore = await api(buyer.token, `/api/v1/orders/${o1}/dispute/statement`, { body: 'The GST return they filed used the wrong turnover figure and I now face a notice.' })
-    await json(stmtBefore)
-    check('statement before a dispute → 409 dispute_not_open', stmtBefore.status === 409, `status ${stmtBefore.status}`)
+    if (migrated) {
+      const stmtBefore = await api(buyer.token, `/api/v1/orders/${o1}/dispute/statement`, { body: 'The GST return they filed used the wrong turnover figure and I now face a notice.' })
+      await json(stmtBefore)
+      check('statement before a dispute → 409 dispute_not_open', stmtBefore.status === 409, `status ${stmtBefore.status}`)
+    }
     const raise = await api(buyer.token, `/api/v1/orders/${o1}/transition`, { action: 'raise_dispute', disputeReason: 'quality' })
-    await json(raise)
+    const raiseBody = await json(raise)
     const d1 = await disputeOf(o1)
+    if (!d1) throw new Error(`raise_dispute did not create a dispute row: ${raise.status} ${JSON.stringify(raiseBody).slice(0, 200)}`)
     check('raise_dispute → dispute row open, payout held (unchanged)', raise.status === 200 && d1?.status === 'open' && ((await admin.from('payouts').select('status').eq('order_id', o1).maybeSingle()).data as any)?.status === 'held')
     const invBefore = ((await admin.from('ai_invocations').select('id').eq('task_class', 'dispute_triage')).data ?? []).length
+
+    if (!migrated) {
+      // Pre-0037 (the pre-approval flag-off run): the spine needs disputes.triage_id + dispute_statements. Prove what does
+      // not depend on it and skip the rest with the reason; the post-0037 flag-off run in the gate proves the spine dark.
+      skip('statement spine (POST/PATCH/GET, masking, 403/409, admin GET statements + thread)', '0037 not applied yet on this DB — proven in the post-migration flag-off run')
+      const { error: triErr } = await admin.from('dispute_triages').select('id').limit(1)
+      check('no dispute_triages table while dark (pre-0037: table absent)', !!triErr, triErr ? triErr.message.slice(0, 60) : 'table exists')
+      const refundX0 = 20_000
+      const expPaid0 = Math.round((earning * (total - refundX0)) / total)
+      const q1 = (await json(await api(ops.token, `/api/v1/admin/disputes/${d1.id}/resolve`, { resolution: 'refund_partial', amountPaise: refundX0 }))) as any
+      const q2 = (await json(await api(ops.token, `/api/v1/admin/disputes/${d1.id}/resolve`, { resolution: 'refund_partial', amountPaise: refundX0 }))) as any
+      const { data: pay0 } = await admin.from('payments').select('id').eq('order_id', o1).single()
+      const { data: refunds0 } = await admin.from('refunds').select('amount_paise').eq('payment_id', pay0!.id)
+      const { data: payout0 } = await admin.from('payouts').select('status, amount_paise').eq('order_id', o1).single()
+      check('resolve without triage_id: refund partial paise-exact, provider paid, second call `already` (byte-identical money path)', q1.ok === true && !('triage_id' in q1) && (refunds0 ?? []).length === 1 && Number(refunds0![0]!.amount_paise) === refundX0 && Number(payout0!.amount_paise) === expPaid0 && q2.already === true, `refunds ${refunds0?.length} payout ${payout0?.amount_paise}/${payout0?.status} exp ${expPaid0}`)
+      skip('flag ON lifecycle', flagOn ? '0037 not applied yet' : 'server is dark (AGENT_ENABLED=false)')
+      return
+    }
 
     const s1 = await api(buyer.token, `/api/v1/orders/${o1}/dispute/statement`, { body: 'The GST return they filed used the wrong turnover figure and I now face a notice. Call me on 98765 43210.' })
     const s1b = (await json(s1)) as any
@@ -318,6 +347,7 @@ async function http() {
         }
       }
       if (users.length) await del('decisions', admin.from('ai_decisions').delete().in('decided_by', users))
+      for (const mid of created.msmeIds) await del('checkout_sessions', admin.from('checkout_sessions').delete().eq('msme_id', mid))
       for (const oid of created.orderIds) {
         const { data: pays } = await admin.from('payments').select('id').eq('order_id', oid)
         for (const p of pays ?? []) await del('refunds', admin.from('refunds').delete().eq('payment_id', p.id))
@@ -331,7 +361,6 @@ async function http() {
         await del('order_documents', admin.from('order_documents').delete().eq('order_id', oid))
         await del('orders', admin.from('orders').delete().eq('id', oid))
       }
-      for (const mid of created.msmeIds) await del('checkout_sessions', admin.from('checkout_sessions').delete().eq('msme_id', mid))
       if (runIds.length) {
         await del('events', admin.from('agent_events').delete().in('run_id', runIds))
         await del('invocations', admin.from('ai_invocations').delete().in('run_id', runIds))
@@ -402,7 +431,11 @@ async function loadTrigger(): Promise<{ maybeEnqueueDisputeTriage: ((admin: Supa
 
 async function main() {
   offline()
-  await http()
+  try {
+    await http()
+  } catch (e) {
+    record('lifecycle aborted', 'FAIL', (e as Error).message)
+  }
   console.log(`\nverify-dispute-triage ${BASE ? `→ ${BASE}` : '(offline)'}\n`)
   for (const r of rows) console.log(`  ${r.status === 'pass' ? '✓' : r.status === 'skip' ? '⏭' : '✗'} ${r.name}${r.detail ? `  — ${r.detail}` : ''}`)
   const skipped = rows.filter((r) => r.status === 'skip').length
