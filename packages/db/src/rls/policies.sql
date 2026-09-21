@@ -463,6 +463,33 @@ CREATE POLICY "agent_grants: admin read" ON agent_grants
 REVOKE UPDATE, DELETE ON agent_grants FROM anon, authenticated;
 GRANT UPDATE (revoked_at) ON agent_grants TO authenticated;
 
+-- ─── onboarding_sessions / provider_capability_facts (0036, S1.6) — self + admin read; service write ─
+-- The provider reads their own interview; admin/ops read all; NO client writes
+-- (the runtime and the two web routes write with the service role).
+ALTER TABLE onboarding_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "onboarding_sessions: self read" ON onboarding_sessions;
+CREATE POLICY "onboarding_sessions: self read" ON onboarding_sessions
+  FOR SELECT USING (deleted_at IS NULL AND user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "onboarding_sessions: admin read" ON onboarding_sessions;
+CREATE POLICY "onboarding_sessions: admin read" ON onboarding_sessions
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+REVOKE INSERT, UPDATE, DELETE ON onboarding_sessions FROM anon, authenticated;
+
+ALTER TABLE provider_capability_facts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "provider_capability_facts: self read" ON provider_capability_facts;
+CREATE POLICY "provider_capability_facts: self read" ON provider_capability_facts
+  FOR SELECT USING (deleted_at IS NULL AND user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "provider_capability_facts: admin read" ON provider_capability_facts;
+CREATE POLICY "provider_capability_facts: admin read" ON provider_capability_facts
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+REVOKE INSERT, UPDATE, DELETE ON provider_capability_facts FROM anon, authenticated;
+
 -- ─── payout_dossiers / evidence_photo_hashes (0031, S1.4) — admin read; service write ─
 ALTER TABLE payout_dossiers ENABLE ROW LEVEL SECURITY;
 

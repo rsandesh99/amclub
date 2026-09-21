@@ -79,6 +79,21 @@ The job lands on queue `agent.payout_dossier` (retryLimit 2, retryDelay 300 s);
 a `payout_dossiers` row for the order and one `payout_dossier_ready`
 notification to the ops user.
 
+### S1.6 — the onboarding queue and cron
+
+Queue `agent.onboarding` (retryLimit 1, retryDelay 60 s): one job per turn —
+`{ kind:'start', sessionId }` (the web start route via
+`POST /internal/jobs/onboarding`, or JOIN from the inbound job),
+`{ kind:'message', sessionId, messageId }` (every inbound message of an active
+session, enqueued by the `wa.inbound` job) and `{ kind:'expire', sessionId }`.
+Turns are idempotent through guarded state updates; `session_terminal`,
+`session_not_found`, `message_not_found` and `budget_*` never retry.
+
+Cron: the web `GET /api/v1/cron/agent-onboarding-expire` (hourly, Vercel)
+calls `POST /internal/jobs/onboarding.expire`, which enumerates sessions past
+`expires_at` and enqueues one expire turn each; with the flag off there are
+no sessions. Runbook: `docs/agents/ONBOARDING.md`.
+
 ## Rollback
 
 The runtime holds no state of its own (runs/events live in Postgres). To stop it

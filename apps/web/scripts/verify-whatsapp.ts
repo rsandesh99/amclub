@@ -65,7 +65,7 @@ async function offline() {
   check('non-transactional kind without opt-in is skipped', decide('rfq_matched', false, true) === 'skipped:no-opt-in')
   check('transactional kind sends without opt-in (dark ⇒ stub)', decide('order_placed', false, false) === 'stub')
   check('opted-in non-transactional kind would send when live', decide('rfq_matched', true, true) === 'sent')
-  check('START/JOIN/नमस्ते → opt_in; STOP/बंद → opt_out', classifyKeyword('start') === 'opt_in' && classifyKeyword('JOIN') === 'opt_in' && classifyKeyword('नमस्ते') === 'opt_in' && classifyKeyword('STOP') === 'opt_out' && classifyKeyword('बंद') === 'opt_out' && classifyKeyword('price?') === null)
+  check('START/नमस्ते → opt_in; JOIN → onboard (S1.6); STOP/बंद → opt_out', classifyKeyword('start') === 'opt_in' && classifyKeyword('JOIN') === 'onboard' && classifyKeyword('नमस्ते') === 'opt_in' && classifyKeyword('STOP') === 'opt_out' && classifyKeyword('बंद') === 'opt_out' && classifyKeyword('price?') === null)
 }
 
 async function live() {

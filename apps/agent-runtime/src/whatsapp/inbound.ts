@@ -11,6 +11,7 @@ import {
 import type { AgentPersona } from '@amclub/shared'
 import { admin } from '../deps'
 import { RUNTIME_ENV } from '../env'
+import { isAgentEnabledForUser, onboardingSessionTtlHours } from '../settings'
 
 /**
  * WhatsApp inbound (S0.5). Two halves:
@@ -44,6 +45,11 @@ export interface IngestResult {
 
 /** Enqueue hook (injected by the server) so this module never imports the worker — no import cycle. */
 export type EnqueueFn = (messageId: string) => Promise<string | null>
+
+/** S1.6 — hooks the worker injects into the inbound job (no import cycle). */
+export interface InboundHooks {
+  enqueueOnboarding?: (turn: { kind: 'start' | 'message'; sessionId: string; messageId?: string }) => Promise<string | null>
+}
 
 export async function ingestWaWebhook(rawBody: string, headers: Record<string, string | undefined>, enqueue: EnqueueFn): Promise<IngestResult> {
   const cfg = whatsappConfigFromEnv()
@@ -143,15 +149,30 @@ async function storeMedia(provider: ReturnType<typeof createWhatsAppProvider>, c
 
 // ── the wa.inbound job ───────────────────────────────────────────────────────
 
-export async function handleWaInbound(messageId: string): Promise<void> {
+export async function handleWaInbound(messageId: string, hooks: InboundHooks = {}): Promise<void> {
   const db = admin()
   const { data: msg } = await db.from('wa_messages').select('id, conversation_id, kind, body').eq('id', messageId).maybeSingle()
   if (!msg) return
-  const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at').eq('id', msg.conversation_id).maybeSingle()
+  const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at, active_session_id').eq('id', msg.conversation_id).maybeSingle()
   if (!conv) return
   const locale = (conv.locale === 'hi' || conv.locale === 'te' ? conv.locale : 'en') as WaLocale
   const intent = classifyKeyword(msg.body as string | null)
 
+  if (intent === 'opt_out') {
+    if (conv.user_id) {
+      await db.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', conv.user_id).eq('channel', 'whatsapp').is('revoked_at', null)
+    }
+    await reply(conv, 'wa_opt_out_confirmed', locale)
+    return
+  }
+  // S1.6 — dispatcher order: STOP (above; opt-out always wins) → active onboarding session → opt-in keywords →
+  // JOIN → holding reply. An active session routes EVERY other message into the interview (one turn per message):
+  // a typed "yes" / "ok" / "hi" is an answer there, not an opt-in (the user already holds a grant). Without an
+  // active session the S0.5 order is unchanged.
+  if (RUNTIME_ENV.AGENT_ENABLED && conv.user_id && conv.active_session_id && hooks.enqueueOnboarding) {
+    await hooks.enqueueOnboarding({ kind: 'message', sessionId: String(conv.active_session_id), messageId })
+    return
+  }
   if (intent === 'opt_in') {
     if (conv.user_id) {
       await grantWhatsApp(conv.user_id as string, conv.phone_e164 as string, locale)
@@ -162,15 +183,70 @@ export async function handleWaInbound(messageId: string): Promise<void> {
     }
     return
   }
-  if (intent === 'opt_out') {
-    if (conv.user_id) {
-      await db.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', conv.user_id).eq('channel', 'whatsapp').is('revoked_at', null)
+  if (intent === 'onboard') {
+    if (!conv.user_id) {
+      await holdingReply(conv, locale)
+      return
     }
-    await reply(conv, 'wa_opt_out_confirmed', locale)
+    if (!(await activeWhatsAppGrant(conv.user_id as string))) {
+      // No grant yet: JOIN keeps its S0.5 meaning (opt-in + confirmation), flag-independent, so the
+      // dark behaviour of JOIN is byte-identical. The provider sends JOIN again to start the interview.
+      await grantWhatsApp(conv.user_id as string, conv.phone_e164 as string, locale)
+      await reply(conv, 'wa_opt_in_confirmed', locale)
+      return
+    }
+    if (RUNTIME_ENV.AGENT_ENABLED && hooks.enqueueOnboarding && (await isAgentEnabledForUser(db, 'onboarding', conv.user_id as string))) {
+      const sessionId = await attachOrCreateOnboardingSession(conv.id as string, conv.user_id as string, locale)
+      if (sessionId) {
+        await hooks.enqueueOnboarding({ kind: 'start', sessionId })
+        return
+      }
+    }
+    await holdingReply(conv, locale)
     return
   }
   // Anything else: no agent handles WhatsApp yet (S1.4+ / S2.3) → polite holding reply, ≤ 1 per 24h.
   await holdingReply(conv, locale)
+}
+
+async function activeWhatsAppGrant(userId: string): Promise<boolean> {
+  const { data } = await admin().from('agent_grants').select('id').eq('user_id', userId).eq('channel', 'whatsapp').is('revoked_at', null).limit(1)
+  return Array.isArray(data) && data.length > 0
+}
+
+/**
+ * S1.6 — the user's active session (a web-started one has no conversation yet:
+ * JOIN attaches it) or a fresh one; wa_conversations.active_session_id is the
+ * dispatcher's O(1) route for every later message.
+ */
+async function attachOrCreateOnboardingSession(conversationId: string, userId: string, locale: WaLocale): Promise<string | null> {
+  const db = admin()
+  const { data: existing } = await db
+    .from('onboarding_sessions')
+    .select('id')
+    .eq('user_id', userId)
+    .not('state', 'in', '("handed_off","abandoned","failed")')
+    .is('deleted_at', null)
+    .limit(1)
+    .maybeSingle()
+  let sessionId = (existing as { id: string } | null)?.id ?? null
+  if (sessionId) {
+    await db.from('onboarding_sessions').update({ conversation_id: conversationId }).eq('id', sessionId)
+  } else {
+    const ttl = await onboardingSessionTtlHours(db)
+    const { data: created, error } = await db
+      .from('onboarding_sessions')
+      .insert({ user_id: userId, conversation_id: conversationId, surface: 'whatsapp', locale, state: 'language', expires_at: new Date(Date.now() + ttl * 3600 * 1000).toISOString() })
+      .select('id')
+      .single()
+    if (error || !created) {
+      console.error('[wa] onboarding session insert failed', error?.message)
+      return null
+    }
+    sessionId = (created as { id: string }).id
+  }
+  await db.from('wa_conversations').update({ active_session_id: sessionId }).eq('id', conversationId)
+  return sessionId
 }
 
 async function grantWhatsApp(userId: string, phoneE164: string, locale: WaLocale): Promise<void> {

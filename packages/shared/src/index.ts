@@ -56,6 +56,10 @@ export * from './compare'
 export * from './compare-pointers'
 export * from './decline-message'
 
+// S1.6 — onboarding agent contract (steps + transitions, strict draft schema, capability facts) and interview copy (en/hi/te)
+export * from './onboarding'
+export * from './onboarding-copy'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

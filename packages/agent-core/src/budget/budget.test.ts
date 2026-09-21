@@ -54,6 +54,25 @@ describe('budget counters', () => {
     expect(s.breach).toBe('user_day_cap')
   })
 
+  it('S1.6: a zero run cap fails the check before any spend (per-agent override) and lazy caps resolve once', async () => {
+    let loads = 0
+    const b = createRedisBudget({ redis, caps: async () => { loads++; return { ...CAPS, runPaise: 0 } }, runId: 'r1', userId: 'u1' })
+    const s = await b.check()
+    expect(s.ok).toBe(false)
+    expect(s.breach).toBe('run_cap')
+    await b.check()
+    expect(loads).toBe(1)
+  })
+
+  it('S1.6: resolveCaps prefers budget_run_paise_by_agent[agent] over budget_run_paise; absent agent = global', () => {
+    const settings = { budget_run_paise: 2000, budget_run_paise_by_agent: { onboarding: 1500 } }
+    expect(resolveCaps(settings, 'onboarding').runPaise).toBe(1500)
+    expect(resolveCaps(settings, 'rfq_quality').runPaise).toBe(2000)
+    expect(resolveCaps(settings).runPaise).toBe(2000)
+    expect(resolveCaps({ budget_run_paise_by_agent: { onboarding: 0 } }, 'onboarding').runPaise).toBe(0)
+    expect(resolveCaps({}, 'onboarding').runPaise).toBe(2000) // registry default
+  })
+
   it('noop budget always allows', async () => {
     const b = createNoopBudget()
     expect((await b.check()).ok).toBe(true)

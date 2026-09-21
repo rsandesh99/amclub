@@ -56,12 +56,26 @@ export interface MediaDownload {
   mime: string
 }
 
+/** S1.6 — a reply button (Meta interactive `button` ≤ 3, or a list row when more). */
+export interface WaButton {
+  /** The payload echoed back as InboundMessage.buttonPayload (≤ 256 chars). */
+  id: string
+  /** Visible label (Meta: ≤ 20 chars for buttons, ≤ 24 for list rows; drivers truncate). */
+  title: string
+}
+
 export interface WhatsAppProvider {
   readonly name: WhatsAppDriverName
   /** Approved transactional template, per-locale name + ordered body params. */
   sendTemplate(to: string, templateName: string, locale: WaLocale, params: string[]): Promise<SendResult>
   /** Free text — only valid inside the 24h customer-care window. */
   sendText(to: string, text: string): Promise<SendResult>
+  /**
+   * S1.6 — interactive reply buttons inside the 24h window. Up to 3 render as
+   * buttons; 4..10 render as a list (single pick). The tapped button comes back
+   * as kind='button' with buttonPayload = id. `listLabel` is the list's open button.
+   */
+  sendButtons(to: string, text: string, buttons: WaButton[], listLabel?: string): Promise<SendResult>
   sendMedia(to: string, media: { url?: string; bytes?: Uint8Array; mime: string; caption?: string }): Promise<SendResult>
   downloadMedia(mediaRef: string): Promise<MediaDownload>
   /** Parse a raw webhook body into inbound messages + delivery statuses. */

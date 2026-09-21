@@ -818,3 +818,60 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   its empty build) for race + idempotence; when that import is not possible on a rig, the same guarded
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
+
+## Agent S1.6 — Onboarding agent (logged 2026-09-21)
+
+**Shipped (dark):** scripted WhatsApp provider interview in the runtime (queue `agent.onboarding`), ONE model call
+per draft (max two per session; `onboarding_interview@v1` + 24-case golden set + `eval --set onboarding_interview`),
+provider confirms by BUTTON (`ai_decisions` feature `onboarding`, tool `confirm_onboarding_draft`, local confirm gate),
+migration **0036** (`onboarding_sessions`, `provider_capability_facts`, `wa_conversations.active_session_id`), web
+start/draft routes, wizard "Finish on WhatsApp" card + prefill chips, `/profile/provider.onboardingSessionId` link,
+partner-dashboard suggested listings, admin "Onboarding interview" section, cron `agent-onboarding-expire`, runbook
+`docs/agents/ONBOARDING.md`, rig `verify-onboarding.ts`.
+
+- **No TTS in this stage** — every question is text (the S1.8 voice leg). Voice ANSWERS work (STT below).
+- **STT still goes through the web route** `POST /api/v1/rfq/voice-parse` (`transcript_only=true`) under the provider's
+  delegated token, with a nominal `duration_ms` (WhatsApp does not report voice-note length; the route's 3 MB byte cap
+  backstops it). Sarvam's format list (WAV/AAC/MP3) may reject WhatsApp's ogg/opus live — the machine then asks the
+  provider to type. Moving STT (and format conversion) into agent-core is S1.8.
+- **Photos stay in `wa-media`** (paths in `onboarding_sessions.photo_refs`, signed URLs on read); no import into the
+  provider media pipeline until it accepts them.
+- **No mobile wizard exists** (`apps/mobile` references a `partner-signup` screen that was never built), so the
+  "Finish on WhatsApp" entry is web-only; `/profile/me.onboardingWhatsAppEnabled` is already delivered to mobile for
+  when the screen lands.
+- **The interview machine lives in agent-core**, not under the runtime (the runtime has no test runner; the prompt asked
+  for ≥ 30 unit tests) — `apps/agent-runtime/src/agents/onboarding/machine.ts` re-exports it.
+- **JOIN without a grant keeps its S0.5 opt-in meaning** (the prompt said "reply with the opt-in instruction"): JOIN
+  was an advertised opt-in keyword, and the flag-off behaviour must stay byte-identical, so a JOIN from an unbound
+  number still creates the grant + confirmation; the second JOIN starts the interview.
+- **Interakt has no interactive-button payload wired**: `sendButtons` falls back to numbered text and the machine
+  accepts the number, but the draft confirmation is button-payload-only, so confirm needs Meta until Interakt's
+  interactive API is wired.
+- **The decision route gained optional `input_refs`** (ids only) and a per-tool feature map (`confirm_onboarding_draft`
+  → `onboarding`) so the S1.6 row carries the session and button-message ids; every other tool is unchanged
+  (`agent_tool`).
+- **The runner short-circuits LOCAL tools** (`wraps: 'local …'`) on resume: no fetch, the verified `ai_decisions` row is
+  the effect (`tool_called { local: true }`); `confirm_onboarding_draft` is the first confirm:true local tool.
+- **Per-agent run caps**: `budget_run_paise_by_agent` (registry) + `resolveCaps(settings, agentName)`; the runtime's
+  budget now reads the four budget keys from `agent_settings` lazily per run (previously env/defaults only).
+- **The wizard's own-draft-wins rule**: the confirmed draft fills only EMPTY fields (a localStorage draft is kept).
+- **Rig on this laptop**: no `SUPABASE_JWT_SECRET` / `AGENT_RUNTIME_SECRET`, and the runtime must never start against
+  prod, so `verify-onboarding.ts` drives `runOnboardingTurn` + `handleWaInbound` in-process with the provider's own
+  session token in place of the delegated one; the HMAC exchange, the pg-boss queue and the webhook are S0.1/S0.5/S1.4-
+  proven legs recorded as skips. `/profile/provider` needs `COLUMN_ENCRYPTION_KEY` on the local server.
+- **Dispatcher order while a session is active: STOP → session → everything else.** The prompt's order (keywords →
+  active session) would swallow a typed "yes" / "ok" / "hi" mid-interview into the S0.5 opt-in branch (the rig caught it:
+  "yes" on review re-granted instead of re-sending the buttons). Now only the opt-OUT keyword outranks an active session;
+  opt-in words are answers while a session is active (the user already holds a grant). Without an active session the S0.5
+  order is unchanged.
+- **`runAgent` now reports `AgentRunError.code` (e.g. `budget_run_cap`) instead of the message** ("budget exceeded:
+  run_cap"), so the workers' `NO_RETRY` regexes actually match budget/step breaches (a latent S1.4 gap: the dossier
+  worker would have retried a budget failure twice). The `agent_runs.error` column already carried the code.
+- **The real delegated path is unexercised until the first Fly deploy** (founder decision, S1.6 review): before ANY
+  onboarding cohort is enabled, the deployed runtime must run one full interview against the deployed web app once —
+  WhatsApp grant → `POST /api/v1/agent/token` (HMAC → run-bound JWT) → `POST /api/v1/rfq/voice-parse` under that
+  Bearer → `POST /api/v1/agent/runs/[id]/decision` under that Bearer → `/internal/runs/[id]/resume` — the three legs
+  the laptop rig records as skips (HMAC exchange, pg-boss queue, webhook ingestion).
+- **Wizard listing prefill URL** is `/partner/listings/new?onboarding_session=…&pkg=N` (the tree's route; the prompt said
+  `/partner/packages/new`).
+- **Tamil/Telugu:** new keys only (28 each), English fallback for the rest; the interview copy itself is en/hi/te.

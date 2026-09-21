@@ -53,6 +53,32 @@ export function makeMetaCloudDriver(cfg: WhatsAppConfig, fetchImpl: typeof fetch
     sendText(to, text) {
       return send({ to, type: 'text', text: { preview_url: false, body: text } })
     },
+    sendButtons(to, text, buttons, listLabel) {
+      if (buttons.length === 0) return send({ to, type: 'text', text: { preview_url: false, body: text } })
+      if (buttons.length <= 3) {
+        return send({
+          to,
+          type: 'interactive',
+          interactive: {
+            type: 'button',
+            body: { text },
+            action: { buttons: buttons.map((b) => ({ type: 'reply', reply: { id: b.id.slice(0, 256), title: b.title.slice(0, 20) } })) },
+          },
+        })
+      }
+      return send({
+        to,
+        type: 'interactive',
+        interactive: {
+          type: 'list',
+          body: { text },
+          action: {
+            button: (listLabel ?? 'Choose').slice(0, 20),
+            sections: [{ title: (listLabel ?? 'Choose').slice(0, 24), rows: buttons.slice(0, 10).map((b) => ({ id: b.id.slice(0, 200), title: b.title.slice(0, 24) })) }],
+          },
+        },
+      })
+    },
     sendMedia(to, media) {
       const kind = media.mime.startsWith('image/') ? 'image' : media.mime.startsWith('audio/') ? 'audio' : 'document'
       if (!media.url) return Promise.resolve(err('meta_cloud sendMedia needs a public url (upload flow not wired)'))
@@ -89,8 +115,9 @@ export function makeMetaCloudDriver(cfg: WhatsAppConfig, fetchImpl: typeof fetch
               messages.push({ ...base, kind: type, body: media.caption ?? null, mediaRef: media.id ?? null, mime: media.mime_type ?? null, buttonPayload: null })
             } else if (type === 'button' || type === 'interactive') {
               const btn = (m['button'] as { text?: string; payload?: string }) ?? {}
-              const inter = (m['interactive'] as { button_reply?: { id?: string; title?: string } }) ?? {}
-              messages.push({ ...base, kind: 'button', body: btn.text ?? inter.button_reply?.title ?? null, mediaRef: null, mime: null, buttonPayload: btn.payload ?? inter.button_reply?.id ?? null })
+              const inter = (m['interactive'] as { button_reply?: { id?: string; title?: string }; list_reply?: { id?: string; title?: string } }) ?? {}
+              const reply = inter.button_reply ?? inter.list_reply
+              messages.push({ ...base, kind: 'button', body: btn.text ?? reply?.title ?? null, mediaRef: null, mime: null, buttonPayload: btn.payload ?? reply?.id ?? null })
             } else {
               messages.push({ ...base, kind: 'unknown', body: null, mediaRef: null, mime: null, buttonPayload: null })
             }

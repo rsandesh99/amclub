@@ -14,6 +14,7 @@ import { getSessionUser, upsertUserRow } from '@/lib/auth/session'
 import { encryptColumn, fingerprintColumn } from '@/lib/crypto'
 import { serverError } from '@/lib/api/errors'
 import { missingLegalDocs } from '@/lib/legal/acceptance'
+import { captureServerEvent } from '@/lib/analytics/server'
 
 const credentialUploadSchema = z.object({
   url: z.string().optional(),
@@ -48,6 +49,8 @@ const bodySchema = z.object({
   bankVerified: z.boolean().default(false),
   // Keyed by category slug → { url|path, name }
   credentialUploads: z.record(z.string(), credentialUploadSchema).default({}),
+  /** S1.6 — the confirmed WhatsApp interview this submission was prefilled from (ownership-checked; the only draft → profile link). */
+  onboardingSessionId: z.string().uuid().optional(),
 })
 
 function slugify(input: string): string {
@@ -73,9 +76,17 @@ export async function POST(request: NextRequest) {
 
   const d = parsed.data
 
+  const admin = await createAdminClient()
+
+  // S1.6 — a foreign or unknown onboarding session id is refused BEFORE anything is written.
+  if (d.onboardingSessionId) {
+    const { data: sess } = await admin.from('onboarding_sessions').select('id, user_id').eq('id', d.onboardingSessionId).maybeSingle()
+    if (!sess) return NextResponse.json({ error: 'onboarding_session_not_found' }, { status: 404 })
+    if ((sess as { user_id: string }).user_id !== user.id) return NextResponse.json({ error: 'onboarding_session_not_yours' }, { status: 403 })
+  }
+
   // Signup contract (Phase 2): Terms + Privacy + Provider Addendum must be on
   // record at the current versions before a provider account is created.
-  const admin = await createAdminClient()
   const missingDocs = await missingLegalDocs(admin, user.id, true)
   if (missingDocs.length > 0) {
     return NextResponse.json({ error: 'legal_acceptance_required', required: missingDocs }, { status: 403 })
@@ -276,6 +287,13 @@ export async function POST(request: NextRequest) {
   )
   if (bankErr) {
     return serverError('[profile/provider POST] bank account:', bankErr)
+  }
+
+  // S1.6 — link the consumed interview to the profile it produced (ownership re-checked in the WHERE).
+  if (d.onboardingSessionId) {
+    const { error: linkErr } = await admin.from('onboarding_sessions').update({ provider_id: providerId }).eq('id', d.onboardingSessionId).eq('user_id', user.id)
+    if (linkErr) console.error('[profile/provider POST] onboarding link:', linkErr)
+    captureServerEvent(user.id, 'onboarding_prefill_used', { session_id: d.onboardingSessionId, provider_id: providerId })
   }
 
   return NextResponse.json({ success: true, providerId, slug, status: 'under_review' })

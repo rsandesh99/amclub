@@ -123,6 +123,10 @@ export function resolveToolRoute(
     // absent here: no tool wraps it, so the runtime can never call it.
     case 'read_order_evidence':
       return { method: 'GET', path: `/api/v1/admin/orders/${id('order_id')}/evidence` }
+    // S1.6 — a LOCAL confirm gate: no /api/v1 route exists; the approved ai_decisions row is the outcome
+    // and executeTool short-circuits before any fetch (see the 'local' branch there).
+    case 'confirm_onboarding_draft':
+      return { method: 'POST', path: 'local:confirm_onboarding_draft', body: payload }
     default:
       throw new AgentRunError('tool_route_unwired', `no /api/v1 route wired for tool '${tool}' yet`)
   }
@@ -255,6 +259,12 @@ export class AgentRun {
   }
 
   private async executeTool(tool: AgentToolName, payload: Record<string, unknown>): Promise<ToolCallResult> {
+    // A local tool (wraps 'local …') calls no route: for a confirm:true local tool the
+    // verified ai_decisions row IS the effect; the caller reads it back. Never a fetch.
+    if (agentTool(tool).wraps.startsWith('local')) {
+      await this.ctx.ledger.appendEvent({ runId: this.ctx.runId, kind: 'tool_called', tool, actor: 'agent', payload: { local: true, ok: true } })
+      return { status: 200, ok: true, body: null }
+    }
     const route = resolveToolRoute(tool, payload)
     const token = await this.ctx.getToken()
     const f = this.ctx.fetchImpl ?? fetch
@@ -304,7 +314,8 @@ export interface AgentDefinition<Input, Output> {
 export interface RunAgentDeps {
   ledger: Ledger
   gateway: Gateway
-  makeBudget: (args: { runId: string; userId: string }) => Budget
+  /** S1.6: `agentName` lets the budget apply a per-agent run cap (budget_run_paise_by_agent). */
+  makeBudget: (args: { runId: string; userId: string; agentName?: string }) => Budget
   apiBaseUrl: string
   /** Mint the run-bound delegated token (the caller wires the token endpoint). */
   makeToken: (args: { runId: string; persona: AgentPersona; userId: string }) => Promise<string> | string
@@ -341,7 +352,7 @@ export async function runAgent<I, O>(
     persona: def.persona,
     ledger: deps.ledger,
     gateway: deps.gateway,
-    budget: deps.makeBudget({ runId, userId: open.userId }),
+    budget: deps.makeBudget({ runId, userId: open.userId, agentName: def.name }),
     apiBaseUrl: deps.apiBaseUrl,
     getToken: () => deps.makeToken({ runId, persona: def.persona, userId: open.userId }),
     scopes: deps.scopes ?? null,
@@ -356,7 +367,9 @@ export async function runAgent<I, O>(
     await run.complete()
     return { runId, status: 'completed', output }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    // An AgentRunError reports its CODE (budget_run_cap, step_budget, tool_out_of_scope, …) so workers' no-retry
+    // rules match what agent_runs.error already holds; anything else reports its message.
+    const message = e instanceof AgentRunError ? e.code : e instanceof Error ? e.message : String(e)
     await run.fail(message)
     return { runId, status: 'failed', error: message }
   }

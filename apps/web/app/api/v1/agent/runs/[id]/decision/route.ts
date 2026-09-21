@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { agentToolNameSchema, type AgentPersona } from '@amclub/shared'
+import { agentToolNameSchema, type AgentPersona, type AgentToolName, type AiDecisionFeature } from '@amclub/shared'
 import { createSupabaseLedger, signRuntimeCredential } from '@amclub/agent-core'
 import { agentApiGate } from '@/lib/agent/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
@@ -27,7 +27,14 @@ const bodySchema = z.object({
   approve: z.boolean(),
   final: z.record(z.string(), z.unknown()).optional(),
   reason: z.string().max(500).optional(),
+  /** S1.6 — extra REFS (ids only, never content) recorded next to run_id, e.g. { session_id, wa_message_id }. */
+  input_refs: z.record(z.string().max(40), z.string().max(200)).optional(),
 })
+
+/** The ai_decisions.feature for a tool's confirmation; the generic runtime confirmation otherwise. */
+const FEATURE_BY_TOOL: Partial<Record<AgentToolName, AiDecisionFeature>> = {
+  confirm_onboarding_draft: 'onboarding', // S1.6
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = agentApiGate()
@@ -76,10 +83,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const final = parsed.data.final ?? proposed
   const decision = await ledger.recordDecision({
-    feature: 'agent_tool',
+    feature: FEATURE_BY_TOOL[tool] ?? 'agent_tool',
     runId: id,
     tool,
-    inputRefs: { run_id: id },
+    inputRefs: { ...(parsed.data.input_refs ?? {}), run_id: id },
     proposed,
     final,
     decidedBy: userId,

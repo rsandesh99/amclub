@@ -78,6 +78,35 @@ Only vendor ids, phone (E.164), text, and media object paths are stored; media
 sits in a **private** bucket and is read via signed URLs. Nothing here is
 exposed to a client role (no RLS policies except admin/ops read).
 
+## S1.6 — the onboarding interview
+
+**Dispatcher order** (`apps/agent-runtime/src/whatsapp/inbound.ts`): STOP
+(opt-out always wins) → **active session** (`wa_conversations.active_session_id` routes
+every other message into the interview, one `agent.onboarding` job per
+message) → **JOIN** (`ONBOARDING_KEYWORDS`: with a grant and
+`agents_enabled.onboarding` + cohort it attaches the user's web-started session
+or creates one and enqueues `start`; without a grant JOIN keeps its S0.5 opt-in
+meaning, so the dark behaviour is unchanged) → holding reply. JOIN/जुड़ें/చేరండి
+moved out of `WA_OPT_IN_KEYWORDS`; START/YES/HI/… are unchanged.
+
+**Interactive buttons.** `WhatsAppProvider.sendButtons(to, text, buttons,
+listLabel?)`: Meta sends ≤ 3 as reply buttons and 4..10 as a list (single
+pick); the tap comes back as `kind='button'` with `buttonPayload` = the id
+(`button_reply` and `list_reply` both parsed). Interakt has no interactive
+payload wired: options go out as numbered lines and the machine accepts the
+number; the draft confirmation (`confirm:<runId>`) therefore needs Meta
+(FOLLOWUPS S1.6). The stub logs.
+
+**Templates** (opt-in gated, en/hi/te): `onboarding_start`,
+`onboarding_resume`, `onboarding_draft_ready`, `onboarding_expired` — see
+`docs/agents/ONBOARDING.md` and PRE_LAUNCH_CHECKLIST 1.3.
+
+**Media retention.** Voice notes and workshop photos stay as objects in the
+private `wa-media` bucket at `<conversationId>/<vendorMessageId>.<ext>`;
+`onboarding_sessions.photo_refs` holds the paths; reads are 15-minute signed
+URLs (wizard, partner dashboard, admin). Nothing is copied into the provider
+media pipeline in this stage.
+
 ## S1.4 note — founder one-tap
 
 The Payout-Evidence agent notifies the ops user by kind `payout_dossier_ready`

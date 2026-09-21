@@ -15,6 +15,9 @@ export { comparePointersSchema, type ComparePointers } from './prompts/quote_com
 export { declineMessageSchema, type DeclineMessage } from './prompts/decline_message/schema'
 export { rfqQualityModelOutputSchema, rfqQualityReportSchema, rfqQualityPrecheck, mergeQualityReport, type RfqQualityModelOutput, type RfqQualityReport } from './prompts/rfq_quality/schema'
 export * from './rfq-quality/parts'
+// S1.6 — onboarding interview: pure state machine, prompt parts (taint), draft summary renderer
+export * from './onboarding/index'
+export { onboardingDraftSchema, type OnboardingDraft } from './prompts/onboarding_interview/schema'
 export * from './compare/parts'
 export * from './compare/stub'
 export * from './decline/parts'

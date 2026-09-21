@@ -150,6 +150,42 @@ describe('confirm gate', () => {
   })
 })
 
+describe('S1.6 local confirm gate (confirm_onboarding_draft)', () => {
+  it('parks like any confirm:true tool and, once approved, resumes WITHOUT any fetch (the decision row is the effect)', async () => {
+    const { ledger, runs, events } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'p1', persona: 'provider', surface: 'whatsapp' })
+    let fetched = 0
+    const ctx = { ...ctxWith(ledger, id), persona: 'provider' as const, fetchImpl: (async () => { fetched++; return new Response('{}', { status: 200 }) }) as unknown as typeof fetch }
+    const run = new AgentRun(ctx)
+    const parked = await run.proposeTool('confirm_onboarding_draft', { session_id: 's1' })
+    expect(parked.status).toBe('awaiting_confirmation')
+    await expect(run.resume('confirm_onboarding_draft', {})).rejects.toBeInstanceOf(ConfirmationNotApprovedError)
+    const dec = await ledger.recordDecision({ feature: 'onboarding', runId: id, tool: 'confirm_onboarding_draft', inputRefs: {}, proposed: {}, final: {}, decidedBy: 'p1' })
+    const out = await run.resume('confirm_onboarding_draft', {}, { decisionId: dec.id })
+    expect(out.status).toBe('done')
+    if (out.status === 'done') expect(out.result).toEqual({ status: 200, ok: true, body: null })
+    expect(fetched).toBe(0)
+    expect(events.some((e) => e.kind === 'tool_called' && e.tool === 'confirm_onboarding_draft')).toBe(true)
+    await run.complete()
+    expect(runs.get(id)?.status).toBe('completed')
+  })
+  it('runAgent reports the AgentRunError CODE on failure (budget_run_cap), matching agent_runs.error', async () => {
+    const { ledger, runs } = makeFakeLedger()
+    const deps = { ledger, gateway: fakeGateway, makeBudget: () => budget(false), apiBaseUrl: 'http://x', makeToken: () => 't' }
+    const r = await runAgent({ name: 'onboarding', persona: 'provider' as const, run: async (run) => run.callModel({ taskClass: 'onboarding_interview', prompt: PROMPT, schema: SCHEMA, stub: () => ({ ok: true as const }) }) }, deps, { userId: 'p1', surface: 'whatsapp' }, {})
+    expect(r.status).toBe('failed')
+    if (r.status === 'failed') expect(r.error).toBe('budget_run_cap')
+    expect(runs.get(r.runId)?.status).toBe('failed')
+  })
+  it('runAgent passes the agent name to makeBudget (per-agent caps)', async () => {
+    const { ledger } = makeFakeLedger()
+    const seen: string[] = []
+    const deps = { ledger, gateway: fakeGateway, makeBudget: (a: { agentName?: string }) => { seen.push(a.agentName ?? ''); return budget(true) }, apiBaseUrl: 'http://x', makeToken: () => 't' }
+    await runAgent({ name: 'onboarding', persona: 'provider' as const, run: async () => 'ok' }, deps, { userId: 'p1', surface: 'whatsapp' }, {})
+    expect(seen).toEqual(['onboarding'])
+  })
+})
+
 // ── allowlist + scope ────────────────────────────────────────────────────────
 
 describe('allowlist and scope', () => {

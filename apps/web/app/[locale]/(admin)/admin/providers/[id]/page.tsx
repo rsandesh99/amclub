@@ -148,6 +148,46 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
         ))}
       </Section>
 
+      {/* S1.6 — the WhatsApp onboarding interview beside verifications and listings (present only while AGENT_ENABLED) */}
+      {data.onboarding && (
+        <Section title={t('onboarding_title')}>
+          <p className="text-xs text-foreground-secondary">
+            {t('onboarding_state')}: {data.onboarding.session.state} · {data.onboarding.session.locale} · {data.onboarding.session.surface}
+            {data.onboarding.session.confirmedAt ? ` · ${t('onboarding_confirmed')}` : ''}
+            {data.onboarding.decisionId ? ` · ${t('onboarding_decision')} ${String(data.onboarding.decisionId).slice(0, 8)}` : ''}
+            {data.onboarding.session.gstinGiven ? ' · GSTIN ✓' : ''}{data.onboarding.session.udyamGiven ? ' · Udyam ✓' : ''}
+          </p>
+          {data.onboarding.answers.length === 0 ? <Empty label={t('onboarding_none')} /> : (
+            <div className="space-y-1">
+              {data.onboarding.answers.map((a: any, i: number) => (
+                <p key={i} className="text-sm">
+                  <span className="text-foreground-secondary">{a.step}{a.category_slug ? ` · ${a.category_slug} #${a.question_no}` : ''}{a.kind === 'audio' ? ' · 🎤' : ''}{a.redacted ? ` · ${t('onboarding_masked')}` : ''}:</span> {a.text}
+                </p>
+              ))}
+            </div>
+          )}
+          {data.onboarding.photoUrls.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {data.onboarding.photoUrls.map((u: string, i: number) => (
+                <a key={i} href={u} target="_blank" rel="noopener">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={u} alt="" className="h-20 w-20 rounded-button object-cover" />
+                </a>
+              ))}
+            </div>
+          )}
+          {data.onboarding.draft && (
+            <div className="border-t border-border pt-2 text-sm">
+              <p className="font-medium">{data.onboarding.draft.profile.display_name ?? '—'}{data.onboarding.draftConfirmed ? '' : ` (${t('onboarding_unconfirmed')})`}</p>
+              {data.onboarding.draft.profile.about && <p className="text-xs text-foreground-secondary">{data.onboarding.draft.profile.about}</p>}
+              {data.onboarding.draft.packages.map((p: any, i: number) => (
+                <p key={i} className="text-xs">{i + 1}. {p.title} · {p.price_paise === null ? '—' : formatINR(Number(p.price_paise))}</p>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+
       {/* Recent orders */}
       <Section title={t('orders_title')}>
         {data.orders.length === 0 ? <Empty label={t('none')} /> : data.orders.slice(0, 10).map((o: any) => (

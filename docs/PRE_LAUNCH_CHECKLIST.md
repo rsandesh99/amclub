@@ -52,6 +52,13 @@ noted; these are what `packages/agent-core/src/whatsapp/templates.ts` sends):
 | (system, no params) opt-in confirmed | `amc_wa_opt_in_en`, `amc_wa_opt_in_hi` |
 | (system, no params) opt-out confirmed | `amc_wa_opt_out_en`, `amc_wa_opt_out_hi` |
 | (system, no params) holding reply | `amc_wa_holding_en`, `amc_wa_holding_hi` |
+| onboarding_start (S1.6, provider; opt-in gated; `{{1}}` name) | `amc_onboarding_start_en`, `amc_onboarding_start_hi`, `amc_onboarding_start_te` |
+| onboarding_resume (S1.6; `{{1}}` step label) | `amc_onboarding_resume_en`, `amc_onboarding_resume_hi`, `amc_onboarding_resume_te` |
+| onboarding_draft_ready (S1.6; `{{1}}` display name) | `amc_onboarding_draft_ready_en`, `amc_onboarding_draft_ready_hi`, `amc_onboarding_draft_ready_te` |
+| onboarding_expired (S1.6; `{{1}}` link) | `amc_onboarding_expired_en`, `amc_onboarding_expired_hi`, `amc_onboarding_expired_te` |
+
+The S1.6 kinds are the first with a `_te` variant (the interview runs in
+en/hi/te); the older kinds stay en + hi until Telugu notifications land.
 
 Webhook: `https://<agent-runtime>/webhooks/whatsapp` (Meta: verify token; Interakt: `x-interakt-secret` header).
 

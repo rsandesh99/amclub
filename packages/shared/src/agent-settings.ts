@@ -125,6 +125,18 @@ export const AGENT_SETTING_DEFS = {
     default: 30,
     hint: "S1.5 minutes a deferred RFQ waits for the buyer's answers before the cron guard fans it out as is.",
   },
+  // ── S1.6 onboarding ──────────────────────────────────────────────────────
+  budget_run_paise_by_agent: {
+    // Partial map agent → per-run cap; an absent agent uses budget_run_paise. Unknown agent names never parse.
+    schema: z.record(z.enum(AGENT_NAMES), z.number().int().min(0).max(1_000_000)),
+    default: {} as Partial<Record<AgentName, number>>,
+    hint: 'S1.6 per-agent override of budget_run_paise (paise). Absent agent = the global cap. Onboarding launches at 1500 (₹15).',
+  },
+  onboarding_session_ttl_hours: {
+    schema: z.number().int().min(1).max(168),
+    default: 72,
+    hint: 'S1.6 hours an unfinished WhatsApp onboarding session stays open (sliding on each answer) before the expiry job abandons it and points the provider to the web wizard.',
+  },
 } as const satisfies Record<string, AgentSettingDef>
 
 export type AgentSettingKey = keyof typeof AGENT_SETTING_DEFS

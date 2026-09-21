@@ -206,6 +206,15 @@ const MANIFEST: Entry[] = [
     tables: [],
     note: 'S1.5 two-phase create: rfqs.fanout_at (BACKFILLED to created_at for every pre-0035 row — deferred = fanout_at IS NULL, never a status), quality_report/checked_at/decision/decision_at/decision_id, partial index rfqs_deferred_idx',
   },
+  {
+    file: '0036_onboarding_sessions.sql',
+    tables: ['onboarding_sessions', 'provider_capability_facts'],
+    triggers: [
+      ['onboarding_sessions', 'onboarding_sessions_set_updated_at'],
+      ['provider_capability_facts', 'provider_capability_facts_set_updated_at'],
+    ],
+    note: 'S1.6 Onboarding agent: onboarding_sessions (scripted WhatsApp interview; one active per user), provider_capability_facts (confirmed facts with ai_decisions provenance), wa_conversations.active_session_id; RLS self + admin read, no client writes',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

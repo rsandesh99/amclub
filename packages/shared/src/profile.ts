@@ -28,4 +28,6 @@ export interface ProfileMeResponse {
   quoteExtractEnabled: boolean
   /** S1.2 — compare pointers for THIS buyer (AGENT_ENABLED + agents_enabled.compare_pointers + cohort). Flags render regardless. */
   comparePointersEnabled: boolean
+  /** S1.6 — the "Finish on WhatsApp" card in the provider wizard (AGENT_ENABLED + agents_enabled.onboarding + cohort). */
+  onboardingWhatsAppEnabled: boolean
 }

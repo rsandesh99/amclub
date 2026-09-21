@@ -6,6 +6,7 @@ import { getProviderReadiness } from '@/lib/payments/readiness-server'
 import { MART_ENABLED } from '@/lib/flags'
 import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
 import { isComparePointersEnabledFor } from '@/lib/rfq/compare'
+import { isOnboardingEnabledFor } from '@/lib/agent/onboarding'
 
 /** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
@@ -33,6 +34,9 @@ export async function GET() {
   const quoteExtractEnabled = provider ? await isQuoteExtractEnabledFor(admin, userId) : false
   // S1.2 — compare pointers for buyers only (flags themselves need no flag).
   const comparePointersEnabled = msme ? await isComparePointersEnabledFor(admin, userId) : false
+  // S1.6 — "Finish on WhatsApp" for users who can still run the provider wizard (no profile, or rejected / pending_kyc).
+  const canOnboard = !provider || provider.status === 'rejected' || provider.status === 'pending_kyc'
+  const onboardingWhatsAppEnabled = canOnboard ? await isOnboardingEnabledFor(admin, userId) : false
 
   const primaryRole =
     roles.includes('admin') || roles.includes('ops')
@@ -56,6 +60,7 @@ export async function GET() {
     martEnabled: MART_ENABLED,
     quoteExtractEnabled,
     comparePointersEnabled,
+    onboardingWhatsAppEnabled,
   }
   return NextResponse.json(
     body,
