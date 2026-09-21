@@ -17,6 +17,9 @@ export { rfqQualityModelOutputSchema, rfqQualityReportSchema, rfqQualityPrecheck
 export * from './rfq-quality/parts'
 // S1.6 — onboarding interview: pure state machine, prompt parts (taint), draft summary renderer
 export * from './onboarding/index'
+// S1.7 — dispute triage: prompt parts (taint); the strict card + checks + clamp live in shared
+export * from './dispute-triage/parts'
+export { disputeTriageSchema, type DisputeTriage } from './prompts/dispute_triage/schema'
 export { onboardingDraftSchema, type OnboardingDraft } from './prompts/onboarding_interview/schema'
 export * from './compare/parts'
 export * from './compare/stub'
