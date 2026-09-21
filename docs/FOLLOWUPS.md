@@ -819,6 +819,34 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
+## Agent S1.7 — Dispute-Triage agent (logged 2026-09-21)
+
+**Shipped (dark):** party statements `dispute_statements` (spine, not flag-gated; one per party, contact-masked, ≤ 5
+order documents, editable until a triage exists; web card + mobile block + admin console); Dispute-Triage agent (ops
+persona, queue `agent.dispute_triage`, two GET tools, one frontier call on the strict `disputeTriageSchema`,
+`clampTriage`, `dispute_triages` + `disputes.triage_id`, idempotent notify); migration **0037**; the resolve route gains
+`requireNotDelegated` + optional `triage_id` → one `ai_decisions` row after settlement; prompt `dispute_triage@v1` +
+17-case golden set + `eval --set dispute_triage`; runbook `docs/agents/DISPUTE_TRIAGE.md`; rig `verify-dispute-triage.ts`.
+
+- **Statement versioning:** one row per party, edited in place (PATCH) until a triage exists; no history of edits
+  (the `dispute_statement` event records `edited: true`). A versions table is a later stage if reviewers need it.
+- **Vision on dispute photos:** photos are NOT sent to the model in this stage; where an S1.4 dossier exists its
+  plausibility findings pass as trusted facts. Sending the dispute's own photos (and the statements' attachments) to
+  the frontier tier is a follow-up once the S1.4 findings prove useful on real disputes.
+- **`dispute_summary` task class is now unused by any agent** (the triage uses `dispute_triage`); keep it for the S2.3
+  support agent or retire it in a cleanup PR.
+- **A buyer/provider-visible "what happens next" copy** on a disputed order (who reads the statements, typical time to
+  resolution) is not written yet — the statement card only says both statements reach the reviewer.
+- **Mobile has no raise-dispute action at all** (`apps/mobile/app/(app)/orders/[id].tsx` never offered it — the prompt
+  assumed it did); S1.7 adds the statement block (text only, no attachments) for disputes raised on the web.
+- **The scope refusal** (a delegated ops token whose grant lacks `summarize_dispute` → 403 on the admin dispute GET) is
+  the `requireToolScope` pattern proven in S1.4; the laptop rig cannot mint a delegated token (no
+  `SUPABASE_JWT_SECRET`) and records it as a skip — the first-deploy delegated-path gate (S1.6) covers it.
+- **Goods disputes** flow through the same agent (`goods_evidence` in the evidence payload; checks + golden cover them);
+  the rig skips the goods lifecycle because `MART_ENABLED` is off on prod.
+- **Golden doc refs** use the fixtures' short ids (`doc:b2`) while the runtime cites real uuids; the eval adds the short
+  form to the allow-list so the clamp is exercised on both.
+
 ## Agent S1.6 — Onboarding agent (logged 2026-09-21)
 
 **Shipped (dark):** scripted WhatsApp provider interview in the runtime (queue `agent.onboarding`), ONE model call

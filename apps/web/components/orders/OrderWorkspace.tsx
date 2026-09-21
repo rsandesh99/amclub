@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ReviewSection } from './ReviewSection'
 import { MilestonesCard } from './MilestonesCard'
+import { DisputeStatementCard } from './DisputeStatementCard'
 import { GoodsOrderWorkspace } from '@/components/mart/GoodsOrderWorkspace'
 import type { GoodsOrderExtras } from '@/lib/mart/order-extras'
 
@@ -241,6 +242,9 @@ function ServicesOrderWorkspace({
           {error && <p className="text-sm text-danger">{error}</p>}
         </div>
       )}
+
+      {/* S1.7 — party statements while the dispute is open (spine; one per party; editable until a triage exists) */}
+      {status === 'disputed' && <DisputeStatementCard orderId={id} documents={documents.map((d) => ({ id: d.id, file_name: d.file_name }))} />}
 
       {/* Services evidence engine (S0.3): staged milestones with photo proof. */}
       <MilestonesCard orderId={id} role={viewerRole} orderStatus={status} />

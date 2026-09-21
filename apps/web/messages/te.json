@@ -840,5 +840,22 @@
     "onboarding_decision": "నిర్ణయం",
     "onboarding_masked": "దాచబడింది",
     "onboarding_none": "జవాబులు నమోదు కాలేదు."
+  },
+  "orders": {
+    "dispute_statement_title": "మీ వాదన",
+    "dispute_statement_intro": "ఏమి జరిగిందో మీ మాటల్లో మా బృందానికి చెప్పండి. రెండు వాదనలు సమీక్షకుడికి పక్కపక్కనే కనిపిస్తాయి.",
+    "dispute_statement_placeholder": "ఏమి ఒప్పుకున్నారు, ఏమి అందింది, ఏమి తప్పు జరిగింది…",
+    "dispute_statement_masking_hint": "ఫోన్ నంబర్లు, ఇమెయిల్‌లు స్వయంచాలకంగా దాచబడతాయి.",
+    "dispute_statement_attach": "ఈ ఆర్డర్ పత్రాలను జత చేయండి (గరిష్టంగా 5)",
+    "dispute_statement_submit": "వాదన సమర్పించండి",
+    "dispute_statement_update": "వాదన నవీకరించండి",
+    "dispute_statement_saved": "వాదన సేవ్ అయింది.",
+    "dispute_statement_masked_notice": "వాదన సేవ్ అయింది. సంప్రదింపు వివరాలు దాచబడ్డాయి.",
+    "dispute_statement_locked": "సమీక్ష మొదలయ్యాక వాదన మార్చలేరు.",
+    "dispute_statement_yours": "మీ వాదన",
+    "dispute_statement_other_title": "మరో పక్షం వాదన",
+    "dispute_statement_other_none": "మరో పక్షం ఇంకా వాదన చెప్పలేదు.",
+    "dispute_statement_failed": "వాదన సేవ్ చేయలేకపోయాము. దయచేసి మళ్ళీ ప్రయత్నించండి.",
+    "dispute_statement_min": "కనీసం 20 అక్షరాలు."
   }
 }

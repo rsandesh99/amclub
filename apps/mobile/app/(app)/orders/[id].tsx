@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
-import { fetchOrder, transitionOrder, fetchOrderReview, submitReview, replyReview } from '@/lib/api'
+import { fetchOrder, transitionOrder, fetchOrderReview, submitReview, replyReview, fetchDisputeStatements, submitDisputeStatement } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
  
@@ -81,6 +81,8 @@ export default function OrderScreen() {
           </View>
         )}
 
+        {o.status === 'disputed' && <DisputeStatementBlock orderId={id} />}
+
         {(o.status === 'completed' || o.status === 'reviewed') && <ReviewBlock orderId={id} />}
 
         <View className="rounded-xl border border-gray-200 bg-surface p-4">
@@ -97,6 +99,60 @@ export default function OrderScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  )
+}
+
+/** S1.7 — "Your statement" on an open dispute (parity with web's DisputeStatementCard; text only, no attachments on mobile). */
+function DisputeStatementBlock({ orderId }: { orderId: string }) {
+  const { t } = useI18n()
+  const [state, setState] = useState<any>(null)
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+
+  const load = useCallback(async () => {
+    const d = await fetchDisputeStatements(orderId)
+    if (!d) return
+    setState(d)
+    const mine = (d.statements ?? []).find((s: any) => s.role === d.role)
+    if (mine) setBody(mine.body)
+  }, [orderId])
+  useEffect(() => { void Promise.resolve().then(load) }, [load])
+
+  if (!state) return null
+  const mine = (state.statements ?? []).find((s: any) => s.role === state.role)
+  const other = (state.statements ?? []).find((s: any) => s.role !== state.role)
+
+  async function save() {
+    setBusy(true); setNotice('')
+    const { ok, data } = await submitDisputeStatement(orderId, body.trim(), !!mine)
+    setBusy(false)
+    if (!ok) { Alert.alert(t('common.error'), data.error === 'triage_exists' ? t('orders.dispute_statement_locked') : t('orders.dispute_statement_failed')); load(); return }
+    setNotice(t('orders.dispute_statement_saved'))
+    load()
+  }
+
+  return (
+    <View className="rounded-xl border border-gray-200 bg-surface p-4 gap-2">
+      <Text className="text-sm font-semibold text-foreground">{t('orders.dispute_statement_title')}</Text>
+      <Text className="text-xs text-foreground-secondary">{t('orders.dispute_statement_intro')}</Text>
+      {state.editable ? (
+        <View className="gap-2">
+          <TextInput value={body} onChangeText={(v) => setBody(v.slice(0, 2000))} multiline placeholder={t('orders.dispute_statement_placeholder')} placeholderTextColor="#9CA3AF" className="min-h-[96px] rounded-lg border border-gray-200 bg-background p-3 text-sm text-foreground" />
+          <Text className="text-[11px] text-foreground-secondary">{body.length}/2000</Text>
+          <TouchableOpacity onPress={save} disabled={busy || body.trim().length < 20} className={`items-center rounded-lg py-3 ${busy || body.trim().length < 20 ? 'bg-primary/60' : 'bg-primary'}`}>
+            <Text className="text-sm font-semibold text-white">{mine ? t('orders.dispute_statement_update') : t('orders.dispute_statement_submit')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : mine ? (
+        <View className="rounded-lg border border-gray-200 p-3"><Text className="text-xs font-medium text-foreground-secondary">{t('orders.dispute_statement_yours')}{state.triageExists ? ` · ${t('orders.dispute_statement_locked')}` : ''}</Text><Text className="mt-1 text-sm text-foreground">{mine.body}</Text></View>
+      ) : null}
+      {notice ? <Text className="text-xs text-success">{notice}</Text> : null}
+      <View className="rounded-lg border border-gray-200 bg-background p-3">
+        <Text className="text-xs font-medium text-foreground-secondary">{t('orders.dispute_statement_other_title')}</Text>
+        <Text className="mt-1 text-sm text-foreground">{other ? other.body : t('orders.dispute_statement_other_none')}</Text>
+      </View>
+    </View>
   )
 }
 

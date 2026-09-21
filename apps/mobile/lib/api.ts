@@ -475,6 +475,18 @@ export async function markNotificationRead(opts: { id?: string; all?: boolean })
 
 // ── Reviews (Phase 6) ──────────────────────────────────────────────────────────
 
+/** S1.7 — party statements on an open dispute (spine). */
+export async function fetchDisputeStatements(orderId: string) {
+  const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/dispute/statement`, { headers: await authHeaders() })
+  if (!res.ok) return null
+  return res.json()
+}
+export async function submitDisputeStatement(orderId: string, body: string, edit: boolean) {
+  const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/dispute/statement`, { method: edit ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: JSON.stringify({ body }) })
+  const data = await res.json().catch(() => ({}))
+  return { ok: res.ok, data }
+}
+
 export async function fetchOrderReview(orderId: string) {
   const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/review`, { headers: await authHeaders() })
   if (!res.ok) return { review: null, canReview: false, isProvider: false }
