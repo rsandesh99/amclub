@@ -12,6 +12,8 @@ import { getPublicProduct } from '@/lib/mart/queries'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { Button } from '@/components/ui/button'
 import { GoodsRfqForm, type GoodsRfqPrefill } from '@/components/mart/GoodsRfqForm'
+import { AGENT_ENABLED } from '@/lib/flags'
+import { isAgentEnabledForUser } from '@/lib/agent/settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,7 +62,7 @@ export default async function NewGoodsRfqPage({ searchParams }: { searchParams: 
         <h1 className="font-display text-2xl font-bold text-emerald-ink">{t('goods_new_title')}</h1>
         <p className="mt-1 text-sm text-foreground-secondary">{t('goods_new_subtitle')}</p>
       </div>
-      <GoodsRfqForm categories={categories} states={INDIAN_STATES} defaults={defaults} prefill={prefill} />
+      <GoodsRfqForm categories={categories} states={INDIAN_STATES} defaults={defaults} prefill={prefill} documentIntakeEnabled={AGENT_ENABLED ? await isAgentEnabledForUser(admin, 'document_intake', user.id) : false} />
     </div>
   )
 }

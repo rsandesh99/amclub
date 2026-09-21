@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Mic, Square, RotateCcw, Loader2, Sparkles } from 'lucide-react'
-import type { VoiceParseResponse } from '@amclub/shared'
+import type { VoiceParseResponse, VoiceParsePrior } from '@amclub/shared'
 import { startWavRecording, type WavRecorderHandle } from '@/lib/voice/wav-recorder'
 
 /**
@@ -38,11 +38,15 @@ interface VoiceRfqRecorderProps {
    * Default false — the RFQ form's behaviour is unchanged.
    */
   transcriptOnly?: boolean
+  /** S1.8 — round two: the first round + the one question; posted as `prior` so the reply is the merged parse. */
+  prior?: VoiceParsePrior | null
+  /** S1.8 — inside the clarify bubble: smaller intro. */
+  compact?: boolean
 }
 
 type Phase = 'idle' | 'recording' | 'review' | 'uploading'
 
-export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track, transcriptOnly = false }: VoiceRfqRecorderProps) {
+export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track, transcriptOnly = false, prior = null, compact = false }: VoiceRfqRecorderProps) {
   const t = useTranslations('voice')
 
   const [phase, setPhase] = useState<Phase>('idle')
@@ -150,6 +154,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track, transcript
       form.append('audio', blob, 'recording.wav')
       form.append('duration_ms', String(Math.round(durationRef.current)))
       if (transcriptOnly) form.append('transcript_only', 'true')
+      if (prior) form.append('prior', JSON.stringify(prior))
       const res = await fetch('/api/v1/rfq/voice-parse', { method: 'POST', body: form })
       const d = await res.json().catch(() => ({}))
 
@@ -218,7 +223,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, track, transcript
   const remaining = Math.max(0, Math.ceil((MAX_RECORD_MS - elapsedMs) / 1000))
 
   return (
-    <div className="rounded-card border border-border bg-surface p-4">
+    <div data-compact={compact ? "1" : undefined} className="rounded-card border border-border bg-surface p-4">
       <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
         <Sparkles className="h-4 w-4 text-primary" aria-hidden />
         {t('intro_title')}
