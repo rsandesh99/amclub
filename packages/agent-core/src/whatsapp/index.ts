@@ -22,6 +22,7 @@ export function makeStubDriver(log: (line: string) => void = (l) => console.warn
     name: 'stub',
     async sendTemplate(to, templateName, locale) { return ok(`send template ${templateName} (${locale}) → ${to.slice(0, 4)}…`) },
     async sendText(to) { return ok(`send text → ${to.slice(0, 4)}…`) },
+    async sendButtons(to, _text, buttons) { return ok(`send ${buttons.length} button(s) [${buttons.map((b) => b.id).join(', ')}] → ${to.slice(0, 4)}…`) },
     async sendMedia(to) { return ok(`send media → ${to.slice(0, 4)}…`) },
     async downloadMedia() { return { bytes: new Uint8Array(), mime: 'application/octet-stream' } },
     parseInbound(body): ParsedInbound { return meta.parseInbound(body) },

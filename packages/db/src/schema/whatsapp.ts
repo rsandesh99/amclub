@@ -14,6 +14,8 @@ export const waConversations = pgTable('wa_conversations', {
   lastOutboundAt: timestamp('last_outbound_at', { withTimezone: true }),
   windowOpenUntil: timestamp('window_open_until', { withTimezone: true }),
   lastHoldingReplyAt: timestamp('last_holding_reply_at', { withTimezone: true }),
+  // 0036 (S1.6): the dispatcher's O(1) route to the active onboarding session (FK in SQL; no import cycle here).
+  activeSessionId: uuid('active_session_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
 }, (table) => [

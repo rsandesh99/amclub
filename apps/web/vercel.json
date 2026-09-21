@@ -8,6 +8,7 @@
     { "path": "/api/v1/cron/reconcile", "schedule": "15 */6 * * *" },
     { "path": "/api/v1/cron/payouts", "schedule": "0 4 * * *" },
     { "path": "/api/v1/cron/provider-stats", "schedule": "30 3 * * *" },
-    { "path": "/api/v1/cron/pool-close", "schedule": "10 * * * *" }
+    { "path": "/api/v1/cron/pool-close", "schedule": "10 * * * *" },
+    { "path": "/api/v1/cron/agent-onboarding-expire", "schedule": "20 * * * *" }
   ]
 }

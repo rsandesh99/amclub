@@ -36,8 +36,12 @@ export interface RedisLike {
   mget<T = unknown>(...keys: string[]): Promise<(T | null)[]>
 }
 
-/** Caps from agent_settings values (or the registry defaults) with env override. */
-export function resolveCaps(settings?: Partial<Record<string, unknown>>): BudgetCaps {
+/**
+ * Caps from agent_settings values (or the registry defaults) with env override.
+ * S1.6: `agentName` selects a per-agent run cap from `budget_run_paise_by_agent`
+ * (an absent agent = the global `budget_run_paise`; the env override still wins).
+ */
+export function resolveCaps(settings?: Partial<Record<string, unknown>>, agentName?: string): BudgetCaps {
   const num = (v: unknown, fallback: number) => {
     const n = typeof v === 'number' ? v : Number(v)
     return Number.isFinite(n) && n >= 0 ? n : fallback
@@ -45,8 +49,11 @@ export function resolveCaps(settings?: Partial<Record<string, unknown>>): Budget
   const dRun = agentSettingDefault('budget_run_paise') as number
   const dDay = agentSettingDefault('budget_user_day_paise') as number
   const dMonth = agentSettingDefault('budget_month_paise') as number
+  const byAgent = settings?.['budget_run_paise_by_agent']
+  const override = agentName && byAgent && typeof byAgent === 'object' ? (byAgent as Record<string, unknown>)[agentName] : undefined
+  const runSetting = override !== undefined && override !== null ? override : settings?.['budget_run_paise']
   return {
-    runPaise: num(process.env['AGENT_BUDGET_RUN_PAISE'] ?? settings?.['budget_run_paise'], dRun),
+    runPaise: num(process.env['AGENT_BUDGET_RUN_PAISE'] ?? runSetting, dRun),
     userDayPaise: num(process.env['AGENT_BUDGET_USER_DAY_PAISE'] ?? settings?.['budget_user_day_paise'], dDay),
     monthPaise: num(process.env['AGENT_BUDGET_MONTH_PAISE'] ?? settings?.['budget_month_paise'], dMonth),
   }
@@ -61,7 +68,8 @@ function ym(d: Date): string {
 
 export interface RedisBudgetOptions {
   redis: RedisLike
-  caps: BudgetCaps
+  /** Fixed caps, or a loader resolved once on the first check (S1.6: caps read from agent_settings per run). */
+  caps: BudgetCaps | (() => Promise<BudgetCaps>)
   runId: string
   userId: string
   now?: () => Date
@@ -73,6 +81,11 @@ const DAY_SECONDS = 86_400
 export function createRedisBudget(opts: RedisBudgetOptions): Budget {
   const now = opts.now ?? (() => new Date())
   const prefix = opts.keyPrefix ?? 'agent:bud'
+  let capsPromise: Promise<BudgetCaps> | null = null
+  const caps = (): Promise<BudgetCaps> => {
+    if (!capsPromise) capsPromise = typeof opts.caps === 'function' ? opts.caps() : Promise.resolve(opts.caps)
+    return capsPromise
+  }
   const keys = () => {
     const d = now()
     return {
@@ -86,9 +99,10 @@ export function createRedisBudget(opts: RedisBudgetOptions): Budget {
       const k = keys()
       const [run, userDay, month] = await opts.redis.mget<number>(k.run, k.userDay, k.month)
       const spent = { run: Number(run ?? 0), userDay: Number(userDay ?? 0), month: Number(month ?? 0) }
-      if (spent.run >= opts.caps.runPaise) return { ok: false, breach: 'run_cap', spent }
-      if (spent.userDay >= opts.caps.userDayPaise) return { ok: false, breach: 'user_day_cap', spent }
-      if (spent.month >= opts.caps.monthPaise) return { ok: false, breach: 'month_cap', spent }
+      const c = await caps()
+      if (spent.run >= c.runPaise) return { ok: false, breach: 'run_cap', spent }
+      if (spent.userDay >= c.userDayPaise) return { ok: false, breach: 'user_day_cap', spent }
+      if (spent.month >= c.monthPaise) return { ok: false, breach: 'month_cap', spent }
       return { ok: true, spent }
     },
     async add(paise: number): Promise<void> {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { acceptLegalDocs } from '@/lib/legal/client'
 import { useRouter } from '@/i18n/navigation'
@@ -78,12 +78,45 @@ const EMPTY: Draft = {
   credentialKinds: {}, credentialNumbers: {},
 }
 
+/** S1.6 — the confirmed WhatsApp interview draft as the server passes it (GET /api/v1/agent/onboarding/draft shape). */
+export interface WaDraftProp {
+  sessionId: string
+  draft: { profile: { display_name: string | null; legal_name: string | null; about: string | null; city: string | null; state: string | null; languages: string[]; category_slugs: string[] } } | null
+  gstin: string | null
+}
+
 interface ProviderWizardProps {
   /** True when the user is already authenticated and only needs to complete KYC. */
   skipAuth?: boolean
+  /** S1.6 — server-evaluated "Finish on WhatsApp" flag; undefined ⇒ the wizard asks /profile/me itself. */
+  waEnabled?: boolean
+  /** S1.6 — server-loaded confirmed draft; undefined ⇒ the wizard asks the draft route itself. */
+  waDraft?: WaDraftProp | null
 }
 
-export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
+/** Fill only EMPTY fields from a confirmed draft; returns the patch and the keys it filled. */
+function prefillFromWa(d: Draft, v: WaDraftProp | null | undefined): { next: Partial<Draft>; filled: string[] } {
+  const next: Partial<Draft> = {}
+  const filled: string[] = []
+  const p = v?.draft?.profile
+  if (!v || !p) return { next, filled }
+  if (p.display_name && !d.displayName.trim()) { next.displayName = p.display_name; filled.push('displayName') }
+  if (p.legal_name && !d.legalName.trim()) { next.legalName = p.legal_name; filled.push('legalName') }
+  if (p.about && !d.about.trim()) { next.about = p.about; filled.push('about') }
+  if (p.city && !d.city.trim()) { next.city = p.city; filled.push('city') }
+  if (p.state && !d.stateCode) { next.stateCode = p.state; filled.push('stateCode') }
+  if (typeof v.gstin === 'string' && v.gstin && !d.gstin) { next.gstin = v.gstin; filled.push('gstin') }
+  if (Array.isArray(p.languages) && p.languages.length > 0 && d.languages.length === 1 && d.languages[0] === 'en') {
+    const langs = p.languages.filter((l) => l === 'en' || l === 'hi' || l === 'te')
+    if (langs.length > 0) { next.languages = langs; filled.push('languages') }
+  }
+  if (Array.isArray(p.category_slugs) && p.category_slugs.length > 0 && d.categorySlugs.length === 0) {
+    next.categorySlugs = p.category_slugs.slice(0, MAX_CATEGORIES); filled.push('categorySlugs')
+  }
+  return { next, filled }
+}
+
+export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: waDraftProp }: ProviderWizardProps) {
   const t = useTranslations('provider_signup')
   const tCommon = useTranslations('common')
   // Credential type labels live in the gateway namespace (translated in all 4
@@ -98,7 +131,9 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   // before the profile POST, which refuses without them.
   const [legalAccepted, setLegalAccepted] = useState(false)
   const [addendumAccepted, setAddendumAccepted] = useState(false)
-  const [draft, setDraft] = useState<Draft>({ ...EMPTY })
+  // S1.6 — a server-passed confirmed draft prefills the initial state so the chips render on first paint.
+  const serverPrefill = prefillFromWa(EMPTY, waDraftProp)
+  const [draft, setDraft] = useState<Draft>({ ...EMPTY, ...serverPrefill.next })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [gstinLoading, setGstinLoading] = useState(false)
@@ -108,6 +143,17 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   // Set on a failed "Continue" so each missing required field highlights red
   // instead of one generic message leaving the user hunting.
   const [triedContinue, setTriedContinue] = useState(false)
+  // S1.6 — "Finish on WhatsApp": the card shows when /profile/me.onboardingWhatsAppEnabled; a CONFIRMED
+  // interview draft prefills the empty fields (a chip marks each) and its session id rides the submit.
+  // The wizard still owns KYC, bank, legal acceptance and the profile write exactly as before.
+  const [waEnabled, setWaEnabled] = useState(waEnabledProp === true)
+  const [waStart, setWaStart] = useState<{ sessionId: string; whatsappNumber: string | null; needsOptIn: boolean } | null>(null)
+  const [waBusy, setWaBusy] = useState(false)
+  const [waError, setWaError] = useState('')
+  const [waSessionId, setWaSessionId] = useState<string | null>(waDraftProp?.draft ? waDraftProp.sessionId : null)
+  const [fromWa, setFromWa] = useState<string[]>(serverPrefill.filled)
+  const draftRef = useRef(draft)
+  useEffect(() => { draftRef.current = draft }, [draft])
 
   // Restore draft on mount — only if it isn't stale (TTL). Note the bank account
   // number is never persisted (see below), so it comes back blank to re-enter.
@@ -161,6 +207,31 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
     })
   }, [])
 
+  // S1.6 — client fallback when the parent passed no server props (the /partner/signup entry):
+  // flag from /profile/me, prefill from the draft route (own draft always wins; only empty fields are filled).
+  useEffect(() => {
+    if (waEnabledProp !== undefined && waDraftProp !== undefined) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (waEnabledProp === undefined) {
+          const me = await fetch('/api/v1/profile/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+          if (cancelled) return
+          if (me?.onboardingWhatsAppEnabled) setWaEnabled(true)
+        }
+        if (waDraftProp !== undefined) return
+        const res = await fetch('/api/v1/agent/onboarding/draft', { cache: 'no-store' })
+        if (!res.ok || cancelled) return
+        const v = (await res.json()) as WaDraftProp
+        const { next, filled } = prefillFromWa(draftRef.current, v)
+        if (Object.keys(next).length > 0) setDraft((cur) => ({ ...cur, ...next }))
+        if (filled.length > 0) setFromWa(filled)
+        if (v?.draft) setWaSessionId(v.sessionId)
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [waEnabledProp, waDraftProp])
+
   // Persist draft on change. NEVER store the bank account number in localStorage
   // (sensitive financial data; XSS-readable) — strip it; re-entered on restore.
   useEffect(() => {
@@ -173,6 +244,29 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
   function update(patch: Partial<Draft>) {
     setDraft((d) => ({ ...d, ...patch }))
   }
+
+  // S1.6 — start (or resume) the WhatsApp interview; the reply carries the number and whether START is needed first.
+  async function startWhatsApp() {
+    setWaBusy(true)
+    setWaError('')
+    try {
+      const res = await fetch('/api/v1/agent/onboarding/start', { method: 'POST' })
+      const d = await res.json().catch(() => ({}))
+      if (res.status === 201 || (res.status === 409 && d.error === 'session_active' && d.sessionId)) {
+        setWaStart({ sessionId: d.sessionId, whatsappNumber: d.whatsappNumber ?? null, needsOptIn: d.needsOptIn !== false })
+      } else if (res.status === 404) {
+        setWaEnabled(false)
+      } else {
+        setWaError(t('wa_card_failed'))
+      }
+    } catch {
+      setWaError(t('wa_card_failed'))
+    } finally {
+      setWaBusy(false)
+    }
+  }
+  const waChip = (key: string) =>
+    fromWa.includes(key) ? <span className="ml-2 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">{t('wa_prefill_chip')}</span> : null
 
   // Already a provider → dashboard; otherwise continue KYC (new or msme-only user).
   async function handleAuthenticated() {
@@ -312,6 +406,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
           legalName: draft.legalName,
           displayName: draft.displayName,
           about: draft.about,
+          ...(waSessionId ? { onboardingSessionId: waSessionId } : {}),
           yearsExperience: draft.yearsExperience || undefined,
           website: draft.website.trim() || undefined,
           gstin: draft.gstin,
@@ -431,20 +526,47 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             <p className="text-sm text-foreground-secondary">{t('step2_subtitle')}</p>
           </div>
           <div className="flex flex-col gap-4">
+            {waEnabled && (
+              <div className="rounded-button border border-primary/30 bg-primary/5 p-3">
+                <p className="text-sm font-medium text-primary">{t('wa_card_title')}</p>
+                <p className="mt-1 text-xs text-foreground-secondary">{t('wa_card_body')}</p>
+                {waStart ? (
+                  <div className="mt-2 text-xs text-foreground">
+                    <p>{waStart.needsOptIn ? t('wa_card_steps_opt_in') : t('wa_card_steps')}</p>
+                    {waStart.whatsappNumber ? (
+                      <a
+                        href={`https://wa.me/${waStart.whatsappNumber}?text=${encodeURIComponent(waStart.needsOptIn ? 'START' : 'JOIN')}`}
+                        target="_blank"
+                        rel="noopener"
+                        className="mt-1 inline-block text-primary underline underline-offset-2"
+                      >
+                        {t('wa_card_open', { number: `+${waStart.whatsappNumber}` })}
+                      </a>
+                    ) : (
+                      <p className="mt-1 text-foreground-secondary">{t('wa_card_no_number')}</p>
+                    )}
+                  </div>
+                ) : (
+                  <Button variant="outline" size="md" className="mt-2" onClick={startWhatsApp} loading={waBusy}>{t('wa_card_button')}</Button>
+                )}
+                {waError && <p className="mt-1 text-xs text-danger">{waError}</p>}
+              </div>
+            )}
+            {fromWa.length > 0 && <p className="rounded-button bg-success/10 px-3 py-2 text-xs text-success">{t('wa_prefill_notice')}</p>}
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="legalName">{t('legal_name_label')} <span className="text-danger">*</span></Label>
+              <Label htmlFor="legalName">{t('legal_name_label')} <span className="text-danger">*</span>{waChip('legalName')}</Label>
               <Input id="legalName" placeholder={t('legal_name_placeholder')} value={draft.legalName} onChange={(e) => update({ legalName: e.target.value })} className={triedContinue && !draft.legalName.trim() ? 'border-danger' : ''} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="displayName">{t('display_name_label')} <span className="text-danger">*</span></Label>
+              <Label htmlFor="displayName">{t('display_name_label')} <span className="text-danger">*</span>{waChip('displayName')}</Label>
               <Input id="displayName" placeholder={t('display_name_placeholder')} value={draft.displayName} onChange={(e) => update({ displayName: e.target.value })} className={triedContinue && !draft.displayName.trim() ? 'border-danger' : ''} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="about">{t('about_label')}</Label>
+              <Label htmlFor="about">{t('about_label')}{waChip('about')}</Label>
               <Textarea id="about" placeholder={t('about_placeholder')} value={draft.about} onChange={(e) => update({ about: e.target.value })} rows={4} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>{t('categories_label')} <span className="text-danger">*</span></Label>
+              <Label>{t('categories_label')} <span className="text-danger">*</span>{waChip('categorySlugs')}</Label>
               <p className={`text-xs ${triedContinue && draft.categorySlugs.length === 0 ? 'text-danger' : 'text-foreground-secondary'}`}>
                 {t('categories_hint')} · {t('categories_count', { n: draft.categorySlugs.length, max: MAX_CATEGORIES })}
               </p>
@@ -475,13 +597,13 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
             </div>
             <div className="flex gap-3">
               <div className="flex-1 flex flex-col gap-1.5">
-                <Label htmlFor="stateCode">{t('state_label')} <span className="text-danger">*</span></Label>
+                <Label htmlFor="stateCode">{t('state_label')} <span className="text-danger">*</span>{waChip('stateCode')}</Label>
                 <Select id="stateCode" value={draft.stateCode} onChange={(e) => update({ stateCode: e.target.value })} placeholder="— Select state —" className={triedContinue && !draft.stateCode ? 'border-danger' : ''}>
                   {INDIAN_STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </Select>
               </div>
               <div className="flex-1 flex flex-col gap-1.5">
-                <Label htmlFor="city">{t('city_label')}</Label>
+                <Label htmlFor="city">{t('city_label')}{waChip('city')}</Label>
                 <Input id="city" placeholder="City" value={draft.city} onChange={(e) => update({ city: e.target.value })} />
               </div>
             </div>
@@ -515,7 +637,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
               </div>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>{t('languages_label')}</Label>
+              <Label>{t('languages_label')}{waChip('languages')}</Label>
               <div className="flex gap-2">
                 {(['en', 'hi'] as const).map((lang) => (
                   <button key={lang} type="button" onClick={() => toggleLanguage(lang)}
@@ -555,7 +677,7 @@ export function ProviderWizard({ skipAuth }: ProviderWizardProps) {
           <div className="flex flex-col gap-4">
             {/* GSTIN */}
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="gstin">{t('gstin_label')} <span className="text-danger">*</span></Label>
+              <Label htmlFor="gstin">{t('gstin_label')} <span className="text-danger">*</span>{waChip('gstin')}</Label>
               <div className="flex gap-2">
                 <Input
                   id="gstin"

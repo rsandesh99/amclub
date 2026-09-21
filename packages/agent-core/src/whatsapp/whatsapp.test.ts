@@ -45,6 +45,14 @@ describe('template registry', () => {
     expect(templateFor('marketing_blast', 'en')).toBeNull()
     expect(allTemplateNames().length).toBe(new Set(allTemplateNames()).size)
   })
+  it('S1.6 onboarding templates exist in en/hi/te and are opt-in gated', () => {
+    for (const k of ['onboarding_start', 'onboarding_resume', 'onboarding_draft_ready', 'onboarding_expired']) {
+      expect(templateFor(k, 'te')?.name).toMatch(/_te$/)
+      expect(templateFor(k, 'hi')?.name).toMatch(/_hi$/)
+      expect(WA_ALWAYS_ALLOWED_KINDS.has(k)).toBe(false)
+    }
+    expect(templateFor('onboarding_expired', 'en')?.spec.params({ title: 't', body: 'b', link: 'https://x' })).toEqual(['https://x'])
+  })
   it('always-allowed kinds are order/payment events only', () => {
     for (const k of WA_ALWAYS_ALLOWED_KINDS) expect(WA_TEMPLATES[k]).toBeDefined()
     expect(WA_ALWAYS_ALLOWED_KINDS.has('rfq_matched')).toBe(false)
@@ -52,7 +60,9 @@ describe('template registry', () => {
   })
   it('classifies opt-in / opt-out keywords, incl. vernacular, case-insensitively', () => {
     expect(classifyKeyword(' Start ')).toBe('opt_in')
-    expect(classifyKeyword('JOIN')).toBe('opt_in')
+    expect(classifyKeyword('JOIN')).toBe('onboard') // S1.6: onboarding keyword (dispatcher falls back to opt-in without a grant)
+    expect(classifyKeyword(' onboard ')).toBe('onboard')
+    expect(classifyKeyword('చేరండి')).toBe('onboard')
     expect(classifyKeyword('नमस्ते')).toBe('opt_in')
     expect(classifyKeyword('STOP')).toBe('opt_out')
     expect(classifyKeyword('बंद')).toBe('opt_out')
@@ -83,6 +93,21 @@ describe('meta_cloud driver', () => {
   it('answers the GET verify challenge only with the right token', () => {
     expect(metaVerifyChallenge({ 'hub.mode': 'subscribe', 'hub.verify_token': 'vt', 'hub.challenge': '12345' }, 'vt')).toBe('12345')
     expect(metaVerifyChallenge({ 'hub.mode': 'subscribe', 'hub.verify_token': 'wrong', 'hub.challenge': '12345' }, 'vt')).toBeNull()
+  })
+  it('parses an interactive list reply as a button with the row id as payload', () => {
+    const d = makeMetaCloudDriver(cfg, noNetwork)
+    const body = { entry: [{ changes: [{ value: { messages: [{ from: '919876543210', id: 'wamid.LIST1', timestamp: '1726800200', type: 'interactive', interactive: { type: 'list_reply', list_reply: { id: 'cat:legal', title: 'Legal' } } }] } }] }] }
+    expect(d.parseInbound(body).messages[0]).toMatchObject({ kind: 'button', buttonPayload: 'cat:legal', body: 'Legal' })
+  })
+  it('sends ≤ 3 buttons as an interactive button message and more as a list', async () => {
+    const calls: { body: { type: string; interactive?: { type: string; action: Record<string, unknown> } } }[] = []
+    const f: typeof fetch = (async (_url: string, init: RequestInit) => { calls.push({ body: JSON.parse(String(init.body)) }); return new Response(JSON.stringify({ messages: [{ id: 'wamid.B' }] }), { status: 200 }) }) as unknown as typeof fetch
+    const d = makeMetaCloudDriver(cfg, f)
+    await d.sendButtons('919876543210', 'Confirm?', [{ id: 'confirm:r1', title: 'Looks right' }, { id: 'revise:r1', title: 'Change something' }])
+    expect(calls[0]?.body.interactive?.type).toBe('button')
+    await d.sendButtons('919876543210', 'Pick', Array.from({ length: 8 }, (_, i) => ({ id: `cat:${i}`, title: `Category ${i}` })), 'Choose')
+    expect(calls[1]?.body.interactive?.type).toBe('list')
+    expect((calls[1]?.body.interactive?.action['sections'] as { rows: unknown[] }[])[0]?.rows).toHaveLength(8)
   })
   it('sends a template with ordered body params', async () => {
     const calls: { url: string; body: unknown }[] = []

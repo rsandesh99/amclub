@@ -38,6 +38,7 @@
     "empty_body": "Publish your first service package so MSMEs can find and buy from you.",
     "create_first": "Create your first listing",
     "back_to_listings": "Back to listings",
+    "from_interview_hint": "Prefilled from your WhatsApp interview — check the price and delivery time before publishing.",
     "edit_listing": "Edit listing",
     "status_active": "Live",
     "status_paused": "Paused",
@@ -457,7 +458,17 @@
     "draft_saved": "Draft saved",
     "draft_restored": "Your previous draft has been restored",
     "addendum_checkbox": "I have read and agree to the <terms>Terms of Service</terms>, <privacy>Privacy Policy</privacy> and <addendum>Provider Addendum</addendum>.",
-    "addendum_required": "Please accept the Terms, Privacy Policy and Provider Addendum to submit."
+    "addendum_required": "Please accept the Terms, Privacy Policy and Provider Addendum to submit.",
+    "wa_card_title": "Finish on WhatsApp",
+    "wa_card_body": "Answer a few short questions on WhatsApp — by typing or voice note — and we will prefill this form. You still verify your GSTIN and bank here.",
+    "wa_card_button": "Start on WhatsApp",
+    "wa_card_steps_opt_in": "Send START from your registered number to opt in, then JOIN to begin the interview.",
+    "wa_card_steps": "Send JOIN from your registered number to begin (or continue) the interview.",
+    "wa_card_open": "Open WhatsApp ({number})",
+    "wa_card_no_number": "Our WhatsApp number will appear here once it is set up.",
+    "wa_card_failed": "Could not start the WhatsApp interview. Please try again.",
+    "wa_prefill_chip": "From your WhatsApp interview",
+    "wa_prefill_notice": "We prefilled this form from your WhatsApp interview. Check each field before you continue."
   },
   "admin": {
     "verifications_title": "Provider Verifications",
@@ -567,7 +578,10 @@
     "payout_hold_bank_unverified": "we verify your bank account",
     "payout_hold_not_ready": "we verify your bank account and link your Razorpay payout account",
     "payout_hold_no_bank": "your bank account is added and verified",
-    "goods_catalogue": "Goods catalogue"
+    "goods_catalogue": "Goods catalogue",
+    "onboarding_suggested_title": "Suggested listings from your interview",
+    "onboarding_suggested_body": "Drafts from your WhatsApp answers. Open one to review, price and publish it.",
+    "onboarding_suggested_open": "Open"
   },
   "shell": {
     "profile": "Profile & settings",
@@ -1215,6 +1229,13 @@
   },
   "admin_ops": {
     "loading": "Loading…",
+    "onboarding_title": "Onboarding interview",
+    "onboarding_state": "State",
+    "onboarding_confirmed": "confirmed by the provider",
+    "onboarding_unconfirmed": "draft not confirmed",
+    "onboarding_decision": "decision",
+    "onboarding_masked": "masked",
+    "onboarding_none": "No answers recorded.",
     "none": "Nothing here yet.",
     "search": "Search",
     "back": "Back",

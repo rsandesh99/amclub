@@ -59,6 +59,12 @@ export function makeInteraktDriver(cfg: WhatsAppConfig, fetchImpl: typeof fetch 
     sendText(to, text) {
       return send(to, { type: 'Text', data: { message: text } })
     },
+    // Interakt's public message API has no interactive-button payload wired here (FOLLOWUPS S1.6):
+    // the options go out as numbered lines and the onboarding machine accepts the number as the reply.
+    sendButtons(to, text, buttons) {
+      const lines = buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n')
+      return send(to, { type: 'Text', data: { message: lines ? `${text}\n${lines}` : text } })
+    },
     sendMedia(to, media) {
       if (!media.url) return Promise.resolve(err('interakt sendMedia needs a public url'))
       const type = media.mime.startsWith('image/') ? 'Image' : media.mime.startsWith('audio/') ? 'Audio' : 'Document'

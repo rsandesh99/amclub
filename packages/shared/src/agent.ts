@@ -132,6 +132,9 @@ export const AGENT_TOOLS = [
   // S1.3 — RFQ-level clarification (every matched provider reads it) and in-place quote revision; both writes, confirm-gated.
   { name: 'ask_clarification', persona: 'provider', confirm: true, wraps: 'POST /rfq/[id]/clarifications' },
   { name: 'revise_quote', persona: 'provider', confirm: true, wraps: 'PATCH /rfq/[id]/quote' },
+  // S1.6 — the ONE confirm gate of the WhatsApp onboarding interview: the provider's button tap on the
+  // draft. Local (no /api/v1 route): the ai_decisions row IS the outcome; the wizard consumes the draft.
+  { name: 'confirm_onboarding_draft', persona: 'provider', confirm: true, wraps: 'local (draft confirm)' },
   { name: 'list_deadlines', persona: 'provider', confirm: false, wraps: 'GET /orders (provider)' },
   // ops — recommendations only; never executes an admin action
   { name: 'summarize_dispute', persona: 'ops', confirm: false, taskClass: 'dispute_summary', wraps: 'GET /admin/disputes/[id]' },

@@ -10,6 +10,8 @@ import { writeAudit } from '@/lib/audit/log'
 import { serverError } from '@/lib/api/errors'
 import { decryptColumn, fingerprintColumn } from '@/lib/crypto'
 import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
+import { AGENT_ENABLED } from '@/lib/flags'
+import { onboardingAdminView } from '@/lib/agent/onboarding'
 
 /** GET — full provider detail for ops: profile, verifications, listings, orders, earnings, reviews. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -35,10 +37,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     .filter((o) => (PAYOUT_RELEASE_STATUSES as readonly string[]).includes(o.status))
     .reduce((s, o) => s + Number(o.provider_earning_paise), 0)
 
+  // S1.6 — the WhatsApp interview beside the profile (redacted answers, transcripts, signed photos, draft, decision id).
+  // Absent while AGENT_ENABLED=false so the flag-off payload is byte-identical.
+  const onboarding = AGENT_ENABLED ? await onboardingAdminView(admin, (provider as { user_id: string }).user_id) : null
+
   // Never expose gstin/pan/bank in the API payload.
   const { gstin: _g, pan: _p, ...safeProvider } = provider as Record<string, unknown>
   void _g; void _p
   return NextResponse.json({
+    ...(onboarding ? { onboarding } : {}),
     provider: safeProvider,
     verifications: verifications ?? [],
     listings: listings ?? [],

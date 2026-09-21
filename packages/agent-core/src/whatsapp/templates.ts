@@ -47,6 +47,12 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   payout_paid: { names: { en: 'amc_payout_paid_en', hi: 'amc_payout_paid_hi' }, params: titleBody },
   // S1.4 — founder one-tap (ops user; requires the founder's own WhatsApp opt-in grant).
   payout_dossier_ready: { names: { en: 'amc_payout_dossier_ready_en', hi: 'amc_payout_dossier_ready_hi' }, params: titleBody },
+  // S1.6 — Onboarding agent (provider; opt-in gated). Sent by the runtime outside the 24h window:
+  // start [name], resume [step label], draft ready [display_name], expired [link]. en/hi/te.
+  onboarding_start: { names: { en: 'amc_onboarding_start_en', hi: 'amc_onboarding_start_hi', te: 'amc_onboarding_start_te' }, params: (n) => [n.title] },
+  onboarding_resume: { names: { en: 'amc_onboarding_resume_en', hi: 'amc_onboarding_resume_hi', te: 'amc_onboarding_resume_te' }, params: (n) => [n.title] },
+  onboarding_draft_ready: { names: { en: 'amc_onboarding_draft_ready_en', hi: 'amc_onboarding_draft_ready_hi', te: 'amc_onboarding_draft_ready_te' }, params: (n) => [n.title] },
+  onboarding_expired: { names: { en: 'amc_onboarding_expired_en', hi: 'amc_onboarding_expired_hi', te: 'amc_onboarding_expired_te' }, params: (n) => [n.link ?? ''] },
   // System templates used by the inbound job (opt-in / opt-out / holding reply).
   wa_opt_in_confirmed: { names: { en: 'amc_wa_opt_in_en', hi: 'amc_wa_opt_in_hi' }, params: () => [] },
   wa_opt_out_confirmed: { names: { en: 'amc_wa_opt_out_en', hi: 'amc_wa_opt_out_hi' }, params: () => [] },
@@ -77,20 +83,28 @@ export function templateFor(kind: string, locale: WaLocale): { name: string; spe
 // Plain words a user types to consent or revoke. Case/whitespace-insensitive;
 // vernacular equivalents included so a Hindi/Telugu user is never stuck.
 export const WA_OPT_IN_KEYWORDS: ReadonlySet<string> = new Set([
-  'start', 'join', 'yes', 'ok', 'hi', 'hello', 'namaste',
-  'शुरू', 'हाँ', 'हां', 'जुड़ें', 'नमस्ते',
+  'start', 'yes', 'ok', 'hi', 'hello', 'namaste',
+  'शुरू', 'हाँ', 'हां', 'नमस्ते',
   'ప్రారంభం', 'అవును', 'నమస్తే',
 ])
+/**
+ * S1.6 — the onboarding keyword. JOIN (and its Hindi/Telugu forms) moved here
+ * from the opt-in set: with a WhatsApp grant it starts the provider interview;
+ * without one the dispatcher treats it exactly as S0.5 did (opt-in), so the
+ * flag-off behaviour of JOIN is unchanged.
+ */
+export const ONBOARDING_KEYWORDS: ReadonlySet<string> = new Set(['join', 'onboard', 'जुड़ें', 'చేరండి'])
 export const WA_OPT_OUT_KEYWORDS: ReadonlySet<string> = new Set([
   'stop', 'unsubscribe', 'no', 'cancel',
   'बंद', 'रोकें', 'नहीं',
   'ఆపు', 'వద్దు',
 ])
 
-export function classifyKeyword(text: string | null): 'opt_in' | 'opt_out' | null {
+export function classifyKeyword(text: string | null): 'opt_in' | 'opt_out' | 'onboard' | null {
   if (!text) return null
   const t = text.trim().toLowerCase().normalize('NFKC')
   if (WA_OPT_OUT_KEYWORDS.has(t)) return 'opt_out'
+  if (ONBOARDING_KEYWORDS.has(t)) return 'onboard'
   if (WA_OPT_IN_KEYWORDS.has(t)) return 'opt_in'
   return null
 }

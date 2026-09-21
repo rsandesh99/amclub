@@ -11,6 +11,8 @@ describe('prompt registry', () => {
   it('loads the shipped prompts, including quote_extract@v1 with the right task class + schemaRef', () => {
     loadDefaultPrompts()
     expect(hasPrompt('hello', 'v1')).toBe(true)
+    expect(getPrompt('onboarding_interview', 'v1')).toMatchObject({ taskClass: 'onboarding_interview', schemaRef: 'onboardingDraftSchema' })
+    expect(getPrompt('onboarding_interview', 'v1').text).not.toMatch(/gpt-|claude-|gemini|openrouter/i)
     expect(hasPrompt('photo_plausibility', 'v1')).toBe(true)
     const p = getPrompt('quote_extract', 'v1')
     expect(p.taskClass).toBe('quote_extract')

@@ -8,7 +8,8 @@ import { listMyOrders } from '@/lib/orders/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatINR } from '@/lib/format'
-import { MART_ENABLED } from '@/lib/flags'
+import { AGENT_ENABLED, MART_ENABLED } from '@/lib/flags'
+import { onboardingDraftView } from '@/lib/agent/onboarding'
 
 const ACTIVE_STATUSES = ['placed', 'accepted', 'requirements_submitted', 'in_progress', 'delivered', 'revision_requested']
 
@@ -22,11 +23,15 @@ export default async function PartnerDashboardPage() {
   if (!profile) redirect('/partner/onboarding')
 
   const isUnderReview = profile.status !== 'active'
+  const admin = await createAdminClient()
   // Phase 3b (ii): an active provider whose payouts would hold sees why, here
   // and on /partner/earnings, until our team finishes the Route/bank link.
   const { readiness } = profile.status === 'active'
-    ? await getProviderReadiness(await createAdminClient(), profile.id)
+    ? await getProviderReadiness(admin, profile.id)
     : { readiness: 'ready' as const }
+  // S1.6 — listing drafts from a CONFIRMED WhatsApp interview (the wizard's existing create route is unchanged).
+  const onboarding = AGENT_ENABLED ? await onboardingDraftView(admin, user.id) : null
+  const suggested = onboarding?.draft?.packages ?? []
   const orders = await listMyOrders(user.id, 'provider')
   const activeCount = orders.filter((o) => ACTIVE_STATUSES.includes(o.status)).length
   const completedCount = orders.filter((o) => o.status === 'completed').length
@@ -79,6 +84,24 @@ export default async function PartnerDashboardPage() {
           <Link href="/partner/onboarding">
             <Button className="mt-3">{t('complete_onboarding')}</Button>
           </Link>
+        </div>
+      )}
+
+      {/* S1.6 — suggested listings from the WhatsApp interview */}
+      {onboarding && suggested.length > 0 && (
+        <div className="rounded-card border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-medium text-primary">{t('onboarding_suggested_title')}</p>
+          <p className="mt-1 text-xs text-foreground-secondary">{t('onboarding_suggested_body')}</p>
+          <ul className="mt-2 space-y-1">
+            {suggested.map((p, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 text-sm">
+                <span>{p.title}</span>
+                <Link href={`/partner/listings/new?onboarding_session=${onboarding.sessionId}&pkg=${i}`} className="shrink-0 text-primary underline underline-offset-2">
+                  {t('onboarding_suggested_open')}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

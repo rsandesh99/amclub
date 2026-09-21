@@ -5,8 +5,9 @@ import {
   createNoopBudget,
   createRedisBudget,
   createSupabaseLedger,
-  resolveCaps,
+  createWhatsAppProvider,
   signRuntimeCredential,
+  whatsappConfigFromEnv,
   type Budget,
   type Gateway,
   type RunAgentDeps,
@@ -14,6 +15,9 @@ import {
 } from '@amclub/agent-core'
 import type { AgentPersona } from '@amclub/shared'
 import { RUNTIME_ENV } from './env'
+import { budgetCapsFor, onboardingSessionTtlHours } from './settings'
+import { captureRuntimeEvent } from './analytics'
+import type { OnboardingRuntimeDeps } from './agents/onboarding/index'
 
 /**
  * Wires agent-core to the runtime's environment. The runtime NEVER uses the
@@ -49,10 +53,15 @@ function redis(): Redis | null {
   return _redis
 }
 
-function makeBudget(runId: string, userId: string): Budget {
+/**
+ * Caps are read from agent_settings once per run (lazy, on the first check) so
+ * the founder's /admin/agents edits apply to the next run — including the
+ * S1.6 per-agent run cap (budget_run_paise_by_agent[agentName]).
+ */
+function makeBudget(runId: string, userId: string, agentName?: string): Budget {
   const r = redis()
   if (!r) return createNoopBudget()
-  return createRedisBudget({ redis: r, caps: resolveCaps(), runId, userId })
+  return createRedisBudget({ redis: r, caps: () => budgetCapsFor(admin(), agentName), runId, userId })
 }
 
 /** Exchange the runtime HMAC for a run-bound delegated JWT via the web endpoint. */
@@ -76,13 +85,28 @@ export function buildDeps(): RunAgentDeps {
   return {
     ledger: createSupabaseLedger(admin()),
     gateway: gateway(),
-    makeBudget: ({ runId, userId }) => makeBudget(runId, userId),
+    makeBudget: ({ runId, userId, agentName }) => makeBudget(runId, userId, agentName),
     apiBaseUrl: RUNTIME_ENV.API_URL,
     makeToken: (args) => mintRuntimeToken(args),
   }
 }
 
 /** A RunContext for resuming an already-open run (the decision callback path). */
+/** S1.6 — everything an onboarding turn needs; the worker builds it per job (the rig builds its own). */
+export async function buildOnboardingDeps(): Promise<OnboardingRuntimeDeps> {
+  return {
+    core: buildDeps(),
+    admin: admin(),
+    whatsapp: createWhatsAppProvider(whatsappConfigFromEnv()),
+    apiUrl: RUNTIME_ENV.API_URL,
+    agentEnabled: RUNTIME_ENV.AGENT_ENABLED,
+    tokenFor: ({ runId, userId }) => mintRuntimeToken({ runId, persona: 'provider', userId }),
+    mediaBucket: RUNTIME_ENV.WA_MEDIA_BUCKET,
+    ttlHours: await onboardingSessionTtlHours(admin()),
+    capture: captureRuntimeEvent,
+  }
+}
+
 export function buildRunContext(args: { runId: string; userId: string; persona: AgentPersona }): RunContext {
   return {
     runId: args.runId,

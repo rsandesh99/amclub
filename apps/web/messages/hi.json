@@ -38,6 +38,7 @@
     "empty_body": "अपना पहला सेवा पैकेज प्रकाशित करें ताकि एमएसएमई आपको ढूंढ और खरीद सकें।",
     "create_first": "अपनी पहली लिस्टिंग बनाएं",
     "back_to_listings": "लिस्टिंग पर वापस",
+    "from_interview_hint": "आपके WhatsApp इंटरव्यू से पहले से भरा गया — प्रकाशित करने से पहले कीमत और डिलीवरी समय जाँचें।",
     "edit_listing": "लिस्टिंग संपादित करें",
     "status_active": "लाइव",
     "status_paused": "रुका हुआ",
@@ -457,7 +458,17 @@
     "draft_saved": "ड्राफ्ट सहेजा गया",
     "draft_restored": "आपका पिछला ड्राफ्ट पुनर्स्थापित किया गया",
     "addendum_checkbox": "मैंने <terms>सेवा शर्तें</terms>, <privacy>गोपनीयता नीति</privacy> और <addendum>प्रदाता अनुबंध</addendum> पढ़ लिए हैं और सहमत हूँ।",
-    "addendum_required": "जमा करने के लिए कृपया सेवा शर्तें, गोपनीयता नीति और प्रदाता अनुबंध स्वीकार करें।"
+    "addendum_required": "जमा करने के लिए कृपया सेवा शर्तें, गोपनीयता नीति और प्रदाता अनुबंध स्वीकार करें।",
+    "wa_card_title": "WhatsApp पर पूरा करें",
+    "wa_card_body": "WhatsApp पर कुछ छोटे सवालों के जवाब दें — टाइप करके या वॉइस नोट से — और हम यह फ़ॉर्म पहले से भर देंगे। GSTIN और बैंक का सत्यापन आप यहीं करेंगे।",
+    "wa_card_button": "WhatsApp पर शुरू करें",
+    "wa_card_steps_opt_in": "अपने पंजीकृत नंबर से START भेजें, फिर इंटरव्यू शुरू करने के लिए JOIN भेजें।",
+    "wa_card_steps": "इंटरव्यू शुरू (या जारी) करने के लिए अपने पंजीकृत नंबर से JOIN भेजें।",
+    "wa_card_open": "WhatsApp खोलें ({number})",
+    "wa_card_no_number": "सेटअप होने पर हमारा WhatsApp नंबर यहाँ दिखेगा।",
+    "wa_card_failed": "WhatsApp इंटरव्यू शुरू नहीं हो सका। कृपया फिर कोशिश करें।",
+    "wa_prefill_chip": "आपके WhatsApp इंटरव्यू से",
+    "wa_prefill_notice": "हमने यह फ़ॉर्म आपके WhatsApp इंटरव्यू से पहले से भर दिया है। आगे बढ़ने से पहले हर फ़ील्ड जाँच लें।"
   },
   "admin": {
     "verifications_title": "प्रदाता सत्यापन",
@@ -567,7 +578,10 @@
     "payout_hold_bank_unverified": "हम आपका बैंक खाता सत्यापित नहीं कर देते",
     "payout_hold_not_ready": "हम आपका बैंक खाता सत्यापित और Razorpay भुगतान खाता लिंक नहीं कर देते",
     "payout_hold_no_bank": "आपका बैंक खाता जोड़ा और सत्यापित नहीं हो जाता",
-    "goods_catalogue": "सामान कैटलॉग"
+    "goods_catalogue": "सामान कैटलॉग",
+    "onboarding_suggested_title": "आपके इंटरव्यू से सुझाई गई लिस्टिंग",
+    "onboarding_suggested_body": "आपके WhatsApp जवाबों से बने ड्राफ़्ट। समीक्षा, कीमत और प्रकाशन के लिए खोलें।",
+    "onboarding_suggested_open": "खोलें"
   },
   "shell": {
     "profile": "प्रोफ़ाइल और सेटिंग्स",
@@ -1162,6 +1176,13 @@
   },
   "admin_ops": {
     "loading": "लोड हो रहा है…",
+    "onboarding_title": "ऑनबोर्डिंग इंटरव्यू",
+    "onboarding_state": "स्थिति",
+    "onboarding_confirmed": "प्रदाता द्वारा पुष्टि",
+    "onboarding_unconfirmed": "ड्राफ़्ट की पुष्टि नहीं",
+    "onboarding_decision": "निर्णय",
+    "onboarding_masked": "छिपाया गया",
+    "onboarding_none": "कोई जवाब दर्ज नहीं।",
     "none": "अभी कुछ नहीं।",
     "search": "खोजें",
     "back": "वापस",
