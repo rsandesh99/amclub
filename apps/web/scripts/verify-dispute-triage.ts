@@ -94,7 +94,7 @@ async function http() {
   }
   const admin: SupabaseClient = createClient(SUPA_URL, SERVICE, { auth: { persistSession: false } })
   const tag = `kt_tri_${Date.now().toString(36)}`
-  const created = { users: [] as string[], msmeIds: [] as string[], providerIds: [] as string[], packageIds: [] as string[], orderIds: [] as string[] }
+  const created = { users: [] as string[], msmeIds: [] as string[], providerIds: [] as string[], packageIds: [] as string[], orderIds: [] as string[], docPaths: [] as string[] }
   const settingsBefore = new Map<string, { existed: boolean; value: unknown }>()
   async function remember(key: string) {
     const { data } = await admin.from('agent_settings').select('value').eq('key', key).maybeSingle()
@@ -116,18 +116,31 @@ async function http() {
   const api = (token: string, p: string, body?: unknown, method = 'POST') =>
     fetch(`${BASE}${p}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, ...(body ? { body: JSON.stringify(body) } : {}) })
 
-  async function placeAndComplete(buyer: { token: string }, prov: { token: string }, packageId: string): Promise<string> {
+  async function placeAndComplete(buyer: { token: string }, prov: { token: string; uid: string }, packageId: string): Promise<string> {
     const co = await api(buyer.token, '/api/v1/checkout', { packageId, idempotencyKey: crypto.randomUUID() })
     const cod = (await json(co)) as any
     if (!cod.simulated) throw new Error(`checkout not simulated: ${co.status} ${JSON.stringify(cod).slice(0, 120)}`)
     const sim = (await json(await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: cod.checkoutSessionId }))) as any
     const orderId = String(sim.orderId)
     created.orderIds.push(orderId)
-    for (const [who, action] of [[prov, 'accept'], [buyer, 'submit_requirements'], [prov, 'start'], [prov, 'deliver'], [buyer, 'accept_delivery']] as const) {
+    const step = async (who: { token: string }, action: string) => {
       const r = await api(who.token, `/api/v1/orders/${orderId}/transition`, { action })
       await json(r)
       if (!r.ok) throw new Error(`${action} → ${r.status}`)
     }
+    for (const [who, action] of [[prov, 'accept'], [buyer, 'submit_requirements'], [prov, 'start'], [prov, 'deliver']] as const) await step(who, action)
+    // The provider's delivery carries a work-complete milestone photo (the S1.4 fixture shape): the triage check
+    // no_work_complete_photo reads it, so the stub card can say `release` once both statements are on record.
+    const objPath = `${orderId}/${tag}-wc.jpg`
+    const bytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9])
+    const up = await admin.storage.from('order-documents').upload(objPath, bytes, { contentType: 'image/jpeg', upsert: true })
+    if (up.error) throw new Error(`upload: ${up.error.message}`)
+    created.docPaths.push(objPath)
+    const { data: doc, error: de } = await admin.from('order_documents').insert({ order_id: orderId, uploaded_by: prov.uid, file_url: objPath, file_name: 'work-complete.jpg', mime: 'image/jpeg', size_bytes: bytes.length, kind: 'milestone_photo' }).select('id').single()
+    if (de || !doc) throw new Error(`doc: ${de?.message}`)
+    const { error: me } = await admin.from('order_milestones').insert({ order_id: orderId, title: 'work_complete', kind: 'work_complete', note: 'Filing done (kill-test note)', photo_doc_id: doc.id, created_by: prov.uid, sort: 1 })
+    if (me) throw new Error(`milestone: ${me.message}`)
+    await step(buyer, 'accept_delivery')
     return orderId
   }
   const disputeOf = async (orderId: string) => {
@@ -327,8 +340,10 @@ async function http() {
     const runs2 = [await runTriage(d2.id, o2), await runTriage(d2.id, o2), await runTriage(d2.id, o2)]
     const fourth = await runTriage(d2.id, o2)
     check('cap: three triages per dispute, the fourth fails terminally with triage_cap', runs2.every((r) => r.status === 'completed') && (await triagesOf(d2.id)).length === 3 && fourth.status === 'failed' && fourth.error === 'triage_cap', JSON.stringify(fourth).slice(0, 100))
-    const capTrig = maybeEnqueueDisputeTriage ? await maybeEnqueueDisputeTriage(admin, { orderId: o2, disputeId: d2.id }) : null
-    check('the web trigger also refuses past the cap (triage_cap)', capTrig?.reason === 'triage_cap', JSON.stringify(capTrig))
+    if (maybeEnqueueDisputeTriage) {
+      const capTrig = await maybeEnqueueDisputeTriage(admin, { orderId: o2, disputeId: d2.id })
+      check('the web trigger also refuses past the cap (triage_cap)', capTrig.reason === 'triage_cap', JSON.stringify(capTrig))
+    } else skip('the web trigger also refuses past the cap (triage_cap)', 'lib/agent/triage-trigger not importable on this rig')
     await json(await api(ops.token, `/api/v1/admin/disputes/${d2.id}/resolve`, { resolution: 'release' }))
     skip('delegated token without summarize_dispute scope → 403; HMAC mint; pg-boss queue; runtime notify', 'agent driven in-process with the ops session token (no SUPABASE_JWT_SECRET / AGENT_RUNTIME_SECRET here) — the scope refusal is the S1.4 route pattern')
     skip('goods dispute (kind goods, goods_evidence in the trusted parts)', 'MART_ENABLED is off on this rig; the parts builder covers goods in its unit test and the golden set')
@@ -342,6 +357,7 @@ async function http() {
       for (const oid of created.orderIds) {
         const { data: disp } = await admin.from('disputes').select('id').eq('order_id', oid).maybeSingle()
         if (disp) {
+          await del('disputes.triage_id', admin.from('disputes').update({ triage_id: null }).eq('id', disp.id)) // 0037: disputes → dispute_triages → disputes
           await del('triages', admin.from('dispute_triages').delete().eq('dispute_id', disp.id))
           await del('statements', admin.from('dispute_statements').delete().eq('dispute_id', disp.id))
         }
@@ -360,6 +376,10 @@ async function http() {
         await del('order_milestones', admin.from('order_milestones').delete().eq('order_id', oid))
         await del('order_documents', admin.from('order_documents').delete().eq('order_id', oid))
         await del('orders', admin.from('orders').delete().eq('id', oid))
+      }
+      if (created.docPaths.length) {
+        const { error } = await admin.storage.from('order-documents').remove(created.docPaths)
+        if (error) errors.push(`storage: ${error.message}`)
       }
       if (runIds.length) {
         await del('events', admin.from('agent_events').delete().in('run_id', runIds))
@@ -392,9 +412,13 @@ async function http() {
       const { count: u } = await admin.from('users').select('id', { count: 'exact', head: true }).like('email', `${tag}%`)
       if (u) residue.push(`users=${u}`)
       if (created.orderIds.length) {
-        for (const [table, col] of [['orders', 'id'], ['disputes', 'order_id'], ['dispute_triages', 'order_id'], ['dispute_statements', 'order_id'], ['payouts', 'order_id']] as const) {
+        for (const [table, col] of [['orders', 'id'], ['disputes', 'order_id'], ['dispute_triages', 'order_id'], ['dispute_statements', 'order_id'], ['payouts', 'order_id'], ['order_documents', 'order_id']] as const) {
           const { count } = await admin.from(table).select('*', { count: 'exact', head: true }).in(col, created.orderIds)
           if (count) residue.push(`${table}=${count}`)
+        }
+        for (const oid of created.orderIds) {
+          const { data: objs } = await admin.storage.from('order-documents').list(oid)
+          if (objs?.length) residue.push(`order-documents/${oid}=${objs.length}`)
         }
       }
       if (users.length) {
@@ -421,10 +445,12 @@ async function loadTrigger(): Promise<{ maybeEnqueueDisputeTriage: ((admin: Supa
       if (request === 'server-only') return empty
       return orig.call(this, request, ...rest)
     }
+    if (!process.env['NEXT_PUBLIC_POSTHOG_KEY']) process.env['NEXT_PUBLIC_POSTHOG_KEY'] = 'phc_placeholder'
+    if (!process.env['NEXT_PUBLIC_POSTHOG_HOST']) process.env['NEXT_PUBLIC_POSTHOG_HOST'] = 'https://eu.posthog.com'
     const mod = (await import('../lib/agent/triage-trigger')) as { maybeEnqueueDisputeTriage: (admin: SupabaseClient, d: { orderId: string; disputeId: string }) => Promise<{ enqueued: boolean; reason?: string }> }
     return { maybeEnqueueDisputeTriage: mod.maybeEnqueueDisputeTriage }
   } catch (e) {
-    console.error('  (trigger import not possible here:', (e as Error).message.split('\n')[0], ')')
+    console.error('  (trigger import not possible here:', (e as Error).message.replace(/\s+/g, ' ').slice(0, 300), ')')
     return { maybeEnqueueDisputeTriage: null }
   }
 }
