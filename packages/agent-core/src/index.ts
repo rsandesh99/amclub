@@ -7,6 +7,8 @@
  * so one gateway, one cost logger, one injection boundary, one confirm gate.
  */
 export * from './untrusted/envelope'
+export * from './untrusted/injection'
+export * from './untrusted/output'
 export * from './prompts/registry'
 export { helloSchema, type Hello } from './prompts/hello/schema'
 export { photoPlausibilitySchema, photoFindingSchema, type PhotoPlausibility, type PhotoFinding } from './prompts/photo_plausibility/schema'
@@ -18,6 +20,9 @@ export * from './rfq-quality/parts'
 // S1.8 — voice/document intake: parse (v1/v2), clarify and document parts (taint); the parser prompt lives here now
 export * from './intake/parts'
 export { rfqParseModelOutputSchema, type RfqParseModelOutput } from './prompts/rfq_parse/schema'
+// S2.1 — the customer-facing contract wraps these in the agent-core schema files; import them from here, not from shared
+export { clarifyQuestionSchema } from './prompts/rfq_clarify/schema'
+export { documentExtractSchema } from './prompts/document_extract/schema'
 // S1.6 — onboarding interview: pure state machine, prompt parts (taint), draft summary renderer
 export * from './onboarding/index'
 // S1.7 — dispute triage: prompt parts (taint); the strict card + checks + clamp live in shared

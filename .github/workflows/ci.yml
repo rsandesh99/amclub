@@ -50,8 +50,26 @@ jobs:
       - name: Unit tests (agent-core — runner, confirm gate, budget, envelope)
         run: pnpm --filter @amclub/agent-core test
 
-      - name: Prompt golden eval (agent-core — STUB mode, no key)
+      - name: Prompt golden eval (agent-core — STUB mode, no key; includes the injection red-team set)
         run: pnpm --filter @amclub/agent-core eval
+
+      # S2.1 — the red-team gate against the real models. Blocking, not advisory: runs whenever the
+      # gateway key exists as a repo secret (the ai-golden.yml precedent); the family × prompt matrix
+      # lands in the job summary.
+      - name: Red-team gate key check
+        id: redteam_key
+        env:
+          KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: echo "present=${{ env.KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Red-team gate (live)
+        if: steps.redteam_key.outputs.present == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -o pipefail
+          pnpm --filter @amclub/agent-core eval -- --set injection --live 2>&1 | tee redteam.log
+          { echo '### Red-team gate (live)'; echo; echo '\`\`\`'; grep -E "family|^  [a-z_]+ +[0-9-]|checks:|gate \(" redteam.log; echo '\`\`\`'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build (web)
         run: pnpm turbo run build --filter=@amclub/web

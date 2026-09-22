@@ -16,6 +16,9 @@ export * from './rfq'
 export * from './clarifications'
 export * from './rfq-quality'
 
+// S2.1 — customer-facing output policy (phrase lists + contact patterns; the Zod post-validator lives in agent-core)
+export * from './output-policy'
+
 // S1.8 — voice RFQ v2 / document intake: contracts, the clarify rule, deterministic STEP / DXF summaries
 export * from './intake'
 export * from './intake-rules'

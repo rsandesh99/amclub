@@ -1,20 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import {
-  CATEGORY_LIST,
-  DrawingParseError,
-  clampDocumentExtract,
-  documentExtractSchema,
-  parseDxfSummary,
-  parseStepSummary,
-  stubDocumentExtract,
-  type DocumentExtract,
-  type DrawingSummary,
-  type IntakeKind,
-  type IntakeMode,
-  type IntakeResult,
-} from '@amclub/shared'
-import { buildDocumentParts } from '@amclub/agent-core'
+import { CATEGORY_LIST, DrawingParseError, clampDocumentExtract, parseDxfSummary, parseStepSummary, stubDocumentExtract, type DocumentExtract, type DrawingSummary, type IntakeKind, type IntakeMode, type IntakeResult } from '@amclub/shared'
+import { buildDocumentParts, documentExtractSchema } from '@amclub/agent-core'
 import { BudgetExceededError, boundedChatJson } from '@/lib/agent/bounded'
 import { recordAiDecision } from '@/lib/mart/events'
 import type { StoredRfqAttachment } from '@/lib/rfq/attachments'

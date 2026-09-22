@@ -1,16 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import {
-  clarifyLocaleFor,
-  clarifyQuestionSchema,
-  needsClarification,
-  rfqFieldLabel,
-  stubClarifyQuestion,
-  type ClarifyQuestion,
-  type RfqTemplate,
-  type VoiceParse,
-} from '@amclub/shared'
-import { buildClarifyParts } from '@amclub/agent-core'
+import { clarifyLocaleFor, needsClarification, rfqFieldLabel, stubClarifyQuestion, type ClarifyQuestion, type RfqTemplate, type VoiceParse } from '@amclub/shared'
+import { buildClarifyParts, clarifyQuestionSchema } from '@amclub/agent-core'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { BudgetExceededError, boundedChatJson } from '@/lib/agent/bounded'
 import { getAgentSetting, isAgentEnabledForUser } from '@/lib/agent/settings'

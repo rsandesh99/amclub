@@ -1,11 +1,14 @@
+import { quoteExtractionSchema as bare } from '@amclub/shared'
+import { customerFacingText } from '../../untrusted/output'
+
 /**
- * Output schema for `quote_extract@v1` (schemaRef: quoteExtractionSchema). The
- * contract lives in @amclub/shared (quote-extraction.ts) because web, mobile
- * and the verify script consume it; re-exported next to the prompt like
- * prompts/photo_plausibility/schema.ts so the registry resolves it in one place.
+ * Output schema for `quote_extract@v1`. S2.1: the scope summary is shown to
+ * the provider and travels into the quote the buyer reads — no contact, no
+ * payment, no URL. `stripContactInfo` still masks at clamp time; the contract
+ * rejects the model output so the route serves an empty extraction.
  */
+export const quoteExtractionSchema = customerFacingText(bare, { fields: ['scope_summary'], forbid: ['contact', 'payment', 'urls'] })
 export {
-  quoteExtractionSchema,
   quoteExtractRequestSchema,
   quoteExtractResponseSchema,
   QUOTE_EXTRACT_FIELDS,

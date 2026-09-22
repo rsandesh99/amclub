@@ -1,13 +1,13 @@
+import { rfqQualityModelOutputSchema as bare } from '@amclub/shared'
+import { customerFacingText } from '../../untrusted/output'
+
 /**
- * Output schema for `rfq_quality@v1` (schemaRef: rfqQualityModelOutputSchema).
- * The contract lives in @amclub/shared (rfq-quality.ts) because the web route,
- * the verify script and the eval consume it; re-exported next to the prompt so
- * the registry resolves it in one place (same pattern as quote_extract/schema.ts).
- * The model returns ONLY `{ specific_enough, gaps }`; the server merges it into
- * the report under the union rule (`mergeQualityReport`).
+ * Output schema for `rfq_quality@v1`. S2.1: the questions reach the buyer —
+ * no contact request, no payment, no URL; a violation rejects the model
+ * output and the route serves the rule-only report (the S1.5 fallback).
  */
+export const rfqQualityModelOutputSchema = customerFacingText(bare, { fields: ['gaps[].question', 'gaps[].why'], forbid: ['contact', 'payment', 'urls'] })
 export {
-  rfqQualityModelOutputSchema,
   rfqQualityReportSchema,
   rfqQualityPrecheck,
   mergeQualityReport,

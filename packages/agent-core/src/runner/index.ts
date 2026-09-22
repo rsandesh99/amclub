@@ -12,7 +12,8 @@ import type { ChatParts, Gateway } from '../llm/gateway'
 import type { Budget, BudgetBreach } from '../budget'
 import type { Ledger } from '../ledger/types'
 import { usdToPaise } from '../ledger/invocations'
-import { assertEnvelope } from '../untrusted/envelope'
+import { assertEnvelope, type Provenance } from '../untrusted/envelope'
+import { INJECTION_SUSPECT_THRESHOLD } from '../untrusted/injection'
 import type { PromptRef } from '../prompts/registry'
 
 /**
@@ -138,6 +139,8 @@ export function resolveToolRoute(
 
 export class AgentRun {
   private tainted = false
+  /** S2.1 — every untrusted provenance seen since the run started (deduped, capped 20): the `tainted_by` of later proposals. */
+  private readonly taintedBy: Provenance[] = []
   private steps = 0
   private _parked = false
   private readonly maxSteps: number
@@ -178,6 +181,26 @@ export class AgentRun {
     }
     for (const e of opts.parts?.untrusted ?? []) assertEnvelope(e)
     if ((opts.parts?.untrusted?.length ?? 0) > 0) this.tainted = true
+    // S2.1 — provenance of every untrusted part (deduped, capped) + one injection_suspected event per
+    // suspected envelope (≤ 5 per call). Detect and log: nothing is thrown, nothing is dropped.
+    let suspected = 0
+    for (const e of opts.parts?.untrusted ?? []) {
+      const key = `${e.provenance.kind}:${e.provenance.id}`
+      if (this.taintedBy.length < 20 && !this.taintedBy.some((p) => `${p.kind}:${p.id}` === key)) this.taintedBy.push({ ...e.provenance })
+      if (e.injection.score >= INJECTION_SUSPECT_THRESHOLD && suspected < 5) {
+        suspected += 1
+        try {
+          await this.ctx.ledger.appendEvent({
+            runId: this.ctx.runId,
+            kind: 'injection_suspected',
+            actor: 'system',
+            payload: { provenance: { ...e.provenance }, score: e.injection.score, hits: e.injection.hits, prompt: `${opts.prompt.id}@${opts.prompt.version}` },
+          })
+        } catch (err) {
+          console.error('[runner] injection_suspected event failed', (err as Error).message)
+        }
+      }
+    }
 
     this.steps += 1
     await this.ctx.ledger.appendEvent({
@@ -233,7 +256,9 @@ export class AgentRun {
     }
 
     if (spec.confirm) {
-      await this.ctx.ledger.appendEvent({ runId: this.ctx.runId, kind: 'tool_proposed', tool, actor: 'agent', payload })
+      // S2.1 — a proposal that follows tainted input names the provenances it followed.
+      const proposedPayload = this.tainted ? { ...payload, tainted_by: this.taintedBy.map((p) => ({ ...p })) } : payload
+      await this.ctx.ledger.appendEvent({ runId: this.ctx.runId, kind: 'tool_proposed', tool, actor: 'agent', payload: proposedPayload })
       await this.ctx.ledger.appendEvent({ runId: this.ctx.runId, kind: 'confirmation_requested', tool, actor: 'agent', payload })
       await this.ctx.ledger.transitionRun(this.ctx.runId, 'running', 'awaiting_confirmation')
       this._parked = true

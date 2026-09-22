@@ -1,15 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import {
-  declineMessageSchema,
-  declineMessageTemplate,
-  messageMatchesLocaleScript,
-  redactContactInfo,
-  resolveDeclineLocale,
-  type DeclineMessageLocale,
-  type QuoteDeclineReason,
-} from '@amclub/shared'
-import { buildDeclineMessageParts } from '@amclub/agent-core'
+import { declineMessageTemplate, messageMatchesLocaleScript, redactContactInfo, resolveDeclineLocale, type DeclineMessageLocale, type QuoteDeclineReason } from '@amclub/shared'
+import { buildDeclineMessageParts, declineMessageSchema } from '@amclub/agent-core'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { isAgentEnabledForUser } from '@/lib/agent/settings'
 import { BudgetExceededError, boundedChatJson } from '@/lib/agent/bounded'
