@@ -4,7 +4,9 @@ import { Link } from '@/i18n/navigation'
 import { ClipboardList } from 'lucide-react'
 import type { RfqTemplate } from '@amclub/shared'
 import { getSessionUser } from '@/lib/auth/session'
-import { createClient, createPublicClient } from '@/lib/supabase/server'
+import { createClient, createPublicClient, createAdminClient } from '@/lib/supabase/server'
+import { AGENT_ENABLED } from '@/lib/flags'
+import { isAgentEnabledForUser } from '@/lib/agent/settings'
 import { Button } from '@/components/ui/button'
 import { RfqForm, type RfqCategoryOption } from '@/components/rfq/RfqForm'
 
@@ -55,13 +57,16 @@ export default async function NewRfqPage() {
     }
   })
 
+  // S1.8 — document intake button only for cohorted buyers (flag off: no setting is read, nothing renders).
+  const documentIntakeEnabled = AGENT_ENABLED ? await isAgentEnabledForUser(await createAdminClient(), 'document_intake', user.id) : false
+
   return (
     <div className="mx-auto max-w-lg px-4 py-6 space-y-6">
       <div>
         <h1 className="text-xl font-semibold">{t('new_title')}</h1>
         <p className="mt-1 text-sm text-foreground-secondary">{t('new_subtitle')}</p>
       </div>
-      <RfqForm categories={categories} />
+      <RfqForm categories={categories} documentIntakeEnabled={documentIntakeEnabled} />
     </div>
   )
 }

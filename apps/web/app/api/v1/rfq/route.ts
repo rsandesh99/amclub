@@ -10,6 +10,7 @@ import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { MART_ENABLED } from '@/lib/flags'
+import { checkIntakeExtractions, linkIntakeExtractions, type IntakeRow } from '@/lib/agent/intake'
 import { getMartCategory } from '@/lib/mart/config'
 import { isRfqQualityEnabledFor, runRfqQualityCheck, toQualityLocale } from '@/lib/agent/rfq-quality'
 
@@ -41,6 +42,16 @@ export async function POST(request: NextRequest) {
   const actor = await resolveActor(admin, userId)
   if (!actor.msmeId) {
     return NextResponse.json({ error: 'profile_incomplete' }, { status: 403 })
+  }
+
+  // S1.8 — intake rows the buyer confirms with this Create: theirs, unlinked, ≤ 4. Checked BEFORE
+  // the insert (the S1.1 lesson); linked after it. Absent (every existing client) → nothing runs.
+  const intakeIds = d.intake_extraction_ids ?? []
+  let intakeRows: IntakeRow[] = []
+  if (intakeIds.length > 0) {
+    const chk = await checkIntakeExtractions(admin, userId, intakeIds)
+    if (!chk.ok) return NextResponse.json({ error: chk.error }, { status: 422 })
+    intakeRows = chk.rows
   }
 
   // §1.5 M5 / §3.3 — RFQ matching needs state + sector. Gate on them.
@@ -106,6 +117,16 @@ export async function POST(request: NextRequest) {
     .select('id')
     .single()
   if (error || !rfq) return serverError('[rfq POST]', error)
+
+  // S1.8 — the Create tap is the confirmation: ONE ai_decisions row (feature rfq_intake), rows linked.
+  if (intakeRows.length > 0) {
+    await linkIntakeExtractions(admin, {
+      userId,
+      rfqId: rfq.id,
+      rows: intakeRows,
+      final: { title: d.title, detail_keys: Object.keys(d.details ?? {}), attachments: (d.attachments ?? []).length, ...(d.voice_meta?.clarify ? { clarify: d.voice_meta.clarify } : {}) },
+    }).catch((e) => console.error('[rfq intake link]', (e as Error).message))
+  }
 
   if (!twoPhase) {
     // Fan-out (match + notify). Best-effort — the RFQ exists regardless.

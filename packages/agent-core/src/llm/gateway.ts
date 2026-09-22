@@ -67,6 +67,8 @@ export interface ChatJsonParams<T> {
   /** Stub-mode producer: returned (schema-validated) when no key is configured. */
   stub?: () => T
   signal?: AbortSignal
+  /** S1.8 — explicit model id for this call (an env override such as VOICE_PARSE_MODEL); default = the task class's tier model. */
+  model?: string
 }
 
 export interface EmbedResult {
@@ -197,7 +199,7 @@ export function createGateway(config: GatewayConfig = gatewayConfigFromEnv()): G
   }
 
   async function chatJson<T>(params: ChatJsonParams<T>): Promise<ChatResult<T>> {
-    const { model } = resolveModel(params.taskClass)
+    const model = params.model || resolveModel(params.taskClass).model
     const started = Date.now()
 
     if (stubMode) {

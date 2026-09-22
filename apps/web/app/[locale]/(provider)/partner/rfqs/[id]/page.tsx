@@ -87,6 +87,19 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
             )}
           </dl>
         )}
+        {/* S1.8 — attachments (signed URLs from the loader; the buyer's uploads, photos / PDFs / drawings). */}
+        {rfq.attachments.length > 0 && (
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="text-xs text-foreground-secondary">{t('attachments_title')}</p>
+            <ul className="mt-1 flex flex-wrap gap-2">
+              {rfq.attachments.map((a) => (
+                <li key={a.url}>
+                  <a href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-8 items-center rounded-chip border border-border px-3 text-[13px] font-medium text-primary underline underline-offset-2">{a.name}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {rfq.kind === 'goods' && rfq.goodsSpec && (

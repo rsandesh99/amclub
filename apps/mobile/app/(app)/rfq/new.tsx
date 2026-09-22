@@ -5,7 +5,7 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
-import { createRfq, fetchMartCategories, fetchMartDeliveryDefaults, type MartCategory, type GoodsDelivery } from '@/lib/api'
+import { createRfq, fetchMartCategories, fetchMartDeliveryDefaults, voiceAnswerText, type MartCategory, type GoodsDelivery, type VoiceParsePriorPayload } from '@/lib/api'
 import { track } from '@/lib/analytics'
 import { VoiceRfqRecorder } from '@/components/VoiceRfqRecorder'
 import { QualityQuestionsBlock } from '@/components/QualityQuestionsBlock'
@@ -24,6 +24,13 @@ export default function NewRfqScreen() {
   const [error, setError] = useState('')
   // Phase 8b — voice_meta carried to the normal RFQ submit (never auto-sent).
   const [voice, setVoice] = useState<any>(null)
+  // S1.8 — the ONE clarifying question (round one only); answered / skipped → voice.clarify + the extraction id.
+  const [clarify, setClarify] = useState<{ question: string; gap: string; locale: string; audio_data_url: string | null; extraction_id: string; prior: VoiceParsePriorPayload } | null>(null)
+  const [clarifyMode, setClarifyMode] = useState<'idle' | 'voice' | 'text'>('idle')
+  const [clarifyText, setClarifyText] = useState('')
+  const [clarifyBusy, setClarifyBusy] = useState(false)
+  const [clarifyNote, setClarifyNote] = useState<'answered' | 'skipped' | null>(null)
+  const [intakeIds, setIntakeIds] = useState<string[]>([])
   // S1.5 — set when the create reply is DEFERRED (questions before sending); replaces the form.
   const [quality, setQuality] = useState<{ rfqId: string; report: any; deadlineAt: string | null; modelUsed: boolean } | null>(null)
   // AMC Mart M2 — goods mode exists only when /api/v1/mart/categories answers (flag on).
@@ -86,8 +93,14 @@ export default function NewRfqScreen() {
     })
   }
 
-  function applyParse(data: any, durationMs: number) {
+  function applyParse(data: any, durationMs: number, clarifyMeta?: { question: string; gap: string; answer_transcript: string; answered_by: 'voice' | 'text' | 'skipped' }) {
     const p = data.parse
+    // S1.8 — round one may carry the ONE question; round two never does.
+    if (data.clarify) {
+      setClarify({ ...data.clarify, prior: { transcript_english: String(data.transcript_english), parse: p, question: { question: data.clarify.question, gap: data.clarify.gap, locale: data.clarify.locale } } })
+      setClarifyMode('idle')
+      track('voice_rfq_clarify_shown', { gap: data.clarify.gap, tts: !!data.clarify.audio_data_url, locale })
+    }
     if (p.category_slug) setSlug(p.category_slug)
     if (p.description_english?.length >= 10) setTitle(p.description_english.slice(0, 120))
     setDetails((d) => ({ ...d, additional_details: p.description_english }))
@@ -98,7 +111,33 @@ export default function NewRfqScreen() {
       edited_fields: [],
       vendor: data.vendor,
       stub: data.stub,
+      ...(clarifyMeta ? { clarify: clarifyMeta } : {}),
     })
+  }
+
+  function onClarifyAnswered(data: any, by: 'voice' | 'text', answerTranscript: string) {
+    if (!clarify) return
+    applyParse(data, voice?.duration_ms ?? 1, { question: clarify.question, gap: clarify.gap, answer_transcript: answerTranscript.slice(0, 2000), answered_by: by })
+    setIntakeIds((ids) => (ids.includes(clarify.extraction_id) ? ids : [...ids, clarify.extraction_id].slice(0, 4)))
+    track('voice_rfq_clarify_answered', { by, gap: clarify.gap, locale })
+    setClarify(null)
+    setClarifyNote('answered')
+  }
+  function onClarifySkip() {
+    if (!clarify) return
+    setVoice((v: any) => (v ? { ...v, clarify: { question: clarify.question, gap: clarify.gap, answer_transcript: '', answered_by: 'skipped' } } : v))
+    setIntakeIds((ids) => (ids.includes(clarify.extraction_id) ? ids : [...ids, clarify.extraction_id].slice(0, 4)))
+    track('voice_rfq_clarify_answered', { by: 'skipped', gap: clarify.gap, locale })
+    setClarify(null)
+    setClarifyNote('skipped')
+  }
+  async function sendClarifyText() {
+    if (!clarify || clarifyText.trim().length < 2) return
+    setClarifyBusy(true)
+    const res = await voiceAnswerText(clarify.prior, clarifyText.trim())
+    setClarifyBusy(false)
+    if (!res.ok) { setError(t('voice.err_transcribe')); return }
+    onClarifyAnswered(res.data, 'text', clarifyText.trim())
   }
 
   function applyTranscriptOnly(transcript: string, durationMs: number) {
@@ -128,10 +167,12 @@ export default function NewRfqScreen() {
           duration_ms: voice.duration_ms,
           edited_fields: voice.edited_fields,
           vendor: voice.vendor,
+          ...(voice.clarify ? { clarify: voice.clarify } : {}),
         }
       : undefined
     const res = await createRfq({
       category_slug: slug, title: title.trim(), details,
+      ...(intakeIds.length ? { intake_extraction_ids: intakeIds } : {}),
       ...(bmin ? { budget_min_paise: Math.round(Number(bmin) * 100) } : {}),
       ...(bmax ? { budget_max_paise: Math.round(Number(bmax) * 100) } : {}),
       ...(voiceMeta ? { voice_meta: voiceMeta } : {}),
@@ -252,6 +293,37 @@ export default function NewRfqScreen() {
         ) : (
         <>
         <VoiceRfqRecorder onParsed={applyParse} onTranscriptOnly={applyTranscriptOnly} />
+
+        {/* S1.8 — the ONE clarifying question; unmounts once answered or skipped. */}
+        {clarify ? (
+          <View className="rounded-xl border border-primary/40 bg-primary/5 p-3.5">
+            <Text className="text-[11px] font-semibold uppercase text-primary">{t('voice.clarify_title')}</Text>
+            <Text className="mt-1 text-base text-foreground">{clarify.question}</Text>
+            {!clarify.audio_data_url ? <Text className="mt-1 text-xs text-foreground-secondary">{t('voice.clarify_audio_unavailable')}</Text> : null}
+            {clarifyMode === 'idle' ? (
+              <View className="mt-3 flex-row flex-wrap gap-2">
+                <TouchableOpacity onPress={() => setClarifyMode('voice')} className="rounded-lg bg-primary px-4 py-2"><Text className="text-sm font-semibold text-white">{t('voice.clarify_answer_voice')}</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setClarifyMode('text')} className="rounded-lg border border-border bg-surface px-4 py-2"><Text className="text-sm text-foreground">{t('voice.clarify_type_instead')}</Text></TouchableOpacity>
+                <TouchableOpacity onPress={onClarifySkip} className="px-3 py-2"><Text className="text-sm text-foreground-secondary underline">{t('voice.clarify_skip')}</Text></TouchableOpacity>
+              </View>
+            ) : null}
+            {clarifyMode === 'voice' ? (
+              <View className="mt-3">
+                <VoiceRfqRecorder prior={clarify.prior} onParsed={(d, _ms) => onClarifyAnswered(d, 'voice', String(d.transcript_english ?? ''))} onTranscriptOnly={(tr) => { setClarifyMode('text'); setClarifyText(tr) }} />
+              </View>
+            ) : null}
+            {clarifyMode === 'text' ? (
+              <View className="mt-3 gap-2">
+                <TextInput value={clarifyText} onChangeText={setClarifyText} placeholder={t('voice.clarify_type_placeholder')} maxLength={1000} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground" />
+                <View className="flex-row gap-2">
+                  <TouchableOpacity disabled={clarifyBusy || clarifyText.trim().length < 2} onPress={sendClarifyText} className="rounded-lg bg-primary px-4 py-2 disabled:opacity-60"><Text className="text-sm font-semibold text-white">{clarifyBusy ? t('voice.processing') : t('voice.clarify_send')}</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setClarifyMode('idle')} className="px-3 py-2"><Text className="text-sm text-foreground-secondary underline">{t('voice.clarify_skip_back')}</Text></TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        {clarifyNote ? <Text className="text-xs text-foreground-secondary">{clarifyNote === 'answered' ? t('voice.clarify_answered_note') : t('voice.clarify_skipped_note')}</Text> : null}
 
         {voice ? (
           <View className={`rounded-xl border p-3.5 ${voice.parse.uncertain ? 'border-warning bg-warning/10' : 'border-primary/40 bg-primary/5'}`}>

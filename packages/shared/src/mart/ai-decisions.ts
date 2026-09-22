@@ -21,6 +21,7 @@ export const AI_DECISION_FEATURES = [
   'onboarding',        // S1.6
   'dispute_triage',    // S1.7
   'rfq_quality',       // S1.5
+  'rfq_intake',        // S1.8 — the Create tap confirming voice-clarify / document / drawing prefill
   'munshi_draft',      // S2.2
   'support_reply',     // S2.3
   'score_note',        // S2.4

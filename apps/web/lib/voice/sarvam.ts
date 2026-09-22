@@ -57,7 +57,8 @@ class StubTranscriber implements Transcriber {
     console.warn(
       `[voice:stt STUB] would transcribe → ${audio.filename} (${audio.mimeType}, ${audio.bytes.byteLength} bytes) via ${MODEL} (no SARVAM_API_KEY)`,
     )
-    return { transcript: STUB_TRANSCRIPT, languageCode: 'te-IN', vendor: 'stub', stub: true }
+    // VOICE_STUB_TRANSCRIPT: verify rigs steer the keyless stub (never read when a key is set).
+    return { transcript: process.env['VOICE_STUB_TRANSCRIPT'] || STUB_TRANSCRIPT, languageCode: process.env['VOICE_STUB_LANGUAGE'] || 'te-IN', vendor: 'stub', stub: true }
   }
 }
 

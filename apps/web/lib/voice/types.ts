@@ -1,4 +1,6 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { VoiceParse } from '@amclub/shared'
+import type { RfqParsePrior } from '@amclub/agent-core'
 
 /**
  * A vendor HTTP failure with the status and FULL response body preserved —
@@ -67,6 +69,21 @@ export interface ParseResult {
   usage?: Record<string, unknown> | undefined
 }
 
+/**
+ * S1.8 — what the bounded parser needs beyond the text: the service-role client
+ * + user for the ONE ai_invocations row per call (budget caps read from
+ * agent_settings), and the prior round when this is the answer to the one
+ * clarifying question. Absent (the golden eval, in-process): the gateway is
+ * called directly and nothing is logged.
+ */
+export interface ParseContext {
+  admin: SupabaseClient
+  userId: string
+  prior?: RfqParsePrior | null
+  /** Round two with a typed answer instead of audio. */
+  answerTyped?: boolean
+}
+
 export interface RequirementParser {
-  parse(englishText: string, originalLanguage: string): Promise<ParseResult>
+  parse(englishText: string, originalLanguage: string, ctx?: ParseContext): Promise<ParseResult>
 }

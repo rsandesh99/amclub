@@ -29,6 +29,8 @@ export interface BoundedChatArgs<T> {
   temperature?: number
   stub?: () => T
   meta?: Record<string, unknown> | null
+  /** S1.8 — explicit model id for this call (see ChatJsonParams.model). */
+  model?: string
 }
 
 export interface BoundedChatDeps {
@@ -60,6 +62,7 @@ export async function runBoundedChatJson<T>(deps: BoundedChatDeps, args: Bounded
       ...(args.parts !== undefined ? { parts: args.parts } : {}),
       temperature: args.temperature ?? 0,
       ...(args.stub !== undefined ? { stub: args.stub } : {}),
+      ...(args.model ? { model: args.model } : {}),
     })
     const costPaise = res.usage.costUsd != null ? usdToPaise(res.usage.costUsd) : null
     const invocationMeta = { model: res.model, prompt: `${args.prompt.id}@${args.prompt.version}`, usage: res.usage.raw, ...(args.meta ?? {}) }

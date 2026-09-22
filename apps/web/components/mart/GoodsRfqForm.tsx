@@ -13,6 +13,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { VoiceDictation } from '@/components/mart/VoiceDictation'
 import { SheetCard } from '@/components/mart/primitives'
 import type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
+import { IntakeDocumentButton } from '@/components/rfq/IntakeDocumentButton'
+import type { IntakeResult } from '@amclub/shared'
 
 export interface GoodsRfqCategoryOption { slug: string; name: string }
 export interface GoodsRfqPrefill { productId: string | null; item: string; unit: string; categorySlug: string; productName: string | null }
@@ -25,7 +27,7 @@ interface SpecRow { k: string; v: string }
  * spec. No money arithmetic here: the target price is a paise integer the
  * buyer typed, sent as a signal.
  */
-export function GoodsRfqForm({ categories, states, defaults, prefill }: { categories: GoodsRfqCategoryOption[]; states: { value: string; label: string }[]; defaults: DeliveryDefaults | null; prefill: GoodsRfqPrefill | null }) {
+export function GoodsRfqForm({ categories, states, defaults, prefill, documentIntakeEnabled = false }: { categories: GoodsRfqCategoryOption[]; states: { value: string; label: string }[]; defaults: DeliveryDefaults | null; prefill: GoodsRfqPrefill | null; documentIntakeEnabled?: boolean }) {
   const t = useTranslations('rfq')
   const tm = useTranslations('mart')
   const locale = useLocale()
@@ -47,7 +49,25 @@ export function GoodsRfqForm({ categories, states, defaults, prefill }: { catego
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // S1.8 — document / drawing intake: attachments + the extraction ids the Create tap confirms.
+  const [attachments, setAttachments] = useState<{ url: string; name: string }[]>([])
+  const [intakeIds, setIntakeIds] = useState<string[]>([])
   const set = (k: keyof typeof form, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }))
+  const track = useCallback((event: string, props?: Record<string, unknown>) => posthog.capture(event, { locale, device: 'web', ...props }), [posthog, locale])
+
+  function onIntake(r: IntakeResult) {
+    setAttachments((a) => (a.length < 5 ? [...a, r.attachment] : a))
+    setIntakeIds((ids) => (ids.length < 4 ? [...ids, r.extraction_id] : ids))
+    const incoming: SpecRow[] = r.kind === 'document' ? r.result.facts.map((f) => ({ k: f.k, v: f.v })) : r.result.spec_rows
+    setRows((rs) => {
+      const kept = rs.filter((x) => x.k.trim() || x.v.trim())
+      const merged = [...kept]
+      for (const row of incoming) if (merged.length < 12 && !merged.some((x) => x.k === row.k)) merged.push(row)
+      return merged.length ? merged : [{ k: '', v: '' }]
+    })
+    if (r.kind === 'drawing' && r.result.product_name && !item.trim()) setItem(r.result.product_name.slice(0, 140))
+    if (r.kind === 'document' && r.result.description_english) setDetails((d) => (d ? `${d}\n${r.result.description_english}` : r.result.description_english))
+  }
 
   const onDictated = useCallback((text: string) => setDetails((d) => (d ? `${d}\n${text}` : text)), [])
 
@@ -71,7 +91,8 @@ export function GoodsRfqForm({ categories, states, defaults, prefill }: { catego
           mart_category_slug: categorySlug,
           title: title.length >= 10 ? title : `${title} (goods request)`,
           details: details.trim() ? { additional_details: details.trim() } : {},
-          attachments: [],
+          attachments,
+          ...(intakeIds.length ? { intake_extraction_ids: intakeIds } : {}),
           ...(neededBy ? { needed_by: neededBy } : {}),
           goods_spec: {
             item: item.trim(), qty: qtyNum, unit, spec,
@@ -159,7 +180,20 @@ export function GoodsRfqForm({ categories, states, defaults, prefill }: { catego
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="g-details">{t('goods_details_label')}</Label>
           <Textarea id="g-details" value={details} onChange={(e) => setDetails(e.target.value)} rows={3} />
-          <VoiceDictation onText={onDictated} />
+          <div className="flex flex-wrap items-start gap-3">
+            <VoiceDictation onText={onDictated} />
+            <IntakeDocumentButton mode="goods" enabled={documentIntakeEnabled} track={track} onResult={onIntake} onAttachmentOnly={(a) => setAttachments((x) => (x.length < 5 ? [...x, a] : x))} compact />
+          </div>
+          {attachments.length > 0 && (
+            <ul className="mt-1 space-y-1 text-xs text-foreground-secondary" aria-label={t('intake_attachments_title')}>
+              {attachments.map((a) => (
+                <li key={a.url} className="flex items-center justify-between gap-2">
+                  <span className="truncate">{a.name}</span>
+                  <button type="button" onClick={() => setAttachments((x) => x.filter((y) => y.url !== a.url))} className="min-h-8 px-2 underline underline-offset-2">{t('intake_remove')}</button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </SheetCard>
 

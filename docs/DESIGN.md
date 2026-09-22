@@ -728,6 +728,18 @@ Empty/error/loading states per §3.8, PWA manifest + offline shell, responsive a
 - **Audio retention: none.** Raw audio is processed in memory (multipart → Sarvam → discarded); it is never written to Supabase Storage, disk, or logs. Only the English transcript + parse persist (`rfqs.voice_meta`). Mobile recordings exist transiently in the app's on-device cache (user's device, not our infrastructure). Consequently there is no server-side purge job to run; if audio retention is ever introduced (e.g. for STT quality audits), it requires a new mini-PRD here plus a 30-day purge job and explicit consent copy BEFORE the first byte is stored.
 - **Consent:** the mic UI on both platforms shows, before recording, that the voice is sent to a transcription service to fill the form and that audio is not stored after processing (`voice.consent_note`, en/hi/te/ta — DPDP purpose-limitation line).
 
+**v2 (S1.8, 2026-09-21; A1 pull-forward per §8.6) — one clarifying question + document / drawing intake, dark.**
+- The parser is a registry prompt (`rfq_parse@v1` = the Phase 8b text; `@v2` for the prior round) through the
+  bounded helper; behaviour preserved, `eval:golden` unchanged.
+- ONE clarifying question when the parse is uncertain or a template-required field is missing (`needsClarification`,
+  code): heard in the buyer's language (te / hi / ta / en), answered by voice or by typing, the merged parse prefills
+  the form; a request carrying `prior` never gets another question. Optional TTS (`clarify_tts_enabled`).
+- Document intake: a photo of a notice / invoice or a text PDF → one frontier call (`document_extract@v1`) returning
+  facts (identity numbers masked to the last 4, contacts stripped); STEP / DXF drawings parsed deterministically
+  (no model). Everything is prefill; the Create tap writes ONE `ai_decisions` row (feature `rfq_intake`).
+- Spine: `rfq-attachments` bucket + `POST /api/v1/rfq/attachments`; detail pages list attachments (signed URLs).
+- Schema: `rfq_intake_extractions` (0038). Flags: `agents_enabled.rfq_clarify`, `agents_enabled.document_intake`.
+
 ### Phase 9 — Pilot launch (Weeks 15–16)
 Razorpay live keys + production webhooks, domain + SSL, legal pages live (§9), onboard **30–50 hand-recruited providers in 1–2 pilot clusters** (e.g., Hyderabad + Vijayawada per GTM Phase 1), invite ~500 MSMEs through associations, daily-metrics Slack digest, founder-led support via WhatsApp.
 **Done criteria for "V1 launched":** 25 real completed paid orders, dispute flow exercised at least once for real, NPS survey sent, weekly growth review cadence established.
@@ -878,6 +890,8 @@ RLS-by-default, service-role key server-only · signed URLs for all private file
 
 `search_performed · listing_viewed · provider_viewed · package_viewed · checkout_started · payment_succeeded/failed · rfq_created · quote_submitted/viewed/accepted · order_accepted/delivered/completed/disputed · review_submitted · provider_signup_started/kyc_submitted/approved · language_switched`
 Gateway funnel (Phase 8a): `gateway_viewed · gateway_door_chosen · gateway_wizard_step_viewed · gateway_wizard_step_answered · gateway_wizard_step_skipped · gateway_wizard_completed · gateway_results_viewed · gateway_browse_clicked · gateway_rfq_opened · gateway_rfq_submitted · gateway_provider_wizard_completed · gateway_provider_application_submitted` (props: `door, step, field, value, prefilled, category, state`).
+
+Voice RFQ v2 (S1.8): `voice_rfq_clarify_shown { gap, tts, locale } · voice_rfq_clarify_answered { by: voice|text|skipped, gap } · rfq_intake_document { kind, doc_type, mode, stub, facts } · rfq_intake_document_failed { reason } · rfq_intake_document_added · rfq_intake_chip_edited { k }`.
 
 Voice RFQ funnel (Phase 8b): `voice_rfq_started · voice_rfq_transcribed · voice_rfq_parsed · voice_rfq_edited · voice_rfq_submitted · voice_rfq_failed` (props: `surface ('rfq_form'|'gateway'), original_language, uncertain, duration_ms, field` — `voice_rfq_edited` fires once per corrected field; `voice_rfq_submitted` marks an RFQ created with voice_meta attached).
 Quote extraction (agent S1.1): `agent_quote_extract_requested` (server; props `rfq_id, kind, source, stub, uncertain_count`) · `quote_extract_filled` · `quote_extract_cleared` (client; props `rfq_id, uncertain_count, stub`). The confirmation itself rides the existing `quote_submitted` / `quote_events.submitted` payload (`extraction_id`, `edited_fields`).

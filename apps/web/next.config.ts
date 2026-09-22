@@ -41,6 +41,8 @@ const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
   // Transpile internal workspace packages (source exports, not compiled)
   transpilePackages: ['@amclub/shared', '@amclub/db', '@amclub/agent-core'],
+  // S1.8 — pure-JS PDF text extraction (bundled pdf.js + fs); never webpack-bundled.
+  serverExternalPackages: ['pdf-parse'],
 
   images: {
     formats: ['image/avif', 'image/webp'],

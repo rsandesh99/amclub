@@ -23,8 +23,8 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
 export interface AiInvocationInput {
   userId: string
   /** Telemetry bucket; defaults to the voice pipeline. */
-  feature?: 'voice_rfq' | 'voice_eval' | 'catalog_draft' | undefined
-  step: 'stt' | 'parse'
+  feature?: 'voice_rfq' | 'voice_eval' | 'catalog_draft' | 'rfq_intake' | undefined
+  step: 'stt' | 'parse' | 'tts' | 'clarify' | 'document'
   vendor: string
   status: 'ok' | 'error' | 'stub'
   latencyMs: number
@@ -44,6 +44,9 @@ export interface AiInvocationInput {
 const STEP_TASK_CLASS: Record<AiInvocationInput['step'], AgentTaskClass> = {
   stt: 'speech_to_text',
   parse: 'rfq_parse',
+  tts: 'text_to_speech',
+  clarify: 'rfq_clarify',
+  document: 'document_extract',
 }
 
 export async function logAiInvocation(admin: Admin, row: AiInvocationInput): Promise<void> {

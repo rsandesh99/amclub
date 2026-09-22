@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, TextInput, Dimensions, Alert, Modal } from 'react-native'
+import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, TextInput, Dimensions, Alert, Modal, Linking } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useState, useEffect, useCallback } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -81,6 +81,16 @@ export default function BuyerRfqScreen() {
         {active && openQ > 0 ? <Text className="mt-1 self-start rounded-full border border-[#b45309]/40 bg-[#f5ebdd] px-2 py-0.5 text-[11px] font-medium text-[#b45309]">{t('rfq.clarify_awaiting_chip')}</Text> : null}
         {/* S1.5 — derived "deferred" chip (open + fanout_at NULL); never a status text change. */}
         {rfq.quality?.deferred ? <Text className="mt-1 self-start rounded-full border border-[#b45309]/40 bg-[#f5ebdd] px-2 py-0.5 text-[11px] font-medium text-[#b45309]">{t('rfq.quality_chip_deferred')}</Text> : null}
+        {/* S1.8 — attachments (signed URLs from the API). */}
+        {Array.isArray(rfq.attachments) && rfq.attachments.length > 0 ? (
+          <View className="mt-2 flex-row flex-wrap gap-2">
+            {rfq.attachments.map((a: { url: string; name: string }) => (
+              <TouchableOpacity key={a.url} onPress={() => { void Linking.openURL(a.url) }} className="rounded-full border border-border px-3 py-1">
+                <Text className="text-xs font-medium text-primary underline">{a.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
       </View>
 
       {goods && <GoodsSpecBlock spec={goods} t={t} />}

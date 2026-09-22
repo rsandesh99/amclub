@@ -12,6 +12,9 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { VoiceRfqRecorder, type VoiceVendorTag } from '@/components/voice/VoiceRfqRecorder'
+import { ClarifyBubble, type ClarifyPayload } from '@/components/voice/ClarifyBubble'
+import { IntakeDocumentButton } from '@/components/rfq/IntakeDocumentButton'
+import type { IntakeResult, VoiceMetaClarify } from '@amclub/shared'
 import { QualityQuestionsCard } from '@/components/rfq/QualityQuestionsCard'
 import type { RfqQualityReport } from '@amclub/shared'
 import { INDIAN_STATES } from '@/lib/constants/india'
@@ -34,7 +37,19 @@ interface DraftState {
   neededBy: string
   /** Phase 8b — present when the draft began as a voice recording. */
   voice?: VoiceMeta & { stub?: boolean }
+  /** S1.8 — document / drawing intake: editable facts, the drawing summary, attachments and the ids the Create tap confirms. */
+  intake?: IntakeDraft
 }
+
+interface IntakeFact { id: string; k: string; v: string; confidence: 'low' | 'medium' | 'high' }
+interface IntakeDraft {
+  extractionIds: string[]
+  attachments: { url: string; name: string }[]
+  facts: IntakeFact[]
+  drawing?: { summary: string; rows: { k: string; v: string }[] } | undefined
+  stub?: boolean | undefined
+}
+const EMPTY_INTAKE: IntakeDraft = { extractionIds: [], attachments: [], facts: [] }
 
 const EMPTY: DraftState = { categorySlug: '', title: '', details: {}, budgetMin: '', budgetMax: '', neededBy: '' }
 
@@ -46,7 +61,7 @@ function specLabel(slug: string): string {
     .join(' ')
 }
 
-export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
+export function RfqForm({ categories, documentIntakeEnabled = false }: { categories: RfqCategoryOption[]; documentIntakeEnabled?: boolean }) {
   const t = useTranslations('rfq')
   const tv = useTranslations('voice')
   const locale = useLocale()
@@ -59,6 +74,9 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [restored, setRestored] = useState(false)
+  // S1.8 — the ONE clarifying question (never persisted: the audio data URL is large and the round is transient).
+  const [clarify, setClarify] = useState<{ payload: ClarifyPayload; prior: { transcript_english: string; parse: VoiceMeta['parse'] } } | null>(null)
+  const [clarifyNote, setClarifyNote] = useState<'answered' | 'skipped' | null>(null)
 
   const track = useCallback(
     (event: string, props?: Record<string, unknown>) =>
@@ -103,9 +121,11 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
     })
   }
 
-  function applyParse(res: VoiceParseResponse & { vendor: VoiceVendorTag }, durationMs: number) {
+  function applyParse(res: VoiceParseResponse & { vendor: VoiceVendorTag }, durationMs: number, clarifyMeta?: VoiceMetaClarify) {
     const p = res.parse
     const description = p.description_english
+    // S1.8 — round one may carry the ONE question; round two never does.
+    if (res.clarify) setClarify({ payload: res.clarify, prior: { transcript_english: res.transcript_english, parse: p } })
     setS((prev) => ({
       ...prev,
       categorySlug: p.category_slug ?? prev.categorySlug,
@@ -121,8 +141,78 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
         edited_fields: [],
         vendor: res.vendor,
         stub: res.stub,
+        ...(clarifyMeta ? { clarify: clarifyMeta } : prev.voice?.clarify ? { clarify: prev.voice.clarify } : {}),
       },
     }))
+  }
+
+  // S1.8 — the clarify round: answered (merged parse replaces the prefill) or skipped (the first parse stands).
+  function onClarifyAnswered(res: VoiceParseResponse & { vendor: VoiceVendorTag }, by: 'voice' | 'text', answerTranscript: string) {
+    if (!clarify) return
+    const meta: VoiceMetaClarify = { question: clarify.payload.question, gap: clarify.payload.gap, answer_transcript: answerTranscript.slice(0, 2000), answered_by: by }
+    applyParse(res, s.voice?.duration_ms ?? 1, meta)
+    addExtractionId(clarify.payload.extraction_id)
+    setClarify(null)
+    setClarifyNote('answered')
+  }
+  function onClarifySkip() {
+    if (!clarify) return
+    const meta: VoiceMetaClarify = { question: clarify.payload.question, gap: clarify.payload.gap, answer_transcript: '', answered_by: 'skipped' }
+    setS((prev) => (prev.voice ? { ...prev, voice: { ...prev.voice, clarify: meta } } : prev))
+    addExtractionId(clarify.payload.extraction_id)
+    setClarify(null)
+    setClarifyNote('skipped')
+  }
+  function addExtractionId(id: string) {
+    setS((prev) => {
+      const cur = prev.intake ?? EMPTY_INTAKE
+      if (cur.extractionIds.includes(id) || cur.extractionIds.length >= 4) return prev
+      return { ...prev, intake: { ...cur, extractionIds: [...cur.extractionIds, id] } }
+    })
+  }
+
+  // S1.8 — document / drawing result → prefill only (facts as chips, description appended, category only when empty).
+  function onIntakeResult(r: IntakeResult) {
+    addExtractionId(r.extraction_id)
+    setS((prev) => {
+      const cur = prev.intake ?? EMPTY_INTAKE
+      const attachments = cur.attachments.some((a) => a.url === r.attachment.url) || cur.attachments.length >= 5 ? cur.attachments : [...cur.attachments, r.attachment]
+      if (r.kind === 'drawing') {
+        const rows = r.result.spec_rows
+        const line = r.result.summary_english
+        return {
+          ...prev,
+          title: prev.title || (r.result.product_name ? `${r.result.product_name} — ${line}`.slice(0, 120) : ''),
+          details: { ...prev.details, additional_details: prev.details['additional_details'] ? `${prev.details['additional_details']}\n${line}` : line },
+          intake: { ...cur, attachments, drawing: { summary: line, rows } },
+        }
+      }
+      const facts: IntakeFact[] = [...cur.facts, ...r.result.facts.map((f, i) => ({ id: `${r.extraction_id}:${i}`, k: f.k, v: f.v, confidence: f.confidence }))].slice(0, 20)
+      const desc = r.result.description_english
+      return {
+        ...prev,
+        categorySlug: prev.categorySlug || (r.result.suggested_category_slug ?? ''),
+        title: prev.title || (desc.length >= 10 ? desc.slice(0, 120) : ''),
+        details: { ...prev.details, additional_details: desc ? (prev.details['additional_details'] ? `${prev.details['additional_details']}\n${desc}` : desc) : (prev.details['additional_details'] ?? '') },
+        intake: { ...cur, attachments, facts, stub: r.stub || cur.stub },
+      }
+    })
+  }
+  function onIntakeAttachmentOnly(a: { url: string; name: string }) {
+    setS((prev) => {
+      const cur = prev.intake ?? EMPTY_INTAKE
+      if (cur.attachments.some((x) => x.url === a.url) || cur.attachments.length >= 5) return prev
+      return { ...prev, intake: { ...cur, attachments: [...cur.attachments, a] } }
+    })
+  }
+  function editFact(id: string, v: string) {
+    setS((prev) => ({ ...prev, intake: { ...(prev.intake ?? EMPTY_INTAKE), facts: (prev.intake?.facts ?? []).map((f) => (f.id === id ? { ...f, v } : f)) } }))
+  }
+  function removeFact(id: string) {
+    setS((prev) => ({ ...prev, intake: { ...(prev.intake ?? EMPTY_INTAKE), facts: (prev.intake?.facts ?? []).filter((f) => f.id !== id) } }))
+  }
+  function removeAttachment(url: string) {
+    setS((prev) => ({ ...prev, intake: { ...(prev.intake ?? EMPTY_INTAKE), attachments: (prev.intake?.attachments ?? []).filter((a) => a.url !== url) } }))
   }
 
   function applyTranscriptOnly(transcript: string, durationMs: number) {
@@ -156,6 +246,9 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
     setLoading(true)
     try {
       const details: Record<string, unknown> = { ...s.details }
+      // S1.8 — the (edited) document facts travel with the request as one readable line.
+      const facts = (s.intake?.facts ?? []).filter((f) => f.k.trim() && f.v.trim())
+      if (facts.length > 0) details['document_facts'] = facts.map((f) => `${f.k}: ${f.v}`).join(' · ').slice(0, 2000)
       // Strip the client-only stub flag; the server Zod-validates the rest.
       const voiceMeta: VoiceMeta | undefined = s.voice
         ? {
@@ -164,6 +257,7 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
             duration_ms: s.voice.duration_ms,
             edited_fields: s.voice.edited_fields,
             vendor: s.voice.vendor,
+            ...(s.voice.clarify ? { clarify: s.voice.clarify } : {}),
           }
         : undefined
       const res = await fetch('/api/v1/rfq', {
@@ -173,7 +267,8 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
           category_slug: s.categorySlug,
           title: s.title.trim(),
           details,
-          attachments: [],
+          attachments: s.intake?.attachments ?? [],
+          ...(s.intake?.extractionIds.length ? { intake_extraction_ids: s.intake.extractionIds } : {}),
           ...(s.budgetMin ? { budget_min_paise: Math.round(Number(s.budgetMin) * 100) } : {}),
           ...(s.budgetMax ? { budget_max_paise: Math.round(Number(s.budgetMax) * 100) } : {}),
           ...(s.neededBy ? { needed_by: s.neededBy } : {}),
@@ -229,6 +324,58 @@ export function RfqForm({ categories }: { categories: RfqCategoryOption[] }) {
 
       {/* Phase 8b — speak instead of type. Parse only pre-fills; never submits. */}
       <VoiceRfqRecorder onParsed={applyParse} onTranscriptOnly={applyTranscriptOnly} track={track} />
+
+      {/* S1.8 — the ONE clarifying question (round one only; the bubble unmounts once answered or skipped). */}
+      {clarify && <ClarifyBubble clarify={clarify.payload} prior={clarify.prior} onAnswered={onClarifyAnswered} onSkip={onClarifySkip} track={track} />}
+      {clarifyNote && <p className="text-xs text-foreground-secondary" role="status">{clarifyNote === 'answered' ? tv('clarify_answered_note') : tv('clarify_skipped_note')}</p>}
+
+      {/* S1.8 — a photo of a notice or invoice, a text PDF, or a STEP / DXF drawing → prefill (cohorted buyers only). */}
+      <div className="flex flex-wrap items-start gap-3">
+        <IntakeDocumentButton mode="service" enabled={documentIntakeEnabled} track={track} onResult={onIntakeResult} onAttachmentOnly={onIntakeAttachmentOnly} />
+      </div>
+      {(s.intake?.facts.length ?? 0) > 0 && (
+        <div className="rounded-card border border-border p-4">
+          <p className="text-sm font-semibold text-foreground">{t('intake_facts_title')}</p>
+          <p className="mt-0.5 text-xs text-foreground-secondary">{t('intake_facts_hint')}{s.intake?.stub ? ` ${t('intake_stub_note')}` : ''}</p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {s.intake!.facts.map((f) => (
+              <li key={f.id} className={`flex items-center gap-1 rounded-chip border px-2 py-1 text-[13px] ${f.confidence === 'low' ? 'border-dashed border-warning/60' : 'border-border'}`}>
+                <span className="font-medium text-foreground-secondary">{f.k}:</span>
+                <input
+                  aria-label={`${t('intake_edit_value')} — ${f.k}`}
+                  value={f.v}
+                  maxLength={200}
+                  onChange={(e) => editFact(f.id, e.target.value)}
+                  onBlur={() => track('rfq_intake_chip_edited', { k: f.k })}
+                  className="min-w-[6rem] bg-transparent text-foreground outline-none"
+                />
+                <button type="button" aria-label={`${t('intake_remove')} ${f.k}`} onClick={() => removeFact(f.id)} className="px-1 text-foreground-secondary">×</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {s.intake?.drawing && (
+        <div className="rounded-card border border-border p-4">
+          <p className="text-sm font-semibold text-foreground">{t('intake_drawing_title')}</p>
+          <p className="mt-0.5 text-sm text-foreground">{s.intake.drawing.summary}</p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {s.intake.drawing.rows.map((r) => (
+              <li key={r.k} className="rounded-chip border border-border px-2 py-1 text-[13px]"><span className="font-medium text-foreground-secondary">{r.k}:</span> {r.v}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(s.intake?.attachments.length ?? 0) > 0 && (
+        <ul className="space-y-1 text-sm" aria-label={t('intake_attachments_title')}>
+          {s.intake!.attachments.map((a) => (
+            <li key={a.url} className="flex items-center justify-between gap-2 rounded-button border border-border px-3 py-2">
+              <span className="truncate">{a.name}</span>
+              <button type="button" onClick={() => removeAttachment(a.url)} className="min-h-8 px-2 text-xs text-foreground-secondary underline underline-offset-2">{t('intake_remove')}</button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {voice && (
         <div

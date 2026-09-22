@@ -22,6 +22,8 @@ export const AGENT_NAMES = [
   'decline_message',  // S1.2
   'payout_dossier', // S1.4
   'rfq_quality',    // S1.5
+  'rfq_clarify',    // S1.8 — the one clarifying question after an uncertain voice parse
+  'document_intake', // S1.8 — photo / PDF / drawing → prefill
   'onboarding',     // S1.6
   'dispute_triage', // S1.7
   'munshi',         // S2.2
@@ -136,6 +138,12 @@ export const AGENT_SETTING_DEFS = {
     schema: z.number().int().min(1).max(168),
     default: 72,
     hint: 'S1.6 hours an unfinished WhatsApp onboarding session stays open (sliding on each answer) before the expiry job abandons it and points the provider to the web wizard.',
+  },
+  // ── S1.8 voice RFQ v2 ──────────────────────────────────────────────────────
+  clarify_tts_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'S1.8 synthesise the clarifying question as audio (Sarvam TTS, paid). false = text only.',
   },
 } as const satisfies Record<string, AgentSettingDef>
 

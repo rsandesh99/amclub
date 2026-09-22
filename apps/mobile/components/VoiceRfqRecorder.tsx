@@ -12,7 +12,7 @@ import {
 } from 'expo-audio'
 import { useI18n } from '@/lib/i18n'
 import { track } from '@/lib/analytics'
-import { voiceParse } from '@/lib/api'
+import { voiceParse, type VoiceParsePriorPayload } from '@/lib/api'
 import { colors } from '@/lib/theme'
 
 /**
@@ -54,9 +54,11 @@ type Phase = 'idle' | 'recording' | 'review' | 'uploading'
 interface VoiceRfqRecorderProps {
   onParsed: (data: any, durationMs: number) => void
   onTranscriptOnly: (transcript: string, durationMs: number) => void
+  /** S1.8 — round two of the one clarifying question (posted as `prior`). */
+  prior?: VoiceParsePriorPayload | null
 }
 
-export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorderProps) {
+export function VoiceRfqRecorder({ onParsed, onTranscriptOnly, prior = null }: VoiceRfqRecorderProps) {
   const { t } = useI18n()
   const recorder = useAudioRecorder(RECORDING_OPTIONS)
   const player = useAudioPlayer()
@@ -153,7 +155,7 @@ export function VoiceRfqRecorder({ onParsed, onTranscriptOnly }: VoiceRfqRecorde
     if (!uri) return
     setPhase('uploading')
     setError('')
-    const res = await voiceParse(uri, MIME, durationRef.current)
+    const res = await voiceParse(uri, MIME, durationRef.current, prior)
     if (res.ok) {
       track('voice_rfq_transcribed', {
         surface: 'rfq_form',

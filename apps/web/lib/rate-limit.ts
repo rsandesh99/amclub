@@ -77,6 +77,9 @@ export const limiters = {
   quoteExtractHourly: build(40, '1 h', 'rl:quote-extract-h'),
   /** S1.2 compare pointers per buyer — one reasoning-tier call per cache miss. */
   comparePointers: build(6, '10 m', 'rl:compare-pointers'),
+  /** S1.8 document intake per buyer — one frontier-tier vision/text call each; burst + hourly pair. */
+  documentExtract: build(5, '1 m', 'rl:document-extract'),
+  documentExtractHourly: build(30, '1 h', 'rl:document-extract-h'),
 } as const
 
 export interface RateLimitResult {

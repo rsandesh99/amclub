@@ -187,19 +187,32 @@ export async function createRfq(body: {
   needed_by?: string
   /** Phase 8b — transcript + parse when the RFQ began as voice. */
   voice_meta?: Record<string, unknown>
+  /** S1.8 — rfq_intake_extractions ids the Create tap confirms (the clarify question row). */
+  intake_extraction_ids?: string[]
+  /** S1.8 — bucket references from /api/v1/rfq/attachments (web-only uploads this stage). */
+  attachments?: { url: string; name: string }[]
 }) {
   const res = await fetch(`${API_URL}/api/v1/rfq`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-    body: JSON.stringify({ ...body, attachments: [] }),
+    body: JSON.stringify({ attachments: [], ...body }),
   })
   return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
 }
 
 /** Phase 8b — voice → structured RFQ prefill. Parses only; never creates an
  *  RFQ. Content-Type is left to fetch so RN sets the multipart boundary. */
-export async function voiceParse(fileUri: string, mimeType: string, durationMs: number) {
+/** S1.8 — round two of the one clarifying question: the first round + the question, echoed as `prior`. */
+export interface VoiceParsePriorPayload {
+  transcript_english: string
+  parse: Record<string, unknown>
+  question: { question: string; gap: string; locale: string }
+  answer_text?: string
+}
+
+export async function voiceParse(fileUri: string, mimeType: string, durationMs: number, prior?: VoiceParsePriorPayload | null) {
   const form = new FormData()
+  if (prior) form.append('prior', JSON.stringify(prior))
   const name = mimeType.includes('wav')
     ? 'recording.wav'
     : mimeType.includes('aac')
@@ -212,6 +225,15 @@ export async function voiceParse(fileUri: string, mimeType: string, durationMs: 
     headers: await authHeaders(),
     body: form,
   })
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
+}
+
+/** S1.8 — answer the one clarifying question by typing (no STT): `prior` + `answer_text`, the reply is the merged parse. */
+export async function voiceAnswerText(prior: VoiceParsePriorPayload, answerText: string) {
+  const form = new FormData()
+  form.append('prior', JSON.stringify({ ...prior, answer_text: answerText }))
+  form.append('answer_text', answerText)
+  const res = await fetch(`${API_URL}/api/v1/rfq/voice-parse`, { method: 'POST', headers: await authHeaders(), body: form })
   return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) }
 }
 

@@ -25,7 +25,8 @@
     "rfq:verify:clarify": "tsx scripts/verify-clarifications.ts",
     "agents:verify:rfq-quality": "tsx scripts/verify-rfq-quality.ts",
     "agents:verify:onboarding": "tsx scripts/verify-onboarding.ts",
-    "agents:verify:triage": "tsx scripts/verify-dispute-triage.ts"
+    "agents:verify:triage": "tsx scripts/verify-dispute-triage.ts",
+    "voice:verify:v2": "tsx scripts/verify-voice-v2.ts"
   },
   "dependencies": {
     "@amclub/agent-core": "workspace:*",
@@ -44,6 +45,7 @@
     "next": "^15.0.0",
     "next-intl": "^3.25.0",
     "pdf-lib": "^1.17.1",
+    "pdf-parse": "1.1.1",
     "posthog-js": "^1.393.0",
     "razorpay": "^2.9.6",
     "react": "^19.0.0",
@@ -57,6 +59,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@types/node": "^22.0.0",
+    "@types/pdf-parse": "1.1.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.0",
