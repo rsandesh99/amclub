@@ -28,9 +28,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { id } = await params
   const admin = await createAdminClient()
-  const { data } = await admin.from('munshi_drafts').select('id, user_id, run_id, kind, status, delivered, rfq:rfqs(title)').eq('id', id).is('deleted_at', null).maybeSingle()
-  const d = data as { id: string; user_id: string; run_id: string | null; kind: string; status: string; delivered: Record<string, unknown> | null; rfq: { title: string } | null } | null
-  if (!d) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  // The draft's own columns first (the static Mart check reads a joined select textually), then the RFQ title.
+  const { data } = await admin.from('munshi_drafts').select('id, user_id, run_id, kind, status, delivered, rfq_id').eq('id', id).is('deleted_at', null).maybeSingle()
+  const row = data as { id: string; user_id: string; run_id: string | null; kind: string; status: string; delivered: Record<string, unknown> | null; rfq_id: string | null } | null
+  if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: rfqRow } = row.rfq_id ? await admin.from('rfqs').select('title').eq('id', row.rfq_id).maybeSingle() : { data: null }
+  const d = { ...row, rfq: (rfqRow as { title: string } | null) ?? null }
   if (d.run_id && claims.runId !== d.run_id) return NextResponse.json({ error: 'run_mismatch' }, { status: 403 })
   if (claims.userId !== d.user_id) return NextResponse.json({ error: 'user_mismatch' }, { status: 403 })
   if (d.delivered?.['notification'] === true) return NextResponse.json({ ok: true, notified: false, reason: 'already_notified' })
