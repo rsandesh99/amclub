@@ -107,6 +107,25 @@ private `wa-media` bucket at `<conversationId>/<vendorMessageId>.<ext>`;
 URLs (wizard, partner dashboard, admin). Nothing is copied into the provider
 media pipeline in this stage.
 
+## S2.3 — the Support agent
+
+**Dispatcher order** now: STOP → active onboarding session → Munshi (S2.2) → opt-in
+keywords → JOIN → **support** → holding reply. The support branch takes a text /
+audio message from a user with an active WhatsApp grant when `AGENT_ENABLED` (runtime)
+and `agents_enabled.support` + cohort are on, and a `nudge:yes|no:<runId>` button whose
+run is the user's. An open ticket (`wa_conversations.support_ticket_id`) stores the
+message and replies **nothing** until a human resolves it at `/admin/support`. Anything
+else still gets the S0.5 holding reply (≤ 1 per 24 h). The run's token persona is the
+grant's persona (`buyer` for an msme user, else `provider`).
+
+**Templates** (en/hi/te; opt-in gated except the two transactional nudges):
+`support_reply` (`amc_support_reply_*`, params `[title, body]`, the out-of-window
+carrier for any support reply), `support_escalated` (`[ticket ref]`),
+`support_ticket_opened` (ops, `[summary]`), `support_resolved` (`[note]`),
+`order_nudge` / `rfq_nudge` (`[body]`). The nudge confirmation is in-window
+buttons only. Add them to the approval batch in PRE_LAUNCH_CHECKLIST 1.3; runbook
+`docs/agents/SUPPORT.md`.
+
 ## S1.4 note — founder one-tap
 
 The Payout-Evidence agent notifies the ops user by kind `payout_dossier_ready`

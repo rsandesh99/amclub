@@ -819,6 +819,51 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
+## Agent S2.3 — Support agent (logged 2026-09-22)
+
+**Shipped (dark):** an intent classifier + template replies from `/api/v1` data — the model never writes a sentence
+the user reads (`supportIntentSchema` has no reply field). `runSupportTurn` (agent-core) is the ONE engine for web /
+mobile (`POST /api/v1/agent/support/message`, the user's session client under RLS) and WhatsApp (runtime
+`support.reply`, GETs under the delegated token); one action `nudge_counterparty` (confirm-gated; spine routes
+`POST /orders|rfq/[id]/nudge`, once per sender per subject per 24 h, flag-independent); escalation = `support_tickets`
+(model summary for ops, halts the agent on that thread / conversation until a human resolves at `/admin/support`);
+migration **0041**. Runbook `docs/agents/SUPPORT.md`.
+
+- **Payment / payout facts (the prompt asked which way):** the web lookups read `payouts` / `refunds` with the service
+  role **only for an order the session client already returned** (RLS proved it is the user's), by that order id. The
+  runtime does NOT read them — on WhatsApp the payout / refund replies degrade to the order-status path
+  (`payout_status.not_due` / `scheduled` from the order status). Putting the facts on the party order GET would let
+  both surfaces read them the same way.
+- **Dispatcher position (prompt vs tree):** the prompt placed the support branch "after the Munshi branch, before the
+  opt-in keywords"; it sits after the keywords and JOIN, before the holding reply, so START / YES / HI / JOIN keep
+  their S0.5 / S1.6 meaning for a granted user (a "hi" from a granted user is a keyword re-grant, not a support
+  greeting). Byte-identical when support is off either way.
+- **Reads on WhatsApp are scripted GETs** (`readUnderToken`, each logged as a `tool_called` event with tool
+  `support_lookup`), not a virtual model-proposed tool — the model only classifies, so there is no proposal to make
+  (the S1.6 STT / S2.2 thread-read precedent).
+- **The run's token persona is the user's WhatsApp grant persona** (START stores `buyer` for an msme user, else
+  `provider`); the engine still picks the hat per turn (`as_role`). A fixed `buyer` would have 403'd every
+  provider-only user (found while writing the rig; fixed).
+- **No client INSERT on `support_messages`** (the prompt offered either): the web route writes the thread + messages
+  with the service role after the session check, because the model call and the two-table write happen server-side.
+- **The runtime mirrors the SLA and the contact line** (`SLA`, `CONTACT` in `agents/support/index.ts`) because it
+  cannot import `apps/web/lib/legal/grievance.ts` — change both together. Moving them to `packages/shared` is the fix.
+- **A WhatsApp escalation whose ticket route is unreachable opens a bare ticket from the runtime** (support table,
+  fallback summary, no notifications) so the halt still holds; the admin queue lists it.
+- **The nudge ledger link is checked:** `support_message_id` counts only when it is an assistant turn in the caller's
+  own thread; anything else is a plain nudge with no `ai_decisions` row.
+- **The web Nudge toast says "24 hours"** (the default) in its i18n string rather than the configured
+  `support_nudge_cooldown_hours`; the agent's own `nudge.capped` reply quotes the setting.
+- **Not built in v1 (as the prompt listed):** SSE streaming (template replies are instant); Bengali / Marathi copy
+  (en / hi / te / ta only; WhatsApp templates en / hi / te); a provider-side "did the buyer see my quote" intent (needs
+  read receipts); the mobile thread shows the last 50 messages with no paging.
+- **Rig skips (recorded, never passes):** the HMAC token exchange (session tokens stand in; `requireToolScope` on the
+  reads and the nudge routes is the S0.1-proven lock); pg-boss + the runtime webhook; a voice note (the S1.6 STT
+  leg); the live model. The runtime-credential ticket route runs when `AGENT_RUNTIME_SECRET` is set to the same
+  throwaway value on the rig and the local server.
+- **Live evals not run** (no LLM key): `support_intent` ≥ 90 % + every injection case, `support_ticket_summary`
+  ≥ 90 % + injections, and the red-team set (now 240 pairs incl. the `support_chat` surface) are the cohort gate.
+
 ## Agent S2.2 — Digital Munshi v1 (logged 2026-09-22)
 
 **Shipped (dark):** the provider's clerk — `munshi.scan` (every 15 min) drafts a quote / ONE question / a skip per new
