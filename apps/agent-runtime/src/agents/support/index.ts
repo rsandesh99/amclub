@@ -56,7 +56,8 @@ export interface SupportRuntimeDeps {
   whatsapp: WhatsAppProvider
   apiUrl: string
   agentEnabled: boolean
-  tokenFor: (args: { runId: string; userId: string }) => Promise<string>
+  /** Mints the run's delegated token; `persona` = the user's WhatsApp grant persona (the token route requires a grant for it). */
+  tokenFor: (args: { runId: string; userId: string; persona?: 'buyer' | 'provider' }) => Promise<string>
   mediaBucket: string
   runtimeSecret: string
   now?: () => Date
@@ -98,10 +99,10 @@ function istDate(iso: string | null | undefined): string | null {
 const paise = (v: unknown) => Number(v ?? 0)
 
 /** A scripted GET under the run's delegated token, recorded on the run as a tool_called event (S1.6 STT precedent). */
-async function readUnderToken(deps: SupportRuntimeDeps, run: { runId: string; userId: string }, path: string): Promise<unknown | null> {
+async function readUnderToken(deps: SupportRuntimeDeps, run: { runId: string; userId: string; persona?: 'buyer' | 'provider' }, path: string): Promise<unknown | null> {
   const f = deps.fetchImpl ?? fetch
   try {
-    const token = await deps.tokenFor({ runId: run.runId, userId: run.userId })
+    const token = await deps.tokenFor({ runId: run.runId, userId: run.userId, ...(run.persona ? { persona: run.persona } : {}) })
     const res = await f(`${deps.apiUrl}${path}`, { headers: { Authorization: `Bearer ${token}` } })
     await deps.core.ledger.appendEvent({ runId: run.runId, kind: 'tool_called', tool: 'support_lookup', actor: 'agent', payload: { path, status: res.status, ok: res.ok } })
     if (!res.ok) return null
@@ -112,7 +113,7 @@ async function readUnderToken(deps: SupportRuntimeDeps, run: { runId: string; us
   }
 }
 
-export function runtimeSupportLookups(deps: SupportRuntimeDeps, run: { runId: string; userId: string }, nudgeCapped: (kind: 'order' | 'rfq', id: string) => Promise<boolean>): SupportLookups {
+export function runtimeSupportLookups(deps: SupportRuntimeDeps, run: { runId: string; userId: string; persona?: 'buyer' | 'provider' }, nudgeCapped: (kind: 'order' | 'rfq', id: string) => Promise<boolean>): SupportLookups {
   const orderView = (o: any, role: 'buyer' | 'provider'): SupportOrderView => ({
     id: o.id,
     order_number: String(o.order_number),
@@ -247,17 +248,19 @@ interface SupportTurnAgentOutput {
   role: 'buyer' | 'provider'
 }
 
-function supportTurnAgent(deps: SupportRuntimeDeps, settings: { escalateAfterTurns: number; nudgeCooldownHours: number }): AgentDefinition<SupportTurnAgentInput, SupportTurnAgentOutput> {
+function supportTurnAgent(deps: SupportRuntimeDeps, settings: { escalateAfterTurns: number; nudgeCooldownHours: number }, persona: 'buyer' | 'provider'): AgentDefinition<SupportTurnAgentInput, SupportTurnAgentOutput> {
   return {
     name: 'support',
-    persona: 'buyer', // the token's persona; the engine picks the hat per turn (as_role) and the reads are the user's own
+    // the token's persona = the user's WhatsApp grant persona (a provider-only user holds a 'provider' grant); the engine
+    // still picks the hat per turn (as_role) and every read is the user's own
+    persona,
     async run(run, input) {
       const nudgeCapped = async (kind: 'order' | 'rfq', id: string): Promise<boolean> => {
         const since = new Date(Date.now() - settings.nudgeCooldownHours * 3600 * 1000).toISOString()
         const { count } = await deps.admin.from('nudges').select('id', { count: 'exact', head: true }).eq('subject_kind', kind).eq('subject_id', id).eq('from_user_id', input.conv.user_id ?? '').gte('created_at', since)
         return (count ?? 0) > 0
       }
-      const lookups = runtimeSupportLookups(deps, { runId: run.runId, userId: input.conv.user_id ?? '' }, nudgeCapped)
+      const lookups = runtimeSupportLookups(deps, { runId: run.runId, userId: input.conv.user_id ?? '', persona }, nudgeCapped)
       const turn = await runSupportTurn(
         {
           classify: async (parts) =>
@@ -300,6 +303,13 @@ async function conversationRow(admin: SupabaseClient, id: string): Promise<Conve
   return (data as ConversationRow | null) ?? null
 }
 
+/** The persona of the user's active WhatsApp grant (START stores 'buyer' for an msme user, else 'provider'). */
+async function whatsappPersona(admin: SupabaseClient, userId: string, roles: readonly ('buyer' | 'provider')[]): Promise<'buyer' | 'provider'> {
+  const { data } = await admin.from('agent_grants').select('persona').eq('user_id', userId).eq('channel', 'whatsapp').is('revoked_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
+  const p = (data as { persona?: string } | null)?.persona
+  return p === 'provider' || p === 'buyer' ? p : roles.includes('buyer') ? 'buyer' : 'provider'
+}
+
 async function userRoles(admin: SupabaseClient, userId: string): Promise<('buyer' | 'provider')[]> {
   const [{ data: m }, { data: p }] = await Promise.all([admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle(), admin.from('provider_profiles').select('id').eq('user_id', userId).maybeSingle()])
   return [...(m ? ['buyer' as const] : []), ...(p ? ['provider' as const] : [])]
@@ -318,12 +328,13 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
   const roles = await userRoles(deps.admin, conv.user_id)
   if (!roles.length) return { status: 'failed', error: 'no_profile' }
   const settings = await supportSettings(deps.admin)
+  const persona = await whatsappPersona(deps.admin, conv.user_id, roles)
 
   // audio → the existing web STT route under the user's token (S1.6 precedent)
   let text = String((msg as any).body ?? '')
   if ((msg as any).kind === 'audio' && (msg as any).media_ref) {
     const tmpRunId = '00000000-0000-0000-0000-000000000000'
-    const token = await deps.tokenFor({ runId: tmpRunId, userId: conv.user_id }).catch(() => '')
+    const token = await deps.tokenFor({ runId: tmpRunId, userId: conv.user_id, persona }).catch(() => '')
     if (token) {
       const t = await transcribeVoiceNote({ admin: deps.admin, bucket: deps.mediaBucket, mediaRef: (msg as any).media_ref, mime: (msg as any).mime, apiUrl: deps.apiUrl, token, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) })
       if (t.ok) text = t.text
@@ -333,7 +344,7 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
 
   const { data: prev } = await deps.admin.from('wa_messages').select('body').eq('conversation_id', conv.id).eq('direction', 'in').neq('id', job.messageId).order('created_at', { ascending: false }).limit(1).maybeSingle()
   const result = await runAgent(
-    supportTurnAgent(deps, settings),
+    supportTurnAgent(deps, settings, persona),
     { ...deps.core, scopes: null, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) },
     { userId: conv.user_id, surface: 'whatsapp', subjectType: 'wa_conversation', subjectId: conv.id, jobId: job.jobId ?? null, meta: { agent: 'support', message_id: job.messageId } },
     { conv, messageId: job.messageId, text, locale, roles, previousText: (prev as { body?: string } | null)?.body ?? null },
@@ -345,7 +356,7 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
   if (out.escalate) {
     const ticketArgs = { conv, userId: conv.user_id, role: out.role, locale, reason: out.escalate.reason, intent: out.intent, orderId: out.lookupRefs.order_id ?? null, rfqId: out.lookupRefs.rfq_id ?? null, runId: result.runId, text }
     // the halt must hold even when the web is unreachable: a bare ticket row (support table, service role) marks the conversation
-    const ticket = (await openTicketViaWeb(deps, ticketArgs)) ?? (await openTicketFallback(deps, ticketArgs))
+    const ticket = (await openTicketViaWeb(deps, { ...ticketArgs, persona })) ?? (await openTicketFallback(deps, ticketArgs))
     const replyText = renderSupportReply('escalated', { sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days, contact: CONTACT, ticket_ref: ticket?.ref ?? '' }, locale)
     await sendReply(deps, conv, locale, replyText, { support: true, escalated: true })
     await deps.admin.from('wa_conversations').update({ support_last_intents: [...(conv.support_last_intents ?? []), (out.intent ?? 'other') as SupportIntent].slice(-5), support_unclear_streak: 0 }).eq('id', conv.id)
@@ -360,12 +371,12 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
   return { status: 'ok', detail: { outcome: out.action ? 'nudge_offered' : 'answered', reply_key: out.replyKey, run_id: result.runId } }
 }
 
-async function openTicketViaWeb(deps: SupportRuntimeDeps, args: { conv: ConversationRow; userId: string; role: 'buyer' | 'provider'; locale: SupportLocale; reason: string; intent: string | null; orderId: string | null; rfqId: string | null; runId: string; text: string }): Promise<{ id: string; ref: string } | null> {
+async function openTicketViaWeb(deps: SupportRuntimeDeps, args: { conv: ConversationRow; userId: string; role: 'buyer' | 'provider'; locale: SupportLocale; reason: string; intent: string | null; orderId: string | null; rfqId: string | null; runId: string; text: string; persona: 'buyer' | 'provider' }): Promise<{ id: string; ref: string } | null> {
   if (!deps.runtimeSecret) return null
   const { data: msgs } = await deps.admin.from('wa_messages').select('id, direction, body').eq('conversation_id', args.conv.id).order('created_at', { ascending: false }).limit(6)
   const transcript = (((msgs as any[]) ?? []).reverse()).map((m) => ({ id: String(m.id), role: (m.direction === 'in' ? 'user' : 'assistant') as 'user' | 'assistant', text: String(m.body ?? '').slice(0, 2000) })).filter((t) => t.text)
   try {
-    const cred = signRuntimeCredential(deps.runtimeSecret, { userId: args.userId, persona: 'buyer', runId: args.runId })
+    const cred = signRuntimeCredential(deps.runtimeSecret, { userId: args.userId, persona: args.persona, runId: args.runId })
     const f = deps.fetchImpl ?? fetch
     const res = await f(`${deps.apiUrl}/api/v1/agent/admin/support/tickets`, {
       method: 'POST',
@@ -423,7 +434,8 @@ export async function runSupportDecide(deps: SupportRuntimeDeps, job: SupportDec
   const { data: ev } = await deps.admin.from('agent_events').select('payload').eq('run_id', job.runId).eq('kind', 'confirmation_requested').order('created_at', { ascending: false }).limit(1).maybeSingle()
   const payload = ((ev as { payload?: Record<string, unknown> } | null)?.payload ?? {}) as { subject_kind?: string; subject_id?: string }
   const f = deps.fetchImpl ?? fetch
-  const token = await deps.tokenFor({ runId: job.runId, userId: conv.user_id })
+  const runPersona: 'buyer' | 'provider' = run.persona === 'provider' ? 'provider' : 'buyer'
+  const token = await deps.tokenFor({ runId: job.runId, userId: conv.user_id, persona: runPersona })
   const decision = await f(`${deps.apiUrl}/api/v1/agent/runs/${job.runId}/decision`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -442,7 +454,7 @@ export async function runSupportDecide(deps: SupportRuntimeDeps, job: SupportDec
   let capped = false
   if (!body?.resumed) {
     const { AgentRun } = await import('@amclub/agent-core')
-    const agentRun = new AgentRun({ runId: job.runId, userId: conv.user_id, persona: run.persona, ledger: deps.core.ledger, gateway: deps.core.gateway, budget: deps.core.makeBudget({ runId: job.runId, userId: conv.user_id, agentName: 'support' }), apiBaseUrl: deps.apiUrl, getToken: () => deps.tokenFor({ runId: job.runId, userId: conv.user_id! }), scopes: null, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) })
+    const agentRun = new AgentRun({ runId: job.runId, userId: conv.user_id, persona: run.persona, ledger: deps.core.ledger, gateway: deps.core.gateway, budget: deps.core.makeBudget({ runId: job.runId, userId: conv.user_id, agentName: 'support' }), apiBaseUrl: deps.apiUrl, getToken: () => deps.tokenFor({ runId: job.runId, userId: conv.user_id!, persona: runPersona }), scopes: null, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) })
     try {
       const outcome = await agentRun.resume('nudge_counterparty', { subject_kind: payload.subject_kind, subject_id: payload.subject_id }, body?.decision_id ? { decisionId: body.decision_id } : undefined)
       await agentRun.complete().catch(() => undefined)

@@ -132,7 +132,8 @@ export function buildSupportDeps(): SupportRuntimeDeps {
     whatsapp: createWhatsAppProvider(whatsappConfigFromEnv()),
     apiUrl: RUNTIME_ENV.API_URL,
     agentEnabled: RUNTIME_ENV.AGENT_ENABLED,
-    tokenFor: ({ runId, userId }) => mintRuntimeToken({ runId, persona: 'buyer', userId }),
+    // the persona of the user's own WhatsApp grant (the token route refuses a persona without one)
+    tokenFor: ({ runId, userId, persona }) => mintRuntimeToken({ runId, persona: persona ?? 'buyer', userId }),
     mediaBucket: RUNTIME_ENV.WA_MEDIA_BUCKET,
     runtimeSecret: RUNTIME_ENV.RUNTIME_SECRET,
     capture: captureRuntimeEvent,

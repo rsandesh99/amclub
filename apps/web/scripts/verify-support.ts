@@ -482,7 +482,8 @@ async function http() {
       async expire() { return 1 },
       async mget<T = unknown>(...keys: string[]) { return keys.map((k) => (store.has(k) ? (store.get(k) as unknown as T) : null)) },
     }
-    const tokens = new Map<string, string>([[w.uid, w.token], [n.uid, n.token], [b1.uid, b1.token]])
+    const tokens = new Map<string, string>([[w.uid, w.token], [n.uid, n.token], [b1.uid, b1.token], [p1.uid, p1.token]])
+    const tokenPersonas: string[] = []
     const readBudget = async () => {
       const { data } = await admin.from('agent_settings').select('key, value').in('key', ['budget_run_paise', 'budget_user_day_paise', 'budget_month_paise', 'budget_run_paise_by_agent'])
       return Object.fromEntries(((data ?? []) as any[]).map((r) => [r.key, r.value])) as Record<string, unknown>
@@ -495,7 +496,7 @@ async function http() {
       makeToken: async ({ userId }) => tokens.get(userId) ?? '',
     }
     const deps: import('../../agent-runtime/src/agents/support/index').SupportRuntimeDeps = {
-      core, admin, whatsapp, apiUrl: BASE, agentEnabled: true, tokenFor: async ({ userId }) => tokens.get(userId) ?? '', mediaBucket: BUCKET, runtimeSecret: RIG_RUNTIME_SECRET, capture: () => undefined,
+      core, admin, whatsapp, apiUrl: BASE, agentEnabled: true, tokenFor: async ({ userId, persona }) => { tokenPersonas.push(`${userId}:${persona ?? 'none'}`); return tokens.get(userId) ?? '' }, mediaBucket: BUCKET, runtimeSecret: RIG_RUNTIME_SECRET, capture: () => undefined,
     }
     const queue: Array<{ kind: 'reply'; conversationId: string; messageId: string } | { kind: 'decide'; runId: string; messageId: string; action: 'yes' | 'no' }> = []
     const hooks = {
@@ -503,10 +504,10 @@ async function http() {
       enqueueSupportDecide: async (j: { runId: string; messageId: string; action: 'yes' | 'no' }) => { queue.push({ kind: 'decide', ...j }); return 'queued' },
     }
     const drain = async () => { const out: any[] = []; while (queue.length) { const j = queue.shift()!; out.push(j.kind === 'reply' ? await rt.runSupportReply(deps, j) : await rt.runSupportDecide(deps, j)) } return out }
-    async function mkConv(u: { uid: string; digits: string }, grant: boolean) {
+    async function mkConv(u: { uid: string; digits: string }, grant: boolean, persona: 'buyer' | 'provider' = 'buyer') {
       const { data } = await admin.from('wa_conversations').insert({ phone_e164: `91${u.digits}`, user_id: u.uid, locale: 'en', last_inbound_at: new Date().toISOString(), window_open_until: new Date(Date.now() + 86400 * 1000).toISOString() }).select('id').single()
       created.convIds.push(data!.id)
-      if (grant) await admin.from('agent_grants').insert({ user_id: u.uid, persona: 'buyer', scopes: [], channel: 'whatsapp', channel_identity: `+91${u.digits}`, consent: { locale: 'en', surface: 'whatsapp', keyword: 'START', text_version: 'v1', at: new Date().toISOString() } })
+      if (grant) await admin.from('agent_grants').insert({ user_id: u.uid, persona, scopes: [], channel: 'whatsapp', channel_identity: `+91${u.digits}`, consent: { locale: 'en', surface: 'whatsapp', keyword: 'START', text_version: 'v1', at: new Date().toISOString() } })
       return data!.id as string
     }
     let vendorSeq = 0
@@ -569,6 +570,13 @@ async function http() {
     const { data: convAfter } = await admin.from('wa_conversations').select('support_ticket_id').eq('id', convW).single()
     const t7 = await waSay(convW, { kind: 'text', body: 'where is my order' })
     check('admin resolve → the conversation is cleared → the next inbound is answered again', resW.status === 200 && (convAfter as any)?.support_ticket_id === null && t7.results[0]?.status === 'ok' && ['answered', 'nudge_offered'].includes(t7.results[0]?.detail?.outcome), JSON.stringify(t7.results[0]))
+    // a provider-only user: the START grant is persona 'provider', so the run and every token must be 'provider' (a 'buyer' mint 403s)
+    const convP = await mkConv(p1, true, 'provider')
+    tokenPersonas.length = 0
+    const tp = await waSay(convP, { kind: 'text', body: 'when will I be paid' })
+    const runP = tp.results[0]?.detail?.run_id as string | undefined
+    const { data: runPRow } = await admin.from('agent_runs').select('persona').eq('id', runP ?? NIL).maybeSingle()
+    check('a provider-only WhatsApp user: the run persona and every delegated-token mint are provider (the grant persona) → payout_status answered from their own orders', tp.results[0]?.status === 'ok' && (runPRow as any)?.persona === 'provider' && tokenPersonas.length > 0 && tokenPersonas.every((x) => x === `${p1.uid}:provider`) && String(tp.results[0]?.detail?.reply_key ?? '').startsWith('payout_status.') && tp.results[0]?.detail?.reply_key !== 'payout_status.none', JSON.stringify({ r: tp.results[0], persona: (runPRow as any)?.persona, tokenPersonas: [...new Set(tokenPersonas)] }))
     // no grant → holding reply only
     const convN = await mkConv(n, false)
     const tn = await waSay(convN, { kind: 'text', body: 'where is my order' })
