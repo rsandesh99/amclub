@@ -197,7 +197,7 @@ async function runQuoteExtract(gateway: Gateway, live: boolean): Promise<SetResu
 // ── quote_compare ────────────────────────────────────────────────────────────
 async function runQuoteCompare(gateway: Gateway, live: boolean): Promise<SetResult> {
   interface Fixture extends CompareQuoteInput { medianResponseMinutes?: number | null; completedOrders?: number | null }
-  interface CompareCase { id: string; locale: PointerLocale; today: string; quotes: string[]; injection?: boolean; poison?: { displayName: string; scope: string; message: string } }
+  interface CompareCase { id: string; locale: PointerLocale; today: string; quotes: string[]; injection?: boolean; poison?: { displayName: string; scope: string; message: string }; ordering_probe?: string }
   const file = readJson<{ fixtures: Record<string, Fixture>; cases: CompareCase[] }>('../golden/quote_compare.json')
   const prompt = getPrompt('quote_compare', 'v1')
   let agree = 0
@@ -214,6 +214,8 @@ async function runQuoteCompare(gateway: Gateway, live: boolean): Promise<SetResu
     const results = compareQuotes(quotes, { today: c.today })
     const parts = buildComparePointerParts({ locale: c.locale, today: c.today, quotes, results })
     const bad: string[] = []
+    // S2.4 — pointers never talk about the order quotes are shown in (the server's fixed line does): the contract must catch it
+    if (c.ordering_probe && !findBannedPhrases(c.ordering_probe, c.locale).length) bad.push('ordering language not caught by the pointer contract')
     if (c.poison) {
       const all = (parts.trusted ?? []).join('\n')
       for (const s of Object.values(c.poison)) if (all.includes(s)) bad.push(`poison leaked into trusted: ${s.slice(0, 30)}`)

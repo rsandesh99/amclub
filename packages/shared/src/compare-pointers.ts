@@ -37,10 +37,22 @@ export const COMPARE_BANNED_PHRASES: Record<PointerLocale, readonly string[]> = 
   te: ['ఉత్తమ', 'ఎంచుకో', 'నివారించ', 'సిఫార్సు', 'అత్యుత్తమ', 'best', 'choose', 'avoid', 'recommend'],
 }
 
-/** The banned phrases found in `text` for `locale` (empty = clean). */
+/**
+ * S2.4 — pointers never talk about the ORDER the quotes are shown in, nor any score (the reliability ordering is
+ * the server's fixed line, ADR-010 §7). Pointer-only: kept out of the shared RANKING_PHRASES, which other outputs
+ * (the provider's own coaching note) must stay free to use words like "score".
+ */
+export const COMPARE_ORDERING_PHRASES: Record<PointerLocale, readonly string[]> = {
+  en: ['listed first', 'shown first', 'ordered by', 'ranked', 'reliability', 'amc score', 'score'],
+  hi: ['पहले दिखाया', 'सबसे ऊपर दिखाया', 'क्रम में', 'विश्वसनीयता', 'स्कोर'],
+  ta: ['முதலில் காட்டப்பட்ட', 'வரிசைப்படுத்தப்பட்ட', 'நம்பகத்தன்மை', 'மதிப்பெண்'],
+  te: ['ముందుగా చూపబడింది', 'క్రమంలో', 'విశ్వసనీయత', 'స్కోర్'],
+}
+
+/** The banned phrases found in `text` for `locale` (ranking + ordering; empty = clean). */
 export function findBannedPhrases(text: string, locale: PointerLocale): string[] {
   const hay = text.toLowerCase()
-  return COMPARE_BANNED_PHRASES[locale].filter((p) => hay.includes(p.toLowerCase()))
+  return [...COMPARE_BANNED_PHRASES[locale], ...COMPARE_ORDERING_PHRASES[locale]].filter((p) => hay.includes(p.toLowerCase()))
 }
 
 /** Drop every quote's lines that contain a banned phrase; returns the cleaned object + which quote ids were dropped. */

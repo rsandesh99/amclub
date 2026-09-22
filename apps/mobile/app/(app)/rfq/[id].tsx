@@ -26,6 +26,9 @@ export default function BuyerRfqScreen() {
   const [compare, setCompare] = useState<Record<string, { normalizedTotalPaise: number; flags: string[] }>>({})
   const [pointers, setPointers] = useState<Record<string, string[]>>({})
   const [pointersEnabled, setPointersEnabled] = useState(false)
+  // S2.4 — the server's order (mode + ids; never a score). 'price' keeps the old order exactly.
+  const [ordering, setOrdering] = useState<{ mode: 'price' | 'reliability'; ids: string[] } | null>(null)
+  const [byPrice, setByPrice] = useState(false)
   const [shortlist, setShortlist] = useState<Set<string>>(new Set())
   const [shortlistOnly, setShortlistOnly] = useState(false)
   const [declining, setDeclining] = useState<any | null>(null)
@@ -44,6 +47,7 @@ export default function BuyerRfqScreen() {
       if (c) {
         setCompare(Object.fromEntries((c.results ?? []).map((r: any) => [r.id, { normalizedTotalPaise: r.normalizedTotalPaise, flags: r.flags }])))
         setPointers(Object.fromEntries((c.pointers?.pointers ?? []).map((p) => [p.quote_id, p.lines])))
+        setOrdering(c.ordering ?? null)
       }
     }
   }, [id, locale])
@@ -63,7 +67,10 @@ export default function BuyerRfqScreen() {
   if (!rfq) return null
 
   const allQuotes: any[] = rfq.quotes ?? []
-  const quotes = shortlistOnly ? allQuotes.filter((q) => shortlist.has(q.id)) : allQuotes
+  const reliability = ordering?.mode === 'reliability' && !byPrice
+  const rank = new Map((ordering?.ids ?? []).map((qid, i) => [qid, i]))
+  const ordered = reliability ? [...allQuotes].sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER)) : allQuotes
+  const quotes = shortlistOnly ? ordered.filter((q) => shortlist.has(q.id)) : ordered
   const decided = rfq.status === 'accepted'
   const goods = rfq.kind === 'goods' && rfq.goodsSpec ? rfq.goodsSpec : null
   const statusOf = (q: any) => (localDeclined[q.id] ? 'declined' : q.status)
@@ -125,12 +132,18 @@ export default function BuyerRfqScreen() {
           {clar}
           <View className="flex-row items-center justify-between px-4 pt-4">
             <Text className="text-xs text-foreground-secondary">{t('rfq.swipe_hint')}</Text>
+            {ordering?.mode === 'reliability' && (
+              <TouchableOpacity onPress={() => setByPrice((v) => !v)} className="rounded-full border border-border px-2 py-0.5" testID="reliability-toggle">
+                <Text className="text-[11px] text-primary">{byPrice ? t('rfq.sort_reliability') : t('rfq.reliability_switch')}</Text>
+              </TouchableOpacity>
+            )}
             {shortlist.size > 0 && (
               <TouchableOpacity onPress={() => setShortlistOnly((v) => !v)} className={`rounded-full border px-2 py-0.5 ${shortlistOnly ? 'border-primary bg-primary/10' : 'border-border'}`}>
                 <Text className="text-[11px] text-foreground">★ {t('rfq.compare_shortlisted_only')} ({shortlist.size})</Text>
               </TouchableOpacity>
             )}
           </View>
+          {reliability && <Text className="px-4 pt-1 text-[11px] text-foreground-secondary" testID="reliability-line">{t('rfq.reliability_line')}</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={CARD_W + 12} decelerationRate="fast" contentContainerClassName="gap-3 p-4">
             {quotes.map((q) => {
               const st = statusOf(q)

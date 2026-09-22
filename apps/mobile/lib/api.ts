@@ -283,7 +283,7 @@ export async function extractQuote(
 }
 
 /** S1.2 — deterministic compare results (+ pointers when the agent is on for this buyer). */
-export async function fetchCompare(rfqId: string, locale: string): Promise<{ results: any[]; pointers: { pointers: { quote_id: string; lines: string[] }[] } | null } | null> {
+export async function fetchCompare(rfqId: string, locale: string): Promise<{ results: any[]; ordering?: { mode: 'price' | 'reliability'; ids: string[] }; pointers: { pointers: { quote_id: string; lines: string[] }[] } | null } | null> {
   try {
     const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}/compare?locale=${encodeURIComponent(locale)}`, { headers: await authHeaders() })
     if (!res.ok) return null
