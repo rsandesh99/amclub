@@ -230,6 +230,11 @@ const MANIFEST: Entry[] = [
     triggers: [['rfq_intake_extractions', 'rfq_intake_extractions_set_updated_at']],
     note: 'S1.8 voice RFQ v2 / document intake: rfq_intake_extractions (agent-owned; clarify / document / drawing results the buyer confirms with the Create tap; rfq_id + decision_id link); ai_decisions feature CHECK gains rfq_intake',
   },
+  {
+    file: '0039_agent_events_injection.sql',
+    tables: ['agent_events'],
+    note: 'S2.1 injection gate: agent_events.kind CHECK restated with injection_suspected (the detector event; logged, never blocking)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

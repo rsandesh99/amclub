@@ -1,12 +1,13 @@
+import { photoPlausibilitySchema as bare } from '@amclub/shared'
+import { customerFacingText } from '../../untrusted/output'
+
 /**
- * Output schema for `photo_plausibility@v1` (schemaRef: photoPlausibilitySchema).
- * The contract lives in @amclub/shared (dossier.ts) because the web routes and
- * the verify script consume the same findings; this module re-exports it next
- * to the prompt, like prompts/hello/schema.ts, so the eval runner and the
- * runtime agent import the schema from where the prompt is.
+ * Output schema for `photo_plausibility@v1` (S1.4). Ops-only card: S2.1 opts
+ * it in for contact and URLs only (the payment rule does not apply to the
+ * founder's console); approval words are the card's vocabulary.
  */
+export const photoPlausibilitySchema = customerFacingText(bare, { fields: ['findings[].concerns[]'], forbid: ['contact', 'urls'] })
 export {
-  photoPlausibilitySchema,
   photoFindingSchema,
   photoFindingPasses,
   photoFindingFailures,

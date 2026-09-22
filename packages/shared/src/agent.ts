@@ -197,6 +197,7 @@ export const AGENT_EVENT_KINDS = [
   'completed',
   'failed',
   'cancelled',
+  'injection_suspected', // S2.1 — an untrusted part scored ≥ 40 by the detector (logged, never blocking); payload { provenance, score, hits, prompt }
 ] as const
 export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number]
 export const agentEventKindSchema = z.enum(AGENT_EVENT_KINDS)

@@ -1,10 +1,14 @@
+import { declineMessageSchema as bare } from '@amclub/shared'
+import { customerFacingText } from '../../untrusted/output'
+
 /**
- * Output schema for `decline_message@v1` (schemaRef: declineMessageSchema).
- * Contract + the fixed fallback templates live in @amclub/shared
- * (decline-message.ts); re-exported next to the prompt (the S1.1 pattern).
+ * Output schema for `decline_message@v1`. S2.1: the customer-facing contract —
+ * the message reaches a provider, so it may carry no contact details, no
+ * off-platform payment instruction and no URL; a violation rejects the output
+ * and the route falls back to the template (the S1.2 path).
  */
+export const declineMessageSchema = customerFacingText(bare, { fields: ['message'], forbid: ['contact', 'payment', 'urls'] })
 export {
-  declineMessageSchema,
   declineMessageTemplate,
   messageMatchesLocaleScript,
   resolveDeclineLocale,

@@ -1,17 +1,8 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import {
-  compareQuotes,
-  comparePointersCacheSchema,
-  comparePointersSchema,
-  sanitizePointers,
-  type CompareQuoteInput,
-  type CompareQuoteResult,
-  type ComparePointersCache,
-  type PointerLocale,
-} from '@amclub/shared'
-import { buildComparePointerParts, stubComparePointers } from '@amclub/agent-core'
+import { compareQuotes, comparePointersCacheSchema, sanitizePointers, type CompareQuoteInput, type CompareQuoteResult, type ComparePointersCache, type PointerLocale } from '@amclub/shared'
+import { buildComparePointerParts, stubComparePointers, comparePointersSchema } from '@amclub/agent-core'
 import type { QuoteForBuyer } from './queries'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { isAgentEnabledForUser } from '@/lib/agent/settings'
