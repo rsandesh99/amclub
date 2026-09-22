@@ -24,8 +24,12 @@ export function NudgeButton({ subjectKind, subjectId }: { subjectKind: 'order' |
     if (res.ok) {
       setSent(true)
       toast(t('nudge_sent'))
-    } else if (res.status === 429) toast(t('nudge_capped'))
-    else toast(t('nudge_failed'))
+    } else if (res.status === 429) {
+      // quote the configured cooldown the route returns; a plain rate-limit 429 carries none → no number at all
+      const body = (await res.json().catch(() => null)) as { cooldown_hours?: unknown } | null
+      const hours = Number(body?.cooldown_hours)
+      toast(Number.isInteger(hours) && hours > 0 ? t('nudge_capped', { hours }) : t('nudge_capped_recent'))
+    } else toast(t('nudge_failed'))
   }
 
   return (

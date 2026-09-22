@@ -19,7 +19,7 @@ import { getSupportSettings } from '@/lib/support/settings'
 
 export type NudgeResult =
   | { ok: true; nudgeId: string; recipients: number }
-  | { ok: false; error: 'not_found' | 'not_a_party' | 'subject_inactive' | 'nudge_cooldown' | 'no_recipient'; retryAfterSec?: number }
+  | { ok: false; error: 'not_found' | 'not_a_party' | 'subject_inactive' | 'nudge_cooldown' | 'no_recipient'; retryAfterSec?: number; cooldownHours?: number }
 
 async function cooldownLeft(admin: SupabaseClient, kind: 'order' | 'rfq', subjectId: string, fromUserId: string, hours: number): Promise<number> {
   const { data } = await admin.from('nudges').select('created_at').eq('subject_kind', kind).eq('subject_id', subjectId).eq('from_user_id', fromUserId).order('created_at', { ascending: false }).limit(1).maybeSingle()
@@ -70,7 +70,7 @@ export async function nudgeOrder(admin: SupabaseClient, orderId: string, args: N
   if (!orderIsActive(String(order.status))) return { ok: false, error: 'subject_inactive' }
   const s = await getSupportSettings(admin)
   const left = await cooldownLeft(admin, 'order', orderId, args.userId, s.nudgeCooldownHours)
-  if (left > 0) return { ok: false, error: 'nudge_cooldown', retryAfterSec: left }
+  if (left > 0) return { ok: false, error: 'nudge_cooldown', retryAfterSec: left, cooldownHours: s.nudgeCooldownHours }
   const toUserId: string = isBuyer ? order.provider.user_id : order.msme.user_id
   const supportMessageId = await ownSupportMessage(admin, args.supportMessageId, args.userId)
   const decisionId = supportMessageId ? await recordAiDecision(admin, args.userId, { feature: 'support_nudge', input_refs: { support_message_id: supportMessageId, order_id: orderId }, proposed: { subject_kind: 'order', subject_id: orderId }, final: { subject_kind: 'order', subject_id: orderId } }, { runId: null, tool: 'nudge_counterparty' }) : null
@@ -97,7 +97,7 @@ export async function nudgeRfq(admin: SupabaseClient, rfqId: string, args: Nudge
   if (!rfqIsActive(String(rfq.status))) return { ok: false, error: 'subject_inactive' }
   const s = await getSupportSettings(admin)
   const left = await cooldownLeft(admin, 'rfq', rfqId, args.userId, s.nudgeCooldownHours)
-  if (left > 0) return { ok: false, error: 'nudge_cooldown', retryAfterSec: left }
+  if (left > 0) return { ok: false, error: 'nudge_cooldown', retryAfterSec: left, cooldownHours: s.nudgeCooldownHours }
   const supportMessageId = await ownSupportMessage(admin, args.supportMessageId, args.userId)
   const decisionId = supportMessageId ? await recordAiDecision(admin, args.userId, { feature: 'support_nudge', input_refs: { support_message_id: supportMessageId, rfq_id: rfqId }, proposed: { subject_kind: 'rfq', subject_id: rfqId }, final: { subject_kind: 'rfq', subject_id: rfqId } }, { runId: null, tool: 'nudge_counterparty' }) : null
   const title = String(rfq.title).slice(0, 80)

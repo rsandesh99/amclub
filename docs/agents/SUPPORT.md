@@ -90,7 +90,7 @@ unclear streak reaching `support_escalate_after_turns` (default 2). The turn ope
 `POST /api/v1/orders/[id]/nudge` and `POST /api/v1/rfq/[id]/nudge` — spine, no flag. Party check (a buyer
 nudges every matched, non-declined provider on an RFQ; a matched provider nudges the buyer), the subject must
 be active, **once per sender per subject per `support_nudge_cooldown_hours`** (default 24; 429
-`nudge_cooldown` + `Retry-After`), a fixed-template notification (`order_nudge` / `rfq_nudge`; no free text —
+`nudge_cooldown` + `Retry-After` + `cooldown_hours`, which the toasts quote), a fixed-template notification (`order_nudge` / `rfq_nudge`; no free text —
 an extra body field is a 422), an `order_events` `nudged` row for orders, PostHog `nudge_sent`. The **Nudge**
 button on the order workspace and the RFQ pages calls these directly; the agent is just another caller.
 
@@ -182,5 +182,4 @@ zero residue. Legs that need 0041 are recorded skips until it is applied.
 ## Known limits (FOLLOWUPS S2.3)
 
 No streaming (template replies are instant); payout / refund facts only on the web surface; en / hi / te / ta
-copy only; no "did the buyer see my quote" intent (needs read receipts); the web Nudge toast says "24 hours"
-(the default) rather than the configured cooldown.
+copy only; no "did the buyer see my quote" intent (needs read receipts).

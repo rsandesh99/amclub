@@ -360,7 +360,7 @@ Payout to provider releases ONLY from `completed` or `resolved_release/partial`.
 - **Help chat, not understood (S2.3):** the `unclear` template asks the user to name the order or pick a chip; a second miss (`support_escalate_after_turns`) opens a ticket instead of looping.
 - **Help chat escalated (S2.3):** a banner "A person is looking at this (T-…)" + "We acknowledge within 24 hours. Anything you write here is added to the ticket." (the SLA from `lib/legal/grievance.ts`); the escalated reply carries the ticket ref, the SLA (24 hours / 15 days) and the human contact line; further messages are kept for the person and answered with the same template — no automated answers until the ticket is resolved.
 - **Help chat, classifier unavailable (S2.3):** treated as a not-understood turn (never a guessed answer); the numbers in any reply come only from the user's own data.
-- **Nudge already sent (S2.3):** the Nudge button toasts "A reminder was already sent in the last 24 hours." (server 429 `nudge_cooldown`); a failed nudge toasts "Could not send the reminder" — never a false "sent".
+- **Nudge already sent (S2.3):** the Nudge button toasts "A reminder was already sent in the last {hours} hours." with `{hours}` = the configured `support_nudge_cooldown_hours` returned by the 429 (`cooldown_hours`); a plain rate-limit 429 says "A reminder was already sent recently."; a failed nudge toasts "Could not send the reminder" — never a false "sent".
 
 ## 3.9 Redirect map
 

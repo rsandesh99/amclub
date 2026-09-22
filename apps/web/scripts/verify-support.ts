@@ -136,6 +136,18 @@ function offline() {
   check('numbers rule catches a planted figure absent from the payload (₹99,999 / 3 Nov)', !planted.ok && planted.missing.includes('999'), planted.missing.join(','))
 
   const good = { intent: 'order_status', as_role: null, order_ref: 'latest', rfq_ref: null, how_to_topic: null, escalate: false, escalate_reason: null, ops_summary: null, language: 'en' }
+  // the nudge toasts quote the configured cooldown (the 429 carries cooldown_hours) — never a fixed number
+  const toastBad: string[] = []
+  for (const l of SUPPORT_LOCALES) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const m = require(`../messages/${l}.json`) as Record<string, Record<string, string>>
+    for (const ns of ['orders', 'support']) {
+      const capped = m[ns]?.['nudge_capped'] ?? ''
+      const recent = m[ns]?.['nudge_capped_recent'] ?? ''
+      if (!capped.includes('{hours}') || /\d/.test(capped.replace('{hours}', '')) || !recent || /\d/.test(recent)) toastBad.push(`${l}.${ns}`)
+    }
+  }
+  check('nudge toasts in every locale quote {hours} from the route (no fixed number); the rate-limit fallback states none', toastBad.length === 0, toastBad.join(', '))
   check('supportIntentSchema accepts the classifier shape', supportIntentSchema.safeParse(good).success)
   check('supportIntentSchema is strict: a `reply` field (model-written text) is rejected', !supportIntentSchema.safeParse({ ...good, reply: 'Your order is on its way!' }).success)
 }
@@ -269,7 +281,9 @@ async function http() {
       check('POST /orders/[id]/nudge (buyer) → 200: one nudges row (to the provider, no decision), order_nudge notification to the provider, a `nudged` order event', n1.status === 200 && n1b['recipients'] === 1 && (nr ?? []).length === 1 && (nr as any[])[0].to_user_id === sp.uid && (nr as any[])[0].decision_id === null && (nt ?? []).length === 1 && (ev ?? []).length === 1, `status ${n1.status} ${JSON.stringify(n1b)}`)
       const n2 = await api(sb.token, `/api/v1/orders/${so.id}/nudge`, { via: 'web' })
       const n2b = await json(n2)
-      check('a second nudge inside the cooldown → 429 nudge_cooldown with retry_after + Retry-After', n2.status === 429 && n2b['error'] === 'nudge_cooldown' && Number(n2b['retry_after']) > 0 && !!n2.headers.get('retry-after'), `status ${n2.status} ${JSON.stringify(n2b)}`)
+      const { data: coolRow } = await admin.from('agent_settings').select('value').eq('key', 'support_nudge_cooldown_hours').maybeSingle()
+      const coolNow = typeof coolRow?.value === 'number' ? coolRow.value : 24
+      check(`a second nudge inside the cooldown → 429 nudge_cooldown with retry_after + Retry-After + cooldown_hours = the setting (${coolNow})`, n2.status === 429 && n2b['error'] === 'nudge_cooldown' && Number(n2b['retry_after']) > 0 && !!n2.headers.get('retry-after') && n2b['cooldown_hours'] === coolNow, `status ${n2.status} ${JSON.stringify(n2b)}`)
       const n3 = await api(sp.token, `/api/v1/orders/${so.id}/nudge`, { via: 'web' })
       await json(n3)
       check('the other party has its own cooldown: the provider nudges the buyer → 200', n3.status === 200, `status ${n3.status}`)
@@ -342,7 +356,7 @@ async function http() {
     await setSetting('cohort_user_ids', [...new Set([...cohortBefore, b1.uid, b2.uid, b3.uid, dual.uid, p1.uid, w.uid, n.uid])])
     await setSetting('ops_user_id', adminU.uid)
     await setSetting('support_escalate_after_turns', 2)
-    await setSetting('support_nudge_cooldown_hours', 24)
+    await setSetting('support_nudge_cooldown_hours', 12) // not the default: every quoted cap must be the setting, never a constant 24
     const o1 = await mkOrder(b1.msmeId, p1.providerId)
     const o2 = await mkOrder(b2.msmeId, p1.providerId)
 
@@ -396,8 +410,8 @@ async function http() {
     check('the confirm click → nudge route 200 → ONE ai_decisions (support_nudge, tool nudge_counterparty, run_id null, input_refs.support_message_id) linked from the nudges row', click.status === 200 && (dec ?? []).length === 1 && (dec as any[])[0].tool === 'nudge_counterparty' && (dec as any[])[0].run_id === null && (dec as any[])[0].input_refs?.support_message_id === act?.support_message_id && (nud as any[])?.[0]?.decision_id === (dec as any[])[0].id, JSON.stringify({ status: click.status, dec }))
     const s5 = await say(b1, 'remind them again please')
     const again = await api(b1.token, `/api/v1/orders/${o1.id}/nudge`, { support_message_id: act?.support_message_id, via: 'web' })
-    await json(again)
-    check('a second ask within 24 h → nudge.capped (quotes the setting), no action; a direct second click → 429', s5.body.reply?.key === 'nudge.capped' && !s5.body.action && String(s5.body.reply?.text).includes('24') && again.status === 429, `${s5.body.reply?.key} / ${again.status}`)
+    const againB = await json(again)
+    check('a second ask within the cooldown (set to 12 h) → nudge.capped quoting 12, never 24, no action; a direct second click → 429 with cooldown_hours 12 (what the toast renders)', s5.body.reply?.key === 'nudge.capped' && !s5.body.action && String(s5.body.reply?.text).includes('12') && !/\b24\b/.test(String(s5.body.reply?.text)) && again.status === 429 && againB['cooldown_hours'] === 12, `${s5.body.reply?.key} / ${again.status}`)
     // a forged support_message_id (the user's OWN user-role message, then someone else's assistant message) never reaches the ledger
     const pAsk = await api(p1.token, `/api/v1/orders/${o1.id}/nudge`, { support_message_id: act?.support_message_id, via: 'web' })
     await json(pAsk)
@@ -551,7 +565,7 @@ async function http() {
     const direct = await api(w.token, `/api/v1/orders/${ow2.id}/nudge`, { via: 'web' })
     await json(direct)
     const tap3 = await waSay(convW, { kind: 'button', payload: `nudge:yes:${runId3}`, body: 'Yes, send it' })
-    check(`a Yes after the cap was reached elsewhere → the resumed route answers 429 → outcome capped + nudge.capped reply (${ow2.number} is the latest order)`, t3.results[0]?.detail?.outcome === 'nudge_offered' && direct.status === 200 && tap3.results[0]?.detail?.outcome === 'capped' && /already|24/.test(String((await outbound(convW)).at(-1)?.body ?? '')), JSON.stringify(tap3.results[0]))
+    check(`a Yes after the cap was reached elsewhere → the resumed route answers 429 → outcome capped + nudge.capped reply (${ow2.number} is the latest order)`, t3.results[0]?.detail?.outcome === 'nudge_offered' && direct.status === 200 && tap3.results[0]?.detail?.outcome === 'capped' && /already|12/.test(String((await outbound(convW)).at(-1)?.body ?? '')), JSON.stringify(tap3.results[0]))
     const tapNo = await waSay(convW, { kind: 'button', payload: `nudge:no:${runId3}`, body: 'No' })
     check('a replayed / late button on a closed run is harmless (stale or declined, no second nudge)', ['stale', 'declined'].includes(tapNo.results[0]?.detail?.outcome) && ((await admin.from('nudges').select('id', { count: 'exact', head: true }).eq('subject_id', ow2.id).eq('from_user_id', w.uid)).count ?? 0) === 1, JSON.stringify(tapNo.results[0]))
     // out of the 24 h window → the support_reply template carrier

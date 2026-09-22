@@ -852,8 +852,9 @@ migration **0041**. Runbook `docs/agents/SUPPORT.md`.
   fallback summary, no notifications) so the halt still holds; the admin queue lists it.
 - **The nudge ledger link is checked:** `support_message_id` counts only when it is an assistant turn in the caller's
   own thread; anything else is a plain nudge with no `ai_decisions` row.
-- **The web Nudge toast says "24 hours"** (the default) in its i18n string rather than the configured
-  `support_nudge_cooldown_hours`; the agent's own `nudge.capped` reply quotes the setting.
+- **Every stated cap is the setting (fixed at the gate):** the nudge 429 returns `cooldown_hours` and both web toasts
+  render it (`{hours}`); a plain rate-limit 429 carries none and the toast states no number. The agent's own
+  `nudge.capped` reply quotes `support_nudge_cooldown_hours` too; the rig runs flag-on at 12 h.
 - **Not built in v1 (as the prompt listed):** SSE streaming (template replies are instant); Bengali / Marathi copy
   (en / hi / te / ta only; WhatsApp templates en / hi / te); a provider-side "did the buyer see my quote" intent (needs
   read receipts); the mobile thread shows the last 50 messages with no paging.

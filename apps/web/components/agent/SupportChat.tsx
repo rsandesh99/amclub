@@ -89,7 +89,9 @@ export function SupportChat({ role: _role }: { role: 'buyer' | 'provider' }) {
     const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ support_message_id: action.support_message_id, via: 'web' }) })
     setBusy(false)
     setAction(null)
-    toast(res.ok ? t('nudge_sent') : res.status === 429 ? t('nudge_capped') : t('error'))
+    // quote the configured cooldown the route returns (never a constant); a plain rate-limit 429 carries none
+    const capped = res.status === 429 ? Number(((await res.json().catch(() => null)) as { cooldown_hours?: unknown } | null)?.cooldown_hours) : NaN
+    toast(res.ok ? t('nudge_sent') : res.status === 429 ? (Number.isInteger(capped) && capped > 0 ? t('nudge_capped', { hours: capped }) : t('nudge_capped_recent')) : t('error'))
     void load()
   }
 

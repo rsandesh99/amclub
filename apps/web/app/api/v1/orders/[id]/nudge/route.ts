@@ -37,7 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const r = await nudgeOrder(admin, id, { userId, actor: { msmeId: actor.msmeId, providerId: actor.providerId }, supportMessageId: parsed.data.support_message_id ?? null, via: parsed.data.via ?? 'web' })
   if (!r.ok) {
     const status = r.error === 'not_found' ? 404 : r.error === 'not_a_party' ? 403 : r.error === 'nudge_cooldown' ? 429 : 409
-    return NextResponse.json({ error: r.error, ...(r.retryAfterSec ? { retry_after: r.retryAfterSec } : {}) }, { status, ...(r.retryAfterSec ? { headers: { 'Retry-After': String(r.retryAfterSec) } } : {}) })
+    return NextResponse.json({ error: r.error, ...(r.retryAfterSec ? { retry_after: r.retryAfterSec } : {}), ...(r.cooldownHours ? { cooldown_hours: r.cooldownHours } : {}) }, { status, ...(r.retryAfterSec ? { headers: { 'Retry-After': String(r.retryAfterSec) } } : {}) })
   }
   return NextResponse.json({ ok: true, nudge_id: r.nudgeId, recipients: r.recipients })
 }
