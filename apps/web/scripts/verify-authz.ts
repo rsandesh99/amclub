@@ -557,6 +557,16 @@ async function main() {
     deniedRows('buyerB direct-reads bank_account_verifications', await bClient.from('bank_account_verifications').select('id'))
     deniedRows('provA direct-reads bank_account_verifications', await asUser(provA.token).from('bank_account_verifications').select('id'))
 
+    // ── 7b. users privilege guard (0041) — no self-promotion, no self-delete ──
+    console.log('users privilege guard (0041, direct PostgREST):')
+    eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)
+    deniedRows('buyerB sets OWN roles to admin', await bClient.from('users').update({ roles: ['admin'] }).eq('id', buyerB.uid).select('id'))
+    deniedRows('buyerB DELETEs OWN users row', await bClient.from('users').delete().eq('id', buyerB.uid).select('id'))
+    deniedRows('buyerB INSERTs a users row', await bClient.from('users').insert({ id: crypto.randomUUID(), email: `${tag}_forged@killtest.amclub`, roles: ['admin'] }).select('id'))
+    const { data: bRow } = await admin.from('users').select('roles').eq('id', buyerB.uid).single()
+    eq('after escalation attempts: buyerB roles unchanged', JSON.stringify((bRow as { roles: string[] } | null)?.roles ?? null), JSON.stringify(['msme']))
+    denied('buyerB GET admin API after attempts', (await api(buyerB.token, '/api/v1/admin/kpi', undefined, 'GET')).status)
+
     // ── 8. Phase 2: terms_acceptances (append-only, self-read) + signup gate ──
     console.log('Phase 2 — terms_acceptances + signup gate:')
     const buyerC = await mkUser('buyerC', ['msme'])
