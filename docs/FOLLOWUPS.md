@@ -858,6 +858,17 @@ migration **0041**. Runbook `docs/agents/SUPPORT.md`.
 - **Not built in v1 (as the prompt listed):** SSE streaming (template replies are instant); Bengali / Marathi copy
   (en / hi / te / ta only; WhatsApp templates en / hi / te); a provider-side "did the buyer see my quote" intent (needs
   read receipts); the mobile thread shows the last 50 messages with no paging.
+- **Gate findings (flag-on lifecycle after 0041; each fixed and re-proven, 62 pass / 0 fail):** (1) the nudge offer's
+  "No" button title is the S0.5 opt-out keyword, so one tap revoked the WhatsApp grant — the dispatcher now classifies
+  a button tap by its payload id (a template quick-reply whose payload is STOP still opts out; typed text unchanged);
+  (2) `/partner/support` inherited the `(agent-provider)` group's Munshi gate — it has its own
+  `(agent-support-provider)` group now (a route-group layout cannot see its page: one group per agent switch);
+  (3) `rfqs` RLS shows a matched provider only `status='open'`, so the provider hat lost every quoted / accepted
+  request and the runtime inferred "submitted" from the matched list — new party-scoped `listMyQuotesForProvider` +
+  read-only `GET /api/v1/partner/quotes` (scope `support_lookup`) give both surfaces the real status + price;
+  (4) `quote_status.no_matches` for a provider with no request at all (`quote_status.none` rendered `("")`).
+- **Typed "no" is still the S0.5 opt-out keyword.** On a BSP without interactive buttons (Interakt: numbered lines), a
+  user who types "no" to the nudge offer opts out of WhatsApp. Meta sends real buttons; revisit when Interakt buttons land.
 - **Rig skips (recorded, never passes):** the HMAC token exchange (session tokens stand in; `requireToolScope` on the
   reads and the nudge routes is the S0.1-proven lock); pg-boss + the runtime webhook; a voice note (the S1.6 STT
   leg); the live model. The runtime-credential ticket route runs when `AGENT_RUNTIME_SECRET` is set to the same

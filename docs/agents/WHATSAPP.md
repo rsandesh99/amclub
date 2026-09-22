@@ -113,7 +113,8 @@ media pipeline in this stage.
 keywords → JOIN → **support** → holding reply. The support branch takes a text /
 audio message from a user with an active WhatsApp grant when `AGENT_ENABLED` (runtime)
 and `agents_enabled.support` + cohort are on, and a `nudge:yes|no:<runId>` button whose
-run is the user's. An open ticket (`wa_conversations.support_ticket_id`) stores the
+run is the user's. **A button tap is classified by its payload id, never its title:** the offer's "No" / "नहीं" (payload
+`nudge:no:<runId>`) is not the S0.5 opt-out keyword; a template quick-reply whose payload is STOP still opts out. An open ticket (`wa_conversations.support_ticket_id`) stores the
 message and replies **nothing** until a human resolves it at `/admin/support`. Anything
 else still gets the S0.5 holding reply (≤ 1 per 24 h). The run's token persona is the
 grant's persona (`buyer` for an msme user, else `provider`).

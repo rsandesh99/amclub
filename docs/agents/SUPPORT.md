@@ -134,6 +134,15 @@ session check, because the model call and the two-table write happen server-side
 `support_escalated` (`[ticket ref]`), `support_ticket_opened` (ops, `[summary]`), `support_resolved`
 (`[note]`), `order_nudge` / `rfq_nudge` (`[body]`). The nudge confirmation is in-window buttons only.
 
+## Provider-hat reads
+
+`rfqs` RLS shows a matched provider only `status='open'` requests, so the provider hat reads through the same
+party-scoped loaders as the provider's own screens: `listMyQuotesForProvider` (my quotes with their real status and
+price, newest first) merged with `listMatchedRfqsForProvider` (matched, not quoted, not declined). The runtime reads
+the same two lists under the token: `GET /api/v1/partner/quotes` (scope `support_lookup`) and `GET /api/v1/rfq/matched`.
+The provider page lives in its own `(agent-support-provider)` route group gated on `agents_enabled.support`
+(`/partner/munshi` stays in `(agent-provider)`, gated on Munshi).
+
 ## Admin queue
 
 `/admin/support` (the `(agent-admin)` group): open first, the SLA countdown against `acknowledgeHours`,
