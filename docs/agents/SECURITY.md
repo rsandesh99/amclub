@@ -102,7 +102,8 @@ you what the set is missing.
 
 `quote_compare` reads structured numbers only (no untrusted slot), so the set does not feed it text; its
 guard is the ranking rule on its output. `decline_message` keeps its five injection cases in the S1.2
-`decline_message.json` set (its only input is the buyer's own note), which every eval runs. `rfq_parse` is
+`decline_message.json` set (its only input is the buyer's own note), which every eval runs, and is a target of
+every statement and quote_text case in `injection.json`. `rfq_parse` is
 driven by the harness (no tool key, no marker) but is deliberately not wrapped by the output contract: its
 output is the buyer's own prefill, edited before Create, and S1.8 promised byte-equal Phase 8b behaviour.
 Runtime agents' tool proposals are covered by the taint law (the registry test + `proposeTool`), not by

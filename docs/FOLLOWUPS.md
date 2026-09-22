@@ -843,17 +843,19 @@ blocking live step in CI when the key exists. Runbook `docs/agents/SECURITY.md`.
 - **Runtime-agent tool proposals are proven by the taint law, not by driving the agent definitions through the harness**
   (the prompt's assertion (3) for runtime agents): the registry test + `proposeTool` guarantee no confirm:false writer
   exists, and the harness asserts no tool / action / status key in any output; a fake-ledger drive of the three runtime
-  agents per red-team case is a later addition.
+  agents per red-team case is a later addition. **Founder requirement (2026-09-22): S2.2 must drive at least one
+  runtime agent through the harness** — Munshi is the first agent that proposes a confirm:true write from untrusted
+  input, so its red-team cases must run the agent definition (fake ledger, stub gateway) and assert the proposal parks.
 - **`quote_compare` has no untrusted slot** (structured numbers only) so the set does not feed it text; its guard is the
   ranking rule on its output lines.
 - **The prompt's `had_markup` "strip tags except the content is escaped anyway":** tags are recorded (`hadMarkup`) but
   NOT stripped — render escapes them, and stripping would blind the detector to a forged `</untrusted>`.
 - **Onboarding contract scope:** `profile.display_name` and `legal_name` are included with `about` and the package
   strings (a business name carrying a phone number would otherwise reach the public profile).
-- **`decline_message` is not a target in `injection.json`:** its only input is the buyer's own note, and its five
-  `[injection]` cases (phone in note, forged close tag, identity claim, JSON blob, money offer) live in the S1.2
-  `golden/decline_message.json` set, which runs on every eval (stub and live, all must pass) and now also validates
-  through the wrapped schema. Folding those five into the red-team matrix is a later tidy-up, not a coverage gap.
+- **`decline_message` keeps its five `[injection]` cases in the S1.2 `golden/decline_message.json` set** (phone in
+  note, forged close tag, identity claim, JSON blob, money offer; every eval, stub and live, all must pass, now through
+  the wrapped schema) **and is also a target in `injection.json` for every statement and quote_text case** (the text in
+  the buyer's-note slot; founder review 2026-09-22).
 - **`rfq_parse` is deliberately NOT wrapped by `customerFacingText`:** its output is the buyer's own prefill
   (`description_english`), edited by the buyer before Create, and the S1.8 promise is byte-equal Phase 8b behaviour —
   a buyer who states their own phone number in a voice clip must not get a parse failure. The red-team harness still
