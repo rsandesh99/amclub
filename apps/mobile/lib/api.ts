@@ -834,3 +834,42 @@ export async function skipMunshiDraft(id: string): Promise<{ ok: boolean }> {
   const res = await fetch(`${API_URL}/api/v1/agent/munshi/drafts/${id}/skip`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-amc-surface': 'mobile', ...(await authHeaders()) }, body: '{}' })
   return { ok: res.ok }
 }
+
+// ── S2.3 — Support (Help): template replies; a nudge is the spine route ───────────────────────────
+export interface SupportMessage {
+  id: string
+  role: string
+  body: string
+  intent: string | null
+  reply_key: string | null
+  created_at: string
+}
+export interface SupportAction {
+  tool: 'nudge_counterparty'
+  subject: { kind: 'order' | 'rfq'; id: string }
+  support_message_id: string
+}
+export async function fetchSupportThread(): Promise<{ thread_id: string; messages: SupportMessage[]; ticket_ref: string | null } | null> {
+  const res = await fetch(`${API_URL}/api/v1/agent/support/thread`, { headers: await authHeaders() })
+  if (!res.ok) return null
+  return (await res.json()) as { thread_id: string; messages: SupportMessage[]; ticket_ref: string | null }
+}
+export async function sendSupportMessage(text: string, threadId: string | null, locale: string): Promise<{ ok: boolean; data?: { thread_id: string; reply: { key: string; text: string }; action?: SupportAction; ticket_ref?: string } }> {
+  const res = await fetch(`${API_URL}/api/v1/agent/support/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-amc-surface': 'mobile', 'x-amc-locale': locale, ...(await authHeaders()) },
+    body: JSON.stringify({ text, ...(threadId ? { thread_id: threadId } : {}) }),
+  })
+  if (!res.ok) return { ok: false }
+  return { ok: true, data: await res.json() }
+}
+/** The nudge is the ORDINARY spine route; support_message_id records the ai_decisions row. */
+export async function sendNudge(kind: 'order' | 'rfq', id: string, supportMessageId?: string): Promise<{ ok: boolean; status: number }> {
+  const path = kind === 'order' ? `/api/v1/orders/${id}/nudge` : `/api/v1/rfq/${id}/nudge`
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ via: 'mobile', ...(supportMessageId ? { support_message_id: supportMessageId } : {}) }),
+  })
+  return { ok: res.ok, status: res.status }
+}
