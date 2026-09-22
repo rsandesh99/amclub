@@ -139,11 +139,17 @@ Only when `reliability_rank_enabled` is on, the largest normalised total is ≥
 `reliability_rank_threshold_paise` (default ₹25,000), and there are ≥ 2 quotes. The
 compare loader reads `provider_scores` server-side and orders by
 
-    adjusted = normalizedTotal × (10000 + k × (100 − s)) ÷ 10000     (integer paise, rounded once)
+    adjusted = normalizedTotal × (1 000 000 + k × (100 − s)) ÷ 1 000 000     (integer paise, rounded once)
 
-with `s = score ?? score_null_prior` and `k = reliability_rank_k_bps` (default 1500).
-With k = 1500, a score of 90 adds 1.5 %, 60 (the neutral prior) adds 6 %, and 40 adds
-9 %. Ties break by the normalised total, then by id (stable).
+with `s = score ?? score_null_prior` and `k = reliability_rank_k_bps` (default 1500): **k is
+the penalty in basis points at a score of 0**, scaling linearly with the shortfall from
+100. With k = 1500, a score of 90 adds 1.5 %, 60 (the neutral prior) adds 6 %, 40 adds
+9 %, and 0 adds the full 15 %. Ties break by the normalised total, then by id (stable).
+
+*Why not the prompt's `(10000 + k × (100 − s)) ÷ 10000`:* with the default k that adds
+150 % at a score of 90 and 900 % at 40, so a ten-point score gap would outweigh almost
+any price gap. That contradicts a bounded `k_bps` setting. The reading above keeps k in
+basis points of price, which is what the setting's name and range say.
 
 *Worked example:* A quotes ₹1,00,000 with score 90 → adjusted ₹1,01,500. B quotes
 ₹95,000 (5 % cheaper) with score 40 → ₹1,03,550. B is listed below A. The buyer still

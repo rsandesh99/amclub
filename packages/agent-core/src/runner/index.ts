@@ -140,6 +140,8 @@ export function resolveToolRoute(
       return payload['rfq_id'] ? { method: 'GET', path: `/api/v1/rfq/${id('rfq_id')}` } : { method: 'GET', path: '/api/v1/rfq/matched' }
     case 'read_price_book':
       return { method: 'GET', path: '/api/v1/partner/price-book' }
+    case 'read_own_score':
+      return { method: 'GET', path: '/api/v1/partner/score' }
     case 'list_deadlines':
       return { method: 'GET', path: '/api/v1/orders?role=provider' }
     case 'submit_quote': {

@@ -99,6 +99,42 @@ export const AGENT_SETTING_DEFS = {
     default: null,
     hint: "S0.4 quote-or-decline window (hours). null = the rfq-expire sweep is OFF. When set, matches older than this with no quote and no decline are auto-declined (window_lapsed) and the buyer is told.",
   },
+  // ── S2.4 AMC Score v1 (ADR-010) — every switch defaults OFF; the formula is code, never a setting ──
+  score_compute_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'S2.4 nightly cron/score-compute writes provider + buyer AMC Score snapshots, history and events. Off = the cron is a no-op heartbeat. Run it for two weeks and review the distribution before turning the card on.',
+  },
+  score_card_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: "S2.4 providers see their OWN score (components, tips, trend) on the partner dashboard and GET /partner/score. Buyers never see a number; this switch does not change that.",
+  },
+  reliability_rank_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: "S2.4 the compare screen orders quotes by price adjusted for reliability above the threshold (server-side; the buyer sees an order and one line, never a score). Keep OFF until the founder confirms ADR-010 §9 (e): ordering is not 'showing' the score.",
+  },
+  reliability_rank_threshold_paise: {
+    schema: z.number().int().min(0),
+    default: 2_500_000,
+    hint: 'S2.4 reliability ordering applies only when the largest quote total reaches this (paise). 2 500 000 = ₹25,000.',
+  },
+  reliability_rank_k_bps: {
+    schema: z.number().int().min(0).max(5000),
+    default: 1500,
+    hint: 'S2.4 the ordering penalty in basis points of price at a score of 0, scaling linearly with the shortfall from 100 (1500: score 90 → +1.5 %, 60 → +6 %, 40 → +9 %). Used only to ORDER; prices shown are unchanged.',
+  },
+  score_null_prior: {
+    schema: z.number().int().min(0).max(100),
+    default: 60,
+    hint: 'S2.4 what a provider below the sample gate (no score yet) ranks as — neutral, neither buried nor boosted.',
+  },
+  growth_nudge_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'S2.4 Munshi providers get at most one informational growth nudge a week (fixed copy; WhatsApp + in-app). Also needs agents_enabled.munshi + cohort + the provider’s grant.',
+  },
   // ── S2.3 Support agent ───────────────────────────────────────────────────
   support_escalate_after_turns: {
     schema: z.number().int().min(1).max(5),

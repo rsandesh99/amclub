@@ -74,6 +74,8 @@ export * from './munshi'
 // S2.3 — Support agent contract (intents, the reply matrix, the numbers rule) and every user-visible reply per locale
 export * from './support'
 export * from './support-copy'
+export * from './score'
+export * from './score-tips'
 
 // S1.6 — onboarding agent contract (steps + transitions, strict draft schema, capability facts) and interview copy (en/hi/te)
 export * from './onboarding'
