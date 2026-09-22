@@ -28,7 +28,7 @@ Per-agent runbooks land with their stages and live here:
 | `SECURITY.md` | S2.1 | threat model, the red-team gate |
 | `MUNSHI.md` | S2.2 | drafts, price book, voice approval |
 | `SUPPORT.md` | S2.3 | intents, escalation, self-serve rate |
-| `SCORE.md` | S2.4 | AMC Score v1 inputs and privacy |
+| `SCORE.md` | S2.4 | AMC Score v1: components, curves, weights, gates, the version rule, exposure matrix, reliability ordering, the coaching note, the growth nudge, appeal, enablement order, rollback (ADR-010) |
 | `PROCUREMENT.md` | S3.1 | buyer agent flow |
 | `BENCHMARKS.md` | S3.2 | density gate, fair-price ranges |
 | `AGGREGATION.md` | S3.4 | services pools, tiered quotes |

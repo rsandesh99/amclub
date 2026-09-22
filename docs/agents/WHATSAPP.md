@@ -127,6 +127,13 @@ carrier for any support reply), `support_escalated` (`[ticket ref]`),
 buttons only. Add them to the approval batch in PRE_LAUNCH_CHECKLIST 1.3; runbook
 `docs/agents/SUPPORT.md`.
 
+## S2.4 — the Munshi growth nudge
+
+Weekly (`munshi.growth`), at most one line per Munshi provider: template `munshi_growth`
+(`amc_munshi_growth_{en,hi,te}`, params `[nudge line]`; opt-in gated) outside the window, plain text inside it —
+only while the provider holds the WhatsApp grant (STOP halts it; the in-app copy still arrives). Fixed copy, no
+model. Runbook `docs/agents/SCORE.md`.
+
 ## S1.4 note — founder one-tap
 
 The Payout-Evidence agent notifies the ops user by kind `payout_dossier_ready`

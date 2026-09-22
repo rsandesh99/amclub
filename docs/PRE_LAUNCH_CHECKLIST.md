@@ -62,6 +62,7 @@ noted; these are what `packages/agent-core/src/whatsapp/templates.ts` sends):
 | munshi_window_warning (S2.2; `{{1}}` RFQ title, `{{2}}` hours) | `amc_munshi_window_warning_en`, `amc_munshi_window_warning_hi`, `amc_munshi_window_warning_te` |
 | munshi_reply_draft (S2.2; `{{1}}` RFQ title) | `amc_munshi_reply_draft_en`, `amc_munshi_reply_draft_hi`, `amc_munshi_reply_draft_te` |
 | munshi_result (S2.2; `{{1}}` outcome line) | `amc_munshi_result_en`, `amc_munshi_result_hi`, `amc_munshi_result_te` |
+| munshi_growth (S2.4; `{{1}}` the weekly nudge line) | `amc_munshi_growth_en`, `amc_munshi_growth_hi`, `amc_munshi_growth_te` |
 | support_reply (S2.3, the out-of-window carrier; `{{1}}` title, `{{2}}` body) | `amc_support_reply_en`, `amc_support_reply_hi`, `amc_support_reply_te` |
 | support_escalated (S2.3; `{{1}}` ticket ref) | `amc_support_escalated_en`, `amc_support_escalated_hi`, `amc_support_escalated_te` |
 | support_ticket_opened (S2.3, ops user; `{{1}}` summary) | `amc_support_ticket_opened_en`, `amc_support_ticket_opened_hi` |
