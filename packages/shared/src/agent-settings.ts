@@ -99,6 +99,22 @@ export const AGENT_SETTING_DEFS = {
     default: null,
     hint: "S0.4 quote-or-decline window (hours). null = the rfq-expire sweep is OFF. When set, matches older than this with no quote and no decline are auto-declined (window_lapsed) and the buyer is told.",
   },
+  // ── S2.3 Support agent ───────────────────────────────────────────────────
+  support_escalate_after_turns: {
+    schema: z.number().int().min(1).max(5),
+    default: 2,
+    hint: 'S2.3 how many consecutive unclear turns open a support ticket (the agent then goes quiet on that conversation until a human resolves it).',
+  },
+  support_nudge_cooldown_hours: {
+    schema: z.number().int().min(1).max(168),
+    default: 24,
+    hint: 'S2.3 the counterparty nudge cap: at most one nudge per sender per subject (order / RFQ) in this many hours.',
+  },
+  support_ops_quiet_hours: {
+    schema: z.object({ from: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), to: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/) }).strict().nullable(),
+    default: null,
+    hint: 'S2.3 IST window (HH:MM–HH:MM) during which ticket WhatsApp pings to the ops user are held; in-app is immediate. null = no quiet hours.',
+  },
   // ── S2.2 Digital Munshi ──────────────────────────────────────────────────
   munshi_price_tolerance_bps: {
     schema: z.number().int().min(0).max(10_000),

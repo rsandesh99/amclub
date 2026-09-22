@@ -71,6 +71,8 @@ export const INJECTION_RULES: readonly InjectionRule[] = [
   r('role.ta', 'role', /(நான்|நாங்கள்)\s*(அட்மின்|நிறுவனர்|ஆப்ஸ்|சிஸ்டம்|டெவலப்பர்)/, 40),
   // ── tool / API invocations ─────────────────────────────────────────────────
   r('tool.call_tool', 'tool', /\b(call|invoke|run|use|execute|trigger)\s+(the\s+)?[\w-]+\s+(tool|function|endpoint)\b/i, 40),
+  // S2.3 — 'call nudge_counterparty now', 'run submit_quote': a snake_case identifier after a call verb is a tool name.
+  r('tool.call_snake', 'tool', /\b(call|invoke|run|execute|trigger|fire)\s+(the\s+)?[a-z]+(?:_[a-z]+)+\b/i, 40),
   r('tool.api', 'tool', /\b(POST|PATCH|PUT|DELETE|GET)\s+\/api\b|\/api\/v1\/(admin|agent|payouts?|orders)\b/i, 40),
   r('tool.money', 'tool', /\b(release|approve|authori[sz]e|process)\s+(the\s+|my\s+|our\s+)?(payout|refund|payment|funds|escrow)\b|\bmark\s+(\w+\s+){0,3}(as\s+)?(verified|approved|paid|resolved|complete|delivered)\b|\b(resolve|close|decide)\s+(the\s+|this\s+)?dispute\s+(in|for)\s+(my|our|the (buyer|provider|seller))\b|\bset\s+(the\s+)?(status|payout|kyc)\s+(to|=)\b/i, 45),
   r('tool.approve_quote', 'tool', /\b(accept|approve|select|choose)\s+(this|my|our)\s+(quote|bid|offer)\s+(automatically|now|immediately|for the buyer)\b|\bauto[- ]?(accept|approve)\b/i, 35),
@@ -112,7 +114,7 @@ export const INJECTION_RULES: readonly InjectionRule[] = [
   r('tag.system', 'tag_forge', /<\/?\s*(system|assistant|instructions?|tool_call|function_call|developer|prompt)\b[^>]*>/i, 40),
   r('tag.bracket', 'tag_forge', /\[(system|assistant|instructions?|admin)\]/i, 25),
   // ── JSON-shaped output attempts ────────────────────────────────────────────
-  r('json.keys', 'json_forge', /\{\s*"(recommendation|status|decision|approved|verified|tool|action|category_slug|doc_type|resolution|amount_paise|facts|pointers|message|price_paise|scope_summary|delivery_days|confidence|findings|question|gap|specific_enough|gaps|profile|uncertain|reply)"\s*:/i, 40),
+  r('json.keys', 'json_forge', /\{\s*"(intent|escalate|reply|refund_paise|suggested_next|summary|edit_instructions|question|skip_reason|recommendation|status|decision|approved|verified|tool|action|category_slug|doc_type|resolution|amount_paise|facts|pointers|message|price_paise|scope_summary|delivery_days|confidence|findings|question|gap|specific_enough|gaps|profile|uncertain|reply)"\s*:/i, 40),
   r('json.fence', 'json_forge', /```\s*(json)?\s*[\r\n]*\s*\{/i, 20),
   r('json.output_the', 'json_forge', /\b(output|return|respond with|reply with|answer with)\s+(only\s+)?(the\s+)?(following\s+)?(json\b|\{)/i, 25),
 ]
