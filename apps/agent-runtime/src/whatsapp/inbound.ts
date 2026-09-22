@@ -13,6 +13,7 @@ import { admin } from '../deps'
 import { RUNTIME_ENV } from '../env'
 import { isAgentEnabledForUser, onboardingSessionTtlHours } from '../settings'
 import { routeMunshiInbound } from '../agents/munshi/index'
+import { routeSupportInbound } from '../agents/support/index'
 
 /**
  * WhatsApp inbound (S0.5). Two halves:
@@ -52,6 +53,9 @@ export interface InboundHooks {
   enqueueOnboarding?: (turn: { kind: 'start' | 'message'; sessionId: string; messageId?: string }) => Promise<string | null>
   /** S2.2 — a Munshi button (approve | edit | skip:<runId>) or an utterance while a draft is open. */
   enqueueMunshiDecide?: (job: { runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance' }) => Promise<string | null>
+  /** S2.3 — a support turn, or the Yes / No on a nudge offer. */
+  enqueueSupportReply?: (job: { conversationId: string; messageId: string }) => Promise<string | null>
+  enqueueSupportDecide?: (job: { runId: string; messageId: string; action: 'yes' | 'no' }) => Promise<string | null>
 }
 
 export async function ingestWaWebhook(rawBody: string, headers: Record<string, string | undefined>, enqueue: EnqueueFn): Promise<IngestResult> {
@@ -156,7 +160,7 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
   const db = admin()
   const { data: msg } = await db.from('wa_messages').select('id, conversation_id, kind, body, payload').eq('id', messageId).maybeSingle()
   if (!msg) return
-  const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at, active_session_id').eq('id', msg.conversation_id).maybeSingle()
+  const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at, active_session_id, support_ticket_id').eq('id', msg.conversation_id).maybeSingle()
   if (!conv) return
   const locale = (conv.locale === 'hi' || conv.locale === 'te' ? conv.locale : 'en') as WaLocale
   const intent = classifyKeyword(msg.body as string | null)
@@ -214,7 +218,18 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
     await holdingReply(conv, locale)
     return
   }
-  // Anything else: no agent handles WhatsApp yet (S1.4+ / S2.3) → polite holding reply, ≤ 1 per 24h.
+  // S2.3 — the Support agent: after the Munshi branch, before the holding reply. A nudge button, or any text /
+  // audio from a granted, enabled user. An open ticket stores the message and replies nothing (the agent is quiet
+  // until a human resolves it). Everything else still falls through to the S0.5 holding reply.
+  if (RUNTIME_ENV.AGENT_ENABLED && conv.user_id && (await activeWhatsAppGrant(conv.user_id as string))) {
+    const routed = await routeSupportInbound(
+      db,
+      { messageId, conversationId: conv.id as string, userId: conv.user_id as string, row: { kind: msg.kind as string, body: msg.body as string | null, payload: (msg.payload as Record<string, unknown> | null) ?? null }, supportTicketId: (conv.support_ticket_id as string | null) ?? null },
+      hooks,
+    )
+    if (routed) return
+  }
+  // Anything else → polite holding reply, ≤ 1 per 24h.
   await holdingReply(conv, locale)
 }
 

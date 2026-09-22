@@ -1,6 +1,6 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { redactContactInfo, type SupportIntent, type SupportLocale, type SupportTicketStatus } from '@amclub/shared'
+import { redactContactInfo, ticketRefFromId, type SupportIntent, type SupportLocale, type SupportTicketStatus } from '@amclub/shared'
 import { buildTicketSummaryParts, supportTicketSummarySchema } from '@amclub/agent-core'
 import { boundedChatJson, BudgetExceededError } from '@/lib/agent/bounded'
 import { createNotification } from '@/lib/notifications/create'
@@ -46,9 +46,7 @@ export interface SupportTicketRow {
 export const TICKET_COLS = 'id, user_id, role, channel, conversation_id, thread_id, order_id, rfq_id, intent, reason, summary, suggested_next, status, assigned_to, acknowledged_at, resolved_at, resolved_by, resolution_note, run_id, created_at, updated_at'
 
 /** A short human reference for a ticket id (the user sees this in the escalated template). */
-export function ticketRef(id: string): string {
-  return `T-${id.slice(0, 8).toUpperCase()}`
-}
+export const ticketRef = ticketRefFromId
 
 // ── threads (web / mobile) ────────────────────────────────────────────────────
 

@@ -88,6 +88,11 @@ export const supportTicketSummarySchema = z
   .strict()
 export type SupportTicketSummary = z.infer<typeof supportTicketSummarySchema>
 
+/** The short human reference for a ticket id (the user sees it in the escalated template). */
+export function ticketRefFromId(id: string): string {
+  return `T-${id.slice(0, 8).toUpperCase()}`
+}
+
 export const nudgeSchema = z.object({ subject_kind: z.enum(['order', 'rfq']), subject_id: uuidSchema }).strict()
 export type NudgeInput = z.infer<typeof nudgeSchema>
 
