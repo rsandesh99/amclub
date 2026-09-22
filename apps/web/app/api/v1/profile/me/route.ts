@@ -8,6 +8,7 @@ import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
 import { isComparePointersEnabledFor } from '@/lib/rfq/compare'
 import { isOnboardingEnabledFor } from '@/lib/agent/onboarding'
 import { isMunshiEnabledFor } from '@/lib/agent/munshi'
+import { isSupportEnabledFor } from '@/lib/support/settings'
 
 /** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
@@ -40,6 +41,8 @@ export async function GET() {
   const onboardingWhatsAppEnabled = canOnboard ? await isOnboardingEnabledFor(admin, userId) : false
   // S2.2 — the Munshi partner tab for active providers (flag + agent switch + cohort).
   const munshiEnabled = provider ? await isMunshiEnabledFor(admin, userId) : false
+  // S2.3 — the Support chat for anyone with a profile (flag + agent switch + cohort).
+  const supportEnabled = msme || provider ? await isSupportEnabledFor(admin, userId) : false
 
   const primaryRole =
     roles.includes('admin') || roles.includes('ops')
@@ -65,6 +68,7 @@ export async function GET() {
     comparePointersEnabled,
     onboardingWhatsAppEnabled,
     munshiEnabled,
+    supportEnabled,
   }
   return NextResponse.json(
     body,

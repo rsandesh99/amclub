@@ -2,12 +2,16 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { requireToolScope } from '@/lib/agent/scope'
 import { resolveActor } from '@/lib/orders/actor'
 
 /** Order detail for a party (cookie or Bearer auth) — used by web + mobile. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // S2.3 — the Support agent's read (support_lookup) and the buyer's track_order; no-op for sessions.
+  const scope = await requireToolScope(['support_lookup', 'track_order'])
+  if (scope) return scope
   const { id } = await params
 
   const admin = await createAdminClient()
