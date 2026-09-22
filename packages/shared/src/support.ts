@@ -217,6 +217,8 @@ export interface SupportLookupResult {
   sla: { acknowledge_hours: number; resolve_days: number }
   support_contact: string
   ticket_ref?: string | null
+  /** The nudge cap the reply quotes (`support_nudge_cooldown_hours`); defaults to 24. */
+  nudge_cooldown_hours?: number
 }
 
 export interface SupportReply {
@@ -338,7 +340,7 @@ export function resolveSupportReply(intent: SupportIntent, lookup: SupportLookup
     case 'nudge_request': {
       if (!lookup.nudge_subject) return { key: 'nudge.no_subject', slots: base }
       if (!lookup.nudge_subject.active) return { key: 'nudge.out_of_window', slots: base }
-      if (lookup.nudge_subject.capped) return { key: 'nudge.capped', slots: { ...base, hours: 24 } }
+      if (lookup.nudge_subject.capped) return { key: 'nudge.capped', slots: { ...base, hours: lookup.nudge_cooldown_hours ?? 24 } }
       return { key: 'nudge.confirm', slots: base, action: { tool: 'nudge_counterparty', subject: { kind: lookup.nudge_subject.kind, id: lookup.nudge_subject.id } } }
     }
     case 'other':

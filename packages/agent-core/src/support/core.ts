@@ -86,7 +86,7 @@ function normRef(ref: string | null): string | null {
 }
 
 export async function runSupportTurn(deps: SupportTurnDeps, input: SupportTurnInput): Promise<SupportTurnResult> {
-  const baseLookup = (role: 'buyer' | 'provider'): SupportLookupResult => ({ role, sla: deps.sla, support_contact: deps.supportContact, ticket_ref: input.ticketRef ?? null })
+  const baseLookup = (role: 'buyer' | 'provider'): SupportLookupResult => ({ role, sla: deps.sla, support_contact: deps.supportContact, ticket_ref: input.ticketRef ?? null, nudge_cooldown_hours: deps.settings.nudgeCooldownHours })
   const finish = (role: 'buyer' | 'provider', intent: SupportIntentOutput | null, lookup: SupportLookupResult, refs: SupportTurnResult['lookupRefs'], unclearStreak: number, escalate?: SupportTurnResult['escalate'], forceKey?: SupportReply['key']): SupportTurnResult => {
     const resolved: SupportReply = forceKey ? { key: forceKey, slots: { sla_hours: deps.sla.acknowledge_hours, sla_days: deps.sla.resolve_days, contact: deps.supportContact, ticket_ref: input.ticketRef ?? '' } } : resolveSupportReply(intent?.intent ?? 'other', lookup)
     const slots = { ...resolved.slots }

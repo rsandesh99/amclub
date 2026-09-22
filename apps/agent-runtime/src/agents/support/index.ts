@@ -343,7 +343,9 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
 
   // escalation → a ticket through the web (runtime credential), then quiet
   if (out.escalate) {
-    const ticket = await openTicketViaWeb(deps, { conv, userId: conv.user_id, role: out.role, locale, reason: out.escalate.reason, intent: out.intent, orderId: out.lookupRefs.order_id ?? null, rfqId: out.lookupRefs.rfq_id ?? null, runId: result.runId, text })
+    const ticketArgs = { conv, userId: conv.user_id, role: out.role, locale, reason: out.escalate.reason, intent: out.intent, orderId: out.lookupRefs.order_id ?? null, rfqId: out.lookupRefs.rfq_id ?? null, runId: result.runId, text }
+    // the halt must hold even when the web is unreachable: a bare ticket row (support table, service role) marks the conversation
+    const ticket = (await openTicketViaWeb(deps, ticketArgs)) ?? (await openTicketFallback(deps, ticketArgs))
     const replyText = renderSupportReply('escalated', { sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days, contact: CONTACT, ticket_ref: ticket?.ref ?? '' }, locale)
     await sendReply(deps, conv, locale, replyText, { support: true, escalated: true })
     await deps.admin.from('wa_conversations').update({ support_last_intents: [...(conv.support_last_intents ?? []), (out.intent ?? 'other') as SupportIntent].slice(-5), support_unclear_streak: 0 }).eq('id', conv.id)
@@ -377,6 +379,29 @@ async function openTicketViaWeb(deps: SupportRuntimeDeps, args: { conv: Conversa
     console.warn('[support] ticket route failed', (e as Error).message)
     return null
   }
+}
+
+/**
+ * The web ticket route failed (runtime secret unset, web down, 5xx): open a bare ticket directly so the escalation
+ * still halts the agent on this conversation. No model summary and no notifications here — the admin queue lists it
+ * (summary = the fixed fallback) and the transcript is on the conversation. One open ticket per (user, channel).
+ */
+async function openTicketFallback(deps: SupportRuntimeDeps, args: { conv: ConversationRow; userId: string; role: 'buyer' | 'provider'; reason: string; intent: string | null; orderId: string | null; rfqId: string | null; runId: string }): Promise<{ id: string; ref: string } | null> {
+  const cols = 'id'
+  const existing = async () => (await deps.admin.from('support_tickets').select(cols).eq('user_id', args.userId).eq('channel', 'whatsapp').neq('status', 'resolved').is('deleted_at', null).maybeSingle()).data as { id: string } | null
+  let row = await existing()
+  if (!row) {
+    const { data, error } = await deps.admin
+      .from('support_tickets')
+      .insert({ user_id: args.userId, role: args.role, channel: 'whatsapp', conversation_id: args.conv.id, order_id: args.orderId, rfq_id: args.rfqId, intent: args.intent, reason: args.reason, summary: 'See the transcript — the automatic summary was not available.', run_id: args.runId })
+      .select(cols)
+      .single()
+    row = (data as { id: string } | null) ?? (error ? await existing() : null)
+  }
+  if (!row) return null
+  await deps.admin.from('wa_conversations').update({ support_ticket_id: row.id }).eq('id', args.conv.id)
+  console.warn('[support] ticket opened by the runtime fallback (web route unavailable)', row.id)
+  return { id: row.id, ref: ticketRefFromId(row.id) }
 }
 
 // ── support.decide (the nudge buttons) ───────────────────────────────────────
@@ -429,7 +454,8 @@ export async function runSupportDecide(deps: SupportRuntimeDeps, job: SupportDec
     }
   }
   const key = capped ? 'nudge.capped' : 'nudge.sent'
-  await sendReply(deps, conv, locale, renderSupportReply(key, { hours: 24, contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true, reply_key: key })
+  const { nudgeCooldownHours } = await supportSettings(deps.admin)
+  await sendReply(deps, conv, locale, renderSupportReply(key, { hours: nudgeCooldownHours, contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true, reply_key: key })
   deps.capture?.(conv.user_id, 'support_nudge_decided', { outcome: capped ? 'capped' : 'sent' })
   return { status: 'ok', detail: { outcome: capped ? 'capped' : 'sent' } }
 }

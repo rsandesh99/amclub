@@ -132,6 +132,11 @@ describe('runSupportTurn — the engine', () => {
     const capped = await runSupportTurn(deps({ intent: 'nudge_request', order_ref: 'latest' }, fakeLookups({ orders: [o(1, 'accepted')], capped: true })), turn('remind again'))
     expect(capped.reply.key).toBe('nudge.capped')
     expect(capped.reply.text).toContain('24')
+    // the cap quoted is the setting, never a constant
+    const capped12 = await runSupportTurn(deps({ intent: 'nudge_request', order_ref: 'latest' }, fakeLookups({ orders: [o(1, 'accepted')], capped: true }), { settings: { escalateAfterTurns: 2, nudgeCooldownHours: 12 } }), turn('remind again'))
+    expect(capped12.reply.text).toContain('12')
+    expect(capped12.reply.text).not.toContain('24 hours')
+    expect(capped12.numbers.ok).toBe(true)
     const closed = await runSupportTurn(deps({ intent: 'nudge_request', rfq_ref: 'latest' }, fakeLookups({ rfqs: [r(1, 'expired')], active: false })), turn('remind providers'))
     expect(closed.reply.key).toBe('nudge.out_of_window')
     const none = await runSupportTurn(deps({ intent: 'nudge_request' }, fakeLookups({})), turn('remind them'))

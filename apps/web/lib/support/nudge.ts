@@ -28,6 +28,18 @@ async function cooldownLeft(admin: SupabaseClient, kind: 'order' | 'rfq', subjec
   return Math.max(0, Math.ceil((until - Date.now()) / 1000))
 }
 
+/**
+ * The confirm click is linked to the ledger only when `support_message_id` is an
+ * assistant turn in the caller's OWN thread; anything else is a plain nudge (no
+ * ai_decisions row), so a client cannot attach an arbitrary id to the ledger.
+ */
+async function ownSupportMessage(admin: SupabaseClient, messageId: string | null | undefined, userId: string): Promise<string | null> {
+  if (!messageId) return null
+  const { data } = await admin.from('support_messages').select('id, role, thread:support_threads!inner(user_id)').eq('id', messageId).maybeSingle()
+  const m = data as { id: string; role: string; thread: { user_id: string } | null } | null
+  return m && m.role === 'assistant' && m.thread?.user_id === userId ? m.id : null
+}
+
 /** Has this user nudged the subject within the cooldown? (read for the support engine's lookups) */
 export async function nudgeCapped(admin: SupabaseClient, kind: 'order' | 'rfq', subjectId: string, fromUserId: string): Promise<boolean> {
   const s = await getSupportSettings(admin)
@@ -60,7 +72,8 @@ export async function nudgeOrder(admin: SupabaseClient, orderId: string, args: N
   const left = await cooldownLeft(admin, 'order', orderId, args.userId, s.nudgeCooldownHours)
   if (left > 0) return { ok: false, error: 'nudge_cooldown', retryAfterSec: left }
   const toUserId: string = isBuyer ? order.provider.user_id : order.msme.user_id
-  const decisionId = args.supportMessageId ? await recordAiDecision(admin, args.userId, { feature: 'support_nudge', input_refs: { support_message_id: args.supportMessageId, order_id: orderId }, proposed: { subject_kind: 'order', subject_id: orderId }, final: { subject_kind: 'order', subject_id: orderId } }, { runId: null, tool: 'nudge_counterparty' }) : null
+  const supportMessageId = await ownSupportMessage(admin, args.supportMessageId, args.userId)
+  const decisionId = supportMessageId ? await recordAiDecision(admin, args.userId, { feature: 'support_nudge', input_refs: { support_message_id: supportMessageId, order_id: orderId }, proposed: { subject_kind: 'order', subject_id: orderId }, final: { subject_kind: 'order', subject_id: orderId } }, { runId: null, tool: 'nudge_counterparty' }) : null
   const { data: ins, error } = await admin.from('nudges').insert({ subject_kind: 'order', subject_id: orderId, from_user_id: args.userId, to_user_id: toUserId, decision_id: decisionId }).select('id').single()
   if (error) throw new Error(`nudge insert: ${error.message}`)
   const body = COPY.order.body(String(order.order_number))
@@ -85,7 +98,8 @@ export async function nudgeRfq(admin: SupabaseClient, rfqId: string, args: Nudge
   const s = await getSupportSettings(admin)
   const left = await cooldownLeft(admin, 'rfq', rfqId, args.userId, s.nudgeCooldownHours)
   if (left > 0) return { ok: false, error: 'nudge_cooldown', retryAfterSec: left }
-  const decisionId = args.supportMessageId ? await recordAiDecision(admin, args.userId, { feature: 'support_nudge', input_refs: { support_message_id: args.supportMessageId, rfq_id: rfqId }, proposed: { subject_kind: 'rfq', subject_id: rfqId }, final: { subject_kind: 'rfq', subject_id: rfqId } }, { runId: null, tool: 'nudge_counterparty' }) : null
+  const supportMessageId = await ownSupportMessage(admin, args.supportMessageId, args.userId)
+  const decisionId = supportMessageId ? await recordAiDecision(admin, args.userId, { feature: 'support_nudge', input_refs: { support_message_id: supportMessageId, rfq_id: rfqId }, proposed: { subject_kind: 'rfq', subject_id: rfqId }, final: { subject_kind: 'rfq', subject_id: rfqId } }, { runId: null, tool: 'nudge_counterparty' }) : null
   const title = String(rfq.title).slice(0, 80)
   if (isBuyer) {
     // every matched, non-declined provider (bulk); the ledger row records the fan-out, not each recipient

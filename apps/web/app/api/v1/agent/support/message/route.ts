@@ -99,8 +99,7 @@ export async function POST(request: NextRequest) {
     const transcript = [...history.filter((m) => m.id !== userMsg.id).slice(-5).map((m) => ({ id: m.id, role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant', text: m.body })), { id: userMsg.id, role: 'user' as const, text: parsed.data.text }]
     let facts: Parameters<typeof openTicket>[1]['facts'] = {}
     if (turn.lookupRefs.order_id) {
-      const o = await lookups.getOrder('', turn.role).catch(() => null)
-      const listed = (await lookups.listOrders(turn.role).catch(() => [])).find((x) => x.id === turn.lookupRefs.order_id) ?? o
+      const listed = (await lookups.listOrders(turn.role).catch(() => [])).find((x) => x.id === turn.lookupRefs.order_id)
       if (listed) facts = { order: { order_number: listed.order_number, status: listed.status, amount: listed.amount } }
     }
     if (turn.lookupRefs.rfq_id) {
