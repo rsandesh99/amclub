@@ -67,6 +67,11 @@ export const ENVELOPE_CAPS: Readonly<Record<string, number>> = {
   // S2.2 — Munshi: a clarification Q/A pair, and the provider's WhatsApp reply to a draft
   rfq_clarification: 1000,
   provider_utterance: 1000,
+  // S2.3 — Support: a chat / WhatsApp message (+ the previous one), and ticket transcript turns
+  support_chat: 2000,
+  support_chat_previous: 2000,
+  whatsapp_previous: 2000,
+  support_transcript: 1000,
 }
 
 export function capForKind(kind: string): number {

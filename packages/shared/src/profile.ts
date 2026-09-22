@@ -32,4 +32,6 @@ export interface ProfileMeResponse {
   onboardingWhatsAppEnabled: boolean
   /** S2.2 — the Munshi partner tab for this provider (AGENT_ENABLED + agents_enabled.munshi + cohort). */
   munshiEnabled: boolean
+  /** S2.3 — the Support chat (Help) for this user (AGENT_ENABLED + agents_enabled.support + cohort). */
+  supportEnabled: boolean
 }

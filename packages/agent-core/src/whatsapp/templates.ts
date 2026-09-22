@@ -22,6 +22,13 @@ export interface TemplateSpec {
 const titleBody = (n: { title: string; body: string }) => [n.title, n.body]
 
 export const WA_TEMPLATES: Record<string, TemplateSpec> = {
+  // S2.3 — Support agent (opt-in gated except the transactional nudges below). Params from the notification's title/body.
+  support_reply: { names: { en: 'amc_support_reply_en', hi: 'amc_support_reply_hi', te: 'amc_support_reply_te' }, params: titleBody },
+  support_escalated: { names: { en: 'amc_support_escalated_en', hi: 'amc_support_escalated_hi', te: 'amc_support_escalated_te' }, params: (n) => [n.title] },
+  support_ticket_opened: { names: { en: 'amc_support_ticket_opened_en', hi: 'amc_support_ticket_opened_hi' }, params: (n) => [n.body] },
+  support_resolved: { names: { en: 'amc_support_resolved_en', hi: 'amc_support_resolved_hi', te: 'amc_support_resolved_te' }, params: (n) => [n.body] },
+  order_nudge: { names: { en: 'amc_order_nudge_en', hi: 'amc_order_nudge_hi', te: 'amc_order_nudge_te' }, params: (n) => [n.body] },
+  rfq_nudge: { names: { en: 'amc_rfq_nudge_en', hi: 'amc_rfq_nudge_hi', te: 'amc_rfq_nudge_te' }, params: (n) => [n.body] },
   // S2.2 — Digital Munshi (provider-facing; opt-in gated). Params from the notification's title/body.
   munshi_draft: { names: { en: 'amc_munshi_draft_en', hi: 'amc_munshi_draft_hi', te: 'amc_munshi_draft_te' }, params: titleBody },
   munshi_window_warning: { names: { en: 'amc_munshi_window_warning_en', hi: 'amc_munshi_window_warning_hi', te: 'amc_munshi_window_warning_te' }, params: titleBody },

@@ -38,6 +38,7 @@ export const AGENT_TASK_CLASSES = [
   'dispute_summary',   // ops: neutral summary of a dispute thread (recommendation only)
   'dispute_triage',    // ops: triage card for a dispute (S1.7)
   'photo_plausibility',// is this evidence photo plausibly of the work? (S0.3/S1.4)
+  'support_intent',    // S2.3: classify a support message into an intent + references (NEVER reply text)
   'approval_intent',   // S2.2: classify a provider's reply to a Munshi draft (re-ask / edit / reject — can NEVER approve)
   'thread_reply',      // S2.2: draft a courteous reply on a quote thread (no price change)
   'support_reply',     // customer support reply, bounded + safe (S2.3)
@@ -65,6 +66,7 @@ export const TASK_CLASS_TIER: Record<AgentTaskClass, AgentTier> = {
   dispute_summary: 'frontier',
   dispute_triage: 'frontier',
   photo_plausibility: 'frontier',
+  support_intent: 'routine',
   approval_intent: 'routine',
   thread_reply: 'routine',
   support_reply: 'reasoning',
@@ -142,6 +144,12 @@ export const AGENT_TOOLS = [
   { name: 'list_deadlines', persona: 'provider', confirm: false, wraps: 'GET /orders (provider)' },
   // S2.2 — Digital Munshi reads the provider's own price book (the only basis a draft price may have); a GET.
   { name: 'read_price_book', persona: 'provider', confirm: false, wraps: 'GET /partner/price-book' },
+  // S2.3 — the Support agent: the same two tools exist for BOTH personas (the table is per persona; a name may repeat).
+  // support_lookup is never routed — the support core calls the lookups interface (session client / token GETs).
+  { name: 'support_lookup', persona: 'buyer', confirm: false, wraps: 'GET /orders | /rfq | /quotes/[id]/messages (read-only)' },
+  { name: 'support_lookup', persona: 'provider', confirm: false, wraps: 'GET /orders | /rfq | /quotes/[id]/messages (read-only)' },
+  { name: 'nudge_counterparty', persona: 'buyer', confirm: true, wraps: 'POST /orders/[id]/nudge | /rfq/[id]/nudge' },
+  { name: 'nudge_counterparty', persona: 'provider', confirm: true, wraps: 'POST /orders/[id]/nudge | /rfq/[id]/nudge' },
   // ops — recommendations only; never executes an admin action
   { name: 'summarize_dispute', persona: 'ops', confirm: false, taskClass: 'dispute_summary', wraps: 'GET /admin/disputes/[id]' },
   { name: 'triage_verification', persona: 'ops', confirm: false, wraps: 'GET /admin/providers/[id]' },
@@ -170,8 +178,8 @@ export function toolsForPersona(persona: AgentPersona): readonly AgentToolSpec[]
 }
 
 export function isToolAllowed(persona: AgentPersona, tool: string): tool is AgentToolName {
-  const spec = TOOL_BY_NAME[tool]
-  return Boolean(spec && spec.persona === persona)
+  // S2.3 — a name may exist for more than one persona (support_lookup, nudge_counterparty): check the pair.
+  return AGENT_TOOLS.some((t) => t.name === tool && t.persona === persona)
 }
 
 export function requiresConfirmation(tool: AgentToolName): boolean {

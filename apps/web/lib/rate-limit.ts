@@ -75,6 +75,9 @@ export const limiters = {
   /** S1.1 quote extraction per provider — one paid routine-tier call each; burst + hourly pair (voice-parse precedent). */
   quoteExtract: build(5, '1 m', 'rl:quote-extract'),
   quoteExtractHourly: build(40, '1 h', 'rl:quote-extract-h'),
+  /** S2.3 — the support chat: one bounded classifier call per turn. */
+  supportChat: build(10, '1 m', 'rl:support-chat'),
+  supportChatHourly: build(60, '1 h', 'rl:support-chat-h'),
   /** S1.2 compare pointers per buyer — one reasoning-tier call per cache miss. */
   comparePointers: build(6, '10 m', 'rl:compare-pointers'),
   /** S1.8 document intake per buyer — one frontier-tier vision/text call each; burst + hourly pair. */

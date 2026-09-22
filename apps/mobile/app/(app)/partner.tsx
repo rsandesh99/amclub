@@ -16,6 +16,7 @@ export default function PartnerScreen() {
   // 'ready' | 'missing_route' | 'bank_unverified' | 'not_ready' | 'no_bank' | null (from /profile/me)
   const [payoutReadiness, setPayoutReadiness] = useState<string | null>(null)
   const [munshiEnabled, setMunshiEnabled] = useState(false)
+  const [supportEnabled, setSupportEnabled] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function PartnerScreen() {
         const data = (await res.json()) as Partial<ProfileMeResponse>
         setProviderStatus((data.providerStatus ?? null) as ProviderStatus['status'])
         setMunshiEnabled(data.munshiEnabled === true)
+        setSupportEnabled(data.supportEnabled === true)
         setPayoutReadiness(data.payoutReadiness ?? null)
       } catch {
         // ignore
@@ -129,6 +131,16 @@ export default function PartnerScreen() {
             </TouchableOpacity>
 
             {/* S2.2 — Digital Munshi (only for an enabled, cohorted provider; the server decides) */}
+            {supportEnabled && (
+              <TouchableOpacity onPress={() => router.push('/support' as never)} className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-surface p-5" testID="support-tile">
+                <View>
+                  <Text className="text-base font-semibold text-foreground">{t('support.title')}</Text>
+                  <Text className="mt-0.5 text-xs text-foreground-secondary">{t('support.tile_sub')}</Text>
+                </View>
+                <Text className="text-2xl">💬</Text>
+              </TouchableOpacity>
+            )}
+
             {munshiEnabled && (
               <TouchableOpacity onPress={() => router.push('/partner-munshi' as never)} className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-surface p-5" testID="munshi-tile">
                 <View>

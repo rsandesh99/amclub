@@ -5,7 +5,7 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
-import { fetchUnreadCount } from '@/lib/api'
+import { fetchUnreadCount, fetchMe } from '@/lib/api'
 import { LocaleToggle } from '@/components/LocaleToggle'
 import { HeroBanner } from '@/components/HeroBanner'
 import { CATEGORY_LIST, pickLocale } from '@amclub/shared'
@@ -15,8 +15,14 @@ export default function HomeScreen() {
   const [userName, setUserName] = useState('')
   const [q, setQ] = useState('')
   const [unread, setUnread] = useState(0)
+  const [supportEnabled, setSupportEnabled] = useState(false)
 
   useEffect(() => {
+    void (async () => {
+      // S2.3 — the Help chat exists only for an enabled, cohorted user (the server decides).
+      const me = await fetchMe()
+      setSupportEnabled(me?.supportEnabled === true)
+    })()
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserName((user?.user_metadata?.['full_name'] as string | undefined) ?? '')
     })
@@ -39,6 +45,11 @@ export default function HomeScreen() {
           </View>
           <View className="flex-row items-center gap-2">
             <LocaleToggle />
+            {supportEnabled && (
+              <TouchableOpacity onPress={() => router.push('/support' as never)} className="rounded-lg border border-gray-200 p-2" testID="support-entry">
+                <Ionicons name="help-circle-outline" size={18} color="#5C645C" />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => router.push('/notifications' as never)} className="relative rounded-lg border border-gray-200 p-2">
               <Ionicons name="notifications-outline" size={18} color="#5C645C" />
               {unread > 0 && (

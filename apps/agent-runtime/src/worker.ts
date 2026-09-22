@@ -5,7 +5,8 @@ import { payoutDossierAgent, type PayoutDossierInput } from './agents/payout-dos
 import { listExpiredOnboardingSessions, runOnboardingTurn, type OnboardingTurn } from './agents/onboarding/index'
 import { disputeTriageAgent, type DisputeTriageInput } from './agents/dispute-triage/index'
 import { runMunshiDecide, runMunshiFollowup, runMunshiScan, type MunshiDecideJob } from './agents/munshi/index'
-import { admin, buildDeps, buildMunshiDeps, buildOnboardingDeps } from './deps'
+import { runSupportDecide, runSupportReply, type SupportDecideJob, type SupportReplyJob } from './agents/support/index'
+import { admin, buildDeps, buildMunshiDeps, buildOnboardingDeps, buildSupportDeps } from './deps'
 import { handleWaInbound } from './whatsapp/inbound'
 import { RUNTIME_ENV } from './env'
 
@@ -33,13 +34,17 @@ const MUNSHI_SCAN_QUEUE = 'agent.munshi.scan'
 const MUNSHI_DECIDE_QUEUE = 'agent.munshi.decide'
 const MUNSHI_FOLLOWUP_QUEUE = 'agent.munshi.followup'
 const MUNSHI_DECIDE_RETRY = { retryLimit: 1, retryDelay: 60 } as const
+/** S2.3 — support turns: one retry after 60 s (a turn is idempotent through the stored message + the guarded ticket). */
+const SUPPORT_REPLY_QUEUE = 'agent.support.reply'
+const SUPPORT_DECIDE_QUEUE = 'agent.support.decide'
+const SUPPORT_RETRY = { retryLimit: 1, retryDelay: 60 } as const
 
 /**
  * Run failures that retrying cannot fix: the web flag is off, the user has no
  * grant, a budget/step cap, authz, or the evidence read was refused (4xx).
  * Everything else (network, 5xx, DB) is thrown so pg-boss retries per queue.
  */
-const NO_RETRY = /^(agent_disabled|no_\w+_grant|budget_|step_budget|tool_not_allowed|tool_out_of_scope|taint_violation|evidence_read_failed:4|session_terminal|session_not_found|message_not_found|message_conversation_mismatch|no_draft_to_confirm|dispute_resolved|dispute_not_found|dispute_read_failed:4|triage_cap|draft_gone|grant_revoked|daily_cap|decision_failed:4)/
+const NO_RETRY = /^(agent_disabled|no_\w+_grant|budget_|step_budget|tool_not_allowed|tool_out_of_scope|taint_violation|evidence_read_failed:4|session_terminal|session_not_found|message_not_found|message_conversation_mismatch|no_draft_to_confirm|dispute_resolved|dispute_not_found|dispute_read_failed:4|triage_cap|draft_gone|grant_revoked|daily_cap|decision_failed:4|ticket_open|conversation_not_found|no_profile|empty_message|run_gone)/
 
 interface RunJob {
   agent: string
@@ -65,6 +70,8 @@ export async function startWorker(): Promise<void> {
   await boss.createQueue(MUNSHI_SCAN_QUEUE, { name: MUNSHI_SCAN_QUEUE, retryLimit: 0 })
   await boss.createQueue(MUNSHI_FOLLOWUP_QUEUE, { name: MUNSHI_FOLLOWUP_QUEUE, retryLimit: 0 })
   await boss.createQueue(MUNSHI_DECIDE_QUEUE, { name: MUNSHI_DECIDE_QUEUE, ...MUNSHI_DECIDE_RETRY })
+  await boss.createQueue(SUPPORT_REPLY_QUEUE, { name: SUPPORT_REPLY_QUEUE, ...SUPPORT_RETRY })
+  await boss.createQueue(SUPPORT_DECIDE_QUEUE, { name: SUPPORT_DECIDE_QUEUE, ...SUPPORT_RETRY })
   const deps = buildDeps()
 
   await boss.work<RunJob>(QUEUE, async (jobs) => {
@@ -137,16 +144,50 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<{ messageId: string }>(WA_QUEUE, async (jobs) => {
-    for (const job of jobs) await handleWaInbound(job.data.messageId, { enqueueOnboarding: enqueueOnboardingJob, enqueueMunshiDecide: enqueueMunshiDecideJob })
+  await boss.work<SupportReplyJob>(SUPPORT_REPLY_QUEUE, async (jobs) => {
+    for (const job of jobs) {
+      const r = await runSupportReply(buildSupportDeps(), { ...job.data, jobId: job.id })
+      if (r.status === 'failed') {
+        if (NO_RETRY.test(r.error)) {
+          console.warn(`[worker] support.reply ${job.data.messageId} failed terminally: ${r.error}`)
+          continue
+        }
+        throw new Error(`support.reply ${job.data.messageId} failed: ${r.error}`) // → pg-boss retry (1 × 60 s)
+      }
+    }
   })
-  console.log(`[worker] pg-boss started on queues ${QUEUE}, ${DOSSIER_QUEUE}, ${TRIAGE_QUEUE}, ${ONBOARDING_QUEUE}, ${MUNSHI_SCAN_QUEUE}, ${MUNSHI_DECIDE_QUEUE}, ${MUNSHI_FOLLOWUP_QUEUE}, ${WA_QUEUE}`)
+  await boss.work<SupportDecideJob>(SUPPORT_DECIDE_QUEUE, async (jobs) => {
+    for (const job of jobs) {
+      const r = await runSupportDecide(buildSupportDeps(), { ...job.data, jobId: job.id })
+      if (r.status === 'failed') {
+        if (NO_RETRY.test(r.error)) {
+          console.warn(`[worker] support.decide ${job.data.runId} failed terminally: ${r.error}`)
+          continue
+        }
+        throw new Error(`support.decide ${job.data.runId} failed: ${r.error}`)
+      }
+    }
+  })
+  await boss.work<{ messageId: string }>(WA_QUEUE, async (jobs) => {
+    for (const job of jobs) await handleWaInbound(job.data.messageId, { enqueueOnboarding: enqueueOnboardingJob, enqueueMunshiDecide: enqueueMunshiDecideJob, enqueueSupportReply: enqueueSupportReplyJob, enqueueSupportDecide: enqueueSupportDecideJob })
+  })
+  console.log(`[worker] pg-boss started on queues ${QUEUE}, ${DOSSIER_QUEUE}, ${TRIAGE_QUEUE}, ${ONBOARDING_QUEUE}, ${MUNSHI_SCAN_QUEUE}, ${MUNSHI_DECIDE_QUEUE}, ${MUNSHI_FOLLOWUP_QUEUE}, ${SUPPORT_REPLY_QUEUE}, ${SUPPORT_DECIDE_QUEUE}, ${WA_QUEUE}`)
 }
 
 /** S1.6 — one onboarding turn (start | message | expire) on its own queue. */
 export async function enqueueOnboardingJob(turn: OnboardingTurn): Promise<string | null> {
   if (!boss) return null
   return boss.send(ONBOARDING_QUEUE, turn, { ...ONBOARDING_RETRY })
+}
+
+/** S2.3 — one support turn (an inbound message) / one nudge decision. */
+export async function enqueueSupportReplyJob(job: { conversationId: string; messageId: string }): Promise<string | null> {
+  if (!boss) return null
+  return boss.send(SUPPORT_REPLY_QUEUE, { kind: 'reply', ...job }, { ...SUPPORT_RETRY })
+}
+export async function enqueueSupportDecideJob(job: { runId: string; messageId: string; action: 'yes' | 'no' }): Promise<string | null> {
+  if (!boss) return null
+  return boss.send(SUPPORT_DECIDE_QUEUE, { kind: 'decide', ...job }, { ...SUPPORT_RETRY })
 }
 
 /** S2.2 — one Munshi decision (a button tap or an utterance) on its own queue. */

@@ -605,6 +605,51 @@ CREATE POLICY "munshi_provider_state: admin read" ON munshi_provider_state
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 REVOKE INSERT, UPDATE, DELETE ON munshi_provider_state FROM anon, authenticated;
 
+-- ─── support_tickets / support_threads / support_messages / nudges (0041, S2.3) — self + admin read; service write ─
+ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "support_tickets: self read" ON support_tickets;
+CREATE POLICY "support_tickets: self read" ON support_tickets
+  FOR SELECT USING (deleted_at IS NULL AND user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "support_tickets: admin read" ON support_tickets;
+CREATE POLICY "support_tickets: admin read" ON support_tickets
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON support_tickets FROM anon, authenticated;
+
+ALTER TABLE support_threads ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "support_threads: self read" ON support_threads;
+CREATE POLICY "support_threads: self read" ON support_threads
+  FOR SELECT USING (deleted_at IS NULL AND user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "support_threads: admin read" ON support_threads;
+CREATE POLICY "support_threads: admin read" ON support_threads
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON support_threads FROM anon, authenticated;
+
+ALTER TABLE support_messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "support_messages: self read" ON support_messages;
+CREATE POLICY "support_messages: self read" ON support_messages
+  FOR SELECT USING (thread_id IN (SELECT id FROM support_threads WHERE user_id = auth_user_id() AND deleted_at IS NULL));
+
+DROP POLICY IF EXISTS "support_messages: admin read" ON support_messages;
+CREATE POLICY "support_messages: admin read" ON support_messages
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON support_messages FROM anon, authenticated;
+
+ALTER TABLE nudges ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "nudges: parties read" ON nudges;
+CREATE POLICY "nudges: parties read" ON nudges
+  FOR SELECT USING (from_user_id = auth_user_id() OR to_user_id = auth_user_id());
+
+DROP POLICY IF EXISTS "nudges: admin read" ON nudges;
+CREATE POLICY "nudges: admin read" ON nudges
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON nudges FROM anon, authenticated;
+
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
 -- raise_append_only() is created in 0017 (bootstrap runs migrations first).
