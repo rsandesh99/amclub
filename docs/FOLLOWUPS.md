@@ -850,6 +850,16 @@ blocking live step in CI when the key exists. Runbook `docs/agents/SECURITY.md`.
   NOT stripped — render escapes them, and stripping would blind the detector to a forged `</untrusted>`.
 - **Onboarding contract scope:** `profile.display_name` and `legal_name` are included with `about` and the package
   strings (a business name carrying a phone number would otherwise reach the public profile).
+- **`decline_message` is not a target in `injection.json`:** its only input is the buyer's own note, and its five
+  `[injection]` cases (phone in note, forged close tag, identity claim, JSON blob, money offer) live in the S1.2
+  `golden/decline_message.json` set, which runs on every eval (stub and live, all must pass) and now also validates
+  through the wrapped schema. Folding those five into the red-team matrix is a later tidy-up, not a coverage gap.
+- **`rfq_parse` is deliberately NOT wrapped by `customerFacingText`:** its output is the buyer's own prefill
+  (`description_english`), edited by the buyer before Create, and the S1.8 promise is byte-equal Phase 8b behaviour —
+  a buyer who states their own phone number in a voice clip must not get a parse failure. The red-team harness still
+  drives all 17 rfq_parse pairs and asserts no tool / status key and no injected marker; contact masking for the
+  provider side happens where the RFQ is rendered, not in the parser. Revisit when the parser gets a provider-facing
+  field.
 
 
 
