@@ -18,6 +18,7 @@ import { RUNTIME_ENV } from './env'
 import { budgetCapsFor, onboardingSessionTtlHours } from './settings'
 import { captureRuntimeEvent } from './analytics'
 import type { OnboardingRuntimeDeps } from './agents/onboarding/index'
+import type { MunshiRuntimeDeps } from './agents/munshi/index'
 
 /**
  * Wires agent-core to the runtime's environment. The runtime NEVER uses the
@@ -103,6 +104,21 @@ export async function buildOnboardingDeps(): Promise<OnboardingRuntimeDeps> {
     tokenFor: ({ runId, userId }) => mintRuntimeToken({ runId, persona: 'provider', userId }),
     mediaBucket: RUNTIME_ENV.WA_MEDIA_BUCKET,
     ttlHours: await onboardingSessionTtlHours(admin()),
+    capture: captureRuntimeEvent,
+  }
+}
+
+/** S2.2 — everything the Munshi jobs need; keyless producers are the module defaults (honest by construction). */
+export function buildMunshiDeps(): MunshiRuntimeDeps {
+  return {
+    core: buildDeps(),
+    admin: admin(),
+    whatsapp: createWhatsAppProvider(whatsappConfigFromEnv()),
+    apiUrl: RUNTIME_ENV.API_URL,
+    agentEnabled: RUNTIME_ENV.AGENT_ENABLED,
+    tokenFor: ({ runId, userId }) => mintRuntimeToken({ runId, persona: 'provider', userId }),
+    mediaBucket: RUNTIME_ENV.WA_MEDIA_BUCKET,
+    runtimeSecret: RUNTIME_ENV.RUNTIME_SECRET,
     capture: captureRuntimeEvent,
   }
 }

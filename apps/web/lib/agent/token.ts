@@ -53,7 +53,14 @@ export async function userHasRoleForPersona(admin: SupabaseClient, userId: strin
   return roles.includes(requiredRole)
 }
 
-/** The active (non-revoked) grant for (user, persona), or null — the runtime path. */
+/**
+ * The active (non-revoked) grant for (user, persona), or null — the runtime path.
+ * S2.2: a user may hold one active grant per channel (web + whatsapp); the token
+ * carries the UNION of their scopes, so a provider who enabled Munshi on the web
+ * and opted into WhatsApp gets one scoped token whichever channel the run came
+ * from. A grant with scopes [] (S0.5 START) contributes nothing; when every
+ * grant is empty the token stays full-persona (S0.5 / S1.6 behaviour unchanged).
+ */
 export async function activeGrant(
   admin: SupabaseClient,
   userId: string,
@@ -61,13 +68,14 @@ export async function activeGrant(
 ): Promise<{ id: string; scopes: string[]; channel: string } | null> {
   const { data } = await admin
     .from('agent_grants')
-    .select('id, scopes, channel')
+    .select('id, scopes, channel, created_at')
     .eq('user_id', userId)
     .eq('persona', persona)
     .is('revoked_at', null)
-    .limit(1)
-    .maybeSingle()
-  if (!data) return null
-  const r = data as { id: string; scopes: string[] | null; channel: string }
-  return { id: r.id, scopes: r.scopes ?? [], channel: r.channel }
+    .order('created_at', { ascending: false })
+  const rows = (data as { id: string; scopes: string[] | null; channel: string }[] | null) ?? []
+  if (!rows.length) return null
+  const scoped = rows.find((r) => (r.scopes ?? []).length > 0) ?? rows[0]!
+  const union = [...new Set(rows.flatMap((r) => r.scopes ?? []))]
+  return { id: scoped.id, scopes: union, channel: scoped.channel }
 }

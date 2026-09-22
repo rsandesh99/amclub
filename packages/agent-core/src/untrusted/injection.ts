@@ -48,6 +48,8 @@ const r = (id: string, family: InjectionFamily, re: RegExp, weight: number): Inj
 export const INJECTION_RULES: readonly InjectionRule[] = [
   // ── override ───────────────────────────────────────────────────────────────
   r('override.ignore_previous', 'override', /\b(ignore|disregard|forget|override|skip)\s+(?:(?:all|any|the|of|previous|prior|earlier|above|these|those|your|my|system|other)\s+){1,3}(instructions?|rules?|prompts?|guidelines?|directions?|constraints?)\b/i, 45),
+  // S2.2 — 'ignore your price book' / 'skip the policy' / 'disregard the system prompt': an override aimed at a named artefact.
+  r('override.ignore_object', 'override', /\b(ignore|disregard|forget|skip|bypass)\s+(?:(?:all|any|the|your|my|our|this|that|of)\s+){0,2}(price\s?book|price\s?history|policy|policies|guardrails?|system\s?prompt|safety\s+(?:rules?|checks?)|band|clamp|allow-?list)\b/i, 40),
   r('override.new_instructions', 'override', /\b(new|updated|real|actual|revised|secret)\s+(instructions?|task|rules?|prompt)\s*[:\-]/i, 40),
   r('override.system_prefix', 'override', /(^|[\n\r]|[.!?]\s+)\s*(system|assistant|developer|instruction)\s*:/i, 40),
   r('override.from_now_on', 'override', /\b(from now on|starting now|henceforth|for the rest of (this|the) (conversation|chat))\b/i, 25),

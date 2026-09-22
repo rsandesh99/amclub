@@ -38,6 +38,8 @@ export const AGENT_TASK_CLASSES = [
   'dispute_summary',   // ops: neutral summary of a dispute thread (recommendation only)
   'dispute_triage',    // ops: triage card for a dispute (S1.7)
   'photo_plausibility',// is this evidence photo plausibly of the work? (S0.3/S1.4)
+  'approval_intent',   // S2.2: classify a provider's reply to a Munshi draft (re-ask / edit / reject — can NEVER approve)
+  'thread_reply',      // S2.2: draft a courteous reply on a quote thread (no price change)
   'support_reply',     // customer support reply, bounded + safe (S2.3)
   'benchmark_explain', // fair-price range explanation (S3.2)
   'translation',       // UI-adjacent short translation
@@ -63,6 +65,8 @@ export const TASK_CLASS_TIER: Record<AgentTaskClass, AgentTier> = {
   dispute_summary: 'frontier',
   dispute_triage: 'frontier',
   photo_plausibility: 'frontier',
+  approval_intent: 'routine',
+  thread_reply: 'routine',
   support_reply: 'reasoning',
   benchmark_explain: 'frontier',
   translation: 'routine',
@@ -136,6 +140,8 @@ export const AGENT_TOOLS = [
   // draft. Local (no /api/v1 route): the ai_decisions row IS the outcome; the wizard consumes the draft.
   { name: 'confirm_onboarding_draft', persona: 'provider', confirm: true, wraps: 'local (draft confirm)' },
   { name: 'list_deadlines', persona: 'provider', confirm: false, wraps: 'GET /orders (provider)' },
+  // S2.2 — Digital Munshi reads the provider's own price book (the only basis a draft price may have); a GET.
+  { name: 'read_price_book', persona: 'provider', confirm: false, wraps: 'GET /partner/price-book' },
   // ops — recommendations only; never executes an admin action
   { name: 'summarize_dispute', persona: 'ops', confirm: false, taskClass: 'dispute_summary', wraps: 'GET /admin/disputes/[id]' },
   { name: 'triage_verification', persona: 'ops', confirm: false, wraps: 'GET /admin/providers/[id]' },

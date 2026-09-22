@@ -235,6 +235,15 @@ const MANIFEST: Entry[] = [
     tables: ['agent_events'],
     note: 'S2.1 injection gate: agent_events.kind CHECK restated with injection_suspected (the detector event; logged, never blocking)',
   },
+  {
+    file: '0040_munshi.sql',
+    tables: ['munshi_drafts', 'munshi_provider_state'],
+    triggers: [
+      ['munshi_drafts', 'munshi_drafts_set_updated_at'],
+      ['munshi_provider_state', 'munshi_provider_state_set_updated_at'],
+    ],
+    note: 'S2.2 Digital Munshi: munshi_drafts (proposals the provider decides on) + munshi_provider_state (scan cursor, daily cap, reminders); provider_price_book gains accepted_at / deleted_at / source (source_quote_id nullable for manual rows; accepted_at backfilled from accepted quotes); quotes.munshi_draft_id (+ the S1.2 column grant restated); ai_decisions feature CHECK gains munshi_reply',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

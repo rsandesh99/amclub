@@ -40,6 +40,13 @@ export async function requireNotDelegated(route: string): Promise<NextResponse |
   return null
 }
 
+/** S2.2 — the run a delegated token is bound to (`amc_run_id`), or null for an ordinary session. */
+export async function delegatedRunId(): Promise<string | null> {
+  const claims = await bearerClaims()
+  const v = claims?.['amc_run_id']
+  return typeof v === 'string' && v.length > 0 ? v : null
+}
+
 async function bearerClaims(): Promise<Record<string, unknown> | null> {
   const h = await headers()
   const authz = h.get('authorization')

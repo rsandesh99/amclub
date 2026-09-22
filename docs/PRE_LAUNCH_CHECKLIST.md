@@ -58,6 +58,10 @@ noted; these are what `packages/agent-core/src/whatsapp/templates.ts` sends):
 | onboarding_resume (S1.6; `{{1}}` step label) | `amc_onboarding_resume_en`, `amc_onboarding_resume_hi`, `amc_onboarding_resume_te` |
 | onboarding_draft_ready (S1.6; `{{1}}` display name) | `amc_onboarding_draft_ready_en`, `amc_onboarding_draft_ready_hi`, `amc_onboarding_draft_ready_te` |
 | onboarding_expired (S1.6; `{{1}}` link) | `amc_onboarding_expired_en`, `amc_onboarding_expired_hi`, `amc_onboarding_expired_te` |
+| munshi_draft (S2.2, provider; opt-in gated; `{{1}}` RFQ title, `{{2}}` price line) | `amc_munshi_draft_en`, `amc_munshi_draft_hi`, `amc_munshi_draft_te` |
+| munshi_window_warning (S2.2; `{{1}}` RFQ title, `{{2}}` hours) | `amc_munshi_window_warning_en`, `amc_munshi_window_warning_hi`, `amc_munshi_window_warning_te` |
+| munshi_reply_draft (S2.2; `{{1}}` RFQ title) | `amc_munshi_reply_draft_en`, `amc_munshi_reply_draft_hi`, `amc_munshi_reply_draft_te` |
+| munshi_result (S2.2; `{{1}}` outcome line) | `amc_munshi_result_en`, `amc_munshi_result_hi`, `amc_munshi_result_te` |
 
 The S1.6 kinds are the first with a `_te` variant (the interview runs in
 en/hi/te); the older kinds stay en + hi until Telugu notifications land.

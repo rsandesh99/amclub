@@ -34,6 +34,9 @@ const bodySchema = z.object({
 /** The ai_decisions.feature for a tool's confirmation; the generic runtime confirmation otherwise. */
 const FEATURE_BY_TOOL: Partial<Record<AgentToolName, AiDecisionFeature>> = {
   confirm_onboarding_draft: 'onboarding', // S1.6
+  submit_quote: 'munshi_draft', // S2.2 — the provider's tap on a Munshi quote draft
+  ask_clarification: 'munshi_draft', // S2.2 — … on a Munshi question draft
+  reply_thread: 'munshi_reply', // S2.2 — … on a Munshi thread reply
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

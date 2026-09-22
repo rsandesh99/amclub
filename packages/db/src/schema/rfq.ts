@@ -96,6 +96,8 @@ export const quotes = pgTable('quotes', {
   // S1.3 (0034) — in-place revision: counts submissions (1 = original, max 3); optimistic lock key.
   revision: integer('revision').default(1).notNull(),
   revisedAt: timestamp('revised_at', { withTimezone: true }),
+  // S2.2 (0040) — the Munshi draft this quote came from; FK → munshi_drafts in SQL (circular import avoided here).
+  munshiDraftId: uuid('munshi_draft_id'),
   // submitted | withdrawn | accepted | declined | expired
   status: text('status').default('submitted').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),

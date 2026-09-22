@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { MAX_QUOTE_REVISIONS, editedExtractFields, quoteRevisionSchema, quoteSchema, type QuoteExtraction } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
-import { requireToolScope } from '@/lib/agent/scope'
+import { delegatedRunId, requireToolScope } from '@/lib/agent/scope'
+import { createSupabaseLedger } from '@amclub/agent-core'
 import { QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
@@ -60,6 +61,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: dup ? 'already_quoted' : 'extraction_mismatch' }, { status: dup ? 409 : 422 })
     }
     extraction = { id: row.id, proposed: row.proposed }
+  }
+
+  // S2.2 — a Munshi draft must be this provider's, for this RFQ, and still open. Checked BEFORE the slot claim.
+  let munshi: { id: string; runId: string | null } | null = null
+  if (d.munshi_draft_id) {
+    const { data: md } = await admin.from('munshi_drafts').select('id, rfq_id, provider_id, status, run_id').eq('id', d.munshi_draft_id).maybeSingle()
+    const row = md as { id: string; rfq_id: string | null; provider_id: string; status: string; run_id: string | null } | null
+    if (!row || row.rfq_id !== rfqId || row.provider_id !== actor.providerId || (row.status !== 'proposed' && row.status !== 'edited')) {
+      return NextResponse.json({ error: 'munshi_draft_mismatch' }, { status: 422 })
+    }
+    munshi = { id: row.id, runId: row.run_id }
   }
 
   // AMC Mart M2 — a goods RFQ needs goods terms; the total is qty × unit price,
@@ -150,6 +162,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     } else {
       console.error('[quote submit] ai_decisions row not recorded for extraction', extraction.id)
     }
+  }
+
+  // S2.2 — link the Munshi draft: the delegated run's submit (Bearer bound to the draft's run) is the provider's
+  // approval; a submit from the composer is an edit, and the parked run is declined (reason 'edited') — never resumed.
+  if (munshi) {
+    // The run's own submit: the bearer is bound to the draft's run (the delegated token, prod) — or the same fact
+    // read from the ledger: the run was resumed (running) on an approved submit_quote decision. The composer path
+    // has neither (the run is still parked, no decision), so it is an edit.
+    const runId = await delegatedRunId()
+    const ledger = createSupabaseLedger(admin)
+    const run = munshi.runId ? await ledger.getRun(munshi.runId) : null
+    const approved = munshi.runId ? await ledger.hasApprovedDecision({ runId: munshi.runId, tool: 'submit_quote' }) : false
+    const viaRun = (!!runId && runId === munshi.runId) || (run?.status === 'running' && approved)
+    const now = new Date().toISOString()
+    const { error: mErr } = await admin.from('quotes').update({ munshi_draft_id: munshi.id, updated_at: now }).eq('id', quote.id)
+    if (mErr) console.error('[quote submit] munshi link failed', mErr.message)
+    const { error: dErr } = await admin
+      .from('munshi_drafts')
+      .update({ status: viaRun ? 'approved' : 'edited', result_ref: { quote_id: quote.id, via: viaRun ? 'run' : 'composer' }, updated_at: now })
+      .eq('id', munshi.id)
+      .in('status', ['proposed', 'edited'])
+    if (dErr) console.error('[quote submit] munshi draft status failed', dErr.message)
+    if (!viaRun && munshi.runId) {
+      try {
+        if (run?.status === 'awaiting_confirmation') {
+          await ledger.appendEvent({ runId: munshi.runId, kind: 'declined', tool: 'submit_quote', actor: 'user', payload: { reason: 'edited', quote_id: quote.id } })
+          await ledger.transitionRun(munshi.runId, 'awaiting_confirmation', 'cancelled')
+        }
+      } catch (e) {
+        console.warn('[quote submit] munshi run decline', (e as Error).message)
+      }
+    }
+    captureServerEvent(actor.userId, 'munshi_draft_decided', { via: viaRun ? 'run' : 'composer', outcome: viaRun ? 'approved' : 'edited', kind: 'quote' })
   }
 
   await addQuoteEvent(admin, {

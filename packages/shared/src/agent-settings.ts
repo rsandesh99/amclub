@@ -99,6 +99,22 @@ export const AGENT_SETTING_DEFS = {
     default: null,
     hint: "S0.4 quote-or-decline window (hours). null = the rfq-expire sweep is OFF. When set, matches older than this with no quote and no decline are auto-declined (window_lapsed) and the buyer is told.",
   },
+  // ── S2.2 Digital Munshi ──────────────────────────────────────────────────
+  munshi_price_tolerance_bps: {
+    schema: z.number().int().min(0).max(10_000),
+    default: 2500,
+    hint: 'S2.2 how far (basis points) a Munshi draft price may sit outside the [min, max] of the basis price-book rows. 2500 = 25 %. A price outside the band becomes a question, never an adjusted number.',
+  },
+  munshi_max_drafts_per_day: {
+    schema: z.number().int().min(1).max(100),
+    default: 20,
+    hint: 'S2.2 max Munshi drafts per provider per day (IST date). The scan stops drafting at the cap; the rest wait for tomorrow.',
+  },
+  munshi_followup_hours_before_lapse: {
+    schema: z.number().int().min(1).max(24),
+    default: 6,
+    hint: 'S2.2 Munshi warns a provider once per match when the quote-or-decline window (quote_window_hours) lapses within this many hours. No-op while quote_window_hours is null.',
+  },
   // ── S1.4 payout dossier ─────────────────────────────────────────────────
   ops_user_id: {
     // null = no ops identity => the dossier trigger is a no-op even when the

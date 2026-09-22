@@ -12,6 +12,7 @@ import type { AgentPersona } from '@amclub/shared'
 import { admin } from '../deps'
 import { RUNTIME_ENV } from '../env'
 import { isAgentEnabledForUser, onboardingSessionTtlHours } from '../settings'
+import { routeMunshiInbound } from '../agents/munshi/index'
 
 /**
  * WhatsApp inbound (S0.5). Two halves:
@@ -49,6 +50,8 @@ export type EnqueueFn = (messageId: string) => Promise<string | null>
 /** S1.6 — hooks the worker injects into the inbound job (no import cycle). */
 export interface InboundHooks {
   enqueueOnboarding?: (turn: { kind: 'start' | 'message'; sessionId: string; messageId?: string }) => Promise<string | null>
+  /** S2.2 — a Munshi button (approve | edit | skip:<runId>) or an utterance while a draft is open. */
+  enqueueMunshiDecide?: (job: { runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance' }) => Promise<string | null>
 }
 
 export async function ingestWaWebhook(rawBody: string, headers: Record<string, string | undefined>, enqueue: EnqueueFn): Promise<IngestResult> {
@@ -151,7 +154,7 @@ async function storeMedia(provider: ReturnType<typeof createWhatsAppProvider>, c
 
 export async function handleWaInbound(messageId: string, hooks: InboundHooks = {}): Promise<void> {
   const db = admin()
-  const { data: msg } = await db.from('wa_messages').select('id, conversation_id, kind, body').eq('id', messageId).maybeSingle()
+  const { data: msg } = await db.from('wa_messages').select('id, conversation_id, kind, body, payload').eq('id', messageId).maybeSingle()
   if (!msg) return
   const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at, active_session_id').eq('id', msg.conversation_id).maybeSingle()
   if (!conv) return
@@ -172,6 +175,12 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
   if (RUNTIME_ENV.AGENT_ENABLED && conv.user_id && conv.active_session_id && hooks.enqueueOnboarding) {
     await hooks.enqueueOnboarding({ kind: 'message', sessionId: String(conv.active_session_id), messageId })
     return
+  }
+  // S2.2 — after the active-session branch, before the opt-in keywords: a Munshi button whose run belongs to this
+  // user, or any text / audio while the user has a proposed draft delivered on WhatsApp in the last 24 h.
+  if (RUNTIME_ENV.AGENT_ENABLED && conv.user_id && hooks.enqueueMunshiDecide) {
+    const routed = await routeMunshiInbound(db, { messageId, userId: conv.user_id as string, row: { kind: msg.kind as string, body: msg.body as string | null, payload: (msg.payload as Record<string, unknown> | null) ?? null } }, hooks)
+    if (routed) return
   }
   if (intent === 'opt_in') {
     if (conv.user_id) {

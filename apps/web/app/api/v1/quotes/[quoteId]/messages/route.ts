@@ -40,6 +40,9 @@ async function loadThread(admin: Awaited<ReturnType<typeof createAdminClient>>, 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ quoteId: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // S2.2 — a reply scope implies reading the thread it replies to (Munshi's follow-up); no-op for sessions.
+  const scope = await requireToolScope('reply_thread')
+  if (scope) return scope
   const { quoteId } = await params
   const admin = await createAdminClient()
   const thread = await loadThread(admin, quoteId, userId)

@@ -22,7 +22,8 @@ export const AI_DECISION_FEATURES = [
   'dispute_triage',    // S1.7
   'rfq_quality',       // S1.5
   'rfq_intake',        // S1.8 — the Create tap confirming voice-clarify / document / drawing prefill
-  'munshi_draft',      // S2.2
+  'munshi_draft',      // S2.2 — the provider's tap on a Munshi quote / question draft (tool submit_quote | ask_clarification)
+  'munshi_reply',      // S2.2 — the provider's tap on a Munshi thread-reply draft (tool reply_thread)
   'support_reply',     // S2.3
   'score_note',        // S2.4
 ] as const

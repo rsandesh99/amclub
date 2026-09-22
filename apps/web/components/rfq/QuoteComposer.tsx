@@ -49,13 +49,15 @@ export interface QuoteComposerProps {
   /** S1.3 — `revise` PATCHes the provider's own submitted quote in place (every field restated). */
   mode?: 'submit' | 'revise'
   initial?: QuoteComposerInitial | undefined
+  /** S2.2 — the Munshi draft the provider is editing: the submit carries munshi_draft_id (the draft becomes 'edited'). */
+  munshiDraftId?: string | null
   onDone?: (() => void) | undefined
   onCancel?: (() => void) | undefined
 }
 
 const triFrom = (v: boolean | null | undefined): Tri => (v == null ? '' : v ? 'yes' : 'no')
 
-export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'submit', initial, onDone, onCancel }: QuoteComposerProps) {
+export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'submit', initial, munshiDraftId = null, onDone, onCancel }: QuoteComposerProps) {
   const t = useTranslations('rfq')
   const router = useRouter()
   const posthog = useAnalytics()
@@ -188,6 +190,7 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
           ...(advanceNum !== undefined ? { advance_percent: advanceNum } : {}),
           ...(goodsTerms ? { goods: goodsTerms } : {}),
           ...(!revise && extractionId ? { extraction_id: extractionId } : {}),
+          ...(!revise && munshiDraftId ? { munshi_draft_id: munshiDraftId } : {}),
         }),
       })
       const d = await res.json().catch(() => ({}))
@@ -235,6 +238,10 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
       <h2 className="text-sm font-semibold">{revise ? t('revise_title') : t('quote_title')}</h2>
       {revise && <p className="text-xs text-foreground-secondary">{t('revise_intro')}</p>}
 
+      {/* S2.2 — the composer opened from a Munshi draft: every field below is the draft; the provider's Submit is the edit. */}
+      {munshiDraftId && !revise && (
+        <p className="rounded-card border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary" data-testid="munshi-drafted-chip">{t('munshi_drafted_chip')}</p>
+      )}
       {/* S1.1 — Type or speak your quote (only for an enabled, cohorted provider; never in revise mode). */}
       {extractEnabled && !revise && (
         <div className="space-y-3 rounded-card border border-primary/30 bg-primary/5 p-4" data-testid="quote-extract-card">
