@@ -122,6 +122,7 @@
     "nudge_button": "Send a reminder",
     "nudge_sent": "Reminder sent.",
     "nudge_capped": "A reminder was already sent in the last 24 hours.",
+    "nudge_failed": "Could not send the reminder. Please try again later.",
     "my_orders": "My orders",
     "orders": "Orders",
     "empty": "No orders yet.",

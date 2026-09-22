@@ -25,7 +25,7 @@ export function NudgeButton({ subjectKind, subjectId }: { subjectKind: 'order' |
       setSent(true)
       toast(t('nudge_sent'))
     } else if (res.status === 429) toast(t('nudge_capped'))
-    else toast(t('nudge_sent'))
+    else toast(t('nudge_failed'))
   }
 
   return (
