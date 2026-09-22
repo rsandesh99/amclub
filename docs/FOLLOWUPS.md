@@ -819,7 +819,39 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
-## Agent S1.8 — Voice RFQ v2: one clarifying question + document / drawing intake (logged 2026-09-21)
+## Agent S2.1 — prompt-injection hardening kit + red-team gate (logged 2026-09-22)
+
+**Shipped (no flag, no product surface):** the Envelope hardened (caps by source kind, Indic digit folding, punctuation
+runs collapsed, markup recorded, provenance required, injection score at wrap time); the instruction-pattern detector
+(`scoreInjection`, seven families, en / hi / te / ta / Hinglish, ≥ 40 = suspected); `injection_suspected` events
+(migration **0039** restates the `agent_events.kind` CHECK) and `tainted_by` on tool proposals; the customer-facing
+output contract (`customerFacingText` over the shared `output-policy.ts`) opted into every customer-facing schema;
+the taint-law test over `AGENT_TOOLS` and the agent-writes audit test; `eval --set injection` (79 cases) with a
+blocking live step in CI when the key exists. Runbook `docs/agents/SECURITY.md`.
+
+- **Detector false positives to watch:** the six benign lookalikes in `injection.json` (cash on delivery not accepted,
+  a UPI ref line, "approved by the site engineer", "our ERP system:", plain Hindi / Tamil requirements, a dispute
+  statement that mentions cash) must stay < 40. Watch the `injection_suspected` rate on real traffic once a cohort
+  runs; a spike on ordinary text means a rule is too wide (lower its weight, add the lookalike to the set).
+- **Bengali / Marathi / Kannada / Gujarati phrases** are not in the detector or the policy lists; add a pass when those
+  locales ship (the digit folding already covers Bengali and Gujarati numerals).
+- **The agent-writes audit grep does not see dynamic table names** (`.from(tableVar)`) and matches a builder chain only
+  within six lines of the `.from(`; a write hidden behind a helper that takes the table as a parameter would pass. It
+  also allows two column-scoped exceptions on purpose — `rfqs` (S1.5 quality report columns) and `disputes.triage_id`
+  (S1.7) — which the prompt's plain "a write to rfqs / disputes fails" did not anticipate; those writes shipped with
+  founder-approved designs and are pinned to their columns, so any other column on those tables still fails.
+- **Runtime-agent tool proposals are proven by the taint law, not by driving the agent definitions through the harness**
+  (the prompt's assertion (3) for runtime agents): the registry test + `proposeTool` guarantee no confirm:false writer
+  exists, and the harness asserts no tool / action / status key in any output; a fake-ledger drive of the three runtime
+  agents per red-team case is a later addition.
+- **`quote_compare` has no untrusted slot** (structured numbers only) so the set does not feed it text; its guard is the
+  ranking rule on its output lines.
+- **The prompt's `had_markup` "strip tags except the content is escaped anyway":** tags are recorded (`hadMarkup`) but
+  NOT stripped — render escapes them, and stripping would blind the detector to a forged `</untrusted>`.
+- **Onboarding contract scope:** `profile.display_name` and `legal_name` are included with `about` and the package
+  strings (a business name carrying a phone number would otherwise reach the public profile).
+
+
 
 **Shipped (dark):** the Phase 8b parser moved into the registry (`rfq_parse@v1` = the Phase 8b text; `@v2` for
 the prior round) and onto `boundedChatJson`; ONE clarifying question after an uncertain / incomplete voice parse

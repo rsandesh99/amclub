@@ -88,10 +88,22 @@ photo captions, web pages, a counterparty's statement.
   **`taint()` law:** after untrusted content enters a run, no `confirm:false`
   tool may write anything — such tools must wrap a `GET` or a pure `local`
   computation (asserted by a test over `AGENT_TOOLS`).
-- Customer-facing generated text is post-validated: no URLs, phone numbers or
-  emails (`redactContactInfo` + regex), and no instruction to pay off-platform
-  (per-locale banned-phrase list). S2.1 makes this a CI red-team gate that
-  every customer-facing agent must pass before it may ship.
+- Customer-facing generated text is post-validated by ONE contract
+  (`customerFacingText`, S2.1): no contact details (phones incl. Indic digits,
+  emails, UPI VPAs, handles, full GSTIN / PAN), no off-platform payment
+  instruction (per-locale lists, en / hi / ta / te / Hinglish), no ranking or
+  approval language where forbidden, no URLs. A violation rejects the model
+  output; the route falls back (template, rule-only report, fixed question).
+  Every customer-facing schema opts in inside its agent-core `schema.ts`.
+- The Envelope scores every untrusted part with an instruction-pattern
+  detector (seven families, four languages + Hinglish; ≥ 40 = suspected). The
+  runner logs an `injection_suspected` event per suspected part and never
+  blocks; the score never reaches the prompt. A proposal that follows tainted
+  input carries `tainted_by` provenance.
+- The red-team gate (`eval --set injection`, ≥ 60 cases, seven surfaces, eight
+  families) runs every case through every registered prompt's real parts
+  builder: stub 100 % on every CI run, live blocking in CI when a key exists.
+  Runbook: `docs/agents/SECURITY.md`.
 
 ## 5. The runner (`agent-core/src/runner`)
 
