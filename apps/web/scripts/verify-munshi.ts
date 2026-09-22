@@ -20,6 +20,8 @@
  *
  * Run: BASE_URL=http://localhost:3100 pnpm --filter @amclub/web agents:verify:munshi
  */
+import path from 'node:path'
+import { config } from 'dotenv'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import {
@@ -33,6 +35,8 @@ import {
   type RunAgentDeps,
 } from '@amclub/agent-core'
 import { MUNSHI_CONSENT_TEXT_VERSION, MUNSHI_SCOPES, isUnambiguousYes, parseMunshiButton, toolsForPersona, type MunshiDraft } from '@amclub/shared'
+
+config({ path: path.resolve(__dirname, '../.env.local') })
 
 const BASE = (process.env['BASE_URL'] || '').replace(/\/$/, '')
 const SUPA_URL = process.env['NEXT_PUBLIC_SUPABASE_URL'] || ''
@@ -181,7 +185,7 @@ async function http() {
 
     if (!flagOn) {
       const cookie = await cookieFor(p1.email)
-      const page = await fetch(`${BASE}/en/partner/munshi`, { headers: { cookie }, redirect: 'manual' })
+      const page = await fetch(`${BASE}/partner/munshi`, { headers: { cookie } })
       check('flag OFF: /partner/munshi → 404', page.status === 404, `status ${page.status}`)
       for (const [p, m, body] of [['/api/v1/agent/munshi', 'GET', undefined], ['/api/v1/agent/munshi/enable', 'POST', { consent_text_version: MUNSHI_CONSENT_TEXT_VERSION }], ['/api/v1/agent/munshi/drafts', 'GET', undefined], ['/api/v1/agent/admin/munshi/stats', 'GET', undefined]] as const) {
         const r = await api(p1.token, p, body, m)
@@ -261,10 +265,10 @@ async function http() {
     const me1 = await json(await api(p1.token, '/api/v1/profile/me', undefined, 'GET'))
     check('/profile/me.munshiEnabled === true for P1', me1['munshiEnabled'] === true)
     const cookie1 = await cookieFor(p1.email)
-    const page1 = await fetch(`${BASE}/en/partner/munshi`, { headers: { cookie: cookie1 } })
+    const page1 = await fetch(`${BASE}/partner/munshi`, { headers: { cookie: cookie1 } })
     const html1 = await page1.text()
     check('/partner/munshi renders for P1 (200, the enable card + drafts + price book sections)', page1.status === 200 && html1.includes('munshi-enable-card'), `status ${page1.status}`)
-    const page3 = await fetch(`${BASE}/en/partner/munshi`, { headers: { cookie: await cookieFor(p3.email) }, redirect: 'manual' })
+    const page3 = await fetch(`${BASE}/partner/munshi`, { headers: { cookie: await cookieFor(p3.email) } })
     check('/partner/munshi → 404 for P3 (not in cohort)', page3.status === 404, `status ${page3.status}`)
 
     // ── scan 1: no price history → never a quote ─────────────────────────────
@@ -353,7 +357,7 @@ async function http() {
     const d6b = (await draftsFor(p1.providerId, rfq6))[0]
     const { data: q6 } = await admin.from('quotes').select('munshi_draft_id, price_paise').eq('id', (editedB['quoteId'] as string) ?? '00000000-0000-0000-0000-000000000000').maybeSingle()
     check('Edit: the provider\'s own submit with munshi_draft_id → 200, quotes.munshi_draft_id set, draft edited (result_ref via composer), the parked run declined → cancelled', edited.status === 200 && (q6 as any)?.munshi_draft_id === d6.id && (q6 as any)?.price_paise === 230000 && d6b.status === 'edited' && d6b.result_ref?.via === 'composer' && (await runRow(d6.run_id))?.status === 'cancelled', JSON.stringify([edited.status, d6b?.status]))
-    const cookiePage = await fetch(`${BASE}/en/partner/rfqs/${rfq6}?munshi=${d6.id}`, { headers: { cookie: cookie1 } })
+    const cookiePage = await fetch(`${BASE}/partner/rfqs/${rfq6}?munshi=${d6.id}`, { headers: { cookie: cookie1 } })
     check('/partner/rfqs/[id]?munshi=<id> renders (an edited draft no longer prefills; the page is unchanged otherwise)', cookiePage.status === 200)
     const wrong = await api(p1.token, `/api/v1/rfq/${rfq6}/quote`, { price_paise: 1, delivery_days: 1, scope: SCOPE, munshi_draft_id: d2.id })
     await json(wrong)
