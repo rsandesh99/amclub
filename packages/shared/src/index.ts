@@ -76,6 +76,7 @@ export * from './support'
 export * from './support-copy'
 export * from './score'
 export * from './score-tips'
+export * from './score-note'
 
 // S1.6 — onboarding agent contract (steps + transitions, strict draft schema, capability facts) and interview copy (en/hi/te)
 export * from './onboarding'

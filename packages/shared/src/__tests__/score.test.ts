@@ -265,3 +265,28 @@ describe('tips + registries', () => {
     expect(toolsForPersona('buyer').some((t) => t.name === 'read_own_score')).toBe(false)
   })
 })
+
+describe('score_note rules (the coaching sentence)', () => {
+  it('a note with only input numbers and no promise passes', async () => {
+    const { scoreNoteProblems } = await import('../score-note')
+    expect(scoreNoteProblems('Your on-time delivery is 40 of 100; set delivery days you can keep.', [40, 100, 25])).toEqual([])
+  })
+  it('an invented number is refused (Indic digits folded)', async () => {
+    const { scoreNoteProblems } = await import('../score-note')
+    expect(scoreNoteProblems('Reply within 2 hours to win 35% more work.', [40, 100])).toEqual(['number not in the input: 2', 'number not in the input: 35'])
+    expect(scoreNoteProblems('समय पर डिलीवरी ४५ है', [40])).toEqual(['number not in the input: 45'])
+  })
+  it('promise language in any locale is refused', async () => {
+    const { scoreNoteProblems } = await import('../score-note')
+    expect(scoreNoteProblems('You are guaranteed more work.', [])).toContain('promise: guarantee')
+    expect(scoreNoteProblems('आपके ऑर्डर बढ़ जाएंगे, पक्का।', []).some((p) => p.startsWith('promise:'))).toBe(true)
+  })
+  it('the stub note names the weakest component tip, stays ≤ 280, and passes its own rules in every locale', async () => {
+    const { stubScoreNote, scoreNoteProblems, SCORE_NOTE_MAX } = await import('../score-note')
+    for (const l of ['en', 'hi', 'te', 'ta']) for (const c of [...PROVIDER_COMPONENTS, null] as const) {
+      const n = stubScoreNote(l, c)
+      expect(n.note.length).toBeLessThanOrEqual(SCORE_NOTE_MAX)
+      expect(scoreNoteProblems(n.note, [])).toEqual([])
+    }
+  })
+})
