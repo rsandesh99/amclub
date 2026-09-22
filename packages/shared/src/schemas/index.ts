@@ -277,6 +277,8 @@ export const quoteSchema = z.object({
   goods: goodsQuoteTermsSchema.optional(),
   /** S1.1 — the quote_extractions row the provider confirmed with this submit (omitted = typed by hand). */
   extraction_id: uuidSchema.optional(),
+  /** S2.2 — the Munshi draft this submit came from (delegated run → `approved`; the provider's own composer → `edited`). */
+  munshi_draft_id: uuidSchema.optional(),
 })
 
 export type QuoteInput = z.infer<typeof quoteSchema>
@@ -289,7 +291,7 @@ export type QuoteInput = z.infer<typeof quoteSchema>
  * or `rfq_id` is a 422, not silently dropped. Goods-terms rules are the same
  * as on submit; the server recomputes `price_paise` for goods on both paths.
  */
-export const quoteRevisionSchema = quoteSchema.omit({ rfq_id: true, extraction_id: true }).strict()
+export const quoteRevisionSchema = quoteSchema.omit({ rfq_id: true, extraction_id: true, munshi_draft_id: true }).strict()
 export type QuoteRevisionInput = z.infer<typeof quoteRevisionSchema>
 
 /** `quotes.revision` counts submissions: 1 = the original, so at most two revisions. */

@@ -32,6 +32,8 @@ export const AGENT_WRITE_ALLOWLIST: Readonly<Record<string, string>> = {
   provider_capability_facts: 'facts the provider confirmed by button (S1.6) — never provider_profiles',
   dispute_triages: 'the triage card (S1.7) — recommendation only; the resolve route is the money path',
   rfq_intake_extractions: 'intake results the buyer confirms with the Create tap (S1.8)',
+  munshi_drafts: 'Munshi proposals (S2.2) — a draft row per RFQ / thread; the quote / clarification / message routes are the writes',
+  munshi_provider_state: 'Munshi per-provider scan state, daily counter, reminders (S2.2)',
   quote_extractions: 'quote prefill the provider confirms with Submit (S1.1)',
   provider_price_book: 'the provider\'s own price memory, upserted from their confirmed quotes (S1.1)',
 }

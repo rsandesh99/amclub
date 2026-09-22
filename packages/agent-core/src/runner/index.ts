@@ -132,6 +132,31 @@ export function resolveToolRoute(
     // and executeTool short-circuits before any fetch (see the 'local' branch there).
     case 'confirm_onboarding_draft':
       return { method: 'POST', path: 'local:confirm_onboarding_draft', body: payload }
+    // S2.2 — Digital Munshi (provider persona). Reads: the matched list / one RFQ (with clarifications, myQuote,
+    // canQuote), the provider's own price book, the provider's orders. Writes: the THREE ordinary provider routes,
+    // each confirm:true (the run parks; the surface's ai_decisions row resumes it). The body is the payload minus
+    // the path id; `munshi_draft_id` rides along so the quote route links the draft.
+    case 'extract_requirements':
+      return payload['rfq_id'] ? { method: 'GET', path: `/api/v1/rfq/${id('rfq_id')}` } : { method: 'GET', path: '/api/v1/rfq/matched' }
+    case 'read_price_book':
+      return { method: 'GET', path: '/api/v1/partner/price-book' }
+    case 'list_deadlines':
+      return { method: 'GET', path: '/api/v1/orders?role=provider' }
+    case 'submit_quote': {
+      const { rfq_id: _r, ...body } = payload
+      void _r
+      return { method: 'POST', path: `/api/v1/rfq/${id('rfq_id')}/quote`, body }
+    }
+    case 'ask_clarification': {
+      const { rfq_id: _r, ...body } = payload
+      void _r
+      return { method: 'POST', path: `/api/v1/rfq/${id('rfq_id')}/clarifications`, body }
+    }
+    case 'reply_thread': {
+      const { quote_id: _q, ...body } = payload
+      void _q
+      return { method: 'POST', path: `/api/v1/quotes/${id('quote_id')}/messages`, body }
+    }
     default:
       throw new AgentRunError('tool_route_unwired', `no /api/v1 route wired for tool '${tool}' yet`)
   }
