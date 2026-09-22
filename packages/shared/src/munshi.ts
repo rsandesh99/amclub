@@ -294,8 +294,9 @@ export type ApprovalIntent = z.infer<typeof approvalIntentSchema>
 /**
  * Unambiguous "yes" phrases per locale, ≤ 6 words each, matched EXACTLY after
  * `normaliseUtterance`. Latin transliterations sit beside the native script
- * because the STT vendor may return either. The `en` list is checked for every
- * locale (the vendor may translate to English). Bare "ok" / "sari" / "theek hai"
+ * because the STT vendor may return either. EVERY list is checked whatever the
+ * locale hint (the vendor may translate to English; a provider may speak a
+ * language other than their stored locale). Bare "ok" / "sari" / "theek hai"
  * are deliberately absent — they acknowledge, they do not approve.
  */
 export const MUNSHI_YES_PHRASES: Record<MunshiLocale, readonly string[]> = {
@@ -339,9 +340,11 @@ const YES_MAX_WORDS = 6
 export function isUnambiguousYes(transcript: string, locale: MunshiLocale | string): boolean {
   const n = normaliseUtterance(transcript)
   if (!n || n.split(' ').length > YES_MAX_WORDS) return false
-  const loc = toMunshiLocale(locale)
-  const lists = loc === 'en' ? [MUNSHI_YES_PHRASES.en] : [MUNSHI_YES_PHRASES[loc], MUNSHI_YES_PHRASES.en]
-  return lists.some((list) => list.some((p) => normaliseUtterance(p) === n))
+  // Every language list is checked whatever the hint: the phrases are unambiguous in any language, a provider's
+  // stored locale may not be the language they speak, and the STT vendor may return the source language or an
+  // English translation. The hint is validated only.
+  void toMunshiLocale(locale)
+  return MUNSHI_LOCALES.some((l) => MUNSHI_YES_PHRASES[l].some((p) => normaliseUtterance(p) === n))
 }
 
 // ── thread replies ───────────────────────────────────────────────────────────

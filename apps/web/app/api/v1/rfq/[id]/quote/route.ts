@@ -167,8 +167,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // S2.2 — link the Munshi draft: the delegated run's submit (Bearer bound to the draft's run) is the provider's
   // approval; a submit from the composer is an edit, and the parked run is declined (reason 'edited') — never resumed.
   if (munshi) {
+    // The run's own submit: the bearer is bound to the draft's run (the delegated token, prod) — or the same fact
+    // read from the ledger: the run was resumed (running) on an approved submit_quote decision. The composer path
+    // has neither (the run is still parked, no decision), so it is an edit.
     const runId = await delegatedRunId()
-    const viaRun = !!runId && runId === munshi.runId
+    const ledger = createSupabaseLedger(admin)
+    const run = munshi.runId ? await ledger.getRun(munshi.runId) : null
+    const approved = munshi.runId ? await ledger.hasApprovedDecision({ runId: munshi.runId, tool: 'submit_quote' }) : false
+    const viaRun = (!!runId && runId === munshi.runId) || (run?.status === 'running' && approved)
     const now = new Date().toISOString()
     const { error: mErr } = await admin.from('quotes').update({ munshi_draft_id: munshi.id, updated_at: now }).eq('id', quote.id)
     if (mErr) console.error('[quote submit] munshi link failed', mErr.message)
@@ -180,8 +186,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (dErr) console.error('[quote submit] munshi draft status failed', dErr.message)
     if (!viaRun && munshi.runId) {
       try {
-        const ledger = createSupabaseLedger(admin)
-        const run = await ledger.getRun(munshi.runId)
         if (run?.status === 'awaiting_confirmation') {
           await ledger.appendEvent({ runId: munshi.runId, kind: 'declined', tool: 'submit_quote', actor: 'user', payload: { reason: 'edited', quote_id: quote.id } })
           await ledger.transitionRun(munshi.runId, 'awaiting_confirmation', 'cancelled')

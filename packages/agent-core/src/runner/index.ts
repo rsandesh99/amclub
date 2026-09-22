@@ -299,6 +299,11 @@ export class AgentRun {
    * approved ai_decisions row bound to (run_id, tool) BEFORE calling the route.
    */
   async resume(tool: AgentToolName, payload: Record<string, unknown> = {}, opts?: { decisionId?: string }): Promise<ToolOutcome> {
+    if (!isToolAllowed(this.ctx.persona, tool)) throw new ToolNotAllowedError(tool, this.ctx.persona)
+    // S2.2 — the grant may have narrowed between the proposal and the tap: the resume re-checks the scopes the
+    // caller minted from the CURRENT grant, so a tool no longer granted never reaches its route (the route's own
+    // requireToolScope is the second lock).
+    if (this.ctx.scopes && !this.ctx.scopes.includes(tool)) throw new ToolOutOfScopeError(tool)
     const approved = await this.ctx.ledger.hasApprovedDecision({
       runId: this.ctx.runId,
       tool,

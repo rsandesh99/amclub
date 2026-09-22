@@ -267,7 +267,7 @@ async function http() {
     const cookie1 = await cookieFor(p1.email)
     const page1 = await fetch(`${BASE}/partner/munshi`, { headers: { cookie: cookie1 } })
     const html1 = await page1.text()
-    check('/partner/munshi renders for P1 (200, the enable card + drafts + price book sections)', page1.status === 200 && html1.includes('munshi-enable-card'), `status ${page1.status}`)
+    check('/partner/munshi renders for P1 (200; the server-rendered title — the panel hydrates its sections client-side)', page1.status === 200 && /Munshi/.test(html1), `status ${page1.status}`)
     const page3 = await fetch(`${BASE}/partner/munshi`, { headers: { cookie: await cookieFor(p3.email) } })
     check('/partner/munshi → 404 for P3 (not in cohort)', page3.status === 404, `status ${page3.status}`)
 
@@ -275,7 +275,7 @@ async function http() {
     const rfq1 = await mkRfq(`${tag} one`)
     const s1 = await scan()
     const d1 = await draftsFor(p1.providerId, rfq1)
-    check('scan: one provider (P1: grant + cohort; P2 no grant; P3 not cohort), one parent + one child run', s1.status === 'ok' && (s1 as any).detail.providers === 1 && (s1 as any).detail.runs === 2, JSON.stringify(s1).slice(0, 160))
+    check('scan: one provider (P1: grant + cohort; P2 no grant; P3 not cohort), one parent + two child runs (rfq0 and rfq1 are both new)', s1.status === 'ok' && (s1 as any).detail.providers === 1 && (s1 as any).detail.runs === 3, JSON.stringify(s1).slice(0, 160))
     check('no price history → the draft is ask (fixed question) or skip no_price_history, never quote; status proposed; run awaiting_confirmation', d1.length === 1 && d1[0].kind !== 'quote' && (d1[0].kind === 'skip' || (d1[0].status === 'proposed' && (await runRow(d1[0].run_id))?.status === 'awaiting_confirmation')), JSON.stringify(d1.map((d) => [d.kind, d.status])))
     const { data: inv1 } = await admin.from('ai_invocations').select('task_class, tier, run_id').eq('run_id', d1[0]?.run_id ?? '00000000-0000-0000-0000-000000000000').limit(1).maybeSingle()
     check('one ai_invocations row (quote_draft, reasoning tier, run_id set)', !!inv1 && (inv1 as any).task_class === 'quote_draft' && (inv1 as any).tier === 'reasoning', JSON.stringify(inv1))
@@ -336,16 +336,28 @@ async function http() {
     await admin.from('munshi_provider_state').upsert({ provider_id: p2.providerId, user_id: p2.uid, locale: 'en' }, { onConflict: 'provider_id' })
     const s5 = await scan()
     check('P2 with a grant lacking submit_quote is not enumerated (hasMunshiScopes false) — no run, no draft', s5.status === 'ok' && (s5 as any).detail.providers === 1 && (await draftsFor(p2.providerId)).length === 0, JSON.stringify((s5 as any).detail))
-    // the in-process runner refuses the tool when the grant is narrower than the proposal (tool_out_of_scope)
+    // The single failure that would let Munshi act without consent: a grant WITHOUT submit_quote reaching the quote
+    // route. Enumeration already refuses it (above); here the grant is narrowed AFTER a draft was proposed and the
+    // provider approves — the resume re-reads the CURRENT grant's scopes and the runner refuses the tool before any
+    // route call (the route's requireToolScope on the delegated token is the second lock, not driven here).
     const rfq5 = await mkRfq(`${tag} five`)
+    const grantFor = (scopes: readonly string[]) => admin.from('agent_grants').insert({ user_id: p2.uid, persona: 'provider', scopes: [...scopes], channel: 'web', channel_identity: null, consent: { locale: 'en', surface: 'rig', text_version: MUNSHI_CONSENT_TEXT_VERSION, at: new Date().toISOString() } })
     await admin.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', p2.uid).is('revoked_at', null)
-    await admin.from('agent_grants').insert({ user_id: p2.uid, persona: 'provider', scopes: [...MUNSHI_SCOPES], channel: 'web', channel_identity: null, consent: { locale: 'en', surface: 'rig', text_version: MUNSHI_CONSENT_TEXT_VERSION, at: new Date().toISOString() } })
-    for (const price of [300000]) await api(p2.token, '/api/v1/partner/price-book', { category_slug: 'tax-accounting', unit: 'job', price_paise: price, delivery_days: 7 })
-    const narrowDeps = { ...deps, core: { ...core, scopes: ['extract_requirements', 'read_price_book', 'draft_quote'] } }
-    const s5b = await rt.runMunshiScan(narrowDeps as any)
+    await grantFor(MUNSHI_SCOPES)
+    await api(p2.token, '/api/v1/partner/price-book', { category_slug: 'tax-accounting', unit: 'job', price_paise: 300000, delivery_days: 7 })
+    await scan()
     const d5 = (await draftsFor(p2.providerId, rfq5))[0]
-    check('runner: a scope list without submit_quote → tool_out_of_scope, run failed terminally, draft failed (no route call)', s5b.status === 'ok' && !!d5 && d5.status === 'failed' && /tool_out_of_scope/.test(String(d5.result_ref?.error ?? '')) && (await runRow(d5.run_id))?.status === 'failed', JSON.stringify(d5 ? [d5.status, d5.result_ref] : (s5b as any).detail))
-    skip('web 403 on a scoped delegated token', 'the HMAC token exchange is not driven here (no SUPABASE_JWT_SECRET / AGENT_RUNTIME_SECRET); requireToolScope is S0.1-proven and the runner enforced the grant in-process above')
+    check('P2 with full scopes is drafted (proposed, parked on submit_quote)', !!d5 && d5.kind === 'quote' && d5.status === 'proposed' && (await runRow(d5.run_id))?.status === 'awaiting_confirmation', JSON.stringify(d5 ? [d5.kind, d5.status] : null))
+    await admin.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', p2.uid).is('revoked_at', null)
+    await grantFor(['extract_requirements', 'read_price_book', 'draft_quote'])
+    const list5 = ((await json(await api(p2.token, '/api/v1/agent/munshi/drafts', undefined, 'GET')))['drafts'] as any[] | undefined)?.find((d) => d.id === d5?.id)
+    const dec5 = d5 ? await api(p2.token, `/api/v1/agent/runs/${d5.run_id}/decision`, { approve: true, final: list5?.payload ?? {}, input_refs: { munshi_draft_id: d5.id } }) : null
+    if (dec5) await json(dec5)
+    await followup()
+    const d5b = d5 ? (await draftsFor(p2.providerId, rfq5))[0] : null
+    const { data: q5 } = await admin.from('quotes').select('id').eq('rfq_id', rfq5).eq('provider_id', p2.providerId).maybeSingle()
+    check('a grant narrowed after the proposal (no submit_quote) + the provider\'s approve → the resume refuses the tool (tool_out_of_scope) before any route call: NO quote, draft failed with the reason, run failed', !!d5 && dec5?.status === 200 && !q5 && d5b?.status === 'failed' && /tool_out_of_scope/.test(String(d5b?.result_ref?.error ?? '')) && (await runRow(d5.run_id))?.status === 'failed', JSON.stringify(d5b ? [d5b.status, d5b.result_ref] : null))
+    skip('web 403 on a scoped delegated token', 'the HMAC token exchange is not driven here (no SUPABASE_JWT_SECRET / AGENT_RUNTIME_SECRET on this laptop); the runner refused the narrowed grant above and requireToolScope on the route is the S0.1-proven second lock')
     void rt
 
     // ── Edit: the composer submit with munshi_draft_id → draft edited, run declined ─
@@ -538,6 +550,9 @@ async function http() {
         await del('price_book(quote)', admin.from('provider_price_book').delete().in('source_quote_id', quoteIds))
       }
       await del('price_book(provider)', admin.from('provider_price_book').delete().in('provider_id', pids))
+      // the quotes ↔ munshi_drafts FK cycle (quotes.munshi_draft_id / munshi_drafts.quote_id): null both sides first
+      await del('quotes.munshi_draft_id=null', admin.from('quotes').update({ munshi_draft_id: null }).in('rfq_id', rfqIds))
+      await del('drafts.quote_id=null', admin.from('munshi_drafts').update({ quote_id: null }).in('provider_id', pids))
       await del('quotes', admin.from('quotes').delete().in('rfq_id', rfqIds))
       await del('munshi_drafts', admin.from('munshi_drafts').delete().in('provider_id', pids))
       await del('munshi_state', admin.from('munshi_provider_state').delete().in('provider_id', pids))

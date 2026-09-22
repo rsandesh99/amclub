@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import {
   AgentRun,
+  AgentRunError,
   approvalIntentAgent,
   munshiAskPayload,
   munshiDraftAgent,
@@ -459,11 +460,12 @@ interface DraftRow {
   status: string
   run_id: string | null
   draft: unknown
+  decision_id: string | null
   rfq: { title: string } | null
 }
 
 async function draftByRun(admin: SupabaseClient, runId: string): Promise<DraftRow | null> {
-  const { data } = await admin.from('munshi_drafts').select('id, provider_id, user_id, rfq_id, quote_id, kind, status, run_id, draft, rfq:rfqs(title)').eq('run_id', runId).is('deleted_at', null).maybeSingle()
+  const { data } = await admin.from('munshi_drafts').select('id, provider_id, user_id, rfq_id, quote_id, kind, status, run_id, draft, decision_id, rfq:rfqs(title)').eq('run_id', runId).is('deleted_at', null).maybeSingle()
   return (data as DraftRow | null) ?? null
 }
 
@@ -492,9 +494,20 @@ function payloadFor(d: DraftRow): Record<string, unknown> {
  */
 export async function finalizeMunshiRun(deps: MunshiRuntimeDeps, runId: string, outcome: ToolCallResult | null, error: string | null, via: string): Promise<void> {
   const d = await draftByRun(deps.admin, runId)
-  if (!d || d.status !== 'proposed') return
+  if (!d) return
   const st = await providerStateFor(deps, d.provider_id, d.user_id)
   const now = new Date().toISOString()
+  // The quote route already closed the draft (approved + result_ref) when the run's own submit ran — the
+  // spine-safe path; here only the decision link and the provider's "sent" message remain.
+  if (d.status === 'approved' && !d.decision_id) {
+    const { data: dec } = await deps.admin.from('ai_decisions').select('id').eq('run_id', runId).eq('tool', toolFor(d.kind)).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    await deps.admin.from('munshi_drafts').update({ decision_id: (dec as { id: string } | null)?.id ?? null, updated_at: now }).eq('id', d.id).eq('status', 'approved')
+    const copy = d.kind === 'quote' ? 'sent_quote' : d.kind === 'ask' ? 'sent_ask' : 'sent_reply'
+    deps.capture?.(d.user_id, 'munshi_draft_decided', { via, outcome: 'approved', kind: d.kind })
+    await sendToProvider(deps, st, munshiCopy(copy, st.locale), { kind: 'munshi_result', params: [munshiCopy(copy, st.locale).slice(0, 120)] }, { munshi_draft_id: d.id, run_id: runId, outcome: 'approved' })
+    return
+  }
+  if (d.status !== 'proposed') return
   const body = (outcome?.body ?? null) as Record<string, unknown> | null
   const errCode = (typeof body?.['error'] === 'string' ? (body['error'] as string) : null) ?? error
   let status: 'approved' | 'expired' | 'failed'
@@ -546,7 +559,9 @@ async function resumeInProcess(deps: MunshiRuntimeDeps, d: DraftRow, decisionId:
     }
     await finalizeMunshiRun(deps, d.run_id, outcome.status === 'done' ? outcome.result : null, null, via)
   } catch (e) {
-    const msg = (e as Error).message
+    // an AgentRunError reports its CODE (tool_out_of_scope, budget_…), as runAgent does, so the draft's reason and the
+    // provider's copy match the runner's vocabulary
+    const msg = e instanceof AgentRunError ? e.code : (e as Error).message
     await run.fail(msg)
     await finalizeMunshiRun(deps, d.run_id, null, msg, via)
   }
