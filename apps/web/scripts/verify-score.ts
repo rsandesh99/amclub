@@ -172,8 +172,10 @@ async function http() {
     return
   }
   const agentOn = probe.status !== 404
-  const t42 = await admin.from('provider_scores').select('provider_id', { count: 'exact', head: true })
-  const has0042 = !missingRelation(t42.error)
+  // a real select (a head count on a missing table returns an EMPTY error message — it would read as present)
+  const t42 = await admin.from('provider_scores').select('provider_id').limit(1)
+  const has0042 = !t42.error
+  if (t42.error && !missingRelation(t42.error)) console.warn('  (provider_scores probe error:', t42.error.message, ')')
   const NEEDS_0042 = '0042 not applied on this DB yet — runs at the gate (after the migration, before the push)'
   const NEEDS_AGENT = 'the server is dark (AGENT_ENABLED off) — runs against the flag-on server'
   const compute = has0042 ? await loadCompute() : null
@@ -476,6 +478,9 @@ async function http() {
     }
     skip('cron/score-compute with the switch ON', 'not called: it would score every real provider on this DB — the compute library ran in-process restricted to the fixtures; the route is a thin wrapper proven as the flag-off no-op')
     skip('live coaching note', 'keyless gateway → the deterministic stub note; the live gate is eval --set score_note (≥ 90 %, 0 policy violations) once the key exists')
+  } catch (e) {
+    // a lifecycle throw is a FAIL row, never an escape before the rows print
+    record('lifecycle', 'FAIL', (e as Error).message.split('\n')[0])
   } finally {
     // ── cleanup (zero residue; CHECKED) ──────────────────────────────────────
     const errors: string[] = []
