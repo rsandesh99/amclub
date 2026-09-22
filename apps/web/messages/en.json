@@ -1081,7 +1081,10 @@
     "intake_err_failed": "We could not read that document right now. You can still attach it and type the details.",
     "intake_stub_note": "Document reading is running without a model key — facts are limited.",
     "intake_attached_only": "Attached (not read)",
-    "attachments_title": "Attachments"
+    "attachments_title": "Attachments",
+    "sort_reliability": "Price, adjusted for reliability",
+    "reliability_line": "Ordered by price, adjusted for each provider's delivery and dispute record on AMClub.",
+    "reliability_switch": "Sort by price instead"
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -2461,5 +2464,48 @@
     "not_set": "Not set — the code default applies",
     "block_capture_warning": "block_capture is refused at pool join until docs/mart/PSP_BLOCK_CAPTURE_REPORT.md §5 is signed off. Saving it here does not enable it.",
     "save": "Save"
+  },
+  "score_card": {
+    "title": "Your AMC Score",
+    "out_of": "of 100",
+    "private_line": "Only you and the AMClub team can see this number. Buyers never see it.",
+    "addendum_link": "How the score works",
+    "not_enough": "Not enough orders yet: {have} of {need} completed",
+    "not_enough_body": "Your score appears after {need} completed orders. Everything below is already counting.",
+    "not_computed": "Your score is calculated every night. Check back tomorrow.",
+    "weight": "Weight {weight}%",
+    "no_data": "No data yet",
+    "tips_title": "How to raise it",
+    "trend_title": "Last 30 days",
+    "note_label": "This week",
+    "c_responsiveness": "Response time",
+    "d_responsiveness": "How quickly you quote after a request reaches you.",
+    "c_on_time": "On-time delivery",
+    "d_on_time": "Orders delivered by the date you set.",
+    "c_buyer_confirmation": "Buyer confirmations",
+    "d_buyer_confirmation": "Completed orders the buyer confirmed; an automatic close counts half.",
+    "c_dispute_record": "Dispute record",
+    "d_dispute_record": "Disputes decided against you, compared with the orders you closed.",
+    "c_decision_rate": "Decisions on requests",
+    "d_decision_rate": "Requests you quoted or declined with a reason, instead of letting them lapse."
+  },
+  "admin_score": {
+    "title": "AMC Score",
+    "buyer_title": "Buyer score (admin only)",
+    "not_computed": "Not computed yet",
+    "gated": "Below the sample gate",
+    "events": "Recent changes",
+    "component": "Component",
+    "value": "Value",
+    "weight": "Weight",
+    "sample": "Sample",
+    "raw": "Raw counts",
+    "none": "None",
+    "tile_title": "AMC Score",
+    "tile_scored": "Scored providers",
+    "tile_gated": "Below the gate",
+    "tile_median": "Median",
+    "tile_buyers": "Scored buyers",
+    "tile_movers": "Moved this week"
   }
 }

@@ -253,7 +253,10 @@
     "intake_err_failed": "இப்போது ஆவணத்தைப் படிக்க முடியவில்லை. இணைத்து விவரங்களைத் தட்டச்சு செய்யலாம்.",
     "intake_stub_note": "மாடல் விசை இல்லாமல் ஆவணப் படிப்பு இயங்குகிறது — உண்மைகள் குறைவு.",
     "intake_attached_only": "இணைக்கப்பட்டது (படிக்கவில்லை)",
-    "attachments_title": "இணைப்புகள்"
+    "attachments_title": "இணைப்புகள்",
+    "sort_reliability": "நம்பகத்தன்மையுடன் சரிசெய்த விலை",
+    "reliability_line": "விலை வரிசையில், AMClub இல் ஒவ்வொரு வழங்குநரின் டெலிவரி மற்றும் சர்ச்சை பதிவுக்கு ஏற்ப சரிசெய்யப்பட்டது.",
+    "reliability_switch": "பதிலாக விலைப்படி வரிசைப்படுத்து"
   },
   "provider_signup": {
     "wa_card_title": "WhatsApp-இல் முடிக்கவும்",
@@ -395,5 +398,48 @@
     "escalated_body": "24 மணி நேரத்தில் ஒப்புகை. இங்கே எழுதுவது டிக்கெட்டில் சேர்க்கப்படும்.",
     "error": "ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.",
     "too_fast": "இப்போது அதிக செய்திகள். சிறிது காத்திருங்கள்."
+  },
+  "score_card": {
+    "title": "உங்கள் AMC மதிப்பெண்",
+    "out_of": "100 இல்",
+    "private_line": "இந்த எண்ணை நீங்களும் AMClub குழுவும் மட்டுமே பார்க்க முடியும். வாங்குபவர்கள் ஒருபோதும் பார்ப்பதில்லை.",
+    "addendum_link": "மதிப்பெண் எப்படி கணக்கிடப்படுகிறது",
+    "not_enough": "இன்னும் போதுமான ஆர்டர்கள் இல்லை: {need} இல் {have} முடிந்தவை",
+    "not_enough_body": "{need} ஆர்டர்கள் முடிந்ததும் உங்கள் மதிப்பெண் தோன்றும். கீழே உள்ளவை அனைத்தும் ஏற்கனவே கணக்கில் வருகின்றன.",
+    "not_computed": "உங்கள் மதிப்பெண் ஒவ்வொரு இரவும் கணக்கிடப்படும். நாளை மீண்டும் பாருங்கள்.",
+    "weight": "எடை {weight}%",
+    "no_data": "இன்னும் தரவு இல்லை",
+    "tips_title": "இதை எப்படி உயர்த்துவது",
+    "trend_title": "கடந்த 30 நாட்கள்",
+    "note_label": "இந்த வாரம்",
+    "c_responsiveness": "பதில் நேரம்",
+    "d_responsiveness": "கோரிக்கை உங்களை அடைந்த பிறகு எவ்வளவு விரைவாக மேற்கோள் அனுப்புகிறீர்கள்.",
+    "c_on_time": "சரியான நேரத்தில் டெலிவரி",
+    "d_on_time": "நீங்கள் நிர்ணயித்த தேதிக்குள் டெலிவர் செய்த ஆர்டர்கள்.",
+    "c_buyer_confirmation": "வாங்குபவர் உறுதிப்படுத்தல்கள்",
+    "d_buyer_confirmation": "வாங்குபவர் உறுதிப்படுத்திய முடிந்த ஆர்டர்கள்; தானியங்கி முடிவு பாதியாக கணக்கிடப்படும்.",
+    "c_dispute_record": "சர்ச்சை பதிவு",
+    "d_dispute_record": "உங்களுக்கு எதிராக முடிவான சர்ச்சைகள், நீங்கள் முடித்த ஆர்டர்களுடன் ஒப்பிட்டு.",
+    "c_decision_rate": "கோரிக்கைகளில் முடிவுகள்",
+    "d_decision_rate": "காலாவதியாக விடாமல் நீங்கள் மேற்கோள் அனுப்பிய அல்லது காரணத்துடன் மறுத்த கோரிக்கைகள்."
+  },
+  "admin_score": {
+    "title": "AMC Score",
+    "buyer_title": "Buyer score (admin only)",
+    "not_computed": "Not computed yet",
+    "gated": "Below the sample gate",
+    "events": "Recent changes",
+    "component": "Component",
+    "value": "Value",
+    "weight": "Weight",
+    "sample": "Sample",
+    "raw": "Raw counts",
+    "none": "None",
+    "tile_title": "AMC Score",
+    "tile_scored": "Scored providers",
+    "tile_gated": "Below the gate",
+    "tile_median": "Median",
+    "tile_buyers": "Scored buyers",
+    "tile_movers": "Moved this week"
   }
 }

@@ -338,7 +338,10 @@
     "flag_fastest_label": "Shortest delivery",
     "flag_fastest_meaning": "The shortest stated delivery time in this set.",
     "flag_only_quote_label": "Only quote",
-    "flag_only_quote_meaning": "The only quote so far — nothing to compare against yet."
+    "flag_only_quote_meaning": "The only quote so far — nothing to compare against yet.",
+    "sort_reliability": "Price, adjusted for reliability",
+    "reliability_line": "Ordered by price, adjusted for each provider's delivery and dispute record on AMClub.",
+    "reliability_switch": "Sort by price instead"
   },
   "checkout": {
     "title": "Checkout",
@@ -706,5 +709,29 @@
     "escalated_title": "A person is looking at this ({ref})",
     "escalated_body": "We acknowledge within 24 hours.",
     "tile_sub": "Orders, payments, payouts"
+  },
+  "score_card": {
+    "title": "Your AMC Score",
+    "out_of": "of 100",
+    "private_line": "Only you and the AMClub team can see this number. Buyers never see it.",
+    "addendum_link": "How the score works",
+    "not_enough": "Not enough orders yet: {have} of {need} completed",
+    "not_enough_body": "Your score appears after {need} completed orders. Everything below is already counting.",
+    "not_computed": "Your score is calculated every night. Check back tomorrow.",
+    "weight": "Weight {weight}%",
+    "no_data": "No data yet",
+    "tips_title": "How to raise it",
+    "trend_title": "Last 30 days",
+    "note_label": "This week",
+    "c_responsiveness": "Response time",
+    "d_responsiveness": "How quickly you quote after a request reaches you.",
+    "c_on_time": "On-time delivery",
+    "d_on_time": "Orders delivered by the date you set.",
+    "c_buyer_confirmation": "Buyer confirmations",
+    "d_buyer_confirmation": "Completed orders the buyer confirmed; an automatic close counts half.",
+    "c_dispute_record": "Dispute record",
+    "d_dispute_record": "Disputes decided against you, compared with the orders you closed.",
+    "c_decision_rate": "Decisions on requests",
+    "d_decision_rate": "Requests you quoted or declined with a reason, instead of letting them lapse."
   }
 }

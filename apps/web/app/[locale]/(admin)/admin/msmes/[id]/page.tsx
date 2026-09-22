@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { AdminScoreBlock } from '@/components/admin/AdminScoreBlock'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -49,6 +50,9 @@ export default function MsmeDetailPage({ params }: { params: Promise<{ id: strin
           ? <Button onClick={() => act({ action: 'reactivate' })} loading={busy}>{t('reactivate')}</Button>
           : <Button variant="danger" onClick={suspend} loading={busy}>{t('suspend')}</Button>}
       </div>
+
+      {/* S2.4 — the buyer score is admin-only in v1 */}
+      <AdminScoreBlock side="buyer" id={id} />
 
       <div className="rounded-card border border-border bg-surface p-4">
         <h2 className="mb-2 text-sm font-semibold">{t('orders_title')}</h2>
