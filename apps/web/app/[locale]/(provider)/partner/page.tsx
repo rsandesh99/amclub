@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { formatINR } from '@/lib/format'
 import { AGENT_ENABLED, MART_ENABLED } from '@/lib/flags'
 import { onboardingDraftView } from '@/lib/agent/onboarding'
+import { isMunshiEnabledFor } from '@/lib/agent/munshi'
 
 const ACTIVE_STATUSES = ['placed', 'accepted', 'requirements_submitted', 'in_progress', 'delivered', 'revision_requested']
 
@@ -32,6 +33,8 @@ export default async function PartnerDashboardPage() {
   // S1.6 — listing drafts from a CONFIRMED WhatsApp interview (the wizard's existing create route is unchanged).
   const onboarding = AGENT_ENABLED ? await onboardingDraftView(admin, user.id) : null
   const suggested = onboarding?.draft?.packages ?? []
+  // S2.2 — the Munshi tile exists only for an enabled, cohorted provider (the page 404s for everyone else).
+  const munshiOn = AGENT_ENABLED && profile.status === 'active' ? await isMunshiEnabledFor(admin, user.id) : false
   const orders = await listMyOrders(user.id, 'provider')
   const activeCount = orders.filter((o) => ACTIVE_STATUSES.includes(o.status)).length
   const completedCount = orders.filter((o) => o.status === 'completed').length
@@ -115,6 +118,7 @@ export default async function PartnerDashboardPage() {
             { label: t('view_orders'), href: '/partner/orders', icon: '📦' },
             { label: t('earnings'), href: '/partner/earnings', icon: '💰' },
             { label: t('view_rfqs'), href: '/partner/rfqs', icon: '📬' },
+            ...(munshiOn ? [{ label: t('munshi'), href: '/partner/munshi', icon: '🧑‍💼' }] : []),
             { label: t('view_reviews'), href: '/partner/reviews', icon: '⭐' },
           ] as { label: string; href: string; icon: string }[]
         ).map((link) => (

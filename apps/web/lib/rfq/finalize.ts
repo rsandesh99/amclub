@@ -1,4 +1,5 @@
 import 'server-only'
+import { AGENT_ENABLED } from '@/lib/flags'
 import { canTransitionQuote } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
@@ -40,6 +41,12 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
 
   // Accept the winning quote.
   await admin.from('quotes').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', quote.id)
+  // S2.2 — mark the winner's price-book row accepted (Munshi prefers accepted rows as its basis). The row exists
+  // only while the agent programme is on (recordPriceBookEntry), so this is gated the same way; best-effort.
+  if (AGENT_ENABLED) {
+    const { error: pbErr } = await admin.from('provider_price_book').update({ accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('source_quote_id', quote.id).is('accepted_at', null)
+    if (pbErr) console.warn('[finalize] price-book accepted_at', pbErr.message)
+  }
   // The acceptance is the buyer's paid checkout, recorded via the payment path
   // (no interactive actor here) — attribute to system with the order as proof.
   await addQuoteEvent(admin, {

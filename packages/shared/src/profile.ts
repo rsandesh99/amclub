@@ -30,4 +30,6 @@ export interface ProfileMeResponse {
   comparePointersEnabled: boolean
   /** S1.6 — the "Finish on WhatsApp" card in the provider wizard (AGENT_ENABLED + agents_enabled.onboarding + cohort). */
   onboardingWhatsAppEnabled: boolean
+  /** S2.2 — the Munshi partner tab for this provider (AGENT_ENABLED + agents_enabled.munshi + cohort). */
+  munshiEnabled: boolean
 }

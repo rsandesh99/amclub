@@ -42,12 +42,19 @@ export const providerPriceBook = pgTable('provider_price_book', {
   deliveryDays: integer('delivery_days'),
   gstIncluded: boolean('gst_included'),
   transportIncluded: boolean('transport_included'),
-  sourceQuoteId: uuid('source_quote_id').references(() => quotes.id).notNull().unique(),
+  // 0040 (S2.2): NULL for a manual row (source 'manual'); the UNIQUE stays (NULLs are distinct).
+  sourceQuoteId: uuid('source_quote_id').references(() => quotes.id).unique(),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull(),
+  // 0040 (S2.2): set by finalizeQuoteAcceptance for the winning quote; Munshi prefers accepted rows as its basis.
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  // 0040 (S2.2): the provider's soft delete through DELETE /partner/price-book/[id]; 'manual' rows come from POST.
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  source: text('source').default('quote').notNull(), // quote | manual
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
 }, (table) => [
   index('provider_price_book_provider_category_confirmed_idx').on(table.providerId, table.categorySlug, table.confirmedAt),
   check('provider_price_book_kind_check', sql`${table.kind} IN ('services', 'goods')`),
   check('provider_price_book_price_positive', sql`${table.pricePaise} > 0`),
+  check('provider_price_book_source_check', sql`${table.source} IN ('quote', 'manual')`),
 ])

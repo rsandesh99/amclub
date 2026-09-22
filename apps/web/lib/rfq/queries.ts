@@ -267,6 +267,8 @@ export interface ProviderRfqItem {
   /** S1.3 — unanswered questions on the RFQ (all providers) and whether one of them is mine. */
   openQuestions: number
   hasUnansweredMine: boolean
+  /** S2.2 — when the match was notified (the quote-or-decline window starts here; Munshi's "new since last scan"). */
+  notifiedAt: string | null
 }
 
 /** RFQs matched to this provider that are still active (open/quoted). */
@@ -277,7 +279,7 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
 
   const { data: matches } = await admin
     .from('rfq_matches')
-    .select('rfq_id, viewed_at, declined_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug))')
+    .select('rfq_id, viewed_at, declined_at, notified_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug))')
     .eq('provider_id', actor.providerId)
     .order('notified_at', { ascending: false })
   if (!matches) return []
@@ -299,6 +301,7 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
       quoteCount: m.rfq.quote_count, maxQuotes: m.rfq.max_quotes, expiresAt: m.rfq.expires_at,
       viewed: !!m.viewed_at, quoted: quotedSet.has(m.rfq_id), declined: !!m.declined_at,
       openQuestions: open.get(m.rfq_id) ?? 0, hasUnansweredMine: mineOpen.has(m.rfq_id),
+      notifiedAt: m.notified_at ?? null,
     }))
 }
 

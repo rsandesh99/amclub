@@ -18,9 +18,12 @@ import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
 import { MAX_QUOTE_REVISIONS, rfqIsActive } from '@amclub/shared'
 import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
 import { ReviseQuote } from '@/components/rfq/ReviseQuote'
+import { AGENT_ENABLED } from '@/lib/flags'
+import { munshiDraftForComposer } from '@/lib/agent/munshi'
 
-export default async function ProviderRfqPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProviderRfqPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ munshi?: string }> }) {
   const { id } = await params
+  const sp = await searchParams
   const user = await getSessionUser()
   if (!user) redirect(`/login?next=/partner/rfqs/${id}`)
   const profile = await getProviderProfile(user.id)
@@ -47,6 +50,8 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
 
   // S1.1 — "Type or speak your quote": AGENT_ENABLED + agents_enabled.quote_extract + cohort, for THIS provider.
   const extractEnabled = await isQuoteExtractEnabledFor(await createAdminClient(), user.id)
+  // S2.2 — ?munshi=<draftId>: the provider's own open quote draft prefills the composer; the submit carries munshi_draft_id.
+  const munshi = AGENT_ENABLED && sp.munshi && /^[0-9a-f-]{36}$/i.test(sp.munshi) ? await munshiDraftForComposer(await createAdminClient(), { providerId: profile.id, draftId: sp.munshi, rfqId: id }) : null
 
   const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')
   // S1.3 — the thread is writable while the RFQ is active and this provider has not declined
@@ -156,7 +161,7 @@ export default async function ProviderRfqPage({ params }: { params: Promise<{ id
         </div>
       ) : rfq.canQuote ? (
         <div className="space-y-3">
-          <QuoteComposer rfqId={rfq.id} goods={goods ?? undefined} extractEnabled={extractEnabled} />
+          <QuoteComposer rfqId={rfq.id} goods={goods ?? undefined} extractEnabled={extractEnabled} {...(munshi ? { initial: { ...munshi.initial, message: null }, munshiDraftId: munshi.draftId } : {})} />
           {/* S0.4 quote-or-decline: an honest "no" beside "Quote". */}
           <div className="flex justify-end"><DeclineRfqButton rfqId={rfq.id} /></div>
         </div>

@@ -37,6 +37,11 @@ export const MUNSHI_SCOPES = [
 ] as const
 export type MunshiScope = (typeof MUNSHI_SCOPES)[number]
 
+/** A grant (or a union of grants) that lets Munshi run: the reads + the quote write. */
+export function hasMunshiScopes(scopes: readonly string[] | null | undefined): boolean {
+  return !!scopes && scopes.includes('submit_quote') && scopes.includes('extract_requirements') && scopes.includes('read_price_book')
+}
+
 export const MUNSHI_LOCALES = ['en', 'hi', 'te', 'ta'] as const
 export type MunshiLocale = (typeof MUNSHI_LOCALES)[number]
 export function toMunshiLocale(l: string | null | undefined): MunshiLocale {
@@ -397,6 +402,37 @@ export function renderMunshiDraft(draft: MunshiDraft, locale: MunshiLocale, rfqT
 export function renderMunshiReply(draft: ThreadReplyDraft, locale: MunshiLocale, rfqTitle: string): string {
   const c = RENDER_COPY[locale]
   return [`${c.reply} — ${rfqTitle.trim().slice(0, 120)}`, draft.body.slice(0, 600), c.tap].join('\n')
+}
+
+/** Button titles (≤ 20 chars) per locale. */
+export const MUNSHI_BUTTON_TITLES: Record<MunshiLocale, Record<MunshiButtonAction, string>> = {
+  en: { approve: 'Approve', edit: 'Edit', skip: 'Skip' },
+  hi: { approve: 'भेजें', edit: 'बदलें', skip: 'छोड़ें' },
+  te: { approve: 'పంపండి', edit: 'మార్చండి', skip: 'వదిలేయండి' },
+  ta: { approve: 'அனுப்பு', edit: 'மாற்று', skip: 'தவிர்' },
+}
+
+/** The runtime's WhatsApp copy around a draft (no ids, no contact details; {link} / {title} / {hours} substituted by code). */
+export const MUNSHI_WA_COPY: Record<'sent_quote' | 'sent_ask' | 'sent_reply' | 'skipped' | 'edited' | 'reask' | 'draft_gone' | 'failed_already_quoted' | 'failed_closed' | 'failed_declined' | 'failed_scope' | 'failed_other' | 'window_warning', Record<MunshiLocale, string>> = {
+  sent_quote: { en: 'Done — your quote is sent. The buyer will see it on AMClub.', hi: 'हो गया — आपका कोटेशन भेज दिया गया। खरीदार इसे AMClub पर देखेगा।', te: 'పూర్తయింది — మీ కొటేషన్ పంపబడింది. కొనుగోలుదారు దీన్ని AMClub లో చూస్తారు.', ta: 'முடிந்தது — உங்கள் விலைப்புள்ளி அனுப்பப்பட்டது. வாங்குபவர் இதை AMClub-இல் பார்ப்பார்.' },
+  sent_ask: { en: 'Done — your question is posted on the request. Munshi will draft again when the buyer answers.', hi: 'हो गया — आपका सवाल माँग पर पोस्ट हो गया। खरीदार के जवाब देने पर मुंशी फिर ड्राफ्ट करेगा।', te: 'పూర్తయింది — మీ ప్రశ్న అభ్యర్థనపై పోస్ట్ అయింది. కొనుగోలుదారు జవాబిస్తే మున్షీ మళ్లీ డ్రాఫ్ట్ చేస్తుంది.', ta: 'முடிந்தது — உங்கள் கேள்வி கோரிக்கையில் பதிவிடப்பட்டது. வாங்குபவர் பதிலளித்ததும் முன்ஷி மீண்டும் வரையும்.' },
+  sent_reply: { en: 'Done — your reply is posted on the quote thread.', hi: 'हो गया — आपका जवाब कोटेशन थ्रेड पर पोस्ट हो गया।', te: 'పూర్తయింది — మీ జవాబు కొటేషన్ థ్రెడ్‌లో పోస్ట్ అయింది.', ta: 'முடிந்தது — உங்கள் பதில் விலைப்புள்ளி உரையாடலில் பதிவிடப்பட்டது.' },
+  skipped: { en: 'Skipped. Munshi will not send this draft.', hi: 'छोड़ दिया। मुंशी यह ड्राफ्ट नहीं भेजेगा।', te: 'వదిలేశాం. మున్షీ ఈ డ్రాఫ్ట్‌ను పంపదు.', ta: 'தவிர்க்கப்பட்டது. முன்ஷி இந்த வரைவை அனுப்பாது.' },
+  edited: { en: 'Sure — open the draft to change it and send: {link}', hi: 'ठीक है — ड्राफ्ट बदलकर भेजने के लिए यहाँ खोलें: {link}', te: 'సరే — డ్రాఫ్ట్ మార్చి పంపడానికి ఇక్కడ తెరవండి: {link}', ta: 'சரி — வரைவை மாற்றி அனுப்ப இங்கே திறக்கவும்: {link}' },
+  reask: { en: 'I did not catch that. Tap Approve to send the draft, Edit to change it, or Skip.', hi: 'समझ नहीं आया। भेजने के लिए Approve, बदलने के लिए Edit, या Skip दबाएँ।', te: 'అర్థం కాలేదు. పంపడానికి Approve, మార్చడానికి Edit, లేదా Skip నొక్కండి.', ta: 'புரியவில்லை. அனுப்ப Approve, மாற்ற Edit, அல்லது Skip அழுத்தவும்.' },
+  draft_gone: { en: 'That draft is no longer open (it was sent, skipped or expired).', hi: 'वह ड्राफ्ट अब खुला नहीं है (भेजा गया, छोड़ा गया या समाप्त हो गया)।', te: 'ఆ డ్రాఫ్ట్ ఇప్పుడు తెరిచి లేదు (పంపబడింది, వదిలేయబడింది లేదా గడువు ముగిసింది).', ta: 'அந்த வரைவு இனி திறந்திருக்கவில்லை (அனுப்பப்பட்டது, தவிர்க்கப்பட்டது அல்லது காலாவதியானது).' },
+  failed_already_quoted: { en: 'Not sent — you had already quoted on this request.', hi: 'नहीं भेजा — आप इस माँग पर पहले ही कोटेशन दे चुके थे।', te: 'పంపలేదు — మీరు ఈ అభ్యర్థనకు ఇప్పటికే కొటేషన్ ఇచ్చారు.', ta: 'அனுப்பப்படவில்லை — இந்த கோரிக்கைக்கு நீங்கள் ஏற்கனவே விலைப்புள்ளி அளித்திருந்தீர்கள்.' },
+  failed_closed: { en: 'Not sent — this request closed before you approved.', hi: 'नहीं भेजा — आपके अनुमोदन से पहले यह माँग बंद हो गई।', te: 'పంపలేదు — మీరు ఆమోదించే ముందే ఈ అభ్యర్థన మూసివేయబడింది.', ta: 'அனுப்பப்படவில்லை — நீங்கள் ஒப்புதல் அளிக்கும் முன் இந்த கோரிக்கை மூடப்பட்டது.' },
+  failed_declined: { en: 'Not sent — this request was declined or its window lapsed.', hi: 'नहीं भेजा — यह माँग अस्वीकृत हो गई या इसकी अवधि समाप्त हो गई।', te: 'పంపలేదు — ఈ అభ్యర్థన తిరస్కరించబడింది లేదా గడువు ముగిసింది.', ta: 'அனுப்பப்படவில்லை — இந்த கோரிக்கை நிராகரிக்கப்பட்டது அல்லது காலம் முடிந்தது.' },
+  failed_scope: { en: 'Not sent — Munshi no longer has permission to send for you. Enable it again on the partner site.', hi: 'नहीं भेजा — मुंशी के पास अब आपके लिए भेजने की अनुमति नहीं है। पार्टनर साइट पर इसे फिर चालू करें।', te: 'పంపలేదు — మున్షీకి ఇప్పుడు మీ తరఫున పంపే అనుమతి లేదు. పార్ట్‌నర్ సైట్‌లో మళ్లీ ఆన్ చేయండి.', ta: 'அனுப்பப்படவில்லை — முன்ஷிக்கு இனி உங்களுக்காக அனுப்ப அனுமதி இல்லை. பார்ட்னர் தளத்தில் மீண்டும் இயக்கவும்.' },
+  failed_other: { en: 'Not sent — something went wrong. Open the request on the partner site to quote by hand.', hi: 'नहीं भेजा — कुछ गड़बड़ हुई। पार्टनर साइट पर माँग खोलकर खुद कोटेशन दें।', te: 'పంపలేదు — ఏదో తప్పు జరిగింది. పార్ట్‌నర్ సైట్‌లో అభ్యర్థన తెరిచి స్వయంగా కొటేషన్ ఇవ్వండి.', ta: 'அனுப்பப்படவில்லை — ஏதோ தவறு நடந்தது. பார்ட்னர் தளத்தில் கோரிக்கையைத் திறந்து நீங்களே விலைப்புள்ளி அளிக்கவும்.' },
+  window_warning: { en: 'Reminder: the request "{title}" needs your quote or decline within {hours} hours, or it will lapse.', hi: 'याद दिलाना: माँग "{title}" पर {hours} घंटे में कोटेशन दें या अस्वीकार करें, वरना अवधि समाप्त हो जाएगी।', te: 'గుర్తు: "{title}" అభ్యర్థనకు {hours} గంటల్లో కొటేషన్ ఇవ్వండి లేదా తిరస్కరించండి, లేకుంటే గడువు ముగుస్తుంది.', ta: 'நினைவூட்டல்: "{title}" கோரிக்கைக்கு {hours} மணி நேரத்தில் விலைப்புள்ளி அளிக்கவும் அல்லது நிராகரிக்கவும், இல்லையெனில் காலம் முடியும்.' },
+}
+
+export function munshiCopy(key: keyof typeof MUNSHI_WA_COPY, locale: MunshiLocale, vars: Record<string, string | number> = {}): string {
+  let s = MUNSHI_WA_COPY[key][locale]
+  for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v))
+  return s
 }
 
 /** WhatsApp button payloads: `<action>:<runId>` — parsed by the dispatcher, never by a model. */

@@ -129,6 +129,7 @@ export default function AppLayout() {
       <Tabs.Screen name="rfq/[id]" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="partner-rfqs" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="partner-rfq/[id]" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="partner-munshi" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="notifications" options={{ href: null, headerShown: false }} />
     </Tabs>
     </>

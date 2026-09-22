@@ -7,6 +7,7 @@ import { MART_ENABLED } from '@/lib/flags'
 import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
 import { isComparePointersEnabledFor } from '@/lib/rfq/compare'
 import { isOnboardingEnabledFor } from '@/lib/agent/onboarding'
+import { isMunshiEnabledFor } from '@/lib/agent/munshi'
 
 /** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
@@ -37,6 +38,8 @@ export async function GET() {
   // S1.6 — "Finish on WhatsApp" for users who can still run the provider wizard (no profile, or rejected / pending_kyc).
   const canOnboard = !provider || provider.status === 'rejected' || provider.status === 'pending_kyc'
   const onboardingWhatsAppEnabled = canOnboard ? await isOnboardingEnabledFor(admin, userId) : false
+  // S2.2 — the Munshi partner tab for active providers (flag + agent switch + cohort).
+  const munshiEnabled = provider ? await isMunshiEnabledFor(admin, userId) : false
 
   const primaryRole =
     roles.includes('admin') || roles.includes('ops')
@@ -61,6 +64,7 @@ export async function GET() {
     quoteExtractEnabled,
     comparePointersEnabled,
     onboardingWhatsAppEnabled,
+    munshiEnabled,
   }
   return NextResponse.json(
     body,

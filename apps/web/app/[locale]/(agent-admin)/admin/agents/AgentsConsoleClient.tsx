@@ -22,6 +22,13 @@ const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { 
 const humanName = (n: string) => n.replace(/_/g, ' ')
 const fmtIST = (v: string | null) => (v ? new Date(v).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) : '—')
 
+interface MunshiStats {
+  week: { proposed: number; approved: number; edited: number; skipped: number; expired: number; failed: number; accepted_from_drafts: number }
+  providers_enabled: number
+  exit_metric_pct: number | null
+  cost_per_approved_paise: number | null
+}
+
 export function AgentsConsoleClient() {
   const t = useTranslations('admin_agents')
   const { toast } = useToast()
@@ -29,6 +36,7 @@ export function AgentsConsoleClient() {
   const [spend, setSpend] = useState<Spend | null>(null)
   const [dossiers, setDossiers] = useState<DossierStats | null>(null)
   const [triages, setTriages] = useState<TriageStats | null>(null)
+  const [munshi, setMunshi] = useState<MunshiStats | null>(null)
   const [agentsDraft, setAgentsDraft] = useState<Record<string, boolean>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -38,11 +46,12 @@ export function AgentsConsoleClient() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [s, sp, ds, ts] = await Promise.all([
+    const [s, sp, ds, ts, ms] = await Promise.all([
       fetch('/api/v1/agent/admin/settings', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { settings: [] })),
       fetch('/api/v1/agent/admin/spend', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
       fetch('/api/v1/agent/admin/dossiers/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/api/v1/agent/admin/triages/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/v1/agent/admin/munshi/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
     const rows: SettingRow[] = s.settings ?? []
     setSettings(rows)
@@ -52,6 +61,7 @@ export function AgentsConsoleClient() {
     setSpend(sp)
     setDossiers(ds)
     setTriages(ts)
+    setMunshi(ms)
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -124,6 +134,20 @@ export function AgentsConsoleClient() {
                 {t('dossiers_approve_rate')}: {dossiers?.approve_rate_pct == null ? t('dossiers_none') : `${dossiers.approve_rate_pct}%`}
               </p>
               <Link href={'/admin/payouts' as '/admin'} className="mt-2 inline-block text-xs font-medium text-primary underline underline-offset-2">{t('dossiers_link')}</Link>
+            </div>
+            {/* S2.2 — Digital Munshi tile */}
+            <div className="rounded-card border border-border bg-surface p-4 shadow-card" data-testid="munshi-tile">
+              <p className="text-xs font-medium text-foreground-secondary">{t('munshi_title')}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{t('munshi_week', { n: munshi?.week.proposed ?? 0 })}</p>
+              <p className="mt-1 text-xs text-foreground-secondary">
+                {t('munshi_counts', { a: munshi?.week.approved ?? 0, e: munshi?.week.edited ?? 0, s: munshi?.week.skipped ?? 0 })}
+                {' · '}
+                {t('munshi_exit')}: {munshi?.exit_metric_pct == null ? t('munshi_none') : `${munshi.exit_metric_pct}%`}
+                {' · '}
+                {t('munshi_cost')}: {munshi?.cost_per_approved_paise == null ? '—' : `₹${(munshi.cost_per_approved_paise / 100).toFixed(2)}`}
+                {' · '}
+                {t('munshi_enabled', { n: munshi?.providers_enabled ?? 0 })}
+              </p>
             </div>
             {/* S1.7 — dispute triages tile */}
             <div className="rounded-card border border-border bg-surface p-4 shadow-card">

@@ -286,7 +286,8 @@ GRANT SELECT (
   status, created_at, updated_at,
   extraction_id, extraction_confirmed_at,
   decline_reason, decline_message, decline_message_locale, declined_by, declined_at, decline_decision_id,
-  revision, revised_at
+  revision, revised_at,
+  munshi_draft_id
 ) ON quotes TO anon, authenticated;
 
 -- ─── quote_events (0016) — append-only; read-only for every client role ──────
@@ -580,6 +581,29 @@ DROP POLICY IF EXISTS "provider_price_book: admin read" ON provider_price_book;
 CREATE POLICY "provider_price_book: admin read" ON provider_price_book
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 REVOKE INSERT, UPDATE, DELETE ON provider_price_book FROM anon, authenticated;
+
+-- ─── munshi_drafts / munshi_provider_state (0040, S2.2) — provider read own; admin read; service write ─
+ALTER TABLE munshi_drafts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "munshi_drafts: provider read own" ON munshi_drafts;
+CREATE POLICY "munshi_drafts: provider read own" ON munshi_drafts
+  FOR SELECT USING (deleted_at IS NULL AND provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "munshi_drafts: admin read" ON munshi_drafts;
+CREATE POLICY "munshi_drafts: admin read" ON munshi_drafts
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON munshi_drafts FROM anon, authenticated;
+
+ALTER TABLE munshi_provider_state ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "munshi_provider_state: provider read own" ON munshi_provider_state;
+CREATE POLICY "munshi_provider_state: provider read own" ON munshi_provider_state
+  FOR SELECT USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+
+DROP POLICY IF EXISTS "munshi_provider_state: admin read" ON munshi_provider_state;
+CREATE POLICY "munshi_provider_state: admin read" ON munshi_provider_state
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON munshi_provider_state FROM anon, authenticated;
 
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.

@@ -819,6 +819,49 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
+## Agent S2.2 — Digital Munshi v1 (logged 2026-09-22)
+
+**Shipped (dark):** the provider's clerk — `munshi.scan` (every 15 min) drafts a quote / ONE question / a skip per new
+match through `munshiDraftAgent` (agent-core; harness-driven in every golden case and in the red-team set), reads only
+through `/api/v1` under a scoped provider grant (`MUNSHI_SCOPES`), a code-enforced price band (`clampMunshiDraft`),
+approval by WhatsApp button / web / mobile / an allow-listed voice "yes" (`isUnambiguousYes`; the classifier can never
+approve), `munshi.followup` (expiry, straggler resumes, window warnings, thread-reply drafts, re-drafts after an
+answered clarification), the partner tab + price book, the admin tile; migration **0040**. Runbook `docs/agents/MUNSHI.md`.
+
+- **Prompt vs tree — the token's scopes are the UNION of the user's active provider grants** (`activeGrant` in
+  `lib/agent/token.ts`): a provider holds one grant per channel (web + WhatsApp); before S2.2 the token took the first
+  row. An all-empty set (`[]`, S0.5 START) still mints a full-persona token — S0.5 / S1.6 behaviour unchanged. A later
+  stage should make `[]` an explicit "no tools" claim.
+- **Template answers travel UNTRUSTED.** The prompt listed "template answers as key/value after Zod cleaning of the
+  keys" under trusted; the values are buyer text, so `renderRfqDetails` cleans the keys and puts the lines in the
+  `rfq_details` Envelope. Only platform-owned fields (category, budget, needed_by) are trusted.
+- **`provider_categories` are derived from the price book** (the scan agent reads `read_price_book` once), not from
+  `provider_categories` — the runtime never reads a user-data table with the service role.
+- **Capability facts are read with the service role** (`provider_capability_facts`, agent-owned since S1.6) — the
+  prompt's own allowance; reading them through a route is a follow-up.
+- **Window warnings + draft-ready notifications go through two small AMC-Runtime routes**
+  (`POST /api/v1/agent/munshi/drafts/[id]/notify`, `POST /api/v1/agent/munshi/reminders`) because the runtime cannot
+  import the web notification dispatcher; the runtime keeps the once-per-match guard.
+- **Reply drafts: the thread is read by a scripted GET under the token** (the `reply_thread` scope implies reading the
+  thread), not a model-proposed tool — the S1.6 STT precedent; a `read_thread` confirm:false tool is a follow-up.
+- **Follow-up (a) warns only matches WITHOUT an open draft is NOT enforced** — a warning goes out for any unquoted,
+  undeclined match lapsing within the setting, once per match; a proposed draft on the same RFQ is the provider's to
+  decide anyway.
+- **Not built in v1 (as the prompt listed):** provider-set price hints; revise-quote drafts after a clarification
+  answer (the ask draft expires with `redraft: true` and the next scan drafts afresh); skip notices; Interakt buttons
+  (the Meta driver's interactive buttons only); the mobile composer prefill (Edit on mobile deep-links into the RFQ
+  screen; the web composer prefills from `?munshi=`); the price book on mobile (web only).
+- **Rig skips (recorded, never passes):** the HMAC token exchange (the provider's own session token stands in; the
+  runner enforces the grant's scopes in-process, `requireToolScope` is S0.1-proven); a goods RFQ (needs MART_ENABLED —
+  the harness test proves the skip); a per-run budget breach (the keyless gateway reports zero cost); accept via the
+  simulated checkout (the Phase 5 / S1.3 rigs' leg; `finalizeQuoteAcceptance` sets `accepted_at`); the voice note
+  unless `VOICE_STUB_TRANSCRIPT` is set on the server.
+- **Live evals not run** (no LLM key): `quote_draft` / `approval_intent` / `thread_reply` ≥ 85 % + injections and
+  the red-team set are the cohort gate.
+- **The `injection.json` harness allows quote_draft's declared `action` key** (`INJ_ALLOWED_KEYS`): the schema is
+  strict and the enum is quote | ask | skip — never a tool name; the generic tool/status-key check would otherwise flag
+  the contract itself.
+
 ## Agent S2.1 — prompt-injection hardening kit + red-team gate (logged 2026-09-22)
 
 **Shipped (no flag, no product surface):** the Envelope hardened (caps by source kind, Indic digit folding, punctuation

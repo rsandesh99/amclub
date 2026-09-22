@@ -1,4 +1,6 @@
 import { Hono } from 'hono'
+import { finalizeMunshiRun } from './agents/munshi/index'
+import { buildMunshiDeps } from './deps'
 import { serve } from '@hono/node-server'
 import { HTTPException } from 'hono/http-exception'
 import {
@@ -40,12 +42,16 @@ app.post('/internal/runs/:id/resume', async (c) => {
   const toolParsed = agentToolNameSchema.safeParse(body.tool)
   if (!toolParsed.success) return c.json({ error: 'bad_tool' }, 400)
   const run = new AgentRun(buildRunContext({ runId: id, userId: claims.userId, persona: claims.persona }))
+  // S2.2 — a Munshi run resumed from the web / mobile Approve: after the route ran, close the draft and tell the provider.
+  const munshiTool = toolParsed.data === 'submit_quote' || toolParsed.data === 'ask_clarification' || toolParsed.data === 'reply_thread'
   try {
     const outcome = await run.resume(toolParsed.data, body.final ?? {}, body.decisionId ? { decisionId: body.decisionId } : undefined)
     await run.complete()
+    if (munshiTool) await finalizeMunshiRun(buildMunshiDeps(), id, outcome.status === 'done' ? outcome.result : null, null, 'web').catch((e: Error) => console.warn('[munshi] finalize', e.message))
     return c.json({ ok: true, outcome })
   } catch (e) {
     await run.fail((e as Error).message)
+    if (munshiTool) await finalizeMunshiRun(buildMunshiDeps(), id, null, (e as Error).message, 'web').catch((err: Error) => console.warn('[munshi] finalize', err.message))
     return c.json({ error: (e as Error).message }, 400)
   }
 })

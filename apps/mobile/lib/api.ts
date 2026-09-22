@@ -784,3 +784,53 @@ export async function fetchMartDeliveryDefaults(): Promise<GoodsDelivery | null>
     return null
   }
 }
+
+// ── S2.2 — Digital Munshi (the partner screen; every write is the provider's own tap) ─────────────
+export interface MunshiStateResponse {
+  enabled: boolean
+  grant: { web: boolean; whatsapp: boolean; whatsapp_number_masked: string | null }
+  paused_until: string | null
+  last_scan_at: string | null
+  drafts_today: number
+  drafts_awaiting: number
+  week: { proposed: number; approved: number; edited: number; skipped: number; expired: number; failed: number; accepted_from_drafts: number }
+  price_book_rows: number
+}
+export interface MunshiDraftItem {
+  id: string
+  kind: 'quote' | 'ask' | 'skip' | 'reply'
+  status: string
+  rfq: { id: string; title: string } | null
+  quote_id: string | null
+  run_id: string | null
+  draft: unknown
+  basis: { price_book_id: string; price_paise: number; accepted: boolean }[]
+  payload: Record<string, unknown> | null
+  expires_at: string
+  created_at: string
+}
+export async function fetchMunshiState(): Promise<MunshiStateResponse | null> {
+  const res = await fetch(`${API_URL}/api/v1/agent/munshi`, { headers: await authHeaders() })
+  if (!res.ok) return null
+  return (await res.json()) as MunshiStateResponse
+}
+export async function fetchMunshiDrafts(): Promise<MunshiDraftItem[]> {
+  const res = await fetch(`${API_URL}/api/v1/agent/munshi/drafts`, { headers: await authHeaders() })
+  if (!res.ok) return []
+  return ((await res.json()).drafts ?? []) as MunshiDraftItem[]
+}
+export async function munshiSwitch(action: 'enable' | 'pause' | 'disable', locale: string): Promise<{ ok: boolean }> {
+  const body = action === 'enable' ? { locale, consent_text_version: 'munshi-v1-2026-09-22' } : action === 'pause' ? { hours: 24 } : {}
+  const res = await fetch(`${API_URL}/api/v1/agent/munshi/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: JSON.stringify(body) })
+  return { ok: res.ok }
+}
+/** Approve = the run's proposed payload posted UNCHANGED as `final` to the decision route (the ordinary route runs on resume). */
+export async function approveMunshiDraft(d: MunshiDraftItem): Promise<{ ok: boolean }> {
+  if (!d.run_id || !d.payload) return { ok: false }
+  const res = await fetch(`${API_URL}/api/v1/agent/runs/${d.run_id}/decision`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: JSON.stringify({ approve: true, final: d.payload, input_refs: { munshi_draft_id: d.id } }) })
+  return { ok: res.ok }
+}
+export async function skipMunshiDraft(id: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${API_URL}/api/v1/agent/munshi/drafts/${id}/skip`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-amc-surface': 'mobile', ...(await authHeaders()) }, body: '{}' })
+  return { ok: res.ok }
+}

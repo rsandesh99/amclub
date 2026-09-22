@@ -9,10 +9,13 @@ import {
   type MunshiPriceBookRow,
   type MunshiSkipReason,
 } from '@amclub/shared'
+import type { ApprovalIntent, ThreadReplyDraft } from '@amclub/shared'
 import type { AgentDefinition, AgentRun } from '../runner'
 import { getPrompt } from '../prompts/registry'
 import { munshiDraftSchema } from '../prompts/quote_draft/schema'
-import { buildQuoteDraftParts, type QuoteDraftRfqFacts } from './parts'
+import { threadReplyDraftSchema } from '../prompts/thread_reply/schema'
+import { approvalIntentSchema } from '../prompts/approval_intent/schema'
+import { buildApprovalIntentParts, buildQuoteDraftParts, buildThreadReplyParts, type QuoteDraftRfqFacts, type ThreadReplyQuoteFacts } from './parts'
 
 /**
  * The Munshi draft agent (S2.2) — ONE child run per matched RFQ. Pure: every
@@ -128,6 +131,16 @@ export interface MunshiPersistArgs {
   band: MunshiPriceBand | null
   /** true when no model was called (skip decided by code). */
   codeOnly: boolean
+  /** The child run the draft belongs to (munshi_drafts.run_id). */
+  runId: string
+}
+
+/** What a keyless / eval stub producer sees: the code-computed band and basis, never the buyer's text. */
+export interface MunshiStubContext {
+  band: MunshiPriceBand | null
+  basis: readonly MunshiPriceBookRow[]
+  locale: MunshiLocale
+  rfqTitle: string
 }
 
 export interface MunshiDraftInput {
@@ -142,8 +155,8 @@ export interface MunshiDraftInput {
   windowLapsed: boolean
   /** Write the draft row (agent-owned). Returns its id — the `munshi_draft_id` of the proposal. */
   persist: (args: MunshiPersistArgs) => Promise<{ draftId: string }>
-  /** Keyless / eval producer. */
-  stub?: () => MunshiDraft
+  /** Keyless / eval producer (the harness passes a constant; the runtime derives an honest draft from the band). */
+  stub?: (ctx: MunshiStubContext) => MunshiDraft
 }
 
 export interface MunshiDraftOutput {
@@ -187,7 +200,7 @@ export const munshiDraftAgent: AgentDefinition<MunshiDraftInput, MunshiDraftOutp
       kind === 'goods' ? 'goods_rfq' : rfq.myQuote ? 'already_quoted' : input.windowLapsed || !rfq.canQuote ? 'window_lapsed' : null
     if (codeSkip) {
       const draft = clampMunshiDraft(CODE_SKIP_DRAFT(codeSkip), { basisRows: [], toleranceBps: input.toleranceBps, rfqKind: kind, alreadyQuoted: !!rfq.myQuote, windowLapsed: codeSkip === 'window_lapsed', locale: input.locale })
-      const { draftId } = await input.persist({ draft, rfq: rfqRef, band: null, codeOnly: true })
+      const { draftId } = await input.persist({ draft, rfq: rfqRef, band: null, codeOnly: true, runId: run.runId })
       return { draftId, action: 'skip', skipReason: draft.skip_reason, tool: null }
     }
 
@@ -216,10 +229,10 @@ export const munshiDraftAgent: AgentDefinition<MunshiDraftInput, MunshiDraftOutp
       parts,
       temperature: 0.2,
       feature: 'munshi_draft',
-      ...(input.stub ? { stub: input.stub } : {}),
+      ...(input.stub ? { stub: () => input.stub!({ band, basis, locale: input.locale, rfqTitle: rfq.title }) } : {}),
     })
     const draft = clampMunshiDraft(proposed, { basisRows: basis, toleranceBps: input.toleranceBps, rfqKind: kind, alreadyQuoted: false, windowLapsed: false, locale: input.locale })
-    const { draftId } = await input.persist({ draft, rfq: rfqRef, band, codeOnly: false })
+    const { draftId } = await input.persist({ draft, rfq: rfqRef, band, codeOnly: false, runId: run.runId })
 
     if (draft.action === 'quote') {
       await run.proposeTool('submit_quote', munshiQuotePayload(draft, rfq.id, draftId))
@@ -230,5 +243,80 @@ export const munshiDraftAgent: AgentDefinition<MunshiDraftInput, MunshiDraftOutp
       return { draftId, action: 'ask', skipReason: null, tool: 'ask_clarification' }
     }
     return { draftId, action: 'skip', skipReason: draft.skip_reason, tool: null }
+  },
+}
+
+// ── the thread-reply agent (S2.2 follow-up (b)) ──────────────────────────────
+
+export interface MunshiReplyInput {
+  quoteId: string
+  rfqId: string | null
+  rfqTitle: string | null
+  locale: MunshiLocale
+  today: string
+  quote: ThreadReplyQuoteFacts
+  scope: string
+  /** Oldest first; the last one is the buyer's message being answered. Read by the follow-up under the token (a scripted GET). */
+  messages: readonly { id: string; mine: boolean; body: string }[]
+  persist: (args: { draft: ThreadReplyDraft; runId: string }) => Promise<{ draftId: string }>
+  stub?: () => ThreadReplyDraft
+}
+
+export interface MunshiReplyOutput {
+  draftId: string
+  needsProviderInput: boolean
+}
+
+/** ONE model call, ONE proposal (reply_thread, confirm:true) — the run parks; the provider's tap posts the message. */
+export const munshiReplyAgent: AgentDefinition<MunshiReplyInput, MunshiReplyOutput> = {
+  name: 'munshi',
+  persona: 'provider',
+  async run(run, input) {
+    const parts = buildThreadReplyParts({ quoteId: input.quoteId, locale: input.locale, today: input.today, quote: input.quote, scope: input.scope, rfqTitle: input.rfqTitle, messages: input.messages })
+    const draft = await run.callModel<ThreadReplyDraft>({
+      taskClass: 'thread_reply',
+      prompt: getPrompt('thread_reply', 'v1'),
+      schema: threadReplyDraftSchema,
+      parts,
+      temperature: 0.3,
+      feature: 'munshi_reply',
+      ...(input.stub ? { stub: input.stub } : {}),
+    })
+    const { draftId } = await input.persist({ draft, runId: run.runId })
+    await run.proposeTool('reply_thread', { quote_id: input.quoteId, body: draft.body, munshi_draft_id: draftId })
+    return { draftId, needsProviderInput: draft.needs_provider_input }
+  },
+}
+
+// ── the approval-intent classifier (S2.2 decide, utterance path) ─────────────
+
+export interface ApprovalIntentInput {
+  transcript: string
+  messageId: string
+  locale: MunshiLocale
+  draftKind: 'quote' | 'ask' | 'reply'
+  via: 'audio' | 'text'
+  stub?: () => ApprovalIntent
+}
+
+/**
+ * ONE model call, NO tools: the output can only re-ask, treat the note as edit
+ * instructions, or reject. Approval is `isUnambiguousYes` in code, checked
+ * BEFORE this agent runs; a model 'approve' is treated as unclear by the caller.
+ */
+export const approvalIntentAgent: AgentDefinition<ApprovalIntentInput, ApprovalIntent> = {
+  name: 'munshi',
+  persona: 'provider',
+  async run(run, input) {
+    const parts = buildApprovalIntentParts({ transcript: input.transcript, messageId: input.messageId, locale: input.locale, draftKind: input.draftKind, via: input.via })
+    return run.callModel<ApprovalIntent>({
+      taskClass: 'approval_intent',
+      prompt: getPrompt('approval_intent', 'v1'),
+      schema: approvalIntentSchema,
+      parts,
+      temperature: 0,
+      feature: 'munshi_intent',
+      ...(input.stub ? { stub: input.stub } : {}),
+    })
   },
 }
