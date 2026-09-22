@@ -335,7 +335,7 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
   const result = await runAgent(
     supportTurnAgent(deps, settings),
     { ...deps.core, scopes: null, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) },
-    { userId: conv.user_id, surface: 'whatsapp', subjectType: 'wa_conversation', subjectId: conv.id, jobId: job.jobId ?? null, meta: { message_id: job.messageId } },
+    { userId: conv.user_id, surface: 'whatsapp', subjectType: 'wa_conversation', subjectId: conv.id, jobId: job.jobId ?? null, meta: { agent: 'support', message_id: job.messageId } },
     { conv, messageId: job.messageId, text, locale, roles, previousText: (prev as { body?: string } | null)?.body ?? null },
   )
   if (result.status === 'failed') return { status: 'failed', error: result.error }

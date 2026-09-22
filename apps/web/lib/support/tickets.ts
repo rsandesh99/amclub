@@ -281,10 +281,11 @@ export interface SupportStats {
 
 export async function supportStats(admin: SupabaseClient): Promise<SupportStats> {
   const since = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
-  const [{ data: tickets }, { count: turns }, { data: waTurns }] = await Promise.all([
+  const [{ data: tickets }, { count: turns }, { count: waTurns }] = await Promise.all([
     admin.from('support_tickets').select('status, reason, created_at, acknowledged_at').is('deleted_at', null).gte('created_at', since),
     admin.from('support_messages').select('id', { count: 'exact', head: true }).eq('role', 'user').gte('created_at', since),
-    admin.from('wa_messages').select('id', { count: 'exact', head: true }).eq('direction', 'in').gte('created_at', since).not('payload->support', 'is', null),
+    // one support.reply run per WhatsApp turn (meta.agent = 'support'; the decide job is not a turn)
+    admin.from('agent_runs').select('id', { count: 'exact', head: true }).eq('surface', 'whatsapp').eq('meta->>agent', 'support').gte('created_at', since),
   ])
   const rows = ((tickets as any[]) ?? [])
   const acks = rows.filter((t) => t.acknowledged_at).map((t) => (new Date(t.acknowledged_at).getTime() - new Date(t.created_at).getTime()) / 60000).sort((a, b) => a - b)
@@ -294,7 +295,7 @@ export async function supportStats(admin: SupabaseClient): Promise<SupportStats>
   for (const t of rows) reasons[t.reason] = (reasons[t.reason] ?? 0) + 1
   const { count: openCount } = await admin.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'open').is('deleted_at', null)
   const { count: inProgress } = await admin.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'in_progress').is('deleted_at', null)
-  const totalTurns = (turns ?? 0) + ((waTurns as unknown as number | null) ?? 0)
+  const totalTurns = (turns ?? 0) + (waTurns ?? 0)
   const escalations = rows.length
   return {
     open: openCount ?? 0,
