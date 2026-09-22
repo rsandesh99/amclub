@@ -840,9 +840,10 @@ document intake `POST /api/v1/rfq/document-extract` (`agents_enabled.document_in
   was added to `ChatJsonParams` / the bounded helpers; the parser passes the env value through it. The CI golden
   workflow keeps working unchanged. `vendor.parser` in `voice_meta` now reads `gateway:<model>` (was
   `openrouter:<model>`) — telemetry only.
-- **pdf-parse 1.1.1, not 2.x:** the prompt named `pdf-parse`; 2.x pulls `@napi-rs/canvas` (a native rasteriser),
-  which the posture forbids on Vercel; 1.1.1 is pure JS (bundled pdf.js) and is kept external in `next.config`.
-  Scanned PDFs → 422 `pdf_no_text`; rasterise in the runtime later.
+- **pdf-parse is pinned to EXACTLY 1.1.1 — never bump it to 2.x.** The prompt named `pdf-parse`; 2.x depends on
+  `@napi-rs/canvas` (a native rasteriser), which the no-rasteriser posture forbids on Vercel; 1.1.1 is pure JS (bundled
+  pdf.js), kept external in `next.config`, and the pin in apps/web/package.json is exact (no caret) on purpose. Scanned
+  PDFs → 422 `pdf_no_text`; rasterise in the runtime later, never in the web bundle.
 - **Detail pages did not render `attachments[]`** (the prompt's ground truth assumed they did): the buyer and
   provider RFQ pages and the mobile detail screen now list them as links (signed URLs from the loaders).
 - **DXF binary variant unsupported** (`AutoCAD Binary DXF` refused with `drawing_unreadable`); STEP bounding box
