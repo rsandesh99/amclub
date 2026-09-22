@@ -41,6 +41,7 @@ import {
   type ThreadReplyDraft,
 } from '@amclub/shared'
 import { readAgentSettings } from '../../settings'
+import { GROWTH_INTERVAL_DAYS, PROVIDER_COMPONENTS, SCORE_VERSION, growthNudgeLine, pickGrowthNudge, pickLocale, weakestComponents, type ComponentResult, type GrowthFacts, type GrowthNudge, type GrowthProfileField, type ProviderComponent } from '@amclub/shared'
 import { transcribeVoiceNote } from '../onboarding/stt'
 import { buttonPayloadOf } from '../onboarding/index'
 
@@ -92,7 +93,9 @@ export interface MunshiRuntimeDeps {
 export interface MunshiScanJob { kind: 'scan'; jobId?: string | null }
 export interface MunshiFollowupJob { kind: 'followup'; jobId?: string | null }
 export interface MunshiDecideJob { kind: 'decide'; runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance'; jobId?: string | null }
-export type MunshiJob = MunshiScanJob | MunshiFollowupJob | MunshiDecideJob
+/** S2.4 — the weekly growth nudge. */
+export interface MunshiGrowthJob { kind: 'growth'; jobId?: string | null }
+export type MunshiJob = MunshiScanJob | MunshiFollowupJob | MunshiDecideJob | MunshiGrowthJob
 export type MunshiJobResult = { status: 'ok'; detail: Record<string, unknown> } | { status: 'failed'; error: string }
 
 // ── settings + providers ─────────────────────────────────────────────────────
@@ -926,4 +929,118 @@ export async function routeMunshiInbound(admin: SupabaseClient, args: { messageI
   if (!row?.run_id) return false
   await hooks.enqueueMunshiDecide({ runId: row.run_id, messageId: args.messageId, action: 'utterance' })
   return true
+}
+
+// ── S2.4 munshi.growth — the weekly informational nudge (fixed copy; no model, no confirm, no ai_decisions) ──────
+//
+// One run per provider (audited), at most one nudge per GROWTH_INTERVAL_DAYS. Facts: the provider's OWN listing gaps,
+// state and categories read under the delegated token (GET /profile/me, a scripted GET); the category demand is an
+// aggregate count of platform data (unmatched services requests from buyers in the provider's state, 30 days — no
+// buyer identity leaves the query); the provider's own score row and events (derived platform data). WhatsApp only
+// with the provider's WhatsApp grant (STOP halts it); disabling Munshi removes the provider from the enumeration.
+
+const growthProfileSchema = z.object({ providerProfileGaps: z.array(z.string()).nullable().optional(), providerState: z.string().nullable().optional(), providerCategorySlugs: z.array(z.string()).nullable().optional() }).passthrough()
+
+async function growthDemand(admin: SupabaseClient, state: string, since: string, cache: Map<string, Map<string, number>>): Promise<Map<string, number>> {
+  const hit = cache.get(state)
+  if (hit) return hit
+  const counts = new Map<string, number>()
+  const { data: rfqs } = await admin.from('rfqs').select('id, category:categories!inner(slug), msme:msme_profiles!inner(state)').eq('msme.state', state).gte('created_at', since).is('deleted_at', null).limit(2000)
+  const rows = ((rfqs ?? []) as any[]).filter((r) => r.category?.slug)
+  const matched = new Set<string>()
+  for (let i = 0; i < rows.length; i += 200) {
+    const ids = rows.slice(i, i + 200).map((r) => r.id as string)
+    const { data: m } = await admin.from('rfq_matches').select('rfq_id').in('rfq_id', ids)
+    for (const x of (m ?? []) as { rfq_id: string }[]) matched.add(x.rfq_id)
+  }
+  for (const r of rows) if (!matched.has(r.id)) counts.set(r.category.slug, (counts.get(r.category.slug) ?? 0) + 1)
+  cache.set(state, counts)
+  return counts
+}
+
+async function growthScoreFacts(admin: SupabaseClient, providerId: string, since: string): Promise<Pick<GrowthFacts, 'weakest' | 'rise'>> {
+  const { data: snap } = await admin.from('provider_scores').select('components').eq('provider_id', providerId).eq('score_version', SCORE_VERSION).maybeSingle()
+  let weakest: GrowthFacts['weakest'] = null
+  if (snap) {
+    const raw = ((snap as { components: Record<string, any> }).components ?? {}) as Record<string, any>
+    const comps = Object.fromEntries(PROVIDER_COMPONENTS.map((k) => [k, { value: typeof raw[k]?.value === 'number' ? raw[k].value : null, sample: Number(raw[k]?.sample ?? 0), raw: {}, weight: Number(raw[k]?.weight ?? 0) } satisfies ComponentResult])) as Record<ProviderComponent, ComponentResult>
+    const w = weakestComponents(comps, PROVIDER_COMPONENTS, 1)[0]
+    if (w) weakest = { component: w, value: comps[w].value ?? 100 }
+  }
+  const { data: evs } = await admin.from('score_events').select('delta, reason').eq('subject_type', 'provider').eq('subject_id', providerId).eq('score_version', SCORE_VERSION).gte('created_at', since).neq('reason', 'gate')
+  const list = ((evs ?? []) as { delta: number; reason: string }[]).filter((e) => (PROVIDER_COMPONENTS as readonly string[]).includes(e.reason))
+  const total = list.reduce((a, e) => a + e.delta, 0)
+  const top = [...list].sort((a, b) => b.delta - a.delta)[0]
+  const rise = total > 0 && top && top.delta > 0 ? { component: top.reason as ProviderComponent, points: total } : null
+  return { weakest, rise }
+}
+
+function growthAgent(deps: MunshiRuntimeDeps, st: ProviderState, since30: string, demandCache: Map<string, Map<string, number>>): AgentDefinition<Record<string, never>, { nudge: GrowthNudge | null }> {
+  return {
+    name: 'munshi',
+    persona: 'provider',
+    async run(run) {
+      // the provider's own listing facts, under the delegated token (a scripted GET, logged on the run)
+      const token = await deps.tokenFor({ runId: run.runId, userId: st.user_id })
+      const f = deps.fetchImpl ?? fetch
+      const res = await f(`${deps.apiUrl}/api/v1/profile/me`, { headers: { Authorization: `Bearer ${token}` } })
+      await deps.core.ledger.appendEvent({ runId: run.runId, kind: 'tool_called', tool: null, actor: 'agent', payload: { path: '/api/v1/profile/me', status: res.status, purpose: 'growth_nudge' } })
+      const me = growthProfileSchema.safeParse(res.ok ? await res.json().catch(() => null) : null)
+      const gaps = (me.success ? me.data.providerProfileGaps ?? [] : []) as GrowthProfileField[]
+      const state = me.success ? me.data.providerState ?? null : null
+      const listed = new Set(me.success ? me.data.providerCategorySlugs ?? [] : [])
+      const demand = state ? [...(await growthDemand(deps.admin, state, since30, demandCache)).entries()].filter(([slug]) => !listed.has(slug)).map(([category_slug, count]) => ({ category_slug, count })) : []
+      const score = await growthScoreFacts(deps.admin, st.provider_id, since30)
+      return { nudge: pickGrowthNudge({ profileGaps: gaps, demand, ...score }) }
+    },
+  }
+}
+
+async function notifyWebGrowth(deps: MunshiRuntimeDeps, st: ProviderState, nudge: GrowthNudge): Promise<boolean> {
+  if (!deps.runtimeSecret) return false
+  try {
+    const cred = signRuntimeCredential(deps.runtimeSecret, { userId: st.user_id, persona: 'provider', runId: '00000000-0000-0000-0000-000000000000' })
+    const f = deps.fetchImpl ?? fetch
+    const res = await f(`${deps.apiUrl}/api/v1/agent/munshi/growth`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `AMC-Runtime ${cred}` }, body: JSON.stringify({ nudge }) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export async function runMunshiGrowth(deps: MunshiRuntimeDeps): Promise<MunshiJobResult> {
+  if (!deps.agentEnabled) return { status: 'failed', error: 'agent_disabled' }
+  const g = await readAgentSettings(deps.admin, ['growth_nudge_enabled'])
+  if (g.growth_nudge_enabled !== true) return { status: 'ok', detail: { providers: 0, sent: 0, skipped: 'growth_nudge_disabled' } }
+  const s = await settings(deps.admin)
+  const now = (deps.now ?? (() => new Date()))()
+  const since30 = new Date(now.getTime() - 30 * 86400 * 1000).toISOString()
+  const providers = await enabledProviders(deps, s)
+  const { data: lastRows } = await deps.admin.from('munshi_provider_state').select('provider_id, last_growth_at').in('provider_id', providers.length ? providers.map((p) => p.provider_id) : ['00000000-0000-0000-0000-000000000000'])
+  const last = new Map(((lastRows ?? []) as { provider_id: string; last_growth_at: string | null }[]).map((r) => [r.provider_id, r.last_growth_at]))
+  const demandCache = new Map<string, Map<string, number>>()
+  const detail = { providers: providers.length, sent: 0, whatsapp: 0, in_app: 0, recent: 0, nothing_to_say: 0, failed: 0, kinds: {} as Record<string, number> }
+  for (const st of providers) {
+    const prev = last.get(st.provider_id)
+    if (prev && now.getTime() - new Date(prev).getTime() < GROWTH_INTERVAL_DAYS * 86400 * 1000) { detail.recent++; continue }
+    const r = await runAgent(growthAgent(deps, st, since30, demandCache), depsFor(deps, st.scopes), { userId: st.user_id, surface: 'system', subjectType: 'provider', subjectId: st.provider_id, meta: { job: 'growth' } }, {})
+    if (r.status !== 'completed') { detail.failed++; continue }
+    const nudge = r.output.nudge
+    if (!nudge) { detail.nothing_to_say++; continue }
+    let categoryName: string | null = null
+    if (nudge.kind === 'category_demand') {
+      const { data: cat } = await deps.admin.from('categories').select('name_i18n').eq('slug', nudge.category_slug).maybeSingle()
+      categoryName = cat ? pickLocale((cat as { name_i18n: { en: string; hi?: string; te?: string } }).name_i18n, st.locale) : null
+    }
+    const line = growthNudgeLine(nudge, st.locale, categoryName)
+    const wa = await sendToProvider(deps, st, line, { kind: 'munshi_growth', params: [line] }, { growth: nudge.kind, run_id: r.runId })
+    const inApp = await notifyWebGrowth(deps, st, nudge)
+    await bumpState(deps.admin, st, { last_growth_at: now.toISOString() })
+    detail.sent++
+    if (wa) detail.whatsapp++
+    if (inApp) detail.in_app++
+    detail.kinds[nudge.kind] = (detail.kinds[nudge.kind] ?? 0) + 1
+    deps.capture?.(st.user_id, 'munshi_growth_sent', { kind: nudge.kind, whatsapp: !!wa, in_app: inApp })
+  }
+  return { status: 'ok', detail }
 }

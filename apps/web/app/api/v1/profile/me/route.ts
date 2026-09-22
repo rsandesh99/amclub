@@ -9,6 +9,13 @@ import { isComparePointersEnabledFor } from '@/lib/rfq/compare'
 import { isOnboardingEnabledFor } from '@/lib/agent/onboarding'
 import { isMunshiEnabledFor } from '@/lib/agent/munshi'
 import { isSupportEnabledFor } from '@/lib/support/settings'
+import { providerProfileGaps } from '@amclub/shared'
+
+/** S2.4 — the slugs of the categories the provider lists (their own rows). */
+async function providerCategorySlugs(admin: Awaited<ReturnType<typeof createAdminClient>>, providerId: string): Promise<string[]> {
+  const { data } = await admin.from('provider_categories').select('category:categories!inner(slug)').eq('provider_id', providerId)
+  return ((data ?? []) as unknown as { category: { slug: string } | null }[]).map((r) => r.category?.slug).filter((s): s is string => !!s)
+}
 
 /** Auth + profile state for routing decisions. Cookie (web) OR Bearer (mobile). */
 export async function GET() {
@@ -26,7 +33,7 @@ export async function GET() {
   const [{ data: u }, { data: msme }, { data: provider }] = await Promise.all([
     admin.from('users').select('roles, full_name').eq('id', userId).maybeSingle(),
     admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle(),
-    admin.from('provider_profiles').select('id, status').eq('user_id', userId).maybeSingle(),
+    admin.from('provider_profiles').select('id, status, about, logo_url, city, state, languages, years_experience').eq('user_id', userId).maybeSingle(),
   ])
   const roles: string[] = u?.roles ?? ['msme']
 
@@ -69,6 +76,10 @@ export async function GET() {
     onboardingWhatsAppEnabled,
     munshiEnabled,
     supportEnabled,
+    // S2.4 — the caller's own listing facts (Munshi's weekly growth nudge reads them under the provider's token)
+    providerProfileGaps: provider ? providerProfileGaps(provider as Parameters<typeof providerProfileGaps>[0]) : null,
+    providerState: provider ? ((provider as { state?: string | null }).state ?? null) : null,
+    providerCategorySlugs: provider ? await providerCategorySlugs(admin, provider.id) : null,
   }
   return NextResponse.json(
     body,
