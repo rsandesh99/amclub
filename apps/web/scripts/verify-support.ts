@@ -185,6 +185,10 @@ async function http() {
   console.log(`\nverify-support → ${BASE}\n`)
   const probe = await fetch(`${BASE}/api/v1/agent/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
   await json(probe)
+  if (probe.status >= 500) {
+    record('server probe', 'FAIL', `POST /api/v1/agent/token → ${probe.status}: the server is broken (env?), not dark — refusing to guess the flag`)
+    return
+  }
   const flagOn = probe.status !== 404
   const t41 = await admin.from('support_tickets').select('id').limit(1)
   const has0041 = !missingRelation(t41.error)
