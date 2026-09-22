@@ -92,9 +92,15 @@ export async function linkIntakeExtractions(
 /** Text layer of a PDF via the pure-JS parser (no rasteriser). Empty for scanned PDFs. */
 export async function extractPdfText(bytes: Buffer): Promise<string> {
   type PdfParse = (b: Buffer, o?: { max?: number }) => Promise<{ text: string }>
-  const mod: unknown = await import('pdf-parse')
+  // pdf-parse 1.1.1's index.js runs a self-test (reads ./test/data/… from cwd) whenever `module.parent` is falsy —
+  // which a dynamic ESM import is. Import the library file directly; it has no side effects.
+  const spec = 'pdf-parse/lib/pdf-parse.js'
+  const mod: unknown = await import(/* webpackIgnore: true */ spec)
   const fn = (typeof mod === 'function' ? mod : (mod as { default?: unknown }).default) as PdfParse
-  const out = await fn(bytes, { max: 20 })
+  // pdf.js 1.10 reads the typed array's underlying ArrayBuffer without honouring byteOffset: a Node Buffer from the
+  // small-buffer pool (< 4 KB, byteOffset ≠ 0) parses garbage at random ("bad XRef entry"). Hand it an exact copy.
+  const exact = new Uint8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+  const out = await fn(exact as unknown as Buffer, { max: 20 })
   return (out.text ?? '').replace(/\u0000/g, '').replace(/[ \t]+\n/g, '\n').trim()
 }
 

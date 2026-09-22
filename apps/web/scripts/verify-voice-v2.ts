@@ -254,7 +254,8 @@ async function http() {
 
     // C2 — round two, typed answer (no STT): merged parse, NEVER another clarify.
     const prior = { transcript_english: r1b.transcript_english!, parse: r1b.parse, question: { question: c1.question, gap: c1.gap, locale: c1.locale } }
-    const answer = 'I need my monthly GST returns filed for my garment shop in Guntur, three months pending.'
+    // Phrased for the keyless stub heuristic ("gst … filing" → tax-accounting / gst-filing; "guntur" → AP).
+    const answer = 'I need monthly GST filing for my garment shop in Guntur, three months are pending.'
     const r2 = await multipart(buyer.token, '/api/v1/rfq/voice-parse', { prior: JSON.stringify({ ...prior, answer_text: answer }), answer_text: answer })
     const r2b = (await json(r2)) as { parse?: VoiceParse; clarify?: unknown; vendor?: { stt: string; parser: string } }
     check('round two (typed): merged parse (category from the answer, state AP), vendor.stt typed, NO clarify key, rfq_parse@v2 invocation', r2.status === 200 && !('clarify' in r2b) && r2b.parse?.category_slug === 'tax-accounting' && r2b.parse?.state === 'AP' && r2b.vendor?.stt === 'typed' && (await invCount('rfq_parse')) === 2, `status ${r2.status} ${JSON.stringify(r2b.parse).slice(0, 120)}`)
@@ -334,6 +335,9 @@ async function http() {
     check('5 ids → 422 (schema max 4)', five.status === 422, `status ${five.status}`)
     const notMine = await api(stranger.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'GST returns for a garment shop again', details: {}, attachments: [], intake_extraction_ids: [d5p.success ? d5p.data.extraction_id : NIL] })
     check("another buyer's unlinked id → 422 intake_not_owned", notMine.status === 422 && String((await json(notMine))['error']) === 'intake_not_owned', `status ${notMine.status}`)
+  } catch (e) {
+    // A lifecycle abort is a FAIL row, never a silent exit: the rows above still print and cleanup still runs.
+    record('lifecycle aborted', 'FAIL', (e as Error).message)
   } finally {
     // ── cleanup (checked, FK order) + residue ────────────────────────────
     const errors: string[] = []

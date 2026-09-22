@@ -855,6 +855,11 @@ document intake `POST /api/v1/rfq/document-extract` (`agents_enabled.document_in
   logs a row and returns null), the 429 (rate limiting is disabled without Upstash), goods mode (`MART_ENABLED` off
   on prod), the bucket-dependent checks until the gate creates `rfq-attachments` (the route 500s "Bucket not found"
   before that — the rig records them as skips).
+- **pdf-parse 1.1.1, two traps found at the gate (both handled in `extractPdfText`):** (1) its `index.js` runs a self-test
+  that reads `./test/data/…` from the cwd whenever `module.parent` is falsy — which a dynamic ESM `import()` is — so the
+  server imports `pdf-parse/lib/pdf-parse.js` directly; (2) the bundled pdf.js 1.10 reads a typed array's underlying
+  ArrayBuffer without honouring `byteOffset`, so a Node Buffer from the small-buffer pool (< 4 KB) parses garbage at random
+  ("bad XRef entry", 0/6 vs 6/6 in a probe) — the helper hands pdf.js an exact standalone copy. Keep both when touching it.
 - **Fact chips travel as `details.document_facts`** ("k: v · k: v"): the RFQ schema has no structured facts field; a
   first-class column is a later stage if providers want them structured.
 - **Unconsumed fetch bodies sweep** (from S1.7): the new client code drains every non-2xx body.
