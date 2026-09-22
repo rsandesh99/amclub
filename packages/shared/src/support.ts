@@ -125,6 +125,7 @@ export const SUPPORT_REPLY_KEYS = [
   'quote_status.expired',
   'quote_status.none',
   'quote_status.not_found',
+  'quote_status.no_matches',
   'rfq_status.open_no_quotes',
   'rfq_status.open_quoted',
   'rfq_status.accepted',
@@ -315,7 +316,8 @@ export function resolveSupportReply(intent: SupportIntent, lookup: SupportLookup
       return { key: 'payout_status.not_due', slots }
     }
     case 'quote_status': {
-      if (lookup.rfq === undefined || (lookup.rfq === null && (lookup.rfqs_count ?? 0) === 0)) return { key: 'quote_status.none', slots: base }
+      // no matched / quoted request at all: its own key (quote_status.none names a request title)
+      if (lookup.rfq === undefined || (lookup.rfq === null && (lookup.rfqs_count ?? 0) === 0)) return { key: 'quote_status.no_matches', slots: base }
       if (!lookup.rfq) return { key: 'quote_status.not_found', slots: base }
       const r = lookup.rfq
       const slots = { ...base, title: r.title, quote_count: r.quote_count, max_quotes: r.max_quotes, expires_date: r.expires_at ?? '', price: r.my_quote?.price ?? '' }

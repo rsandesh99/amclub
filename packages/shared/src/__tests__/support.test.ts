@@ -110,6 +110,7 @@ describe('resolveSupportReply — the reply matrix', () => {
     { name: 'rfq accepted', intent: 'rfq_status', lookup: { ...base('buyer'), rfq: rfq('accepted') }, key: 'rfq_status.accepted' },
     { name: 'rfq expired', intent: 'rfq_status', lookup: { ...base('buyer'), rfq: rfq('expired') }, key: 'rfq_status.expired' },
     { name: 'rfq cancelled', intent: 'rfq_status', lookup: { ...base('buyer'), rfq: rfq('cancelled') }, key: 'rfq_status.cancelled' },
+    { name: 'quote: no matched / quoted request at all → no_matches (never a blank title)', intent: 'quote_status', lookup: { ...base('provider'), rfq: null, rfqs_count: 0 }, key: 'quote_status.no_matches' },
     { name: 'quote none (provider has not quoted)', intent: 'quote_status', lookup: { ...base('provider'), rfq: rfq('open'), rfqs_count: 1 }, key: 'quote_status.none' },
     { name: 'quote submitted + nudge', intent: 'quote_status', lookup: { ...base('provider'), rfq: rfq('quoted', { quote_count: 2, my_quote: { status: 'submitted', price: '₹2,500' } }), nudge_subject: { kind: 'rfq', id: 'r1', active: true, capped: false } }, key: 'quote_status.submitted', action: true },
     { name: 'quote accepted', intent: 'quote_status', lookup: { ...base('provider'), rfq: rfq('accepted', { my_quote: { status: 'accepted', price: '₹2,500' } }) }, key: 'quote_status.accepted' },

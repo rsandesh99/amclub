@@ -196,8 +196,9 @@ async function http() {
 
   console.log(`\nverify-support → ${BASE}\n`)
   const probe = await fetch(`${BASE}/api/v1/agent/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-  await json(probe)
-  if (probe.status >= 500) {
+  const probeBody = await json(probe)
+  // 503 agent_not_configured = flag ON without SUPABASE_JWT_SECRET (this laptop); any other 5xx = a broken server
+  if (probe.status >= 500 && !(probe.status === 503 && probeBody['error'] === 'agent_not_configured')) {
     record('server probe', 'FAIL', `POST /api/v1/agent/token → ${probe.status}: the server is broken (env?), not dark — refusing to guess the flag`)
     return
   }
@@ -383,7 +384,7 @@ async function http() {
     const orderGet = await json(await api(b1.token, `/api/v1/orders/${o1.id}`, undefined, 'GET'))
     const label = ORDER_STATUS_LABELS.en['in_progress'] ?? 'in_progress'
     const nr1 = s1.body?.reply ? numbersAccountedFor(String(s1.body.reply.text), [SUPPORT_COPY.en[s1.body.reply.key as SupportReplyKey] ?? '', JSON.stringify(orderGet), JSON.stringify(SLA), CONTACT]) : { ok: false, missing: ['no reply'] }
-    check(`"where is my order" → order_status.in_progress naming ${o1.number} and the label "${label}"; every digit in the reply is in the order GET payload / copy / SLA / contact`, s1.status === 200 && s1.body.reply?.key === 'order_status.in_progress' && String(s1.body.reply.text).includes(o1.number) && String(s1.body.reply.text).includes(label) && nr1.ok, `${s1.status} ${JSON.stringify(s1.body.reply)} missing=${nr1.missing.join(',')}`)
+    check(`"where is my order" → order_status.in_progress naming ${o1.number} and the label "${label}"; every digit in the reply is in the order GET payload / copy / SLA / contact`, s1.status === 200 && s1.body.reply?.key === 'order_status.in_progress' && String(s1.body.reply.text).includes(o1.number) && String(s1.body.reply.text).toLowerCase().includes(label.toLowerCase()) && nr1.ok, `${s1.status} ${JSON.stringify(s1.body.reply)} missing=${nr1.missing.join(',')}`)
     check('an active order offers the nudge action (tool nudge_counterparty, subject = the order, support_message_id)', s1.body.action?.tool === 'nudge_counterparty' && s1.body.action?.subject?.id === o1.id && typeof s1.body.action?.support_message_id === 'string', JSON.stringify(s1.body.action))
     const inv1 = await admin.from('ai_invocations').select('task_class, tier, run_id').eq('user_id', b1.uid).order('created_at', { ascending: false }).limit(1).maybeSingle()
     check('one bounded ai_invocations row for the turn (support_intent, routine, run_id null on Vercel)', (inv1.data as any)?.task_class === 'support_intent' && (inv1.data as any)?.tier === 'routine' && (inv1.data as any)?.run_id === null, JSON.stringify(inv1.data))
@@ -432,7 +433,7 @@ async function http() {
     const dq = await api(dual.token, `/api/v1/rfq/${rq}/quote`, { price_paise: 420000, delivery_days: 6, scope: SCOPE })
     await json(dq)
     const s7 = await say(dual, 'has the buyer accepted my quote')
-    check('a dual-role user asking about "my quote" → as_role provider: quote_status.submitted on the matched RFQ (the buyer hat would have no quote → quote_status.none)', !!dm && dq.status === 200 && s7.body.reply?.key === 'quote_status.submitted' && String(s7.body.reply?.text).includes(`${tag} dual`), `${dq.status} ${JSON.stringify(s7.body.reply)}`)
+    check('a dual-role user asking about "my quote" → as_role provider: quote_status.submitted on the matched RFQ (the buyer hat would have no quote → quote_status.none)', !!dm && dq.status === 200 && s7.body.reply?.key === 'quote_status.submitted' && String(s7.body.reply?.text).includes(`${tag} dual`) && String(s7.body.reply?.text).includes('4,200'), `${dq.status} ${JSON.stringify(s7.body.reply)}`)
 
     // two unclear turns → ticket; the third message is stored with NO model call
     const u1 = await say(b2, 'asdf qwer')
@@ -567,7 +568,9 @@ async function http() {
     const tap3 = await waSay(convW, { kind: 'button', payload: `nudge:yes:${runId3}`, body: 'Yes, send it' })
     check(`a Yes after the cap was reached elsewhere → the resumed route answers 429 → outcome capped + nudge.capped reply (${ow2.number} is the latest order)`, t3.results[0]?.detail?.outcome === 'nudge_offered' && direct.status === 200 && tap3.results[0]?.detail?.outcome === 'capped' && /already|12/.test(String((await outbound(convW)).at(-1)?.body ?? '')), JSON.stringify(tap3.results[0]))
     const tapNo = await waSay(convW, { kind: 'button', payload: `nudge:no:${runId3}`, body: 'No' })
-    check('a replayed / late button on a closed run is harmless (stale or declined, no second nudge)', ['stale', 'declined'].includes(tapNo.results[0]?.detail?.outcome) && ((await admin.from('nudges').select('id', { count: 'exact', head: true }).eq('subject_id', ow2.id).eq('from_user_id', w.uid)).count ?? 0) === 1, JSON.stringify(tapNo.results[0]))
+    const { data: gAfterNo } = await admin.from('agent_grants').select('id').eq('user_id', w.uid).eq('channel', 'whatsapp').is('revoked_at', null)
+    check('the nudge "No" button (title "No" = the S0.5 opt-out keyword) is classified by its payload: the WhatsApp grant stays active (no silent opt-out)', (gAfterNo ?? []).length === 1, `${(gAfterNo ?? []).length} active grants`)
+    check('a replayed / late button on a closed run is harmless (stale or declined, no second nudge)', ['stale', 'declined'].includes(tapNo.results[0]?.detail?.outcome) &&((await admin.from('nudges').select('id', { count: 'exact', head: true }).eq('subject_id', ow2.id).eq('from_user_id', w.uid)).count ?? 0) === 1, JSON.stringify(tapNo.results[0]))
     // out of the 24 h window → the support_reply template carrier
     await admin.from('wa_conversations').update({ window_open_until: new Date(Date.now() - 60_000).toISOString() }).eq('id', convW)
     const t4 = await waSay(convW, { kind: 'text', body: 'how do I get a refund' }, { openWindow: false })

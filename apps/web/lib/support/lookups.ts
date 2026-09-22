@@ -4,6 +4,7 @@ import { formatRupees, type SupportOrderView, type SupportRfqView } from '@amclu
 import type { SupportLookups } from '@amclub/agent-core'
 import { nudgeCapped } from '@/lib/support/nudge'
 import { orderIsActive, rfqIsActive } from '@amclub/shared'
+import { listMatchedRfqsForProvider, listMyQuotesForProvider } from '@/lib/rfq/queries'
 
 /**
  * S2.3 — the web / mobile lookups: every read runs on the USER'S OWN session
@@ -99,15 +100,15 @@ export function webSupportLookups(ctx: WebLookupContext): SupportLookups {
         const { data } = await ctx.session.from('rfqs').select('id, title, status, quote_count, max_quotes, expires_at').eq('msme_id', ctx.msmeId ?? '00000000-0000-0000-0000-000000000000').is('deleted_at', null).order('created_at', { ascending: false }).limit(10)
         return ((data as any[]) ?? []).map((r) => toRfqView(r, null))
       }
-      const { data } = await ctx.session.from('rfq_matches').select('rfq_id, declined_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at)').eq('provider_id', ctx.providerId ?? '00000000-0000-0000-0000-000000000000').order('notified_at', { ascending: false }).limit(10)
-      const rows = ((data as any[]) ?? []).filter((m) => m.rfq)
-      const ids = rows.map((m) => m.rfq_id)
-      const mine = new Map<string, { status: string; price_paise: number }>()
-      if (ids.length && ctx.providerId) {
-        const { data: qs } = await ctx.session.from('quotes').select('rfq_id, status, price_paise').eq('provider_id', ctx.providerId).in('rfq_id', ids)
-        for (const q of (qs as any[]) ?? []) mine.set(q.rfq_id, { status: q.status, price_paise: Number(q.price_paise) })
-      }
-      return rows.map((m) => toRfqView(m.rfq, mine.get(m.rfq_id) ?? null))
+      // the provider's screens' own party-scoped loaders (rfqs RLS hides every non-open request from a matched
+      // provider, so a session read would lose the quoted / accepted ones): my quotes first (real status + price),
+      // then matched requests I have not quoted
+      if (!ctx.providerId) return []
+      const [mine, matched] = await Promise.all([listMyQuotesForProvider(ctx.userId), listMatchedRfqsForProvider(ctx.userId)])
+      const out = new Map<string, SupportRfqView>()
+      for (const q of mine) out.set(q.rfqId, toRfqView({ id: q.rfqId, title: q.title, status: q.rfqStatus, quote_count: q.quoteCount, max_quotes: q.maxQuotes, expires_at: q.expiresAt }, { status: q.quoteStatus, price_paise: q.pricePaise }))
+      for (const m of matched) if (!out.has(m.rfqId) && !m.declined) out.set(m.rfqId, toRfqView({ id: m.rfqId, title: m.title, status: m.status, quote_count: m.quoteCount, max_quotes: m.maxQuotes, expires_at: m.expiresAt }, null))
+      return [...out.values()].slice(0, 10)
     },
     async getRfq(ref, role) {
       const all = await this.listRfqs(role)

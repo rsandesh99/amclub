@@ -14,6 +14,7 @@ import { RUNTIME_ENV } from '../env'
 import { isAgentEnabledForUser, onboardingSessionTtlHours } from '../settings'
 import { routeMunshiInbound } from '../agents/munshi/index'
 import { routeSupportInbound } from '../agents/support/index'
+import { buttonPayloadOf } from '../agents/onboarding/index'
 
 /**
  * WhatsApp inbound (S0.5). Two halves:
@@ -163,7 +164,10 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
   const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at, active_session_id, support_ticket_id').eq('id', msg.conversation_id).maybeSingle()
   if (!conv) return
   const locale = (conv.locale === 'hi' || conv.locale === 'te' ? conv.locale : 'en') as WaLocale
-  const intent = classifyKeyword(msg.body as string | null)
+  // S2.3 — a button tap is classified by its PAYLOAD id, never its visible title: the nudge offer's "No" / "नहीं"
+  // (payload nudge:no:<runId>) is not the S0.5 opt-out keyword "no", while a template quick-reply whose payload IS a
+  // keyword (STOP) still opts out. Typed text is classified exactly as before.
+  const intent = classifyKeyword(msg.kind === 'button' ? buttonPayloadOf({ kind: 'button', body: (msg.body as string | null) ?? null, payload: (msg.payload as Record<string, unknown> | null) ?? null }) : (msg.body as string | null))
 
   if (intent === 'opt_out') {
     if (conv.user_id) {

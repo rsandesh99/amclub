@@ -90,6 +90,7 @@ async function supportSettings(admin: SupabaseClient) {
 const ordersSchema = z.object({ orders: z.array(z.object({ id: z.string(), order_number: z.string(), title: z.string(), status: z.string(), total_paise: z.union([z.number(), z.string()]), provider_earning_paise: z.union([z.number(), z.string()]).nullable().optional(), created_at: z.string() }).passthrough()) })
 const orderDetailSchema = z.object({ order: z.object({ id: z.string(), order_number: z.string(), title: z.string(), status: z.string(), total_paise: z.union([z.number(), z.string()]), provider_earning_paise: z.union([z.number(), z.string()]).nullable().optional(), due_at: z.string().nullable().optional(), updated_at: z.string().optional() }).passthrough(), viewerRole: z.string().optional() })
 const rfqMineSchema = z.object({ rfqs: z.array(z.object({ id: z.string(), title: z.string(), status: z.string(), quoteCount: z.number(), maxQuotes: z.number(), expiresAt: z.string().nullable().optional() }).passthrough()) })
+const myQuotesSchema = z.object({ quotes: z.array(z.object({ rfqId: z.string(), title: z.string(), rfqStatus: z.string(), quoteCount: z.number(), maxQuotes: z.number(), expiresAt: z.string().nullable().optional(), quoteStatus: z.string(), pricePaise: z.number() }).passthrough()) })
 const rfqMatchedSchema = z.object({ rfqs: z.array(z.object({ rfqId: z.string(), title: z.string(), status: z.string(), quoteCount: z.number(), maxQuotes: z.number(), expiresAt: z.string().nullable().optional(), quoted: z.boolean(), declined: z.boolean() }).passthrough()) })
 
 function istDate(iso: string | null | undefined): string | null {
@@ -146,10 +147,15 @@ export function runtimeSupportLookups(deps: SupportRuntimeDeps, run: { runId: st
         const parsed = rfqMineSchema.safeParse(body)
         return parsed.success ? parsed.data.rfqs.slice(0, 10).map((r) => ({ id: r.id, title: r.title, status: r.status, quote_count: r.quoteCount, max_quotes: r.maxQuotes, expires_at: istDate(r.expiresAt), my_quote: null } as SupportRfqView)) : []
       }
-      const body = await readUnderToken(deps, run, '/api/v1/rfq/matched')
-      const parsed = rfqMatchedSchema.safeParse(body)
-      if (!parsed.success) return []
-      return parsed.data.rfqs.slice(0, 10).map((r) => ({ id: r.rfqId, title: r.title, status: r.status, quote_count: r.quoteCount, max_quotes: r.maxQuotes, expires_at: istDate(r.expiresAt), my_quote: r.quoted ? { status: 'submitted', price: '' } : null } as SupportRfqView))
+      // my quotes (real status + price, GET /partner/quotes) first, then matched requests I have not quoted — never a
+      // status inferred from the matched list's `quoted` flag
+      const [mineBody, matchedBody] = await Promise.all([readUnderToken(deps, run, '/api/v1/partner/quotes'), readUnderToken(deps, run, '/api/v1/rfq/matched')])
+      const mine = myQuotesSchema.safeParse(mineBody)
+      const matched = rfqMatchedSchema.safeParse(matchedBody)
+      const out = new Map<string, SupportRfqView>()
+      if (mine.success) for (const q of mine.data.quotes) out.set(q.rfqId, { id: q.rfqId, title: q.title, status: q.rfqStatus, quote_count: q.quoteCount, max_quotes: q.maxQuotes, expires_at: istDate(q.expiresAt), my_quote: { status: q.quoteStatus, price: formatRupees(q.pricePaise) } })
+      if (matched.success) for (const r of matched.data.rfqs) if (!out.has(r.rfqId) && !r.quoted && !r.declined) out.set(r.rfqId, { id: r.rfqId, title: r.title, status: r.status, quote_count: r.quoteCount, max_quotes: r.maxQuotes, expires_at: istDate(r.expiresAt), my_quote: null })
+      return [...out.values()].slice(0, 10)
     },
     async getRfq(ref, role) {
       const all = await this.listRfqs(role)
