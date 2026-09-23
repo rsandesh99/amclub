@@ -30,6 +30,7 @@ export const AGENT_NAMES = [
   'support',        // S2.3
   'procurement',    // S3.1
   'benchmark',      // S3.2
+  'review_summary', // Experience v3 E3 (FR-3.9) — cited summary of verified reviews; dark slot, built when the agent programme resumes
 ] as const
 export type AgentName = (typeof AGENT_NAMES)[number]
 
@@ -150,6 +151,22 @@ export const AGENT_SETTING_DEFS = {
     schema: z.number().int().min(1).max(200),
     default: 30,
     hint: 'S3.1 max proposals (create / answer / message / choose / decline / nudge cards) the procurement agent may put to ONE buyer per IST day; past it the agent points the buyer to the app.',
+  },
+  // ── Experience v3 E3 — trust made visible (PRD_EXPERIENCE_V3 §6 E3; D1 + ADR-010 amendment) ──
+  public_stats_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E3 / D1: buyers see a provider\'s INDIVIDUAL measured stats (on-time %, repeat-buyer %, response rate, each with its sample) on cards and the profile. Never the composite AMC Score. Off until the founder decides D1 and ADR-010 is amended.',
+  },
+  public_stats_min_n: {
+    schema: z.number().int().min(5).max(500),
+    default: 10,
+    hint: 'E3 sample gate: a stat shows only when its own sample is at least this many (floor 5 in code).',
+  },
+  gstin_recheck_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E3 / F4: the nightly job re-checks every active provider\'s GSTIN with the KYC vendor (paid calls) and flags cancelled or suspended ones to ops. It never suspends anyone by itself.',
   },
   // ── S3.2 fair price ranges (benchmarks) — compute and display are separate switches, both OFF; the formula is code ──
   benchmark_compute_enabled: {

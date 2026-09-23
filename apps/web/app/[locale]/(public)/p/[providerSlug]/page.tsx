@@ -11,9 +11,15 @@ import { JsonLd } from '@/components/catalog/JsonLd'
 import { SaveButton } from '@/components/catalog/SaveButton'
 import { TrackedLink } from '@/components/analytics/TrackedLink'
 import { ReviewList } from '@/components/catalog/ReviewList'
+import { ProviderHeaderV3 } from '@/components/trust/ProviderHeaderV3'
+import { StickyActionBar } from '@/components/ui-v3/StickyActionBar'
+import { isOnForEveryone } from '@/lib/experiments'
+import { getProviderTrust } from '@/lib/trust/provider-trust'
+import { reviewExtras } from '@/lib/trust/reviews'
+import { ReviewHistogram } from '@/components/trust/ReviewHistogram'
 import { getProviderBySlug, getPackagesForProvider, getReviews } from '@/lib/catalog/queries'
 import { getSiteUrl } from '@/lib/site-url'
-import { pickI18n, initials, formatResponseTime } from '@/lib/format'
+import { pickI18n, initials, formatResponseTime, computePricing, formatINR } from '@/lib/format'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { MART_ENABLED } from '@/lib/flags'
 import { listPublicProducts } from '@/lib/mart/queries'
@@ -57,6 +63,7 @@ export default async function ProviderProfilePage({
   if (!provider) notFound()
 
   const t = await getTranslations('catalog')
+  const tt = await getTranslations('trust')
   const locale = await getLocale()
   // Mart (dark build): the goods query and its copy only run when the flag is
   // on — with MART_ENABLED=false the services storefront is byte-identical.
@@ -103,99 +110,119 @@ export default async function ProviderProfilePage({
     })),
   }
 
+  // E0 / U4 — the two ways to buy, above the fold (was: Save only).
+  const providerCtas = (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {packages.length > 0 && (
+        <TrackedLink
+          href={`/p/${provider.slug}#packages`}
+          event="provider_cta_clicked"
+          eventProps={{ cta: 'see_packages' }}
+          className="rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+        >
+          {t('see_packages', { count: packages.length })}
+        </TrackedLink>
+      )}
+      {primaryCategory && (
+        <TrackedLink
+          href={`/app/rfq/new?category=${primaryCategory.slug}`}
+          event="provider_cta_clicked"
+          eventProps={{ cta: 'post_requirement' }}
+          className="rounded-button border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary"
+        >
+          {t('post_requirement_in', { category: pickI18n(primaryCategory.nameI18n, locale) })}
+        </TrackedLink>
+      )}
+    </div>
+  )
+
+  // Experience v3 E3 — the trust header (flag `trust`; static page → "on" only).
+  const trust = isOnForEveryone('trust') ? await getProviderTrust(provider.id) : null
+  const extras = trust ? await reviewExtras(provider.id, reviews.map((r) => r.id)).catch(() => null) : null
+  const fromPaise = packages.length ? Math.min(...packages.map((pk) => computePricing(pk).discountedPaise)) : null
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className={trust ? 'mx-auto max-w-5xl px-4 pb-28 pt-6 lg:pb-8' : 'mx-auto max-w-5xl px-4 py-8'}>
       <JsonLd data={jsonLd} />
 
-      {/* Header card */}
-      <section className="rounded-card border border-border bg-surface p-6 shadow-card">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary">
-            {initials(provider.displayName)}
-          </div>
-          <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-2xl font-bold">{provider.displayName}</h1>
-              {provider.badges.length > 0 && (
-                <BadgeCheck className="h-5 w-5 text-trust" aria-label={t('verified')} />
-              )}
+      {trust ? (
+        <ProviderHeaderV3
+          provider={provider}
+          trust={trust}
+          stateLabel={stateLabel}
+          headlineCredential={headlineCredential}
+          save={<SaveButton providerId={provider.id} returnPath={`/p/${provider.slug}`} />}
+          actions={providerCtas}
+        />
+      ) : (
+        // Header card (v2)
+        <section className="rounded-card border border-border bg-surface p-6 shadow-card">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary">
+              {initials(provider.displayName)}
             </div>
-            {headlineCredential && (
-              <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-verified">
-                <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
-                {t(`badge_${headlineCredential}` as 'badge_gstin')} · {t('verified')}
-              </p>
-            )}
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground-secondary">
-              <Stars rating={provider.avgRating} count={provider.reviewCount} />
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="h-3.5 w-3.5" /> {stateLabel}
-                {provider.city ? `, ${provider.city}` : ''}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <CheckCircle2 className="h-3.5 w-3.5" /> {t('orders_done', { count: provider.completedOrders })}
-              </span>
-              {responseTime && (
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="font-display text-2xl font-bold">{provider.displayName}</h1>
+                {provider.badges.length > 0 && (
+                  <BadgeCheck className="h-5 w-5 text-trust" aria-label={t('verified')} />
+                )}
+              </div>
+              {headlineCredential && (
+                <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-verified">
+                  <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
+                  {t(`badge_${headlineCredential}` as 'badge_gstin')} · {t('verified')}
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground-secondary">
+                <Stars rating={provider.avgRating} count={provider.reviewCount} />
                 <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" /> {t('responds_in', { time: responseTime })}
+                  <MapPin className="h-3.5 w-3.5" /> {stateLabel}
+                  {provider.city ? `, ${provider.city}` : ''}
                 </span>
-              )}
-              {provider.languages.length > 0 && (
                 <span className="inline-flex items-center gap-1">
-                  <Languages className="h-3.5 w-3.5" /> {provider.languages.map((l) => l.toUpperCase()).join(', ')}
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {t('orders_done', { count: provider.completedOrders })}
                 </span>
-              )}
+                {responseTime && (
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" /> {t('responds_in', { time: responseTime })}
+                  </span>
+                )}
+                {provider.languages.length > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <Languages className="h-3.5 w-3.5" /> {provider.languages.map((l) => l.toUpperCase()).join(', ')}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3">
+                <VerificationBadges badges={provider.badges} />
+              </div>
+                {providerCtas}
             </div>
-            <div className="mt-3">
-              <VerificationBadges badges={provider.badges} />
+            <div className="shrink-0">
+              <SaveButton providerId={provider.id} returnPath={`/p/${provider.slug}`} />
             </div>
-            {/* E0 / U4 — the two ways to buy, above the fold (was: Save only). */}
-            <div className="mt-4 flex flex-wrap gap-2">
-              {packages.length > 0 && (
-                <TrackedLink
-                  href={`/p/${provider.slug}#packages`}
-                  event="provider_cta_clicked"
-                  eventProps={{ cta: 'see_packages' }}
-                  className="rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+          </div>
+  
+          {provider.categories.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
+              {provider.categories.map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/services/${c.slug}`}
+                  className="rounded-chip border border-border px-2.5 py-1 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
                 >
-                  {t('see_packages', { count: packages.length })}
-                </TrackedLink>
-              )}
-              {primaryCategory && (
-                <TrackedLink
-                  href={`/app/rfq/new?category=${primaryCategory.slug}`}
-                  event="provider_cta_clicked"
-                  eventProps={{ cta: 'post_requirement' }}
-                  className="rounded-button border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary"
-                >
-                  {t('post_requirement_in', { category: pickI18n(primaryCategory.nameI18n, locale) })}
-                </TrackedLink>
-              )}
+                  {pickI18n(c.nameI18n, locale)}
+                </Link>
+              ))}
             </div>
-          </div>
-          <div className="shrink-0">
-            <SaveButton providerId={provider.id} returnPath={`/p/${provider.slug}`} />
-          </div>
-        </div>
-
-        {provider.categories.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
-            {provider.categories.map((c) => (
-              <Link
-                key={c.slug}
-                href={`/services/${c.slug}`}
-                className="rounded-chip border border-border px-2.5 py-1 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
-              >
-                {pickI18n(c.nameI18n, locale)}
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
 
       {/* About */}
       {provider.about && (
-        <section className="mt-6">
+        <section id="about" className="mt-6 scroll-mt-24">
           <h2 className="font-display text-lg font-bold">{t('about')}</h2>
           <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground-secondary">
             {provider.about}
@@ -257,7 +284,7 @@ export default async function ProviderProfilePage({
       )}
 
       {/* Reviews */}
-      <section className="mt-8">
+      <section id="reviews" className="mt-8 scroll-mt-24">
         <h2 className="font-display text-lg font-bold">
           {t('reviews')} {reviewTotal > 0 && <span className="text-foreground-secondary">({reviewTotal})</span>}
         </h2>
@@ -265,7 +292,8 @@ export default async function ProviderProfilePage({
           <p className="mt-2 text-sm text-foreground-secondary">{t('no_reviews')}</p>
         ) : (
           <>
-            <ReviewList reviews={reviews} />
+            {extras && <div className="mt-3"><ReviewHistogram histogram={extras.histogram} total={reviewTotal} /></div>}
+            <ReviewList reviews={extras ? reviews.map((r) => ({ ...r, repeatBuyer: extras.repeat.has(r.id) })) : reviews} />
             {/* E0 / U11 — reviews were capped at 10 with no way to read the rest. */}
             {reviewTotal > reviews.length && (
               <Link
@@ -278,6 +306,12 @@ export default async function ProviderProfilePage({
           </>
         )}
       </section>
+      {trust && fromPaise !== null && (
+        <StickyActionBar hideFrom="md">
+          <p className="t-headline tabular-nums text-foreground">{tt('from_price', { price: formatINR(fromPaise) })}</p>
+          <a href="#packages" className="shrink-0 rounded-button bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground">{tt('see_packages')}</a>
+        </StickyActionBar>
+      )}
     </div>
   )
 }

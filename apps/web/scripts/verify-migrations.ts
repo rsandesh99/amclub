@@ -299,6 +299,12 @@ const MANIFEST: Entry[] = [
     note: 'E0 / U9: search_packages ordering drops top_rated; "rating" is review-count weighted (same signature as 0007)',
   },
   { file: '0048_ui_density.sql', note: 'E1 / N33: users.ui_density (comfortable | compact | NULL) + CHECK; written by the service role only' },
+  {
+    file: '0049_trust_v3.sql',
+    tables: ['provider_public_stats'],
+    triggers: [['provider_public_stats', 'provider_public_stats_set_updated_at']],
+    note: 'E3: provider_public_stats (service role only), provider_verifications expires_at/evidence_hash, provider_profiles next_available_on/capacity_slots/logo_status/logo_pending_url',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

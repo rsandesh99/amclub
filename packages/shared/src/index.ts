@@ -41,6 +41,9 @@ export * from './gstin'
 // Experience v3 rollout flags (closed registry, server-evaluated)
 export * from './experiments'
 
+// N9 — public measured stats (gated; never the composite score)
+export * from './public-stats'
+
 // N33 — display density preference
 export * from './preferences'
 

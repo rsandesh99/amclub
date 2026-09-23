@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { touchLastSeen } from '@/lib/trust/last-seen'
 
 export interface SessionUser {
   id: string
@@ -39,6 +40,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
+  // N11 — authenticated page activity ("active this week"), throttled, after the response.
+  touchLastSeen(user.id)
 
   const { data } = await supabase
     .from('users')

@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
 import { recordHeartbeat } from '@/lib/jobs/heartbeat'
+import { recomputePublicStats } from '@/lib/trust/public-stats'
+import { recheckGstins } from '@/lib/trust/gstin-recheck'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +50,15 @@ export async function GET(request: NextRequest) {
     else nulled++
   }
 
-  const result = { providers: rows?.length ?? 0, computed, nulled, failed, minSample: MIN_RESPONSE_SAMPLE }
+  // Experience v3 E3 (N9): individual measured stats for the gated buyer view.
+  // Computed every night whatever the display switch says, so D1 can be turned
+  // on with a history already in place. Never throws (0049 may be pending).
+  const publicStats = await recomputePublicStats(admin).catch((e: unknown) => ({ providers: 0, written: 0, skipped: e instanceof Error ? e.message : 'failed' }))
+
+  // F4 — GSTIN re-check (setting-gated, default off; flags, never suspends).
+  const gstin = await recheckGstins(admin).catch(() => ({ enabled: true, checked: 0, flagged: 0, errors: 1 }))
+
+  const result = { providers: rows?.length ?? 0, computed, nulled, failed, minSample: MIN_RESPONSE_SAMPLE, publicStats, gstin }
   await recordHeartbeat(admin, 'provider-stats', result)
   return NextResponse.json(result)
 }
