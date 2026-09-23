@@ -20,6 +20,7 @@ import { captureRuntimeEvent } from './analytics'
 import type { OnboardingRuntimeDeps } from './agents/onboarding/index'
 import type { MunshiRuntimeDeps } from './agents/munshi/index'
 import type { SupportRuntimeDeps } from './agents/support/index'
+import type { ProcurementRuntimeDeps } from './agents/procurement/index'
 
 /**
  * Wires agent-core to the runtime's environment. The runtime NEVER uses the
@@ -135,6 +136,21 @@ export function buildSupportDeps(): SupportRuntimeDeps {
     agentEnabled: RUNTIME_ENV.AGENT_ENABLED,
     // the persona of the user's own WhatsApp grant (the token route refuses a persona without one)
     tokenFor: ({ runId, userId, persona }) => mintRuntimeToken({ runId, persona: persona ?? 'buyer', userId }),
+    mediaBucket: RUNTIME_ENV.WA_MEDIA_BUCKET,
+    runtimeSecret: RUNTIME_ENV.RUNTIME_SECRET,
+    capture: captureRuntimeEvent,
+  }
+}
+
+/** S3.1 — the procurement jobs: the buyer persona (the token carries the union of the buyer's active grant scopes). */
+export function buildProcurementDeps(): ProcurementRuntimeDeps {
+  return {
+    core: buildDeps(),
+    admin: admin(),
+    whatsapp: createWhatsAppProvider(whatsappConfigFromEnv()),
+    apiUrl: RUNTIME_ENV.API_URL,
+    agentEnabled: RUNTIME_ENV.AGENT_ENABLED,
+    tokenFor: ({ runId, userId }) => mintRuntimeToken({ runId, persona: 'buyer', userId }),
     mediaBucket: RUNTIME_ENV.WA_MEDIA_BUCKET,
     runtimeSecret: RUNTIME_ENV.RUNTIME_SECRET,
     capture: captureRuntimeEvent,

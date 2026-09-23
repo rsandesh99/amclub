@@ -27,6 +27,7 @@ import {
   type SupportRfqView,
 } from '@amclub/shared'
 import { isAgentEnabledForUser, readAgentSettings } from '../../settings'
+import { PROCUREMENT_BUTTON_TITLES, hasProcurementScopes, procurementButtonId, toProcurementLocale } from '@amclub/shared'
 import { transcribeVoiceNote } from '../onboarding/stt'
 import { buttonPayloadOf } from '../onboarding/index'
 
@@ -232,6 +233,21 @@ async function sendNudgeButtons(deps: SupportRuntimeDeps, conv: ConversationRow,
   return recordOutbound(deps, conv, 'button', text, r, { buttons: buttons.map((b) => b.id), run_id: runId })
 }
 
+/** S3.1 — AGENT on for procurement + cohort + a buyer grant carrying the procurement scopes. */
+async function procurementOnFor(admin: SupabaseClient, userId: string): Promise<boolean> {
+  if (!(await isAgentEnabledForUser(admin, 'procurement', userId))) return false
+  const { data } = await admin.from('agent_grants').select('scopes').eq('user_id', userId).eq('persona', 'buyer').is('revoked_at', null)
+  return hasProcurementScopes([...new Set((((data as { scopes: string[] | null }[] | null) ?? []).flatMap((g) => g.scopes ?? [])))])
+}
+
+/** S3.1 — "Shall I start a request for this?" with ONE button: the tap re-runs THIS message in a new procurement session. */
+async function sendStartOffer(deps: SupportRuntimeDeps, conv: ConversationRow, locale: SupportLocale, messageId: string, text: string): Promise<string | null> {
+  if (!deps.agentEnabled || !inWindow(deps, conv)) return sendReply(deps, conv, locale, text, { reply_key: 'new_need.offer' })
+  const buttons = [{ id: procurementButtonId({ kind: 'session', choice: 'new', messageId }), title: PROCUREMENT_BUTTON_TITLES[toProcurementLocale(locale)].start }]
+  const r = await deps.whatsapp.sendButtons(conv.phone_e164, text, buttons)
+  return recordOutbound(deps, conv, 'button', text, r, { reply_key: 'new_need.offer', buttons: buttons.map((b) => b.id) })
+}
+
 // ── the agent definition: one run per turn ───────────────────────────────────
 
 interface SupportTurnAgentInput {
@@ -241,6 +257,8 @@ interface SupportTurnAgentInput {
   locale: SupportLocale
   roles: ('buyer' | 'provider')[]
   previousText: string | null
+  /** S3.1 — the procurement agent is on for this buyer (flag + cohort + a grant with its scopes): new_need → the start offer. */
+  procurementAvailable: boolean
 }
 
 interface SupportTurnAgentOutput {
@@ -284,7 +302,7 @@ function supportTurnAgent(deps: SupportRuntimeDeps, settings: { escalateAfterTur
           sla: SLA,
           supportContact: CONTACT,
         },
-        { text: input.text, messageId: input.messageId, channel: 'whatsapp', roles: input.roles, locale: input.locale, history: { intents: input.conv.support_last_intents ?? [], unclearStreak: input.conv.support_unclear_streak ?? 0, previousText: input.previousText }, openTicket: false },
+        { text: input.text, messageId: input.messageId, channel: 'whatsapp', roles: input.roles, locale: input.locale, history: { intents: input.conv.support_last_intents ?? [], unclearStreak: input.conv.support_unclear_streak ?? 0, previousText: input.previousText }, openTicket: false, procurementAvailable: input.procurementAvailable },
       )
       if (!turn.numbers.ok) console.error('[support] numbers rule violated', turn.reply.key, turn.numbers.missing)
       if (turn.action) await run.proposeTool('nudge_counterparty', { subject_kind: turn.action.subject.kind, subject_id: turn.action.subject.id })
@@ -349,11 +367,12 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
   if (!text.trim()) return { status: 'failed', error: 'empty_message' }
 
   const { data: prev } = await deps.admin.from('wa_messages').select('body').eq('conversation_id', conv.id).eq('direction', 'in').neq('id', job.messageId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+  const procurementAvailable = roles.includes('buyer') && (await procurementOnFor(deps.admin, conv.user_id))
   const result = await runAgent(
     supportTurnAgent(deps, settings, persona),
     { ...deps.core, scopes: null, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) },
     { userId: conv.user_id, surface: 'whatsapp', subjectType: 'wa_conversation', subjectId: conv.id, jobId: job.jobId ?? null, meta: { agent: 'support', message_id: job.messageId } },
-    { conv, messageId: job.messageId, text, locale, roles, previousText: (prev as { body?: string } | null)?.body ?? null },
+    { conv, messageId: job.messageId, text, locale, roles, previousText: (prev as { body?: string } | null)?.body ?? null, procurementAvailable },
   )
   if (result.status === 'failed') return { status: 'failed', error: result.error }
   const out = result.output
@@ -371,6 +390,7 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
   }
 
   if (out.action) await sendNudgeButtons(deps, conv, locale, result.runId, out.replyText)
+  else if (out.replyKey === 'new_need.offer') await sendStartOffer(deps, conv, locale, job.messageId, out.replyText)
   else await sendReply(deps, conv, locale, out.replyText, { support: true, reply_key: out.replyKey })
   await deps.admin.from('wa_conversations').update({ support_last_intents: [...(conv.support_last_intents ?? []), (out.intent ?? 'other') as SupportIntent].slice(-5), support_unclear_streak: out.unclearStreak }).eq('id', conv.id)
   deps.capture?.(conv.user_id, 'support_turn', { channel: 'whatsapp', intent: out.intent, escalated: false, reply_key: out.replyKey })

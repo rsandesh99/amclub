@@ -6,7 +6,8 @@ import { listExpiredOnboardingSessions, runOnboardingTurn, type OnboardingTurn }
 import { disputeTriageAgent, type DisputeTriageInput } from './agents/dispute-triage/index'
 import { runMunshiDecide, runMunshiFollowup, runMunshiGrowth, runMunshiScan, type MunshiDecideJob } from './agents/munshi/index'
 import { runSupportDecide, runSupportReply, type SupportDecideJob, type SupportReplyJob } from './agents/support/index'
-import { admin, buildDeps, buildMunshiDeps, buildOnboardingDeps, buildSupportDeps } from './deps'
+import { decideProcurement, runProcurementTurn, runProcurementWatch, type ProcurementDecideJob, type ProcurementTurnJob } from './agents/procurement/index'
+import { admin, buildDeps, buildMunshiDeps, buildOnboardingDeps, buildProcurementDeps, buildSupportDeps } from './deps'
 import { handleWaInbound } from './whatsapp/inbound'
 import { RUNTIME_ENV } from './env'
 
@@ -40,13 +41,18 @@ const MUNSHI_DECIDE_RETRY = { retryLimit: 1, retryDelay: 60 } as const
 const SUPPORT_REPLY_QUEUE = 'agent.support.reply'
 const SUPPORT_DECIDE_QUEUE = 'agent.support.decide'
 const SUPPORT_RETRY = { retryLimit: 1, retryDelay: 60 } as const
+/** S3.1 — procurement: a turn and a decision retry once after 60 s (idempotent: guarded session updates, the decision route's 409); the watch never retries (the next 15-min tick is the retry). */
+const PROCUREMENT_TURN_QUEUE = 'agent.procurement.turn'
+const PROCUREMENT_WATCH_QUEUE = 'agent.procurement.watch'
+const PROCUREMENT_DECIDE_QUEUE = 'agent.procurement.decide'
+const PROCUREMENT_RETRY = { retryLimit: 1, retryDelay: 60 } as const
 
 /**
  * Run failures that retrying cannot fix: the web flag is off, the user has no
  * grant, a budget/step cap, authz, or the evidence read was refused (4xx).
  * Everything else (network, 5xx, DB) is thrown so pg-boss retries per queue.
  */
-const NO_RETRY = /^(agent_disabled|no_\w+_grant|budget_|step_budget|tool_not_allowed|tool_out_of_scope|taint_violation|evidence_read_failed:4|session_terminal|session_not_found|message_not_found|message_conversation_mismatch|no_draft_to_confirm|dispute_resolved|dispute_not_found|dispute_read_failed:4|triage_cap|draft_gone|grant_revoked|daily_cap|decision_failed:4|ticket_open|conversation_not_found|no_profile|empty_message|run_gone)/
+const NO_RETRY = /^(agent_disabled|no_\w+_grant|budget_|step_budget|tool_not_allowed|tool_out_of_scope|taint_violation|evidence_read_failed:4|session_terminal|session_not_found|message_not_found|message_conversation_mismatch|no_draft_to_confirm|dispute_resolved|dispute_not_found|dispute_read_failed:4|triage_cap|draft_gone|grant_revoked|daily_cap|decision_failed:4|ticket_open|conversation_not_found|no_profile|empty_message|run_gone|session_closed|grant_revoked|proposal_cap|session_insert_failed)/
 
 interface RunJob {
   agent: string
@@ -74,6 +80,9 @@ export async function startWorker(): Promise<void> {
   await boss.createQueue(MUNSHI_DECIDE_QUEUE, { name: MUNSHI_DECIDE_QUEUE, ...MUNSHI_DECIDE_RETRY })
   await boss.createQueue(SUPPORT_REPLY_QUEUE, { name: SUPPORT_REPLY_QUEUE, ...SUPPORT_RETRY })
   await boss.createQueue(SUPPORT_DECIDE_QUEUE, { name: SUPPORT_DECIDE_QUEUE, ...SUPPORT_RETRY })
+  await boss.createQueue(PROCUREMENT_TURN_QUEUE, { name: PROCUREMENT_TURN_QUEUE, ...PROCUREMENT_RETRY })
+  await boss.createQueue(PROCUREMENT_DECIDE_QUEUE, { name: PROCUREMENT_DECIDE_QUEUE, ...PROCUREMENT_RETRY })
+  await boss.createQueue(PROCUREMENT_WATCH_QUEUE, { name: PROCUREMENT_WATCH_QUEUE, retryLimit: 0 })
   const deps = buildDeps()
 
   await boss.work<RunJob>(QUEUE, async (jobs) => {
@@ -175,8 +184,37 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
+  await boss.work<ProcurementTurnJob>(PROCUREMENT_TURN_QUEUE, async (jobs) => {
+    for (const job of jobs) {
+      const r = await runProcurementTurn(buildProcurementDeps(), { ...job.data, jobId: job.id })
+      if (r.status === 'failed') {
+        if (NO_RETRY.test(r.error)) {
+          console.warn(`[worker] procurement.turn ${job.data.messageId ?? job.data.turnId ?? '-'} failed terminally: ${r.error}`)
+          continue
+        }
+        throw new Error(`procurement.turn failed: ${r.error}`) // → pg-boss retry (1 × 60 s)
+      }
+    }
+  })
+  await boss.work<ProcurementDecideJob>(PROCUREMENT_DECIDE_QUEUE, async (jobs) => {
+    for (const job of jobs) {
+      const r = await decideProcurement(buildProcurementDeps(), { ...job.data, jobId: job.id })
+      if (r.status === 'failed') {
+        if (NO_RETRY.test(r.error)) {
+          console.warn(`[worker] procurement.decide ${job.data.action}/${job.data.runId} failed terminally: ${r.error}`)
+          continue
+        }
+        throw new Error(`procurement.decide ${job.data.runId} failed: ${r.error}`)
+      }
+    }
+  })
+  await boss.work<{ kind: 'watch' }>(PROCUREMENT_WATCH_QUEUE, async () => {
+    const r = await runProcurementWatch(buildProcurementDeps())
+    if (r.status === 'failed') console.warn(`[worker] procurement.watch: ${r.error}`)
+    else console.log('[worker] procurement.watch', JSON.stringify(r.detail))
+  })
   await boss.work<{ messageId: string }>(WA_QUEUE, async (jobs) => {
-    for (const job of jobs) await handleWaInbound(job.data.messageId, { enqueueOnboarding: enqueueOnboardingJob, enqueueMunshiDecide: enqueueMunshiDecideJob, enqueueSupportReply: enqueueSupportReplyJob, enqueueSupportDecide: enqueueSupportDecideJob })
+    for (const job of jobs) await handleWaInbound(job.data.messageId, { enqueueOnboarding: enqueueOnboardingJob, enqueueMunshiDecide: enqueueMunshiDecideJob, enqueueSupportReply: enqueueSupportReplyJob, enqueueSupportDecide: enqueueSupportDecideJob, enqueueProcurementTurn: enqueueProcurementTurnJob, enqueueProcurementDecide: enqueueProcurementDecideJob })
   })
   console.log(`[worker] pg-boss started on queues ${QUEUE}, ${DOSSIER_QUEUE}, ${TRIAGE_QUEUE}, ${ONBOARDING_QUEUE}, ${MUNSHI_SCAN_QUEUE}, ${MUNSHI_DECIDE_QUEUE}, ${MUNSHI_FOLLOWUP_QUEUE}, ${SUPPORT_REPLY_QUEUE}, ${SUPPORT_DECIDE_QUEUE}, ${WA_QUEUE}`)
 }
@@ -197,6 +235,16 @@ export async function enqueueSupportDecideJob(job: { runId: string; messageId: s
   return boss.send(SUPPORT_DECIDE_QUEUE, { kind: 'decide', ...job }, { ...SUPPORT_RETRY })
 }
 
+/** S3.1 — one procurement turn / one procurement decision. */
+export async function enqueueProcurementTurnJob(job: Omit<ProcurementTurnJob, 'kind'>): Promise<string | null> {
+  if (!boss) return null
+  return boss.send(PROCUREMENT_TURN_QUEUE, { kind: 'turn', ...job }, { ...PROCUREMENT_RETRY })
+}
+export async function enqueueProcurementDecideJob(job: Omit<ProcurementDecideJob, 'kind'>): Promise<string | null> {
+  if (!boss) return null
+  return boss.send(PROCUREMENT_DECIDE_QUEUE, { kind: 'decide', ...job }, { ...PROCUREMENT_RETRY })
+}
+
 /** S2.2 — one Munshi decision (a button tap or an utterance) on its own queue. */
 export async function enqueueMunshiDecideJob(job: Omit<MunshiDecideJob, 'kind'>): Promise<string | null> {
   if (!boss) return null
@@ -210,6 +258,15 @@ export async function enqueueJob(agent: string, data: unknown): Promise<string |
   if (agent === 'munshi.scan') return boss.send(MUNSHI_SCAN_QUEUE, { kind: 'scan' }, { retryLimit: 0, singletonKey: 'munshi.scan', singletonSeconds: 600 })
   if (agent === 'munshi.followup') return boss.send(MUNSHI_FOLLOWUP_QUEUE, { kind: 'followup' }, { retryLimit: 0, singletonKey: 'munshi.followup', singletonSeconds: 1800 })
   if (agent === 'munshi.growth') return boss.send(MUNSHI_GROWTH_QUEUE, { kind: 'growth' }, { retryLimit: 0, singletonKey: 'munshi.growth', singletonSeconds: 3600 })
+  // S3.1 — the watcher (web cron, every 15 min; overlapping ticks collapse) and a web / mobile composer turn (the web
+  // stored the buyer's turn; the runtime runs the SAME turn engine as WhatsApp). Validated shapes only.
+  if (agent === 'procurement.watch') return boss.send(PROCUREMENT_WATCH_QUEUE, { kind: 'watch' }, { retryLimit: 0, singletonKey: 'procurement.watch', singletonSeconds: 600 })
+  if (agent === 'procurement.turn') {
+    const t = data as Partial<ProcurementTurnJob>
+    const uuid = /^[0-9a-f-]{36}$/i
+    if (typeof t.userId !== 'string' || !uuid.test(t.userId) || typeof t.turnId !== 'string' || !uuid.test(t.turnId) || (t.sessionId !== null && t.sessionId !== undefined && !uuid.test(String(t.sessionId))) || (t.surface !== 'web' && t.surface !== 'mobile')) throw new Error('bad_procurement_turn')
+    return enqueueProcurementTurnJob({ userId: t.userId, surface: t.surface, sessionId: t.sessionId ?? null, turnId: t.turnId })
+  }
   if (agent === 'onboarding') {
     // The web start route: { kind:'start', sessionId }. Validated shape only.
     const t = data as Partial<OnboardingTurn>

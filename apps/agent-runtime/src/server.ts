@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { finalizeMunshiRun } from './agents/munshi/index'
-import { buildMunshiDeps } from './deps'
+import { finalizeProcurementRun } from './agents/procurement/index'
+import { sessionByOpenRun } from './agents/procurement/store'
+import { admin, buildMunshiDeps, buildProcurementDeps } from './deps'
 import { serve } from '@hono/node-server'
 import { HTTPException } from 'hono/http-exception'
 import {
@@ -42,16 +44,20 @@ app.post('/internal/runs/:id/resume', async (c) => {
   const toolParsed = agentToolNameSchema.safeParse(body.tool)
   if (!toolParsed.success) return c.json({ error: 'bad_tool' }, 400)
   const run = new AgentRun(buildRunContext({ runId: id, userId: claims.userId, persona: claims.persona }))
+  // S3.1 — a procurement proposal approved in the web / mobile mirror: after the route ran, the session + the buyer's reply.
+  const procurement = !!(await sessionByOpenRun(admin(), id))
   // S2.2 — a Munshi run resumed from the web / mobile Approve: after the route ran, close the draft and tell the provider.
-  const munshiTool = toolParsed.data === 'submit_quote' || toolParsed.data === 'ask_clarification' || toolParsed.data === 'reply_thread'
+  const munshiTool = !procurement && (toolParsed.data === 'submit_quote' || toolParsed.data === 'ask_clarification' || toolParsed.data === 'reply_thread')
   try {
     const outcome = await run.resume(toolParsed.data, body.final ?? {}, body.decisionId ? { decisionId: body.decisionId } : undefined)
     await run.complete()
     if (munshiTool) await finalizeMunshiRun(buildMunshiDeps(), id, outcome.status === 'done' ? outcome.result : null, null, 'web').catch((e: Error) => console.warn('[munshi] finalize', e.message))
+    if (procurement) await finalizeProcurementRun(buildProcurementDeps(), id, outcome.status === 'done' ? outcome.result : null, null, body.decisionId ?? null).catch((e: Error) => console.warn('[procurement] finalize', e.message))
     return c.json({ ok: true, outcome })
   } catch (e) {
     await run.fail((e as Error).message)
     if (munshiTool) await finalizeMunshiRun(buildMunshiDeps(), id, null, (e as Error).message, 'web').catch((err: Error) => console.warn('[munshi] finalize', err.message))
+    if (procurement) await finalizeProcurementRun(buildProcurementDeps(), id, null, (e as Error).message, body.decisionId ?? null).catch((err: Error) => console.warn('[procurement] finalize', err.message))
     return c.json({ error: (e as Error).message }, 400)
   }
 })

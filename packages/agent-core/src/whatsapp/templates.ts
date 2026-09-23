@@ -36,6 +36,9 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   munshi_result: { names: { en: 'amc_munshi_result_en', hi: 'amc_munshi_result_hi', te: 'amc_munshi_result_te' }, params: (n) => [n.body] },
   // S2.4 — the weekly growth nudge (opt-in gated; informational): [the nudge line]
   munshi_growth: { names: { en: 'amc_munshi_growth_en', hi: 'amc_munshi_growth_hi', te: 'amc_munshi_growth_te' }, params: (n) => [n.body] },
+  // S3.1 — the procurement agent outside the 24 h window: one line of the message + the assistant link (decisions then
+  // happen in the app; buttons are in-window only). Buyer; opt-in gated. en/hi/te.
+  procurement_update: { names: { en: 'amc_procurement_update_en', hi: 'amc_procurement_update_hi', te: 'amc_procurement_update_te' }, params: (n) => [n.body.split('\n')[0]!.slice(0, 300), n.link ?? ''] },
   order_placed: { names: { en: 'amc_order_placed_en', hi: 'amc_order_placed_hi' }, params: titleBody },
   order_accepted: { names: { en: 'amc_order_accepted_en', hi: 'amc_order_accepted_hi' }, params: titleBody },
   requirements_submitted: { names: { en: 'amc_requirements_submitted_en', hi: 'amc_requirements_submitted_hi' }, params: titleBody },
