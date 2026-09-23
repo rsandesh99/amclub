@@ -11,7 +11,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, type ActionItem, type OrderStatus } from '@amclub/shared'
+import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, autofilledFields, type ActionItem, type GstinAutofill, type OrderStatus } from '@amclub/shared'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -997,6 +997,82 @@ async function e9b() {
   }
 }
 
+async function e10() {
+  console.log('\nE10 — provider onboarding v3')
+  const cronSecret = process.env['CRON_SECRET']
+  const cron = async () => (await (await fetch(`${BASE}/api/v1/cron/onboarding-nudges`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })).json()) as { sent?: number }
+  const cookieApi = (cookie: string, p: string, body: unknown) => fetch(`${BASE}${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) })
+  // A checksum-valid GSTIN issued in Telangana (code 36).
+  const gstin = [...'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map((c) => `36AABCE${String(Date.now()).slice(-4)}F1Z${c}`).find((g) => isValidGstin(g))!
+  const app = await mkUser('e10app')
+  let providerId: string | null = null
+  try {
+    const needs = visible(await (await fetch(`${BASE}/partner/onboarding`, { headers: { cookie: app.cookie } })).text())
+    const atStep = visible(await (await fetch(`${BASE}/partner/onboarding?step=business`, { headers: { cookie: app.cookie } })).text())
+    check('FR-10.1/10.2: "What you’ll need" first; ?step= resumes at the exact step', needs.includes('data-testid="onboarding-needs"') && atStep.includes('data-step="business"'))
+    const prog = await cookieApi(app.cookie, '/api/v1/profile/provider/onboarding-progress', { step: 'business', categorySlug: 'digital-marketing' })
+    const { data: row } = await admin.from('provider_onboarding_progress').select('step, category_slug, submitted_at').eq('user_id', app.uid).maybeSingle()
+    check('FR-10.4: each step is saved on the server', prog.ok && row?.step === 'business' && row.category_slug === 'digital-marketing' && row.submitted_at === null)
+
+    // FR-10.3 — the stub registry fills legal name, trade name, state and date; a state that disagrees with the code is a flag.
+    const v = await cookieApi(app.cookie, '/api/v1/profile/provider/kyc/verify-gstin', { gstin })
+    const vj = (await v.json()) as { autofill?: GstinAutofill }
+    const a = vj.autofill
+    check('FR-10.3: a stub GSTIN fills 4 fields', v.ok && !!a && autofilledFields(a).length === 4 && a.active === true, JSON.stringify(a))
+    check('FR-10.3: the GSTIN’s own state code is checked (a mismatch is flagged, not blocked)', !!a && a.stateMismatch === true && a.state === 'MH')
+
+    // Submit through the ordinary route with the autofilled values.
+    await api(app.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy', 'provider_addendum'], surface: 'web', locale: 'en' })
+    await cookieApi(app.cookie, '/api/v1/profile/provider/kyc/verify-bank', { accountNumber: '123456789012', ifsc: 'HDFC0000001', holderName: a?.legalName ?? 'E10' })
+    const sub = await cookieApi(app.cookie, '/api/v1/profile/provider', { fullName: 'E10 Applicant', legalName: a?.legalName, displayName: a?.tradeName, gstin, categorySlugs: ['digital-marketing'], state: a?.state, city: 'Hyderabad', languages: ['en'], bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: a?.legalName, bankVerified: true })
+    const sj = (await sub.json().catch(() => ({}))) as { providerId?: string }
+    providerId = sj.providerId ?? null
+    if (providerId) created.providerIds.push(providerId)
+    const { data: after } = await admin.from('provider_onboarding_progress').select('submitted_at').eq('user_id', app.uid).single()
+    check('FR-10.4: submitting stamps the draft done', sub.ok && !!after?.submitted_at, `status ${sub.status}`)
+
+    const adm = await mkUser('e10admin', ['admin'])
+    const q = visible(await (await fetch(`${BASE}/admin/verifications`, { headers: { cookie: adm.cookie } })).text())
+    check('FR-10.3: the admin queue shows the source of each field and the state flag', q.includes(`data-testid="autofill-${providerId}"`) && q.includes(`data-testid="state-flag-${providerId}"`) && q.includes('From GST records'))
+    const ov = await api(adm.token, `/api/v1/admin/verifications/${providerId}/legal-name`, { legalName: 'E10 Corrected LLP', reason: 'registry holds the old name' })
+    const { data: pr } = await admin.from('provider_profiles').select('legal_name').eq('id', providerId ?? '').single()
+    const { count: audits } = await admin.from('audit_logs').select('id', { count: 'exact', head: true }).eq('action', 'provider_legal_name_overridden').eq('entity_id', providerId ?? '')
+    check('FR-10.3: an admin can override the locked legal name (audit-logged)', ov.ok && pr?.legal_name === 'E10 Corrected LLP' && audits === 1)
+    check('FR-10.3: a non-admin cannot', (await api(app.token, `/api/v1/admin/verifications/${providerId}/legal-name`, { legalName: 'Nope Co', reason: 'nope nope' })).status === 403)
+  } finally {
+    if (providerId) {
+      await admin.from('provider_bank_accounts').delete().eq('provider_id', providerId)
+    }
+    await admin.from('gstin_verifications').delete().eq('user_id', app.uid)
+    await admin.from('bank_account_verifications').delete().eq('user_id', app.uid)
+  }
+
+  // FR-10.4 — the stall rule: one nudge after 24 h, none on a re-run, a second after another 24 h, never a third or after submit.
+  const stalled = await mkUser('e10stall')
+  const done = await mkUser('e10done')
+  const ago = (h: number) => new Date(Date.now() - h * 3600e3).toISOString()
+  await admin.from('provider_onboarding_progress').insert([
+    { user_id: stalled.uid, step: 'credentials_bank', updated_at: ago(25), created_at: ago(26) },
+    { user_id: done.uid, step: 'review', updated_at: ago(30), created_at: ago(31), submitted_at: ago(29) },
+  ])
+  try {
+    const first = await cron()
+    const second = await cron()
+    const { data: n1 } = await admin.from('onboarding_nudges').select('nudge_no, step').eq('user_id', stalled.uid)
+    const { data: notes } = await admin.from('notifications').select('link').eq('user_id', stalled.uid).eq('kind', 'onboarding_stalled')
+    check('FR-10.4: a draft stalled 24 h gets exactly one nudge, deep-linked to its step', (first.sent ?? 0) >= 1 && second.sent === 0 && n1?.length === 1 && (notes ?? []).length === 1 && notes?.[0]?.link === '/partner/onboarding?step=credentials_bank', `first ${first.sent}, second ${second.sent}`)
+    await admin.from('onboarding_nudges').update({ sent_at: ago(25) }).eq('user_id', stalled.uid)
+    await cron()
+    await admin.from('onboarding_nudges').update({ sent_at: ago(25) }).eq('user_id', stalled.uid)
+    await cron()
+    const { data: n2 } = await admin.from('onboarding_nudges').select('nudge_no').eq('user_id', stalled.uid)
+    const { count: doneNudges } = await admin.from('onboarding_nudges').select('user_id', { count: 'exact', head: true }).eq('user_id', done.uid)
+    check('FR-10.4: at most 2 nudges; a submitted draft gets none', n2?.length === 2 && doneNudges === 0)
+  } finally {
+    await admin.from('notifications').delete().in('user_id', [stalled.uid, done.uid, app.uid])
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1010,6 +1086,7 @@ async function main() {
     await e6()
     await e9()
     await e9b()
+    await e10()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

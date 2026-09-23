@@ -5,6 +5,7 @@ import { getSessionUser } from '@/lib/auth/session'
 import { getKycClient } from '@/lib/kyc'
 import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
+import { toGstinAutofill } from '@amclub/shared'
 
 const bodySchema = z.object({
   gstin: z.string().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, 'Invalid GSTIN format'),
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
       state: result.state ?? null,
       registrationDate: result.registrationDate ?? null,
       isActive: result.isActive ?? null,
+      statusText: result.statusText ?? null,
       error: result.error ?? null,
     },
   })
@@ -62,5 +64,8 @@ export async function POST(request: NextRequest) {
     legalName: result.legalName,
     tradeName: result.tradeName,
     stub: result.stub ?? false,
+    // Experience v3 E10 (N27) — the vendor facts normalised for autofill: state from the vendor or the
+    // GSTIN's own code (a disagreement is an admin flag, never a block), the date, active + its reason.
+    autofill: toGstinAutofill(parsed.data.gstin, result),
   })
 }

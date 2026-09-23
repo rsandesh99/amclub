@@ -7,13 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createAdminClient } from '@/lib/supabase/server'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { isOnboardingEnabledFor, onboardingDraftView } from '@/lib/agent/onboarding'
+import { ONBOARDING_V3_STEPS, type OnboardingV3Step } from '@amclub/shared'
+import { isOnFor } from '@/lib/experiments'
+import { ProviderWizardV3 } from '@/components/wizard-v3/ProviderWizardV3'
 
 export default async function ProviderOnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>
+  searchParams: Promise<{ next?: string; step?: string }>
 }) {
-  const { next } = await searchParams
+  const { next, step } = await searchParams
   const t = await getTranslations('provider_signup')
   const user = await getSessionUser()
   if (!user) redirect(`/login?next=${encodeURIComponent(withNext('/partner/onboarding', next))}`)
@@ -32,6 +35,19 @@ export default async function ProviderOnboardingPage({
   // prefilled fields and their chips render on first paint. Both null/false while dark.
   const admin = await createAdminClient()
   const waEnabled = AGENT_ENABLED ? await isOnboardingEnabledFor(admin, user.id) : false
+
+  // Experience v3 E10 (flag `onboarding`): four named steps, GSTIN autofill; ?step= resumes a nudged draft.
+  if (isOnFor('onboarding', user.id)) {
+    const initialStep = (ONBOARDING_V3_STEPS as readonly string[]).includes(step ?? '') ? (step as OnboardingV3Step) : null
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <div className="mx-auto w-full max-w-lg py-6">
+          <h1 className="t-title-1 mb-5">{t('page_title')}</h1>
+          <ProviderWizardV3 initialName={user.fullName ?? ''} initialStep={initialStep} next={safeNext(next)} waEnabled={waEnabled} />
+        </div>
+      </div>
+    )
+  }
   const waDraft = AGENT_ENABLED ? await onboardingDraftView(admin, user.id) : null
 
   return (

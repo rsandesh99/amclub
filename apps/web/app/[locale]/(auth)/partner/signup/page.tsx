@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server'
 import { Link } from '@/i18n/navigation'
 import { ProviderWizard } from '@/components/wizard/ProviderWizard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { isOnForEveryone } from '@/lib/experiments'
 
 export default async function ProviderSignupPage() {
   const t = await getTranslations('provider_signup')
@@ -14,7 +15,8 @@ export default async function ProviderSignupPage() {
         <CardTitle>{t('page_title')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <ProviderWizard />
+        {/* Experience v3 E10: sign in here, then the four-step wizard at /partner/onboarding. */}
+        <ProviderWizard {...(isOnForEveryone('onboarding') ? { handoffTo: '/partner/onboarding' } : {})} />
         <p className="text-center text-sm text-foreground-secondary">
           {tAuth('already_have_account')}{' '}
           <Link href="/login" className="text-primary underline underline-offset-2 hover:no-underline">

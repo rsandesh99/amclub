@@ -73,6 +73,9 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   onboarding_resume: { names: { en: 'amc_onboarding_resume_en', hi: 'amc_onboarding_resume_hi', te: 'amc_onboarding_resume_te' }, params: (n) => [n.title] },
   onboarding_draft_ready: { names: { en: 'amc_onboarding_draft_ready_en', hi: 'amc_onboarding_draft_ready_hi', te: 'amc_onboarding_draft_ready_te' }, params: (n) => [n.title] },
   onboarding_expired: { names: { en: 'amc_onboarding_expired_en', hi: 'amc_onboarding_expired_hi', te: 'amc_onboarding_expired_te' }, params: (n) => [n.link ?? ''] },
+  // Experience v3 E10 — the provider-wizard stall nudge (opt-in gated; at most 2 per draft): [title "Your AMClub
+  // profile is 2 steps from done", the deep link to the exact step]. en/hi/te.
+  onboarding_stalled: { names: { en: 'amc_onboarding_stalled_en', hi: 'amc_onboarding_stalled_hi', te: 'amc_onboarding_stalled_te' }, params: (n) => [n.title, n.link ?? ''] },
   // Experience v3 E9b — licence renewal reminder (buyer; opt-in gated; dark behind obligations_enabled):
   // [title "Your FSSAI licence expires on 14 Nov", the category link]. en/hi/te.
   licence_renewal_due: { names: { en: 'amc_licence_renewal_due_en', hi: 'amc_licence_renewal_due_hi', te: 'amc_licence_renewal_due_te' }, params: (n) => [n.title, n.link ?? ''] },

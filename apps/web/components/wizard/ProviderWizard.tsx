@@ -96,6 +96,8 @@ interface ProviderWizardProps {
   waDraft?: WaDraftProp | null
   /** E0 (U1) — the sanitized page the applicant was heading to when the auth wall sent them here. */
   next?: string | null
+  /** Experience v3 E10 — after sign-in, continue in the v3 wizard at this path instead of the v2 steps. */
+  handoffTo?: string
 }
 
 /** Fill only EMPTY fields from a confirmed draft; returns the patch and the keys it filled. */
@@ -120,7 +122,7 @@ function prefillFromWa(d: Draft, v: WaDraftProp | null | undefined): { next: Par
   return { next, filled }
 }
 
-export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: waDraftProp, next = null }: ProviderWizardProps) {
+export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: waDraftProp, next = null, handoffTo }: ProviderWizardProps) {
   const t = useTranslations('provider_signup')
   const tCommon = useTranslations('common')
   // Credential type labels live in the gateway namespace (translated in all 4
@@ -286,6 +288,7 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
     const res = await fetch('/api/v1/profile/me')
     const d = await res.json().catch(() => ({}))
     if (d.hasProviderProfile) router.push(next ?? '/partner')
+    else if (handoffTo) router.push(handoffTo as '/partner/onboarding')
     else setStep('business')
   }
 

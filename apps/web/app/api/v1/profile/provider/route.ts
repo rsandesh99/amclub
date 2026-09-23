@@ -16,6 +16,8 @@ import { encryptColumn, fingerprintColumn } from '@/lib/crypto'
 import { serverError } from '@/lib/api/errors'
 import { missingLegalDocs } from '@/lib/legal/acceptance'
 import { captureServerEvent } from '@/lib/analytics/server'
+import { isOnFor } from '@/lib/experiments'
+import { markOnboardingSubmitted } from '@/lib/onboarding-v3'
 
 const credentialUploadSchema = z.object({
   url: z.string().optional(),
@@ -298,6 +300,9 @@ export async function POST(request: NextRequest) {
     if (linkErr) console.error('[profile/provider POST] onboarding link:', linkErr)
     captureServerEvent(user.id, 'onboarding_prefill_used', { session_id: d.onboardingSessionId, provider_id: providerId })
   }
+
+  // Experience v3 E10 (N27c) — a submitted draft is never nudged again.
+  if (isOnFor('onboarding', user.id)) await markOnboardingSubmitted(admin, user.id)
 
   return NextResponse.json({ success: true, providerId, slug, status: 'under_review' })
 }
