@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { serverError } from '@/lib/api/errors'
+import { KYC_BUCKET, KYC_SIGNED_URL_TTL_SECONDS, credentialPathPrefix } from '@/lib/auth/kyc-documents'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -75,11 +76,11 @@ export async function POST(request: NextRequest) {
   // docType lands in the storage path — clamp it, and derive the extension
   // from the verified type (client filename never touches the path).
   const safeDocType = docType.replace(/[^a-z0-9_-]/gi, '').slice(0, 40) || 'credential'
-  const path = `provider-credentials/${user.id}/${safeDocType}-${Date.now()}.${TYPE_EXT[file.type]}`
+  const path = `${credentialPathPrefix(user.id)}${safeDocType}-${Date.now()}.${TYPE_EXT[file.type]}`
 
   const admin = await createAdminClient()
   const { error } = await admin.storage
-    .from('kyc-documents')
+    .from(KYC_BUCKET)
     .upload(path, buffer, {
       contentType: file.type,
       upsert: false,
@@ -89,15 +90,18 @@ export async function POST(request: NextRequest) {
     return serverError('[credential-upload]', error)
   }
 
-  // Return a signed URL valid for 7 days so the admin can view it
+  // P0-9: the STORAGE PATH is the durable reference — profile/provider persists
+  // it as provider_verifications.document_url and the admin queue signs on
+  // read. `url` carries the path too because that is the field the signup
+  // wizard stores and submits (credentialUploads[slug].url). `signedUrl` is a
+  // short-lived preview link only — never persist it.
   const { data: signedData } = await admin.storage
-    .from('kyc-documents')
-    .createSignedUrl(path, 60 * 60 * 24 * 7)
+    .from(KYC_BUCKET)
+    .createSignedUrl(path, KYC_SIGNED_URL_TTL_SECONDS)
 
   return NextResponse.json({
     path,
-    // `url` is what the wizard stores in credentialUploads[slug].url
-    url: signedData?.signedUrl ?? null,
+    url: path,
     signedUrl: signedData?.signedUrl ?? null,
   })
 }
