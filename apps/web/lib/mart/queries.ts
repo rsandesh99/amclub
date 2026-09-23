@@ -38,6 +38,8 @@ export interface ProductSummary {
   countryOfOrigin: string
   brand: string | null
   specs: { k: string; v: string }[]
+  /** E16 N40 — typed attributes, validated per category by the seller routes (staged 0069). */
+  attributes: Record<string, string | number | boolean>
   availability: 'in_stock' | 'lead_time'
   leadTimeDays: number | null
   status: string
@@ -71,7 +73,7 @@ export function tierDisplay(t: TierRow, gstRateBps: number): TierDisplay {
 }
 
 const SELECT =
-  'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, brand, specs, availability, lead_time_days, list_price_paise, status, created_at, ' +
+  'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, brand, specs, attributes, availability, lead_time_days, list_price_paise, status, created_at, ' +
   'seller:provider_profiles!inner(id, display_name, slug, city, state, avg_rating, review_count, completed_orders, top_rated), tiers:price_tiers(min_qty, unit_price_paise)'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -95,6 +97,7 @@ export function mapProduct(r: any): ProductSummary {
     countryOfOrigin: r.country_of_origin ?? 'IN',
     brand: r.brand ?? null,
     specs: Array.isArray(r.specs) ? (r.specs as { k: string; v: string }[]) : [],
+    attributes: r.attributes && typeof r.attributes === 'object' && !Array.isArray(r.attributes) ? (r.attributes as Record<string, string | number | boolean>) : {},
     availability: r.availability === 'lead_time' ? 'lead_time' : 'in_stock',
     leadTimeDays: r.lead_time_days == null ? null : Number(r.lead_time_days),
     status: r.status,
@@ -127,6 +130,8 @@ export interface ProductListFilters {
   /** Bounds on the min_qty=1 tier price, paise. */
   minPricePaise?: number
   maxPricePaise?: number
+  /** E16 N40 — facet filters (shared parseAttributeFilters: facetable keys, typed values). */
+  attrs?: Record<string, string | boolean>
   sort?: ProductSort
   limit?: number
   offset?: number
@@ -152,6 +157,7 @@ export async function listPublicProducts(f: ProductListFilters): Promise<{ produ
   if (f.brand) q = q.ilike('brand', f.brand)
   if (f.minPricePaise !== undefined) q = q.gte('list_price_paise', f.minPricePaise)
   if (f.maxPricePaise !== undefined) q = q.lte('list_price_paise', f.maxPricePaise)
+  if (f.attrs && Object.keys(f.attrs).length > 0) q = q.contains('attributes', f.attrs)
   if (f.query) {
     // Postgres FTS over the generated search_tsv (name + description + HSN);
     // hybrid dense search is a later trigger (MART_DESIGN.md §6).
@@ -165,6 +171,25 @@ export async function listPublicProducts(f: ProductListFilters): Promise<{ produ
   const products = (data ?? []).map(mapProduct)
   const total = count ?? products.length
   return { products, total, nextOffset: offset + products.length < total ? offset + products.length : null }
+}
+
+/**
+ * E16 N40 — the attributes of every active listing in a category (and query),
+ * for facet counts (shared countAttributeFacets). Ignores the attribute filters
+ * themselves so a chosen facet still shows its siblings. Capped at 500 rows.
+ */
+export async function attributeFacetRows(f: Pick<ProductListFilters, 'category' | 'query' | 'brand' | 'sellerSlug'>): Promise<{ attributes: unknown }[]> {
+  if (!f.category) return []
+  let q = createPublicClient().from('products').select(f.sellerSlug ? 'attributes, seller:provider_profiles!inner(slug)' : 'attributes').eq('status', 'active').is('deleted_at', null).eq('category_slug', f.category).limit(500)
+  if (f.sellerSlug) q = q.eq('seller.slug', f.sellerSlug)
+  if (f.brand) q = q.ilike('brand', f.brand)
+  if (f.query) q = q.textSearch('search_tsv', f.query, { type: 'plain', config: 'simple' })
+  const { data, error } = await q
+  if (error) {
+    console.error('[attributeFacetRows]', error.message)
+    return []
+  }
+  return (data ?? []) as unknown as { attributes: unknown }[]
 }
 
 /** One public product (anon client; null when not visible). */

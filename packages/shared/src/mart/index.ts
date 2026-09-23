@@ -5,3 +5,5 @@ export * from './goods'
 export * from './pools'
 export * from './ai-decisions'
 export * from './settings'
+// E16 N40 — typed category attributes, validation, facets (staged 0069)
+export * from './attributes'

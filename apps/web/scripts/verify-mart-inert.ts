@@ -65,6 +65,11 @@ async function main() {
       ok(`${locale || '/en'}${p}`, res.status === 404 || res.status === 307, String(res.status))
     }
   }
+  // E16 N39 — the Services | Goods switch renders only with the flag on.
+  for (const p of ['/services', '/services?query=gst']) {
+    const html = await (await fetch(`${BASE}${p}`)).text()
+    ok(`${p} has no Services | Goods switch`, !html.includes('data-testid="mode-switch"'))
+  }
   const me = await fetch(`${BASE}/api/v1/profile/me`)
   ok('profile/me unauthenticated → 401 (contract unchanged)', me.status === 401)
 

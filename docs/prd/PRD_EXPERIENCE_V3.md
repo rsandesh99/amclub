@@ -2514,6 +2514,18 @@ Nothing in this epic is user-visible.
 
 **RICE:** R 0.3 · I 1 · C 0.6 · E 3 → **0.06** (scored for the Launch Gate, not now).
 
+**As built (E16a: dual mode + typed attributes; staged migration 0069, behind `MART_ENABLED` and the Launch Gate).**
+- **Migration 0069 is STAGED** with 0022–0025 (`verify-migrations` `staged: true`; `verify-launch-gate` probes `products.attributes`; LAUNCH_RUNBOOK step 3.2 applies it). It changes Mart tables only (`products`, `mart_categories`, three new tables), so `mart:static` has nothing new to guard. `killtest-mart-storefront` proves its constraints and grants on a local DB.
+- **N40 typed attributes.**
+  - Definitions are `mart_category_attributes` (config, public read, no client writes): `text | number | enum | bool`, unit, options (enums only), `facetable` (enum / bool only), `required`. Seeded for fasteners and lubricants.
+  - Shared `validateProductAttributes` is the one rule. Both seller routes (create and PATCH) run it against the category's definitions and answer 422 `invalid_attributes` with `problems` (`required | unknown | type | option`). Numbers typed as text are stored as numbers.
+  - The listing wizard asks for the category's attributes on the confirm step (definitions from `GET /api/v1/mart/categories?attributes=<slug>`). The product page shows them above the free-form specs.
+  - **Facets.** Facetable attributes of the current category become chips (`a.<key>=<value>`, server-rendered links like the other filters). Counts come from the category's active listings; a chosen facet keeps its siblings visible. Shared `parseAttributeFilters` accepts only facetable keys and legal values; the list query applies them as one jsonb containment on the GIN-indexed column. The products API takes the same params for "show more".
+- **N39 dual mode.**
+  - A Services | Goods switch (`ModeSwitch`, a SegmentedControl) sits above the search field on `/services`, `/app/search` and the Mart header. It renders only when `MART_ENABLED` and carries the query across.
+  - Strong goods results (≥ 3) show a "Make to order" strip: the goods RFQ (ADR-007) prefilled with the query and category. Weak results (< 3) show the prefilled goods RFQ card after the grid; zero results keep the existing empty state with the same link.
+- **Acceptance.** `mart:acceptance` runs the new `verify-mart-storefront` (N39 + N40 now; E16b / E16c add N41–N44) and, on a local DB, the 0069 killtest. `verify-mart-inert` checks `/services` renders no switch with the flag off.
+
 ---
 
 ### E17: Analytics consent (N36, gated: D-UX2)

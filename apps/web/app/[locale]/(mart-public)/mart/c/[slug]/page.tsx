@@ -5,7 +5,7 @@ import { pickLocale } from '@amclub/shared'
 import { martPageGate } from '@/lib/mart/gate'
 import { MART_ENABLED } from '@/lib/flags'
 import { listMartCategories } from '@/lib/mart/config'
-import { MartBrowse, type BrowseParams } from '../../_browse'
+import { MartBrowse, attrParams, type BrowseParams } from '../../_browse'
 
 /**
  * Category browse — ISR per category, rendered ON DEMAND (first hit builds it,
@@ -32,6 +32,6 @@ export default async function MartCategoryPage({ params, searchParams }: { param
   const [{ slug }, sp] = await Promise.all([params, searchParams])
   const cats = await listMartCategories()
   if (!cats.some((c) => c.slug === slug)) notFound()
-  const p: BrowseParams = { category: slug, sort: sp['sort'], brand: sp['brand'], band: sp['band'], seller: sp['seller'] }
+  const p: BrowseParams = { category: slug, sort: sp['sort'], brand: sp['brand'], band: sp['band'], seller: sp['seller'], attrs: attrParams(sp) }
   return <MartBrowse params={p} base={`/mart/c/${slug}`} />
 }

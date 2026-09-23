@@ -2565,7 +2565,21 @@
     "pay_blocked_phone": "Enter a valid 10-digit mobile number.",
     "pay_blocked_gstin": "Correct the GSTIN, or clear it to continue without a GST invoice.",
     "pay_blocked_form": "Fill in the delivery details above to continue.",
-    "gstin_check_hint": "This GSTIN does not pass the checksum — please re-check it."
+    "gstin_check_hint": "This GSTIN does not pass the checksum — please re-check it.",
+    "mode_label": "Search services or goods",
+    "mode_services": "Services",
+    "mode_goods": "Goods",
+    "attr_yes": "Yes",
+    "attr_no": "No",
+    "attr_any": "Any",
+    "attr_choose": "Choose",
+    "attributes_title": "Product details",
+    "attributes_hint": "Buyers filter by these. Fields marked * are required.",
+    "err_attributes": "Check the product details: fill the required ones and use numbers where a unit is shown.",
+    "make_to_order_body": "Need it made to your drawing or spec? Verified sellers quote on it.",
+    "make_to_order_cta": "Make to order",
+    "weak_results_title": "Not quite what you need?",
+    "weak_results_body": "Tell verified sellers what you need, and how many. They send quotes to compare."
   },
   "admin_mart": {
     "title": "AMC Mart",

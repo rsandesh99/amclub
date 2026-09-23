@@ -11,6 +11,8 @@ import { hasNarrowingV2, parseSearchV2 } from '@amclub/shared'
 import { isOnForEveryone } from '@/lib/experiments'
 import { SearchResultsV3 } from '@/components/search-v3/SearchResultsV3'
 import { isVoiceSearchOn } from '@/lib/voice/search'
+import { MART_ENABLED } from '@/lib/flags'
+import { ModeSwitch } from '@/components/mart/ModeSwitch'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('catalog')
@@ -41,6 +43,8 @@ export default async function ServicesPage({
       </div>
 
       <div className="mb-8 max-w-2xl">
+        {/* E16 N39 — Services | Goods, only with the Mart flag on. */}
+        {MART_ENABLED && <div className="mb-3"><ModeSwitch mode="services" query={sp['query']} /></div>}
         <SearchBar defaultValue={sp['query'] ?? ''} voice={v3 && (await isVoiceSearchOn())} />
       </div>
 

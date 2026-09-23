@@ -18,7 +18,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 
 // Keep in sync with the migrations 0022–0025 column additions on SERVICES
-// tables (rfqs, quotes, orders, provider_profiles, checkout_sessions).
+// tables (rfqs, quotes, orders, provider_profiles, checkout_sessions). The
+// staged 0069 (E16) adds columns to Mart tables only (products,
+// mart_categories), so nothing here changes for it.
 const STAGED_COLUMNS = [
   'sells_goods',            // provider_profiles (0022)
   'line_items',             // orders / checkout_sessions (0022)

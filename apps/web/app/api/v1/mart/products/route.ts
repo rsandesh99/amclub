@@ -1,9 +1,11 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { parseAttributeFilters } from '@amclub/shared'
 import { martApiGate } from '@/lib/mart/gate'
 import { listPublicProducts, PRODUCT_SORTS } from '@/lib/mart/queries'
 import { publicAssetUrl } from '@/lib/mart/assets'
+import { publicCategoryAttributes } from '@/lib/mart/attributes'
 import { enforce, limiters, tooManyRequests, clientIp } from '@/lib/rate-limit'
 
 const querySchema = z.object({
@@ -25,9 +27,12 @@ export async function GET(request: NextRequest) {
   const rl = await enforce(limiters.search, `mart-search:${clientIp(request)}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
-  const parsed = querySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams.entries()))
+  const raw = Object.fromEntries(request.nextUrl.searchParams.entries())
+  const parsed = querySchema.safeParse(raw)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   const q = parsed.data
+  // E16 N40 — `a.<key>` facet filters apply within a category (its facetable definitions only).
+  const attrs = q.category && Object.keys(raw).some((k) => k.startsWith('a.')) ? parseAttributeFilters(await publicCategoryAttributes(q.category), raw) : {}
   const result = await listPublicProducts({
     ...(q.category ? { category: q.category } : {}),
     ...(q.query ? { query: q.query } : {}),
@@ -35,6 +40,7 @@ export async function GET(request: NextRequest) {
     ...(q.brand ? { brand: q.brand } : {}),
     ...(q.minPrice !== undefined ? { minPricePaise: q.minPrice } : {}),
     ...(q.maxPrice !== undefined ? { maxPricePaise: q.maxPrice } : {}),
+    ...(Object.keys(attrs).length ? { attrs } : {}),
     ...(q.sort ? { sort: q.sort } : {}),
     ...(q.limit !== undefined ? { limit: q.limit } : {}),
     ...(q.offset !== undefined ? { offset: q.offset } : {}),

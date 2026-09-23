@@ -2,11 +2,12 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
-import { pickLocale } from '@amclub/shared'
+import { formatAttributeValue, pickLocale } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { martPageGate } from '@/lib/mart/gate'
 import { getPublicProduct } from '@/lib/mart/queries'
 import { listMartCategories } from '@/lib/mart/config'
+import { publicCategoryAttributes } from '@/lib/mart/attributes'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { formatINRExact } from '@/lib/format'
 import { getSiteUrl } from '@/lib/site-url'
@@ -42,6 +43,9 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
   const [product, categories, t, locale, tr] = await Promise.all([getPublicProduct(id), listMartCategories(), getTranslations('mart'), getLocale(), getTranslations('rfq')])
   if (!product) notFound()
   const cat = categories.find((c) => c.slug === product.categorySlug)
+  // E16 N40 — the typed attributes, in the category's order, labelled from its definitions.
+  const attrDefs = Object.keys(product.attributes).length ? await publicCategoryAttributes(product.categorySlug) : []
+  const attrRows = attrDefs.filter((d) => product.attributes[d.key] !== undefined)
   const images = product.images.map(publicAssetUrl)
   const list = product.list
   const url = `${getSiteUrl()}/mart/p/${product.id}`
@@ -155,10 +159,16 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
         </div>
       </SheetCard>
 
-      {product.specs.length > 0 && (
+      {(attrRows.length > 0 || product.specs.length > 0) && (
         <SheetCard className="mt-4">
           <h2 className="text-meta font-semibold text-emerald-ink">{t('specs')}</h2>
           <dl className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-y-1 text-meta">
+            {attrRows.map((d) => (
+              <div key={`a-${d.key}`} className="contents" data-attribute={d.key}>
+                <dt className="border-b border-brass/20 py-1.5 text-foreground-secondary">{pickLocale(d.label_i18n, locale)}</dt>
+                <dd className="border-b border-brass/20 py-1.5 text-emerald-ink">{formatAttributeValue(d, product.attributes[d.key], { yes: t('attr_yes'), no: t('attr_no') })}</dd>
+              </div>
+            ))}
             {product.specs.map((s) => (
               <div key={s.k} className="contents">
                 <dt className="border-b border-brass/20 py-1.5 text-foreground-secondary">{s.k}</dt>

@@ -55,8 +55,10 @@ const column = async (table: string, col: string) => !(await admin.from(table).s
   const m0023 = await column('pools', 'id')
   const m0024 = await column('rfqs', 'kind')
   const m0025 = await column('mart_categories', 'return_freight_payer')
-  const applied = m0022 && m0023 && m0024 && m0025
-  if (EXPECT_ON) check('0022–0025 applied (mart_categories, pools, rfqs.kind, return_freight_payer)', applied, `${[m0022, m0023, m0024, m0025].map((b) => (b ? '✓' : '✗')).join(' ')}`)
+  // E16 (0069) — storefront v2 ships in the same staged set.
+  const m0069 = await column('products', 'attributes')
+  const applied = m0022 && m0023 && m0024 && m0025 && m0069
+  if (EXPECT_ON) check('0022–0025 + 0069 applied (mart_categories, pools, rfqs.kind, return_freight_payer, products.attributes)', applied, `${[m0022, m0023, m0024, m0025, m0069].map((b) => (b ? '✓' : '✗')).join(' ')}`)
   else if (applied) wn('staged migrations already applied while the flag is OFF (allowed: additive, inert; §8.2 wants them with the enabling deploy)')
   else ok('staged migrations not applied (flag OFF) — apply them WITH the enabling deploy')
 

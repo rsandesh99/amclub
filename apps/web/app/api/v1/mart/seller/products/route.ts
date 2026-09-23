@@ -1,12 +1,13 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { productInputSchema, aiDecisionSchema } from '@amclub/shared'
+import { productInputSchema, aiDecisionSchema, validateProductAttributes } from '@amclub/shared'
 import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSellerCtx } from '@/lib/mart/seller'
 import { listSellerProducts } from '@/lib/mart/queries'
 import { getMartCategory } from '@/lib/mart/config'
+import { listCategoryAttributes } from '@/lib/mart/attributes'
 import { addProductEvent, recordAiDecision } from '@/lib/mart/events'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { serverError } from '@/lib/api/errors'
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
   if (cat.bis_blocked) return NextResponse.json({ error: 'category_blocked' }, { status: 422 })
   const prefix = `mart/${seller.id}/`
   if (d.images.some((k) => !k.startsWith(prefix))) return NextResponse.json({ error: 'Image not owned by this seller' }, { status: 403 })
+  // E16 N40 — typed attributes, validated against the category's definitions.
+  const attrs = validateProductAttributes(await listCategoryAttributes(admin, d.category_slug), d.attributes)
+  if (!attrs.ok) return NextResponse.json({ error: 'invalid_attributes', problems: attrs.problems }, { status: 422 })
 
   const { data: product, error } = await admin
     .from('products')
@@ -69,6 +73,7 @@ export async function POST(request: NextRequest) {
       country_of_origin: d.country_of_origin,
       brand: d.brand ?? null,
       specs: d.specs,
+      attributes: attrs.value,
       availability: d.availability,
       lead_time_days: d.availability === 'lead_time' ? (d.lead_time_days ?? null) : null,
       list_price_paise: d.tiers[0]?.unit_price_paise ?? null,
@@ -82,7 +87,8 @@ export async function POST(request: NextRequest) {
     .insert(d.tiers.map((t) => ({ product_id: product.id, min_qty: t.min_qty, unit_price_paise: t.unit_price_paise })))
   if (tierErr) return serverError('[mart/seller/products POST tiers]', tierErr)
 
-  const { ai, ...fields } = d
+  const { ai, ...rest } = d
+  const fields = { ...rest, attributes: attrs.value }
   await addProductEvent(admin, product.id, userId, 'created', { after: fields, from_agent: !!ai })
   if (ai) {
     await recordAiDecision(admin, userId, {
