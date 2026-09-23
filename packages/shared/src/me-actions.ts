@@ -15,7 +15,7 @@ import { NEXT_ACTIONS } from './order-next-action'
  * NextStepBar and notifications read one rule. `clarification_question` is
  * the PRD's `answer_clarification`.
  */
-export const ACTION_ITEM_KINDS = ['order_action', 'quotes_waiting', 'quote_expiring', 'clarification_question', 'rfq_new'] as const
+export const ACTION_ITEM_KINDS = ['order_action', 'quotes_waiting', 'quote_expiring', 'clarification_question', 'rfq_new', 'buyer_message', 'munshi_draft'] as const
 export type ActionItemKind = (typeof ACTION_ITEM_KINDS)[number]
 
 const base = {
@@ -45,6 +45,9 @@ export const actionItemSchema = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('clarification_question'), ...base }),
   z.object({ kind: z.literal('rfq_new'), ...base }),
+  // E11 (FR-11.1) provider kinds: a buyer's message on my quote waiting for my reply, and a Munshi draft ready (dark, S2.2).
+  z.object({ kind: z.literal('buyer_message'), ...base }),
+  z.object({ kind: z.literal('munshi_draft'), ...base }),
 ])
 export type ActionItem = z.infer<typeof actionItemSchema>
 

@@ -13,8 +13,9 @@ import { TrackedLink } from '@/components/analytics/TrackedLink'
 import { ReviewList } from '@/components/catalog/ReviewList'
 import { ProviderHeaderV3 } from '@/components/trust/ProviderHeaderV3'
 import { StickyActionBar } from '@/components/ui-v3/StickyActionBar'
-import { isOnForEveryone } from '@/lib/experiments'
+import { isExperienceLive, isOnForEveryone } from '@/lib/experiments'
 import { RecentViewTracker } from '@/components/recent-v3/RecentViewTracker'
+import { ViewBeacon } from '@/components/partner-v3/ViewBeacon'
 import { getProviderTrust } from '@/lib/trust/provider-trust'
 import { reviewExtras } from '@/lib/trust/reviews'
 import { ReviewHistogram } from '@/components/trust/ReviewHistogram'
@@ -147,6 +148,8 @@ export default async function ProviderProfilePage({
   return (
     <div className={trust ? 'mx-auto max-w-5xl px-4 pb-28 pt-6 lg:pb-8' : 'mx-auto max-w-5xl px-4 py-8'}>
       <JsonLd data={jsonLd} />
+      {/* Experience v3 E11 (N29): the provider funnel's view count. */}
+      {isExperienceLive('partner') && <ViewBeacon kind="provider" id={provider.id} />}
       {isOnForEveryone('search') && <RecentViewTracker kind="provider" id={provider.id} title={provider.displayName} href={`/p/${provider.slug}`} />}
 
       {trust ? (

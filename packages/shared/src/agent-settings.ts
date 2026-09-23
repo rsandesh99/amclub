@@ -186,6 +186,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E9b / N45 (D-PRD5): the buyer\'s licences, renewal reminders (60 / 30 / 7 days, once each) and the obligations checklist. Keep off until counsel and the CA answer D-PRD5 and the checklist reaches >= 95 % precision on the CA\'s 50-profile set; only CA-reviewed obligation_rules are ever shown.',
   },
+  // ── Experience v3 E11 — "Buyer verified ✓" in the provider inbox (FR-11.3, N28b; gated by D2) ──
+  buyer_verified_badge_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E11 / N28b (D2): the inbox shows "Buyer verified ✓" (a boolean only — Udyam or GSTIN verified AND at least one paid order on AMClub). No buyer id, name, count or contact before a quote; fan-out and the 7-quote cap are unchanged. Turn on only after D2.',
+  },
   // ── S3.2 fair price ranges (benchmarks) — compute and display are separate switches, both OFF; the formula is code ──
   benchmark_compute_enabled: {
     schema: z.boolean(),

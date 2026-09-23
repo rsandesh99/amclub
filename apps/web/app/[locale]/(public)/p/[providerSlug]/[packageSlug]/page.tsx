@@ -11,11 +11,12 @@ import { getPackageDetail } from '@/lib/catalog/queries'
 import { getPackageExtras } from '@/lib/catalog/package-groups'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatINR } from '@/lib/format'
-import { isOnForEveryone } from '@/lib/experiments'
+import { isExperienceLive, isOnForEveryone } from '@/lib/experiments'
 import { TierProvider, type BuyOption } from '@/components/packages-v3/TierContext'
 import { BuyBox, StickyBuyBar, TierTabs } from '@/components/packages-v3/BuyBox'
 import { PackageTierMatrix } from '@/components/packages-v3/TierMatrix'
 import { RecentViewTracker } from '@/components/recent-v3/RecentViewTracker'
+import { ViewBeacon } from '@/components/partner-v3/ViewBeacon'
 import { TrackedLink } from '@/components/analytics/TrackedLink'
 
 export const revalidate = 300
@@ -123,6 +124,8 @@ export default async function PackageDetailPage({
     // pb-28 below lg keeps the last section clear of the sticky buy bar.
     <div className="mx-auto max-w-5xl px-4 pb-28 pt-8 lg:pb-8">
       <JsonLd data={jsonLd} />
+      {/* Experience v3 E11 (N29): the provider funnel's view count. */}
+      {isExperienceLive('partner') && <ViewBeacon kind="package" id={pkg.id} />}
       {isOnForEveryone('search') && <RecentViewTracker kind="package" id={pkg.id} title={title} href={`/p/${provider.slug}/${pkg.slug}`} />}
 
       {/* Breadcrumb */}

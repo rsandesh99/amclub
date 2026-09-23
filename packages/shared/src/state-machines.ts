@@ -169,6 +169,15 @@ export function canTransitionQuote(from: QuoteStatus, to: QuoteStatus): boolean 
 export const PAYOUT_STATUSES = ['scheduled', 'processing', 'paid', 'failed', 'held'] as const
 export type PayoutStatus = (typeof PAYOUT_STATUSES)[number]
 
+/** Named payout statuses (rule 8), mirroring PAYOUT_STATUSES one-to-one. */
+export const PAYOUT_STATUS = {
+  scheduled: 'scheduled',
+  processing: 'processing',
+  paid: 'paid',
+  failed: 'failed',
+  held: 'held',
+} as const satisfies { [K in PayoutStatus]: K }
+
 export const PAYOUT_TRANSITIONS: Record<PayoutStatus, readonly PayoutStatus[]> = {
   scheduled: ['processing', 'held'],
   processing: ['paid', 'failed', 'held'],

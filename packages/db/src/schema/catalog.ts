@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, boolean, integer, timestamp, jsonb, bigint,
+  pgTable, uuid, text, boolean, integer, timestamp, jsonb, bigint, date,
   index, unique, primaryKey, customType, check,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
@@ -122,3 +122,16 @@ export const recentViews = pgTable('recent_views', {
 }, (table) => [
   unique('recent_views_user_ref_uniq').on(table.userId, table.kind, table.refId),
 ])
+
+// Experience v3 E11 N29 (0056): daily views per provider profile / package — the
+// top of the provider funnel. Written only by bump_view_count() (service role)
+// from the rate-limited beacon; a provider reads only their own rows (RLS).
+export const viewCountsDaily = pgTable('view_counts_daily', {
+  subjectKind: text('subject_kind').notNull(),
+  subjectId: uuid('subject_id').notNull(),
+  providerId: uuid('provider_id').notNull(),
+  day: date('day').notNull(),
+  views: integer('views').default(0).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [primaryKey({ columns: [table.subjectKind, table.subjectId, table.day] })])

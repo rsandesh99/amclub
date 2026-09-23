@@ -34,3 +34,8 @@ export function isOnFor(flag: ExperienceFlag, userId: string | null | undefined)
 export function enabledExperiences(userId: string | null | undefined): ExperienceFlag[] {
   return EXPERIENCE_FLAGS.filter((f) => isOnFor(f, userId))
 }
+
+/** Not off: on for everyone, a percentage or a cohort. For data a v3 surface will read once rolled out (e.g. view counts). */
+export function isExperienceLive(flag: ExperienceFlag): boolean {
+  return experienceSetting(flag).mode !== 'off' || cohort().size > 0
+}

@@ -89,6 +89,9 @@ export const limiters = {
   /** S1.8 document intake per buyer — one frontier-tier vision/text call each; burst + hourly pair. */
   documentExtract: build(5, '1 m', 'rl:document-extract'),
   documentExtractHourly: build(30, '1 h', 'rl:document-extract-h'),
+  // Experience v3 E11 — the view beacon: one count per visitor (IP + UA) per subject per day, and an IP cap.
+  viewOnce: build(1, '1 d', 'rl:view-once'),
+  viewIp: build(120, '1 m', 'rl:view-ip'),
 } as const
 
 export interface RateLimitResult {

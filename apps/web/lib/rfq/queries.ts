@@ -379,6 +379,11 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
   return all.filter((m) => rfqIsActive(m.status))
 }
 
+/** Experience v3 E11 — the same matched rows the inbox uses (the ONLY source the v3 filters run over). */
+export async function loadProviderInboxMatches(admin: Awaited<ReturnType<typeof createAdminClient>>, providerId: string): Promise<ProviderRfqItem[]> {
+  return loadProviderMatches(admin, providerId, PROVIDER_INBOX_SCAN_LIMIT)
+}
+
 /** The inbox scans this many most-recent matches; older history is out of the web list (a sane cap, not a cursor). */
 export const PROVIDER_INBOX_SCAN_LIMIT = 300
 export const PROVIDER_INBOX_PAGE_SIZE = 20

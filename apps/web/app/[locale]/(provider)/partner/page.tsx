@@ -17,8 +17,10 @@ import { providerScoreCard } from '@/lib/score/card'
 import { ProviderScoreCard } from '@/components/score/ProviderScoreCard'
 import { getLocale } from 'next-intl/server'
 import { summarizeProviderOrders } from '@amclub/shared'
+import { isOnFor } from '@/lib/experiments'
+import { PartnerTodayV3 } from '@/components/partner-v3/PartnerTodayV3'
 
-export default async function PartnerDashboardPage() {
+export default async function PartnerDashboardPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const t = await getTranslations('partner_home')
   const tShell = await getTranslations('shell')
 
@@ -44,6 +46,41 @@ export default async function PartnerDashboardPage() {
   const supportOn = AGENT_ENABLED ? await isSupportEnabledFor(admin, user.id) : false
   // S2.4 — the provider's OWN AMC Score (score_card_enabled; buyers never see a number).
   const scoreCard = profile.status === 'active' && (await getScoreSettings(admin)).cardEnabled ? await providerScoreCard(admin, { providerId: profile.id, userId: user.id, locale: await getLocale() }) : null
+  // Experience v3 E11 (flag `partner`): "Today" — what's due, the funnel, payouts. The banners and the score card stay.
+  if (isOnFor('partner', user.id)) {
+    const { range } = await searchParams
+    return (
+      <PartnerTodayV3
+        userId={user.id}
+        providerId={profile.id}
+        range={range === '30d' ? '30d' : '7d'}
+        banners={
+          <>
+            {isUnderReview && <div className="rounded-card border border-warning/30 bg-warning/10 p-4"><p className="text-sm text-warning">{t('under_review_banner')}</p></div>}
+            {!isUnderReview && readiness !== 'ready' && (
+              <div className="rounded-card border border-warning/30 bg-warning/10 p-4">
+                <p className="text-sm font-medium text-warning">{t('payout_hold_title')}</p>
+                <p className="mt-1 text-sm text-foreground-secondary">{t('payout_hold_body')}</p>
+              </div>
+            )}
+            {isUnderReview && profile.status === 'pending_kyc' && (
+              <div className="rounded-card border border-primary/30 bg-primary/5 p-4">
+                <p className="text-sm font-medium text-primary">{t('onboarding_cta')}</p>
+                <Link href="/partner/onboarding"><Button className="mt-3">{t('complete_onboarding')}</Button></Link>
+              </div>
+            )}
+            {scoreCard && <ProviderScoreCard card={scoreCard} />}
+            {(munshiOn || supportOn) && (
+              <div className="flex flex-wrap gap-2">
+                {munshiOn && <Link href="/partner/munshi" className="rounded-chip border border-border px-3 py-1.5 text-sm">{t('munshi')}</Link>}
+                {supportOn && <Link href="/partner/support" className="rounded-chip border border-border px-3 py-1.5 text-sm">{tShell('help_entry')}</Link>}
+              </div>
+            )}
+          </>
+        }
+      />
+    )
+  }
   const orders = await listMyOrders(user.id, 'provider')
   // E0 / U8 — one shared rule (web + /partner/stats for mobile); reviewed orders count as completed.
   const { activeCount, completedCount, earningsPaise } = summarizeProviderOrders(orders)
