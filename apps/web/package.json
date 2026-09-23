@@ -30,6 +30,7 @@
     "agents:verify:support": "tsx scripts/verify-support.ts",
     "agents:verify:procurement": "tsx scripts/verify-procurement.ts",
     "trust:verify:score": "tsx scripts/verify-score.ts",
+    "trust:verify:benchmarks": "tsx scripts/verify-benchmarks.ts",
     "voice:verify:v2": "tsx scripts/verify-voice-v2.ts"
   },
   "dependencies": {

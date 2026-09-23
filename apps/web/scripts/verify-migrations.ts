@@ -286,6 +286,13 @@ const MANIFEST: Entry[] = [
     ],
     note: 'S3.1 Buyer Procurement Agent (dark; A2 at the V1.5 -> V2 gate): procurement_sessions (one per need; one ACTIVE per user x rfq), procurement_turns (the web mirror thread), wa_conversations.procurement_session_id, ai_decisions feature procurement_step; clients SELECT only',
   },
+  {
+    file: '0046_benchmarks.sql',
+    tables: ['price_benchmarks'],
+    functions: ['benchmark_inputs', 'replace_price_benchmarks'],
+    triggers: [['price_benchmarks', 'price_benchmarks_set_updated_at']],
+    note: 'S3.2 fair price ranges (dark): price_benchmarks (aggregates only, no id column), benchmark_inputs() + replace_price_benchmarks() (service_role only); any signed-in user reads, clients SELECT only',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

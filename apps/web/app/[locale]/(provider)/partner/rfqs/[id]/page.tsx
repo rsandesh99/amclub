@@ -25,6 +25,8 @@ import { Link } from '@/i18n/navigation'
 import { QUOTE_STATUS, type RfqStatus } from '@amclub/shared'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { munshiDraftForComposer } from '@/lib/agent/munshi'
+import { getBenchmarkFor } from '@/lib/benchmarks/view'
+import { BenchmarkLine } from '@/components/rfq/BenchmarkLine'
 
 export default async function ProviderRfqPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ munshi?: string }> }) {
   const { id } = await params
@@ -58,6 +60,8 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
   // S2.2 — ?munshi=<draftId>: the provider's own open quote draft prefills the composer; the submit carries munshi_draft_id.
   const munshi = AGENT_ENABLED && sp.munshi && /^[0-9a-f-]{36}$/i.test(sp.munshi) ? await munshiDraftForComposer(await createAdminClient(), { providerId: profile.id, draftId: sp.munshi, rfqId: id }) : null
 
+  // S3.2 — the SAME fair price line the buyer sees (services; benchmark_display_enabled; null renders nothing)
+  const benchmark = await getBenchmarkFor(await createAdminClient(), { rfqId: rfq.id, kind: rfq.kind, categorySlug: rfq.categorySlug, viewerUserId: user.id, locale: await getLocale() })
   const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')
   // S1.3 — the thread is writable while the RFQ is active and this provider has not declined
   // (a provider who already quoted may still ask); read-only once closed.
@@ -112,6 +116,8 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
             )}
           </dl>
         )}
+        {/* S3.2 — the fair price range in the summary card (the buyer sees the identical line) */}
+        {benchmark && <div className="mt-4 border-t border-border pt-4"><BenchmarkLine view={benchmark} role="provider" /></div>}
         {/* S1.8 — attachments (signed URLs from the loader; the buyer's uploads, photos / PDFs / drawings). */}
         {rfq.attachments.length > 0 && (
           <div className="mt-4 border-t border-border pt-4">

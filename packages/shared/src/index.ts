@@ -87,6 +87,7 @@ export * from './munshi-growth'
 
 // S3.1 — Buyer Procurement Agent contract (scopes without accept/pay, the turn classifier, the no-negotiation clamp, the chat quote summary) + every message it sends
 export * from './procurement'
+export * from './benchmarks'
 export * from './procurement-copy'
 
 // S1.6 — onboarding agent contract (steps + transitions, strict draft schema, capability facts) and interview copy (en/hi/te)

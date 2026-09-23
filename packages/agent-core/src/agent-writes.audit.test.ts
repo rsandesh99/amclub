@@ -54,11 +54,14 @@ export const AGENT_WRITE_COLUMN_EXCEPTIONS: Readonly<Record<string, readonly str
   rfqs: ['quality_report', 'quality_checked_at', 'quality_decision', 'compare_pointers'],
   // S1.7 — the dispute points at its latest triage; the resolution columns are the resolve route's alone.
   disputes: ['triage_id'],
+  // S3.2 — the benchmark_explain sentence is cached on the aggregate row; the numbers are written only by the nightly compute
+  // (lib/benchmarks/compute.ts → replace_price_benchmarks), never by the note path.
+  price_benchmarks: ['notes'],
 }
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(here, '../../..')
-const TREES = ['apps/agent-runtime/src', 'apps/web/lib/agent', 'apps/web/lib/voice/clarify.ts']
+const TREES = ['apps/agent-runtime/src', 'apps/web/lib/agent', 'apps/web/lib/voice/clarify.ts', 'apps/web/lib/benchmarks/view.ts']
 
 function files(p: string): string[] {
   const abs = join(ROOT, p)

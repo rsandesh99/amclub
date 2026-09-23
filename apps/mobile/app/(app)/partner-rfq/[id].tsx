@@ -8,6 +8,7 @@ import { ClarificationsBlock } from '@/components/ClarificationsBlock'
 import { formatINR } from '@/lib/format'
 import { GST_RATE_BPS_OPTIONS } from '@amclub/shared'
 import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
+import { BenchmarkBlock } from '@/components/BenchmarkBlock'
 import { VoiceRfqRecorder } from '@/components/VoiceRfqRecorder'
 
 
@@ -15,9 +16,11 @@ type ExtractField = 'price' | 'unit_price' | 'delivery_days' | 'gst_included' | 
 const AMBER = 'border-[#b45309]'
 
 export default function ProviderRfqScreen() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { id } = useLocalSearchParams<{ id: string }>()
   const [rfq, setRfq] = useState<any>(null)
+  // S3.2 — the fair price range (present only when the API sends one)
+  const [benchmark, setBenchmark] = useState<unknown>(null)
   const [loading, setLoading] = useState(true)
   const [price, setPrice] = useState('')
   const [days, setDays] = useState('')
@@ -50,13 +53,14 @@ export default function ProviderRfqScreen() {
   const [active, setActive] = useState(false)
 
   const load = useCallback(async () => {
-    const [d, me] = await Promise.all([fetchRfq(id), fetchMe()])
+    const [d, me] = await Promise.all([fetchRfq(id, locale), fetchMe()])
     setRfq(d?.rfq ?? null)
+    setBenchmark(d?.benchmark ?? null)
     setActive(!!d?.rfq && (d.rfq.status === 'open' || d.rfq.status === 'quoted') && new Date(d.rfq.expiresAt).getTime() > Date.now())
     if (d?.rfq?.kind === 'goods' && d.rfq.goodsSpec?.qty) setGQty(String(d.rfq.goodsSpec.qty))
     setExtractEnabled(me?.quoteExtractEnabled === true)
     setLoading(false)
-  }, [id])
+  }, [id, locale])
   // Deferred: keeps setState off the effect's synchronous path.
   useEffect(() => { void Promise.resolve().then(load) }, [load])
 
@@ -171,6 +175,8 @@ export default function ProviderRfqScreen() {
       <ScrollView contentContainerClassName="px-4 py-4 gap-4">
         {isGoods && <View className="-mx-4 -mt-4"><GoodsSpecBlock spec={rfq.goodsSpec} t={t} /></View>}
         <View className="rounded-xl border border-border bg-surface p-4 gap-1">
+          {/* S3.2 — the same fair price line the buyer sees, in the summary card; nothing when there is none */}
+          {benchmark ? <BenchmarkBlock raw={benchmark} role="provider" locale={locale} t={t} /> : null}
           {details.map(([k, v]) => (
             <Text key={k} className="text-sm text-foreground"><Text className="text-foreground-secondary capitalize">{k.replace(/_/g, ' ')}: </Text>{String(v)}</Text>
           ))}

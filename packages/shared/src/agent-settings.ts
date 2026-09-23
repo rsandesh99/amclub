@@ -151,6 +151,37 @@ export const AGENT_SETTING_DEFS = {
     default: 30,
     hint: 'S3.1 max proposals (create / answer / message / choose / decline / nudge cards) the procurement agent may put to ONE buyer per IST day; past it the agent points the buyer to the app.',
   },
+  // ── S3.2 fair price ranges (benchmarks) — compute and display are separate switches, both OFF; the formula is code ──
+  benchmark_compute_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'S3.2 nightly cron/benchmark-compute writes price_benchmarks from PAID services jobs (last 180 days). Off = the cron is a no-op heartbeat. Run it and review the table for two weeks before turning display on.',
+  },
+  benchmark_display_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'S3.2 the buyer and every matched provider see the same "Similar jobs … closed at ₹X–₹Y" line on a services request (web + mobile). Nothing renders when no row passes the gates.',
+  },
+  benchmark_min_sample: {
+    schema: z.number().int().min(30).max(1000),
+    default: 30,
+    hint: 'S3.2 privacy gate: a range exists only with at least this many paid jobs in the key. Can only be raised (floor 30 — the "How is this calculated?" copy and the table CHECK state it).',
+  },
+  benchmark_min_providers: {
+    schema: z.number().int().min(8).max(200),
+    default: 8,
+    hint: 'S3.2 privacy gate: at least this many distinct providers in the key (no single provider can be read off the range).',
+  },
+  benchmark_min_buyers: {
+    schema: z.number().int().min(8).max(200),
+    default: 8,
+    hint: 'S3.2 privacy gate: at least this many distinct buyers in the key (no single buyer’s spend can be read off the range).',
+  },
+  benchmark_max_provider_share_bps: {
+    schema: z.number().int().min(500).max(2500),
+    default: 2500,
+    hint: 'S3.2 privacy gate: no single provider may contribute more than this share of the sample (basis points; 2500 = 25 %). Can only be tightened (ceiling 2500).',
+  },
   // ── S2.3 Support agent ───────────────────────────────────────────────────
   support_escalate_after_turns: {
     schema: z.number().int().min(1).max(5),

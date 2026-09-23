@@ -740,8 +740,8 @@ async function http() {
         const { count } = await admin.from('notifications').select('id', { count: 'exact', head: true }).like('link', `%${id}%`)
         if (count) residue.push(`notifications(link ${id.slice(0, 8)})=${count}`)
       }
-      const { data: hb } = await admin.from('cron_heartbeats').select('name').eq('name', 'agent-procurement-watch')
-      if ((hb ?? []).length) residue.push('heartbeat agent-procurement-watch (left by a cron call)')
+      // no heartbeat check: since S3.1 merged, production's own Vercel cron (vercel.json, every 15 min) writes the
+      // agent-procurement-watch heartbeat (reason agent_disabled while dark) — a legitimate prod row, never rig residue
       if (errors.length) record('cleanup', 'FAIL', errors.join(' | '))
       else check(`cleanup: zero residue (${created.users.length} users, ${rfqIds.length} RFQs, ${created.convIds.length} conversations removed and recounted incl. seed-provider notifications by link; settings restored)`, residue.length === 0, residue.join(', '))
     } catch (e) {

@@ -8,6 +8,7 @@ import { ClarificationsBlock } from '@/components/ClarificationsBlock'
 import { QualityQuestionsBlock } from '@/components/QualityQuestionsBlock'
 import { formatINR } from '@/lib/format'
 import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
+import { BenchmarkBlock } from '@/components/BenchmarkBlock'
 
 
 const CARD_W = Math.min(Dimensions.get('window').width - 48, 340)
@@ -19,6 +20,8 @@ export default function BuyerRfqScreen() {
   const { t, locale } = useI18n() as { t: (k: string, p?: Record<string, string | number>) => string; locale?: string }
   const { id } = useLocalSearchParams<{ id: string }>()
   const [rfq, setRfq] = useState<any>(null)
+  // S3.2 — the fair price range (present only when the API sends one)
+  const [benchmark, setBenchmark] = useState<unknown>(null)
   const [loading, setLoading] = useState(true)
   const [accepting, setAccepting] = useState<string | null>(null)
   const [thread, setThread] = useState<string | null>(null)
@@ -37,8 +40,9 @@ export default function BuyerRfqScreen() {
   const [active, setActive] = useState(false)
 
   const load = useCallback(async () => {
-    const [d, me] = await Promise.all([fetchRfq(id), fetchMe()])
+    const [d, me] = await Promise.all([fetchRfq(id, locale ?? 'en'), fetchMe()])
     setRfq(d?.rfq ?? null)
+    setBenchmark(d?.benchmark ?? null)
     setActive(!!d?.rfq && (d.rfq.status === 'open' || d.rfq.status === 'quoted') && new Date(d.rfq.expiresAt).getTime() > Date.now())
     setPointersEnabled(me?.comparePointersEnabled === true)
     setLoading(false)
@@ -99,6 +103,9 @@ export default function BuyerRfqScreen() {
           </View>
         ) : null}
       </View>
+
+      {/* S3.2 — the same fair price line the matched providers see; nothing when there is none */}
+      {benchmark ? <View className="px-4"><BenchmarkBlock raw={benchmark} role="buyer" locale={locale ?? 'en'} t={t} /></View> : null}
 
       {goods && <GoodsSpecBlock spec={goods} t={t} />}
 
