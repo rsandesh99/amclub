@@ -43,6 +43,9 @@ export const AGENT_TASK_CLASSES = [
   'thread_reply',      // S2.2: draft a courteous reply on a quote thread (no price change)
   'support_reply',     // customer support reply, bounded + safe (S2.3)
   'score_note',        // S2.4: one informational coaching sentence from score components (numbers + keys only; no free text in)
+  'procurement_turn',  // S3.1: route one buyer message in a procurement session (NEVER reply text)
+  'clarification_answer', // S3.1: draft a buyer's answer to a provider question from the buyer's own earlier words
+  'provider_message',  // S3.1: draft the buyer's scope / timing / terms question to one provider (clamped: no price, no counter-offer)
   'benchmark_explain', // fair-price range explanation (S3.2)
   'translation',       // UI-adjacent short translation
   'embedding',         // retrieval vectors
@@ -72,6 +75,9 @@ export const TASK_CLASS_TIER: Record<AgentTaskClass, AgentTier> = {
   thread_reply: 'routine',
   support_reply: 'reasoning',
   score_note: 'routine',
+  procurement_turn: 'routine',
+  clarification_answer: 'routine',
+  provider_message: 'routine',
   benchmark_explain: 'frontier',
   translation: 'routine',
   embedding: 'routine',
@@ -112,6 +118,9 @@ export const TASK_CLASS_RESIDENCY: Record<AgentTaskClass, AgentResidency> = {
   thread_reply: 'in',         // quote thread messages
   support_reply: 'in',        // support messages
   score_note: 'in',           // a named provider's own score components (derived numbers, but personal data)
+  procurement_turn: 'in',     // a buyer's message + their request's state
+  clarification_answer: 'in', // a provider's question + the buyer's earlier words
+  provider_message: 'in',     // the buyer's question for a provider
   benchmark_explain: 'any',   // aggregate, anonymised price ranges only
   translation: 'any',         // platform / public catalogue copy only (e.g. the Mart pool pitch); translating a user's words must use an 'in' class
   embedding: 'in',            // vectors may be computed over user content
@@ -157,7 +166,7 @@ export const AGENT_TOOLS = [
   { name: 'clarify_rfq', persona: 'buyer', confirm: false, taskClass: 'rfq_clarify', wraps: 'local (question only)' },
   { name: 'extract_document', persona: 'buyer', confirm: false, taskClass: 'document_extract', wraps: 'local (facts only)' },
   { name: 'create_rfq', persona: 'buyer', confirm: true, wraps: 'POST /rfq' },
-  { name: 'compare_quotes', persona: 'buyer', confirm: false, taskClass: 'quote_compare', wraps: 'GET /rfq/[id]' },
+  { name: 'compare_quotes', persona: 'buyer', confirm: false, taskClass: 'quote_compare', wraps: 'GET /rfq/[id]/compare' },
   { name: 'accept_quote', persona: 'buyer', confirm: true, wraps: 'POST /rfq/[id]/quote (accept)' },
   { name: 'place_order', persona: 'buyer', confirm: true, wraps: 'POST /checkout' },
   { name: 'track_order', persona: 'buyer', confirm: false, wraps: 'GET /orders/[id]' },
@@ -170,6 +179,13 @@ export const AGENT_TOOLS = [
   // answer / send-as-is is the confirmation and the only write (fan-out release), so confirm-gated.
   { name: 'check_rfq_quality', persona: 'buyer', confirm: false, taskClass: 'rfq_quality', wraps: 'local (questions only)' },
   { name: 'complete_rfq', persona: 'buyer', confirm: true, wraps: 'POST /rfq/[id]/quality/{answer|send}' },
+  // S3.1 — the procurement agent's "go with B": a LOCAL confirm gate (button / web tap only). Its ONLY effect is the
+  // decision-bound link to the ordinary checkout page with that quote selected; the buyer's own session pays there.
+  // It never calls a route — and the procurement grant holds neither accept_quote nor place_order.
+  { name: 'choose_quote', persona: 'buyer', confirm: true, wraps: 'local (checkout deep link)' },
+  // S3.1 — the buyer's scope / timing / terms question to one provider, drafted by the agent and clamped (no amount,
+  // no percentage, no counter-offer: §8.3 no per-buyer price negotiation); posted only after the buyer confirms.
+  { name: 'message_provider', persona: 'buyer', confirm: true, wraps: 'POST /quotes/[quoteId]/messages' },
   // provider
   { name: 'extract_requirements', persona: 'provider', confirm: false, taskClass: 'rfq_parse', wraps: 'GET /rfq/matched' },
   { name: 'draft_quote', persona: 'provider', confirm: false, taskClass: 'quote_draft', wraps: 'local (draft only)' },

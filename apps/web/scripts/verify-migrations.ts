@@ -277,6 +277,15 @@ const MANIFEST: Entry[] = [
     ],
     note: 'S2.4 AMC Score v1 (ADR-010): score_inputs_provider / score_inputs_buyer (SECURITY INVOKER, services only, 90-day window; service_role EXECUTE only), provider_scores + buyer_scores (latest snapshot per subject x version), score_history (one row per subject per day), score_events (append-only); munshi_provider_state.last_growth_at',
   },
+  {
+    file: '0045_procurement.sql',
+    tables: ['procurement_sessions', 'procurement_turns'],
+    triggers: [
+      ['procurement_sessions', 'procurement_sessions_set_updated_at'],
+      ['procurement_turns', 'procurement_turns_set_updated_at'],
+    ],
+    note: 'S3.1 Buyer Procurement Agent (dark; A2 at the V1.5 -> V2 gate): procurement_sessions (one per need; one ACTIVE per user x rfq), procurement_turns (the web mirror thread), wa_conversations.procurement_session_id, ai_decisions feature procurement_step; clients SELECT only',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

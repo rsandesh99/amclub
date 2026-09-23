@@ -29,6 +29,9 @@ export const SUPPORT_INTENTS = [
   'dispute_language',
   'payment_problem',
   'greeting',
+  // S3.1 — the user describes something they need done ("I need a CA for GST filing"): the procurement agent's
+  // entry point when it is enabled for them; otherwise the how-to for creating a request.
+  'new_need',
   'other',
 ] as const
 export type SupportIntent = (typeof SUPPORT_INTENTS)[number]
@@ -165,6 +168,7 @@ export const SUPPORT_REPLY_KEYS = [
   'nudge.capped',
   'nudge.no_subject',
   'nudge.out_of_window',
+  'new_need.offer',
   'greeting',
   'unclear',
   'unclear_again',
@@ -220,6 +224,8 @@ export interface SupportLookupResult {
   ticket_ref?: string | null
   /** The nudge cap the reply quotes (`support_nudge_cooldown_hours`); defaults to 24. */
   nudge_cooldown_hours?: number
+  /** S3.1 — the procurement agent is enabled for this user on this channel (the new_need offer instead of the how-to). */
+  procurement_available?: boolean
 }
 
 export interface SupportReply {
@@ -272,6 +278,8 @@ export function resolveSupportReply(intent: SupportIntent, lookup: SupportLookup
   switch (intent) {
     case 'greeting':
       return { key: 'greeting', slots: base }
+    case 'new_need':
+      return lookup.procurement_available ? { key: 'new_need.offer', slots: base } : { key: 'how_to.create_rfq', slots: base }
     case 'complaint':
     case 'dispute_language':
     case 'payment_problem':

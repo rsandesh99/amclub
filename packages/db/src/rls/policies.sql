@@ -701,6 +701,28 @@ CREATE POLICY "score_events: admin read" ON score_events
 REVOKE ALL ON score_events FROM anon, authenticated;
 GRANT SELECT ON score_events TO authenticated;
 
+-- ─── procurement_sessions / procurement_turns (0045, S3.1) — the buyer reads own; admin / ops read all ─
+-- Only the service role writes (the runtime + the web routes after the session check): every client privilege off,
+-- then SELECT for signed-in users (RLS decides the rows) — the S2.4 / PR #15 rule.
+ALTER TABLE procurement_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "procurement_sessions: owner read" ON procurement_sessions;
+CREATE POLICY "procurement_sessions: owner read" ON procurement_sessions
+  FOR SELECT USING (deleted_at IS NULL AND user_id = auth_user_id());
+DROP POLICY IF EXISTS "procurement_sessions: admin read" ON procurement_sessions;
+CREATE POLICY "procurement_sessions: admin read" ON procurement_sessions
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE ALL ON procurement_sessions FROM anon, authenticated;
+GRANT SELECT ON procurement_sessions TO authenticated;
+ALTER TABLE procurement_turns ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "procurement_turns: owner read" ON procurement_turns;
+CREATE POLICY "procurement_turns: owner read" ON procurement_turns
+  FOR SELECT USING (deleted_at IS NULL AND user_id = auth_user_id());
+DROP POLICY IF EXISTS "procurement_turns: admin read" ON procurement_turns;
+CREATE POLICY "procurement_turns: admin read" ON procurement_turns
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE ALL ON procurement_turns FROM anon, authenticated;
+GRANT SELECT ON procurement_turns TO authenticated;
+
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
 -- raise_append_only() is created in 0017 (bootstrap runs migrations first).
