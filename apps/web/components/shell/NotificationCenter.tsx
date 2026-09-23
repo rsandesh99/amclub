@@ -4,21 +4,33 @@ import { useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 
+/** Stored copy: en always; hi / te / ta only where the event carries them. */
+type NotifText = { en: string; hi?: string; te?: string; ta?: string }
+
 interface Notif {
   id: string
   kind: string
-  title_i18n: { en: string; hi: string }
-  body_i18n: { en: string; hi: string }
+  title_i18n: NotifText
+  body_i18n: NotifText
   link: string | null
   read_at: string | null
   created_at: string
 }
 
-/** Notification centre (§3.7 list view). Renders in the recipient's locale,
- *  marks read on click, and supports mark-all-read. */
+/** The active locale's text, en when this notification has no copy in it. */
+function pick(t: NotifText | null | undefined, locale: string): string {
+  if (!t) return ''
+  const v = (t as Record<string, string | undefined>)[locale]
+  return v && v.trim() !== '' ? v : t.en
+}
+
+const DATE_LOCALE: Record<string, string> = { en: 'en-IN', hi: 'hi-IN', te: 'te-IN', ta: 'ta-IN' }
+
+/** Notification centre (§3.7 list view). Renders in the recipient's locale
+ *  (any supported locale, en fallback), marks read on click, and supports mark-all-read. */
 export function NotificationCenter() {
   const t = useTranslations('notifications')
-  const locale = (useLocale() === 'hi' ? 'hi' : 'en') as 'en' | 'hi'
+  const locale = useLocale()
   const router = useRouter()
   const [items, setItems] = useState<Notif[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,10 +97,10 @@ export function NotificationCenter() {
               >
                 {!n.read_at && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
                 <div className={n.read_at ? 'pl-5' : ''}>
-                  <p className="text-sm font-medium">{n.title_i18n?.[locale] ?? n.title_i18n?.en}</p>
-                  <p className="text-sm text-foreground-secondary">{n.body_i18n?.[locale] ?? n.body_i18n?.en}</p>
+                  <p className="text-sm font-medium">{pick(n.title_i18n, locale)}</p>
+                  <p className="text-sm text-foreground-secondary">{pick(n.body_i18n, locale)}</p>
                   <p className="mt-1 text-xs text-foreground-secondary">
-                    {new Date(n.created_at).toLocaleString(locale === 'hi' ? 'hi-IN' : 'en-IN', { timeZone: 'Asia/Kolkata' })} IST
+                    {new Date(n.created_at).toLocaleString(DATE_LOCALE[locale] ?? 'en-IN', { timeZone: 'Asia/Kolkata' })} IST
                   </p>
                 </div>
               </button>
