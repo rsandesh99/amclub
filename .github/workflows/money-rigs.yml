@@ -99,11 +99,17 @@ jobs:
 
       - name: Upstash-compatible REST front answers
         run: |
+          # The same protocol @upstash/redis speaks: POST / with a JSON command array.
           for i in $(seq 1 30); do
-            if curl -sf -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" "$UPSTASH_REDIS_REST_URL/ping" | grep -q PONG; then echo "upstash ok"; exit 0; fi
+            if curl -sf -X POST -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" -H "Content-Type: application/json" \
+                 -d '["PING"]' "$UPSTASH_REDIS_REST_URL/" | grep -q PONG; then echo "upstash ok"; exit 0; fi
             sleep 2
           done
-          echo "the Upstash REST front did not answer"; exit 1
+          echo "the Upstash REST front did not answer"
+          curl -s -X POST -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" -d '["PING"]' "$UPSTASH_REDIS_REST_URL/" || true
+          docker ps
+          docker logs "$(docker ps -q --filter ancestor=hiett/serverless-redis-http:latest)" 2>&1 | tail -40 || true
+          exit 1
 
       - name: Build and start the app (simulate payments)
         id: app
