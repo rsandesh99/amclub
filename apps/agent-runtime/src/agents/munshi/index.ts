@@ -92,7 +92,8 @@ export interface MunshiRuntimeDeps {
 
 export interface MunshiScanJob { kind: 'scan'; jobId?: string | null }
 export interface MunshiFollowupJob { kind: 'followup'; jobId?: string | null }
-export interface MunshiDecideJob { kind: 'decide'; runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance'; jobId?: string | null }
+/** `via: 'whatsapp_text'` = a typed "no" to the open draft (the dispatcher's card rule, 2026-09-23) — recorded as a text skip. */
+export interface MunshiDecideJob { kind: 'decide'; runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance'; via?: 'whatsapp_text'; jobId?: string | null }
 /** S2.4 — the weekly growth nudge. */
 export interface MunshiGrowthJob { kind: 'growth'; jobId?: string | null }
 export type MunshiJob = MunshiScanJob | MunshiFollowupJob | MunshiDecideJob | MunshiGrowthJob
@@ -608,7 +609,7 @@ export async function runMunshiDecide(deps: MunshiRuntimeDeps, job: MunshiDecide
   const scopes = await scopesFor(deps.admin, d.user_id)
   let action: 'approve' | 'edit' | 'skip' | 'reask' = job.action === 'utterance' ? 'reask' : job.action
   const inputRefs: Record<string, string> = { munshi_draft_id: d.id, wa_message_id: job.messageId }
-  let via: 'whatsapp_button' | 'voice_yes' | 'whatsapp_text' = 'whatsapp_button'
+  let via: 'whatsapp_button' | 'voice_yes' | 'whatsapp_text' = job.via === 'whatsapp_text' && job.action === 'skip' ? 'whatsapp_text' : 'whatsapp_button'
   let editInstructions: string | null = null
 
   if (job.action === 'utterance') {

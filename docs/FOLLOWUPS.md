@@ -846,7 +846,8 @@ migration **0045**. Runbook `docs/agents/PROCUREMENT.md`.
   the runbook says so. **Founder decision (2026-09-23):** while a card is open, a typed "no" / "cancel" / "नहीं"
   means "no to this card"; STOP / UNSUBSCRIBE and their translations always opt out, whatever is open. One shared
   classifier change for Munshi, Support and Procurement, as its own PR after S3.1 and **before any WhatsApp agent
-  cohort** (it changes live consent handling); recorded in the S0.5 runbook when it lands.
+  cohort** (it changes live consent handling). **Landed** in the "typed no" PR: WHATSAPP.md "Typed no". Open: the
+  S1.6 onboarding interview (a typed "no" to "Do you have an Udyam number?" still opts out) needs its own decision.
 - **Button payloads** are `pr:ok|edit|no:<runId>` (the prompt: `ok:|edit:|no:<runId>`): Munshi already parses
   `edit:<runId>`, and the `pr:` namespace keeps the three agents' payloads disjoint.
 - **The chat labels follow the compare page's letters, not `ordering.ids`.** The compare page letters quotes by their

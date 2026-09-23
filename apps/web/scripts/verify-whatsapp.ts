@@ -66,6 +66,8 @@ async function offline() {
   check('transactional kind sends without opt-in (dark ⇒ stub)', decide('order_placed', false, false) === 'stub')
   check('opted-in non-transactional kind would send when live', decide('rfq_matched', true, true) === 'sent')
   check('START/नमस्ते → opt_in; JOIN → onboard (S1.6); STOP/बंद → opt_out', classifyKeyword('start') === 'opt_in' && classifyKeyword('JOIN') === 'onboard' && classifyKeyword('नमस्ते') === 'opt_in' && classifyKeyword('STOP') === 'opt_out' && classifyKeyword('बंद') === 'opt_out' && classifyKeyword('price?') === null)
+  // founder decision 2026-09-23: a plain negative answers an open card; STOP words always opt out
+  check('typed no: "no" / "cancel" / "नहीं" / "వద్దు" opt out with no card open, answer the card while one is open; STOP / UNSUBSCRIBE / बंद / रोकें / ఆపు opt out either way', ['no', 'cancel', 'नहीं', 'వద్దు'].every((w) => classifyKeyword(w) === 'opt_out' && classifyKeyword(w, { cardOpen: true }) === 'card_no') && ['stop', 'unsubscribe', 'बंद', 'रोकें', 'ఆపు'].every((w) => classifyKeyword(w, { cardOpen: true }) === 'opt_out' && classifyKeyword(w) === 'opt_out'))
 }
 
 async function live() {

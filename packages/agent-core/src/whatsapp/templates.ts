@@ -114,17 +114,63 @@ export const WA_OPT_IN_KEYWORDS: ReadonlySet<string> = new Set([
  * flag-off behaviour of JOIN is unchanged.
  */
 export const ONBOARDING_KEYWORDS: ReadonlySet<string> = new Set(['join', 'onboard', 'जुड़ें', 'చేరండి'])
-export const WA_OPT_OUT_KEYWORDS: ReadonlySet<string> = new Set([
-  'stop', 'unsubscribe', 'no', 'cancel',
-  'बंद', 'रोकें', 'नहीं',
-  'ఆపు', 'వద్దు',
+/**
+ * The explicit opt-out words. They ALWAYS revoke WhatsApp, whatever card or session is open (WhatsApp's rule is to
+ * honour an explicit opt-out word; founder decision 2026-09-23).
+ */
+export const WA_STOP_KEYWORDS: ReadonlySet<string> = new Set([
+  'stop', 'unsubscribe',
+  'बंद', 'रोकें',
+  'ఆపు',
 ])
+/**
+ * The plain negatives. With NO card open they opt out exactly as in S0.5; while one of the user's agent cards is open
+ * on WhatsApp (a Munshi draft, a Support nudge offer, a procurement proposal) they mean "no to this card" — a buyer
+ * answering a card with "no" does not mean to leave WhatsApp (founder decision 2026-09-23).
+ */
+export const WA_CARD_NO_KEYWORDS: ReadonlySet<string> = new Set([
+  'no', 'cancel',
+  'नहीं',
+  'వద్దు',
+])
+/** Every word that can opt out (the S0.5 set, unchanged): the STOP words plus the plain negatives. */
+export const WA_OPT_OUT_KEYWORDS: ReadonlySet<string> = new Set([...WA_STOP_KEYWORDS, ...WA_CARD_NO_KEYWORDS])
 
-export function classifyKeyword(text: string | null): 'opt_in' | 'opt_out' | 'onboard' | null {
+const normaliseKeyword = (text: string): string => text.trim().toLowerCase().normalize('NFKC')
+
+/**
+ * The ONE keyword classifier. `cardOpen` (default false → the S0.5 behaviour, byte-identical) turns a plain negative
+ * into 'card_no'; a STOP word is 'opt_out' regardless.
+ */
+export function classifyKeyword(text: string | null, opts: { cardOpen?: boolean } = {}): 'opt_in' | 'opt_out' | 'onboard' | 'card_no' | null {
   if (!text) return null
-  const t = text.trim().toLowerCase().normalize('NFKC')
-  if (WA_OPT_OUT_KEYWORDS.has(t)) return 'opt_out'
+  const t = normaliseKeyword(text)
+  if (WA_STOP_KEYWORDS.has(t)) return 'opt_out'
+  if (WA_CARD_NO_KEYWORDS.has(t)) return opts.cardOpen ? 'card_no' : 'opt_out'
   if (ONBOARDING_KEYWORDS.has(t)) return 'onboard'
   if (WA_OPT_IN_KEYWORDS.has(t)) return 'opt_in'
   return null
+}
+
+/** True for a plain negative ("no", "cancel", "नहीं", "వద్దు") — the only words whose meaning depends on an open card. */
+export function isCardNoKeyword(text: string | null): boolean {
+  return !!text && WA_CARD_NO_KEYWORDS.has(normaliseKeyword(text))
+}
+
+/** An agent card open on WhatsApp for this user: the one a typed "no" answers. */
+export interface OpenWhatsAppCard {
+  agent: 'munshi' | 'support' | 'procurement'
+  runId: string
+  /** when the card went out (ISO); the latest card is the one being answered */
+  at: string
+}
+
+/** The card a typed "no" answers: the most recently sent one (ties → the first listed). Pure. */
+export function latestOpenCard(cards: readonly (OpenWhatsAppCard | null)[]): OpenWhatsAppCard | null {
+  let best: OpenWhatsAppCard | null = null
+  for (const c of cards) {
+    if (!c || !c.runId) continue
+    if (!best || Date.parse(c.at) > Date.parse(best.at)) best = c
+  }
+  return best
 }
