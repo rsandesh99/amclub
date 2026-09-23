@@ -298,6 +298,7 @@ const MANIFEST: Entry[] = [
     functions: ['search_packages'],
     note: 'E0 / U9: search_packages ordering drops top_rated; "rating" is review-count weighted (same signature as 0007)',
   },
+  { file: '0048_ui_density.sql', note: 'E1 / N33: users.ui_density (comfortable | compact | NULL) + CHECK; written by the service role only' },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

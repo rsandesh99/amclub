@@ -1,8 +1,68 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"],
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
   "rules": {
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_"
+      }
+    ],
     "@typescript-eslint/consistent-type-imports": "error",
-    "no-console": ["warn", { "allow": ["warn", "error"] }]
-  }
+    "no-console": [
+      "warn",
+      {
+        "allow": [
+          "warn",
+          "error"
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "JSXOpeningElement[name.name='select']",
+        "message": "Experience v3 (PRD FR-1.7): no native <select>. Use ui-v3 SegmentedControl (≤ 5 options) or Picker (more). Files still on the baseline list in .eslintrc.json are converted epic by epic."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Select']",
+        "message": "Experience v3 (PRD FR-1.7): no native <select>. Use ui-v3 SegmentedControl (≤ 5 options) or Picker (more). Files still on the baseline list in .eslintrc.json are converted epic by epic."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "app/\\[locale\\]/\\(admin\\)/admin/cms/page.tsx",
+        "app/\\[locale\\]/\\(admin\\)/admin/coupons/CouponsClient.tsx",
+        "app/\\[locale\\]/\\(admin\\)/admin/orders/page.tsx",
+        "app/\\[locale\\]/\\(admin\\)/admin/providers/page.tsx",
+        "app/\\[locale\\]/\\(agent-admin\\)/admin/agents/runs/AgentRunsClient.tsx",
+        "app/\\[locale\\]/\\(mart-admin\\)/admin/mart/settings/MartSettingsClient.tsx",
+        "app/\\[locale\\]/\\(mart-msme\\)/app/mart/checkout/GoodsCheckoutClient.tsx",
+        "components/agent/MunshiPanel.tsx",
+        "components/catalog/JurisdictionSelector.tsx",
+        "components/catalog/LanguageSwitcher.tsx",
+        "components/catalog/ListingControls.tsx",
+        "components/mart/CatalogWizard.tsx",
+        "components/mart/GoodsOrderWorkspace.tsx",
+        "components/mart/GoodsRfqForm.tsx",
+        "components/mart/PoolJoin.tsx",
+        "components/partner/PackageWizard.tsx",
+        "components/profile/MsmeProfileForm.tsx",
+        "components/rfq/DeclineRfqButton.tsx",
+        "components/rfq/QuoteCompare.tsx",
+        "components/rfq/QuoteComposer.tsx",
+        "components/rfq/RfqForm.tsx",
+        "components/ui/select.tsx",
+        "components/wizard/MsmeWizard.tsx",
+        "components/wizard/ProviderWizard.tsx"
+      ],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
 }

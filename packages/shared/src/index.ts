@@ -38,6 +38,21 @@ export * from './states'
 // GSTIN format + mod-36 checksum validation
 export * from './gstin'
 
+// Experience v3 rollout flags (closed registry, server-evaluated)
+export * from './experiments'
+
+// N33 — display density preference
+export * from './preferences'
+
+// N3 — universal search contract
+export * from './universal-search'
+
+// N2 — /me/actions contract (nav badges + home action lists)
+export * from './me-actions'
+
+// N23 — the next action on an order (badges, home lists, NextStepBar)
+export * from './order-next-action'
+
 // E0 / U8 — provider home stats (server-computed, web + mobile)
 export * from './provider-stats'
 

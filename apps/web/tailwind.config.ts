@@ -11,55 +11,64 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // §4.2 semantic design tokens — named by JOB. The palette is locked;
-        // never use raw gray-*/amber-* or hex in components.
+        // §4.2 semantic design tokens — named by JOB. Values live in
+        // app/globals.css as channels (`--c-*`); [data-ui="v3"] re-points them
+        // for Experience v3 "Precision", so no component changes per theme.
+        // Never use raw gray-*/amber-* or hex in components.
         primary: {
-          DEFAULT: '#1B4D3E', // brand — FINAL, never blue/navy
-          strong: '#143F33', // hover/pressed deepen
-          foreground: '#FFFFFF',
+          DEFAULT: 'rgb(var(--c-primary) / <alpha-value>)',
+          strong: 'rgb(var(--c-primary-strong) / <alpha-value>)',
+          foreground: 'rgb(var(--c-primary-foreground) / <alpha-value>)',
         },
         accent: {
-          DEFAULT: '#F4A300', // marigold — discounts + rating stars ONLY
-          foreground: '#1A1D1A',
+          DEFAULT: 'rgb(var(--c-accent) / <alpha-value>)', // marigold — discounts + rating stars ONLY
+          foreground: 'rgb(var(--c-accent-foreground) / <alpha-value>)',
         },
         // Pre-mixed soft-tint fills for badges / icon chips / section washes.
-        'primary-soft': '#E8EEEB',
-        'accent-soft': '#FDEFD2',
-        'verified-soft': '#E6EFF8',
-        'success-soft': '#E5F2EC',
-        'warning-soft': '#F5EBDD',
-        'danger-soft': '#F8E8E8',
-        success: '#14724A', // positive/completed (green family) — ≥4.5:1 on success-soft
-        // Verification blue — badges/ticks ONLY. `verified` is the semantic name;
-        // `trust` kept as an alias for existing usages. ≥4.5:1 on verified-soft.
-        trust: '#155C9E',
-        verified: '#155C9E',
-        // Destructive/hard-error red — never decorative. `destructive` is the
-        // semantic name; `danger` kept as an alias.
+        'primary-soft': 'rgb(var(--c-primary-soft) / <alpha-value>)',
+        'accent-soft': 'rgb(var(--c-accent-soft) / <alpha-value>)',
+        'verified-soft': 'rgb(var(--c-verified-soft) / <alpha-value>)',
+        'success-soft': 'rgb(var(--c-success-soft) / <alpha-value>)',
+        'warning-soft': 'rgb(var(--c-warning-soft) / <alpha-value>)',
+        'danger-soft': 'rgb(var(--c-danger-soft) / <alpha-value>)',
+        success: 'rgb(var(--c-success) / <alpha-value>)',
+        // Verification blue — badges/ticks ONLY (`trust` is the legacy alias).
+        trust: 'rgb(var(--c-trust) / <alpha-value>)',
+        verified: 'rgb(var(--c-verified) / <alpha-value>)',
+        // Destructive/hard-error red — never decorative (`danger` alias kept).
         danger: {
-          DEFAULT: '#C73E3E',
-          foreground: '#FFFFFF',
+          DEFAULT: 'rgb(var(--c-danger) / <alpha-value>)',
+          foreground: 'rgb(var(--c-danger-foreground) / <alpha-value>)',
         },
         destructive: {
-          DEFAULT: '#C73E3E',
-          foreground: '#FFFFFF',
+          DEFAULT: 'rgb(var(--c-destructive) / <alpha-value>)',
+          foreground: 'rgb(var(--c-danger-foreground) / <alpha-value>)',
         },
         // Caution/pending (under-review, external waits). Distinct from accent.
         warning: {
-          DEFAULT: '#92400E', // ≥4.5:1 on warning-soft and /10 tints (a11y AA)
-          foreground: '#FFFFFF',
+          DEFAULT: 'rgb(var(--c-warning) / <alpha-value>)',
+          foreground: 'rgb(var(--c-warning-foreground) / <alpha-value>)',
         },
-        background: '#FAFAF7',
-        surface: '#FFFFFF',
-        // De-emphasis: borders + muted surfaces (replaces raw gray-*).
-        border: '#E6E7E3',
-        muted: '#F3F4F1',
+        background: 'rgb(var(--c-background) / <alpha-value>)',
+        surface: 'rgb(var(--c-surface) / <alpha-value>)',
+        // v3 `bg/sunken`: inputs, table header rows, segmented-control track.
+        sunken: 'rgb(var(--c-sunken) / <alpha-value>)',
+        border: 'rgb(var(--c-border) / <alpha-value>)',
+        muted: 'rgb(var(--c-muted) / <alpha-value>)',
+        // v3 hairlines (brass at 35 %); v2 falls back to the border colour.
+        separator: {
+          DEFAULT: 'var(--separator)',
+          strong: 'var(--separator-strong)',
+        },
         foreground: {
-          DEFAULT: '#1A1D1A',
-          // muted text + disabled — ≈7.8:1 on background, 7.4:1 on muted
-          // (FRONTEND.md §5/§8 7:1 body floor; was #5C645C ≈ 5.9:1).
-          secondary: '#4A514A',
+          DEFAULT: 'rgb(var(--c-foreground) / <alpha-value>)',
+          // ≥7:1 body floor (FRONTEND.md §5/§8) in both themes.
+          secondary: 'rgb(var(--c-foreground-secondary) / <alpha-value>)',
+          // Captions/placeholders only — never money (≥4.5:1).
+          tertiary: 'rgb(var(--c-foreground-tertiary) / <alpha-value>)',
         },
+        // All money and stats (tabular).
+        numeric: 'rgb(var(--c-numeric) / <alpha-value>)',
         // ── AMC Mart / FRONTEND.md v2 "Emerald & Brass" tokens (§2.1) ───────
         // ADDITIVE: the services palette above is untouched; these are used by
         // Mart surfaces (behind MART_ENABLED) and by services pages only as
@@ -112,25 +121,27 @@ const config: Config = {
         '5xl': ['56px', { lineHeight: '1.04', letterSpacing: '-0.028em' }],
       },
       borderRadius: {
-        card: '12px',
-        button: '10px',
-        input: '10px', // `rounded-input` was referenced but undefined
-        chip: '999px',
+        card: 'var(--radius-card)',
+        button: 'var(--radius-button)',
+        input: 'var(--radius-input)',
+        chip: 'var(--radius-chip)',
+        sheet: 'var(--radius-sheet)',
+        modal: 'var(--radius-modal)',
       },
       // §4 elevation scale — ONE coherent system. Brand-tinted (cool green-black)
       // so shadows harmonise with the #1B4D3E palette instead of flat grey.
       // resting → hover → lg map to the card lift states; `card` is kept as an
       // alias for the many existing `shadow-card` usages.
       boxShadow: {
-        xs: '0 1px 2px 0 rgb(16 30 24 / 0.05)',
-        resting: '0 1px 2px 0 rgb(16 30 24 / 0.04), 0 1px 3px 0 rgb(16 30 24 / 0.08)',
-        card: '0 1px 2px 0 rgb(16 30 24 / 0.04), 0 1px 3px 0 rgb(16 30 24 / 0.08)',
-        hover: '0 6px 16px -4px rgb(16 30 24 / 0.12), 0 2px 6px -2px rgb(16 30 24 / 0.07)',
-        lg: '0 16px 40px -8px rgb(16 30 24 / 0.16), 0 4px 12px -4px rgb(16 30 24 / 0.08)',
+        // Values in globals.css (`--shadow-*`); v3 renders them at 70 %.
+        xs: 'var(--shadow-xs)',
+        resting: 'var(--shadow-resting)',
+        card: 'var(--shadow-resting)',
+        hover: 'var(--shadow-hover)',
+        lg: 'var(--shadow-lg)',
         pressed: 'inset 0 1px 2px 0 rgb(16 30 24 / 0.10)',
-        // FRONTEND.md §2.3 — sheet card two-layer shadow (soft depth, no grey mud)
-        sheet: '0 1px 2px rgba(10,46,34,.06), 0 8px 24px rgba(10,46,34,.10)',
-        modal: '0 2px 6px rgba(10,46,34,.08), 0 24px 64px rgba(10,46,34,.18)',
+        sheet: 'var(--shadow-sheet)',
+        modal: 'var(--shadow-modal)',
       },
       backgroundImage: {
         // Metallic gold — the ONLY way gold is rendered as a fill/edge.

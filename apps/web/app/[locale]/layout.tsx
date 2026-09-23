@@ -2,12 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getMessages, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
-import {
-  Noto_Sans,
-  Noto_Sans_Devanagari,
-  Noto_Sans_Telugu,
-  Noto_Sans_Tamil,
-} from 'next/font/google'
 import localFont from 'next/font/local'
 import { routing } from '@/i18n/routing'
 import { PostHogProvider } from '@/components/providers/posthog'
@@ -15,6 +9,7 @@ import { ToastProvider } from '@/components/ui/toast'
 import { PwaManager } from '@/components/pwa/PwaManager'
 import { ResourceHints } from '@/components/shell/ResourceHints'
 import { fontPreloadHrefs } from '@/lib/fonts/preload-hrefs'
+import { isOnForEveryone } from '@/lib/experiments'
 import '@/app/globals.css'
 
 // PWA chrome color (Phase 8 §5) — matches manifest theme_color.
@@ -31,14 +26,17 @@ export const viewport: Viewport = {
 // shift) and the web font is used from the second navigation on. 'swap'
 // re-painted the LCP text 3–4s later on simulated 4G (measured: LCP 5.2s →
 // dominated by "render delay" waiting on fonts).
-const notoSans = Noto_Sans({
-  subsets: ['latin'],
-  // 500 is `font-medium` — every Button / Badge / Label (240+ usages); without
-  // it the browser snapped those to 400 and the hierarchy flattened.
-  weight: ['400', '500', '600', '700'],
+//
+// Self-hosted (PRD E1 / §7.3): the variable-weight latin subset (100–900 in
+// one 35 KB file) ships in app/fonts, so builds never fetch Google Fonts —
+// that fetch is what flaked the axe job ("Cannot read properties of null").
+// Files: @fontsource-variable/noto-sans* 5.3.0, SIL OFL 1.1 (app/fonts/OFL-noto.txt).
+const notoSans = localFont({
+  src: './../fonts/noto-sans-latin-var.woff2',
   variable: '--font-sans',
+  weight: '100 900',
   display: 'optional',
-  adjustFontFallback: true,
+  adjustFontFallback: 'Arial',
 })
 
 // The rupee sign. Google's Noto Sans keeps U+20B9 in its DEVANAGARI subset,
@@ -62,25 +60,31 @@ const notoRupee = localFont({
 // active locale's class lands on <html>, so exactly one resolves per page and
 // the other scripts are never downloaded. preload:false keeps them off the
 // critical path (they would be dead weight on en pages).
-const notoDevanagari = Noto_Sans_Devanagari({
-  subsets: ['devanagari'],
+const notoDevanagari = localFont({
+  src: './../fonts/noto-sans-devanagari-var.woff2',
   variable: '--font-indic',
+  weight: '100 900',
   display: 'optional',
   preload: false,
+  adjustFontFallback: false,
 })
 
-const notoTelugu = Noto_Sans_Telugu({
-  subsets: ['telugu'],
+const notoTelugu = localFont({
+  src: './../fonts/noto-sans-telugu-var.woff2',
   variable: '--font-indic',
+  weight: '100 900',
   display: 'optional',
   preload: false,
+  adjustFontFallback: false,
 })
 
-const notoTamil = Noto_Sans_Tamil({
-  subsets: ['tamil'],
+const notoTamil = localFont({
+  src: './../fonts/noto-sans-tamil-var.woff2',
   variable: '--font-indic',
+  weight: '100 900',
   display: 'optional',
   preload: false,
+  adjustFontFallback: false,
 })
 
 const INDIC_FONT: Record<string, { variable: string } | undefined> = {
@@ -134,12 +138,24 @@ export default async function LocaleLayout({
   const hintOrigins = supabaseOrigin ? [supabaseOrigin] : []
   const fonts = fontPreloadHrefs()
 
+  // Experience v3 tokens for everyone only when EXP_V3_SHELL=on (static pages
+  // can't bucket by user); cohort / percentage users get v3 from their
+  // logged-in shell's own data-ui wrapper.
+  const v3 = isOnForEveryone('shell')
+
   return (
     <html
       lang={locale}
       className={`${notoRupee.variable} ${notoSans.variable}${indic ? ` ${indic.variable}` : ''}`}
+      {...(v3 ? { 'data-ui': 'v3' } : {})}
     >
       <body className="bg-background font-sans text-foreground antialiased">
+        {/* v3 materials: solid bars on low-memory devices (PRD §3.4.3). Tiny, sync, before paint. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "try{var m=navigator.deviceMemory;if(m&&m<=2)document.documentElement.setAttribute('data-lowmem','')}catch(e){}",
+          }}
+        />
         <ResourceHints fonts={fonts} origins={hintOrigins} />
         <NextIntlClientProvider messages={messages}>
           <PostHogProvider>

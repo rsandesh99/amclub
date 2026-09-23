@@ -50,6 +50,10 @@ jobs:
       UPSTASH_REDIS_REST_TOKEN: ci-upstash-token-disposable
       SENTRY_AUTH_TOKEN: ""
       NEXT_TELEMETRY_DISABLED: "1"
+      # Experience v3 (PRD §7.9): this job runs the app with the v3 flags ON, so
+      # the rigs exercise the new surfaces; the axe job keeps the production
+      # default (off) and scans the v2 public pages.
+      EXP_V3_SHELL: "on"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -13,6 +13,8 @@ export const users = pgTable('users', {
   preferredLocale: text('preferred_locale').default('en').notNull(),
   roles: text('roles').array().default(sql`'{msme}'`).notNull(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+  // Experience v3 N33 (migration 0048): 'comfortable' | 'compact' | NULL (role default).
+  uiDensity: text('ui_density'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })

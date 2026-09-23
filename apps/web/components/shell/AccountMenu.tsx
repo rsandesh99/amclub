@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield, Search } from 'lucide-react'
+import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield, Search, Rows3 } from 'lucide-react'
+import { useRouter } from '@/i18n/navigation'
+import { useAnalytics } from '@/components/providers/posthog'
 import { Link } from '@/i18n/navigation'
 import { cn } from '@/lib/utils'
 
@@ -16,15 +18,29 @@ interface AccountMenuProps {
   hasMsme: boolean
   hasProvider: boolean
   isAdmin: boolean
+  /** N33 — shown only in the v3 shell; toggles Comfortable ⇄ Compact. */
+  density?: 'comfortable' | 'compact'
 }
 
 /** Avatar dropdown: profile, role switch / become-provider, help, sign out.
  *  Shared across every logged-in surface (and the public header when logged in). */
-export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: AccountMenuProps) {
+export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin, density }: AccountMenuProps) {
   const t = useTranslations('shell')
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const router = useRouter()
+  const analytics = useAnalytics()
+
+  async function toggleDensity() {
+    const next = density === 'compact' ? 'comfortable' : 'compact'
+    const res = await fetch('/api/v1/profile/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uiDensity: next }) })
+    if (res.ok) {
+      analytics.capture('density_changed', { density: next, surface: context })
+      setOpen(false)
+      router.refresh()
+    }
+  }
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -125,6 +141,19 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: Ac
             <MenuLink href="/admin/verifications" icon={Shield} label={t('admin_panel')} onClick={() => setOpen(false)} />
           )}
 
+          {density && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={density === 'compact'}
+              onClick={toggleDensity}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground hover:bg-primary/5"
+            >
+              <Rows3 className="h-4 w-4 text-foreground-secondary" />
+              <span className="flex-1">{t('compact_view')}</span>
+              <span className="text-xs text-foreground-secondary">{density === 'compact' ? t('on') : t('off')}</span>
+            </button>
+          )}
           <MenuLink href="/help" icon={LifeBuoy} label={t('help')} onClick={() => setOpen(false)} />
 
           <div className="my-1 border-t border-border" />

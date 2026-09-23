@@ -22,7 +22,7 @@ const admin = createClient(URL_, SERVICE, { auth: { persistSession: false } })
 let pass = 0, fail = 0
 const check = (n: string, ok: boolean, extra = '') => { console.log(`  ${ok ? '✓' : '✗'} ${n}${extra ? ' — ' + extra : ''}`); ok ? pass++ : fail++ }
 const tag = `expv_${Date.now()}`
-const created: { users: string[]; providerIds: string[]; msmeIds: string[]; orderIds: string[]; packageIds: string[] } = { users: [], providerIds: [], msmeIds: [], orderIds: [], packageIds: [] }
+const created: { users: string[]; providerIds: string[]; msmeIds: string[]; orderIds: string[]; packageIds: string[]; rfqIds: string[] } = { users: [], providerIds: [], msmeIds: [], orderIds: [], packageIds: [], rfqIds: [] }
 
 async function mkUser(label: string, roles: string[] = ['msme']): Promise<{ uid: string; token: string; cookie: string }> {
   const email = `${tag}_${label}@killtest.amclub`
@@ -146,15 +146,102 @@ async function e0() {
   check('U3: the package page has the sticky buy bar', pkgPage.ok && pkgHtml.includes('lg:hidden') && pkgHtml.includes(`/app/checkout/${pkg?.id}`))
 }
 
+async function e1() {
+  console.log('\nE1 — design system + shells')
+  const word = `Zorblax${Date.now() % 100000}`
+  const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+
+  const buyer = await mkUser('e1buyer')
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  await api(buyer.token, '/api/v1/profile/msme', { fullName: 'E1 Buyer', businessName: 'E1 Buyer Co', state: 'TS', sector: 'services' })
+  const { data: msme } = await admin.from('msme_profiles').select('id').eq('user_id', buyer.uid).single()
+  created.msmeIds.push(msme!.id)
+
+  const prov = await mkUser('e1prov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({
+    user_id: prov.uid, legal_name: `E1 ${word} Prov`, display_name: `E1 ${word} Prov`, slug: `${tag}-e1prov`, state: 'TS', status: 'active', languages: ['en'],
+  }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: cat!.id })
+  const { data: pkg } = await admin.from('packages').insert({
+    provider_id: pp!.id, category_id: cat!.id, slug: `${tag}-e1pkg`, title_i18n: { en: `${word} bookkeeping` },
+    scope_included: ['Monthly books'], deliverables: ['Ledger'], price_paise: 2000_00, delivery_days: 5, status: 'active',
+  }).select('id').single()
+  if (pkg) created.packageIds.push(pkg.id)
+
+  const autoAcceptAt = new Date(Date.now() + 50 * 3600e3).toISOString()
+  const mkOrder = async (status: string, extra: Record<string, unknown> = {}) => {
+    const { data: o } = await admin.from('orders').insert({
+      msme_id: msme!.id, provider_id: pp!.id, source: 'package', title: `${word} order ${status}`, scope_snapshot: {},
+      price_paise: 2000_00, gst_paise: 360_00, total_paise: 2360_00, commission_bps: 500, commission_paise: 100_00,
+      provider_earning_paise: 1900_00, delivery_days: 5, status, ...extra,
+    }).select('id').single()
+    if (o) created.orderIds.push(o.id)
+    return o!.id as string
+  }
+  const delivered = await mkOrder('delivered', { auto_accept_at: autoAcceptAt })
+  const placed = await mkOrder('placed')
+  const { data: rfq } = await admin.from('rfqs').insert({
+    msme_id: msme!.id, category_id: cat!.id, title: `${word} audit`, details: {}, status: 'quoted', quote_count: 2,
+    expires_at: new Date(Date.now() + 60 * 3600e3).toISOString(),
+  }).select('id').single()
+  if (rfq) created.rfqIds.push(rfq.id)
+
+  // N2 — /me/actions
+  check('N2: /me/actions without a session → 401', (await fetch(`${BASE}/api/v1/me/actions`)).status === 401)
+  const ba = (await (await api(buyer.token, '/api/v1/me/actions', undefined, 'GET')).json()) as { buyer?: { counts: { orders: number; requirements: number }; items: { kind: string; objectId: string; action: string | null; dueAt: string | null }[] } | null; provider?: unknown }
+  const review = ba.buyer?.items.find((i) => i.objectId === delivered)
+  check('N2: buyer — the delivered order needs review by auto_accept_at; placed waits on the provider',
+    ba.buyer?.counts.orders === 1 && review?.action === 'review_delivery' && !!review?.dueAt && Date.parse(review.dueAt) === Date.parse(autoAcceptAt) && !ba.buyer?.items.some((i) => i.objectId === placed),
+    JSON.stringify(ba.buyer?.counts))
+  check('N2: buyer — quotes waiting on an open requirement', ba.buyer?.counts.requirements === 1 && !!ba.buyer?.items.some((i) => i.kind === 'quotes_waiting' && i.objectId === rfq?.id))
+  check('N2: a buyer-only user has no provider section', ba.provider === null)
+  const pa = (await (await api(prov.token, '/api/v1/me/actions', undefined, 'GET')).json()) as { provider?: { counts: { orders: number }; items: { objectId: string; action: string | null }[] } | null }
+  check('N2: provider — the placed order must be accepted; the delivered one waits on the buyer',
+    pa.provider?.counts.orders === 1 && pa.provider?.items.some((i) => i.objectId === placed && i.action === 'accept_order') === true && !pa.provider?.items.some((i) => i.objectId === delivered),
+    JSON.stringify(pa.provider?.counts))
+
+  // N3 — universal search
+  check('N3: a 1-character query → 422', (await fetch(`${BASE}/api/v1/search/universal?q=x`)).status === 422)
+  const anonS = (await (await fetch(`${BASE}/api/v1/search/universal?q=${word}`)).json()) as { services: { id: string }[]; providers: { title: string }[]; mine: unknown }
+  check('N3: anonymous search finds the package and the provider, no "mine"', anonS.services.some((h) => h.id === pkg?.id) && anonS.providers.some((h) => h.title.includes(word)) && anonS.mine === null,
+    `services=${anonS.services.length} providers=${anonS.providers.length}`)
+  const mineS = (await (await api(buyer.token, `/api/v1/search/universal?q=${word}`, undefined, 'GET')).json()) as { mine?: { orders: { id: string }[]; requirements: { id: string }[] } | null }
+  check('N3: signed in, "mine" has the buyer’s own orders and requirement', (mineS.mine?.orders.length ?? 0) >= 2 && !!mineS.mine?.requirements.some((h) => h.id === rfq?.id))
+  const otherS = (await (await api(prov.token, `/api/v1/search/universal?q=${word}%20audit`, undefined, 'GET')).json()) as { mine?: { requirements: unknown[] } | null }
+  check('N3: another user never sees the buyer’s requirement', (otherS.mine?.requirements.length ?? 0) === 0)
+
+  // N33 — density preference
+  check('N33: PATCH preferences without a session → 401', (await fetch(`${BASE}/api/v1/profile/preferences`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uiDensity: 'compact' }) })).status === 401)
+  check('N33: an unknown density → 422', (await api(buyer.token, '/api/v1/profile/preferences', { uiDensity: 'tiny' }, 'PATCH')).status === 422)
+  const setD = await api(buyer.token, '/api/v1/profile/preferences', { uiDensity: 'compact' }, 'PATCH')
+  const { data: u } = await admin.from('users').select('ui_density').eq('id', buyer.uid).single()
+  check('N33: compact is saved', setD.status === 200 && u?.ui_density === 'compact')
+
+  // The v3 shell (this CI job runs with EXP_V3_SHELL=on).
+  const home = await fetch(`${BASE}/app`, { headers: { cookie: buyer.cookie } })
+  const hh = await home.text()
+  check('E1: the buyer shell renders v3 tokens + the saved density', home.ok && hh.includes('data-ui="v3"') && hh.includes('data-density="compact"'), `status ${home.status}`)
+  check('E1: the buyer shell has the rail/tab nav with Requirements', hh.includes('href="/app/rfq"') && hh.includes('href="/app/saved"'))
+  const pub = await fetch(`${BASE}/services`)
+  const ph = await pub.text()
+  check('E1: the public header has "Post a requirement" and the v3 material bar', pub.ok && ph.includes('href="/app/rfq/new"') && ph.includes('material'))
+  check('E1: fonts are self-hosted (no Google Fonts request)', !ph.includes('fonts.googleapis.com') && !ph.includes('fonts.gstatic.com'))
+  const gal = await fetch(`${BASE}/admin/dev/ui`, { headers: { cookie: buyer.cookie }, redirect: 'manual' })
+  check('E1: /admin/dev/ui is admin-only', [302, 303, 307].includes(gal.status), `status ${gal.status}`)
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
     await e0()
+    await e1()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }
     for (const id of created.orderIds) { await t(admin.from('order_events').delete().eq('order_id', id)); await t(admin.from('orders').delete().eq('id', id)) }
     for (const id of created.packageIds) await t(admin.from('packages').delete().eq('id', id))
+    for (const id of created.rfqIds) await t(admin.from('rfqs').delete().eq('id', id))
     for (const id of created.providerIds) { await t(admin.from('provider_categories').delete().eq('provider_id', id)); await t(admin.from('provider_profiles').delete().eq('id', id)) }
     for (const id of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', id))
     for (const uid of created.users) { await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
