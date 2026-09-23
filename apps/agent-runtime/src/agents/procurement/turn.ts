@@ -158,6 +158,8 @@ export async function runProcurementTurn(deps: ProcurementRuntimeDeps, job: Proc
     return { status: 'ok', detail: { outcome: 'ticket_open' } }
   }
 
+  // a web "new request" tap re-runs the original turn in a NEW session: copy the buyer's words into its thread
+  if (job.turnId && job.forced?.sessionChoice === 'new' && text) await recordTurn(deps, { sessionId: row.id, userId: row.user_id, role: 'user', surface: row.surface, body: text })
   // the buyer's turn in the mirror (the web composer stored its own)
   if (job.messageId && !job.forced && (text || media)) await recordTurn(deps, { sessionId: row.id, userId: row.user_id, role: 'user', surface: row.surface, body: text || (media?.kind === 'audio' ? '🎤' : '📎'), waMessageId })
 

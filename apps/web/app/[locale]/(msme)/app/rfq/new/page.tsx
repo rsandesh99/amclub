@@ -12,8 +12,8 @@ import { RfqForm, type RfqCategoryOption, type RfqPrefill } from '@/components/r
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export default async function NewRfqPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
-  const { from } = await searchParams
+export default async function NewRfqPage({ searchParams }: { searchParams: Promise<{ from?: string; assistant?: string }> }) {
+  const { from, assistant } = await searchParams
   const user = await getSessionUser()
   if (!user) redirect('/login?next=/app/rfq/new')
   const t = await getTranslations('rfq')
@@ -84,6 +84,18 @@ export default async function NewRfqPage({ searchParams }: { searchParams: Promi
         budgetMin: prev.budget_min_paise != null ? String(Number(prev.budget_min_paise) / 100) : '',
         budgetMax: prev.budget_max_paise != null ? String(Number(prev.budget_max_paise) / 100) : '',
       }
+    }
+  }
+
+  // S3.1 — Edit on the procurement agent's draft card (?assistant=<session>): prefill the ordinary form from the buyer's
+  // OWN session draft (the user-scoped client — RLS owner read; someone else's id loads nothing). Nothing is created here.
+  if (!prefill && assistant && UUID.test(assistant)) {
+    const { data: sess } = await supabase.from('procurement_sessions').select('draft').eq('id', assistant).maybeSingle()
+    const payload = ((sess?.draft as { payload?: Record<string, unknown> | null } | null)?.payload ?? null) as { title?: unknown; category_slug?: unknown; details?: Record<string, unknown> } | null
+    if (payload) {
+      const slug = typeof payload.category_slug === 'string' ? payload.category_slug : ''
+      const details = Object.fromEntries(Object.entries(payload.details ?? {}).filter(([, v]) => typeof v === 'string')) as Record<string, string>
+      prefill = { categorySlug: categories.some((c) => c.slug === slug) ? slug : '', title: typeof payload.title === 'string' ? payload.title : '', details, budgetMin: '', budgetMax: '' }
     }
   }
 

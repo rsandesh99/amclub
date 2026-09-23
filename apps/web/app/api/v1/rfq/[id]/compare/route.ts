@@ -9,6 +9,7 @@ import { loadBuyerQuotes } from '@/lib/rfq/queries'
 import { computeCompare, getComparePointers, toPointerLocale } from '@/lib/rfq/compare'
 import { compareOrderingFor } from '@/lib/score/ordering'
 import { captureServerEvent } from '@/lib/analytics/server'
+import { requireToolScope } from '@/lib/agent/scope'
 
 /**
  * GET /api/v1/rfq/[id]/compare?locale=xx (S1.2 §5) — the buyer's comparability
@@ -25,6 +26,9 @@ const NO_STORE = { 'Cache-Control': 'private, no-store' }
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // S3.1 — a delegated token must carry compare_quotes (the procurement agent's summary read); a no-op for sessions.
+  const scope = await requireToolScope('compare_quotes')
+  if (scope) return scope
   const { id: rfqId } = await params
   const admin = await createAdminClient()
   const actor = await resolveActor(admin, userId)

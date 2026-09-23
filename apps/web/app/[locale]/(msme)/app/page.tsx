@@ -11,6 +11,7 @@ import { formatINR } from '@/lib/format'
 import { MART_ENABLED } from '@/lib/flags'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { isSupportEnabledFor } from '@/lib/support/settings'
+import { isProcurementEnabledFor } from '@/lib/agent/procurement'
 import { createAdminClient } from '@/lib/supabase/server'
 
 function getGreeting() {
@@ -34,6 +35,8 @@ export default async function MsmeHomePage() {
 
   // S2.3 — the Help chat for an enabled, cohorted buyer (the page 404s for everyone else).
   const supportOn = AGENT_ENABLED ? await isSupportEnabledFor(await createAdminClient(), user.id) : false
+  // S3.1 — the buying assistant for an enabled, cohorted buyer (the page 404s for everyone else).
+  const assistantOn = AGENT_ENABLED ? await isProcurementEnabledFor(await createAdminClient(), user.id) : false
   const orders = (await listMyOrders(user.id, 'msme')).slice(0, 3)
   const greeting = getGreeting()
   const name = user.fullName?.split(' ')[0] ?? 'there'
@@ -75,6 +78,7 @@ export default async function MsmeHomePage() {
             { label: t('saved'), href: '/app/saved', icon: '❤️' },
             // S2.3 — the Help chat for an enabled, cohorted buyer (the page 404s for everyone else).
             ...(supportOn ? [{ label: tShell('help_entry'), href: '/app/support', icon: '💬' }] : []),
+            ...(assistantOn ? [{ label: tShell('assistant_entry'), href: '/app/assistant', icon: '🧑‍💼' }] : []),
           ] as { label: string; href: string; icon: string }[]
         ).map((action) => (
           <Link

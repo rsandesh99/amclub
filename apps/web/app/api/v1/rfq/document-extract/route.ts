@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const admin = await createAdminClient()
-  if (!(await isAgentEnabledForUser(admin, 'document_intake', userId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  // S3.1 — the procurement agent's photo / PDF start uses the same intake: on for document_intake OR procurement
+  if (!(await isAgentEnabledForUser(admin, 'document_intake', userId)) && !(await isAgentEnabledForUser(admin, 'procurement', userId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Paid-API guard (images / PDFs are frontier-tier calls): burst + hourly.
   const burst = await enforce(limiters.documentExtract, `de:${userId}`)

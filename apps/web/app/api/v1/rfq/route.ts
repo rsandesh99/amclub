@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { rfqSchema, effectiveQuoteCap } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
-import { requireToolScope } from '@/lib/agent/scope'
+import { delegatedRunId, requireToolScope } from '@/lib/agent/scope'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { fanoutRfq } from '@/lib/rfq/fanout'
@@ -118,12 +118,17 @@ export async function POST(request: NextRequest) {
     .single()
   if (error || !rfq) return serverError('[rfq POST]', error)
 
-  // S1.8 — the Create tap is the confirmation: ONE ai_decisions row (feature rfq_intake), rows linked.
+  // S1.8 — the Create tap is the confirmation: ONE ai_decisions row (feature rfq_intake), rows linked. S3.1 — when the
+  // create is the resume of a procurement run, the buyer's tap already wrote that ONE row (feature procurement_step,
+  // tool create_rfq): the rows link to it instead of a second row.
   if (intakeRows.length > 0) {
+    const runId = await delegatedRunId()
+    const prior = runId ? ((await admin.from('ai_decisions').select('id').eq('run_id', runId).eq('tool', 'create_rfq').eq('decided_by', userId).limit(1).maybeSingle()).data as { id: string } | null) : null
     await linkIntakeExtractions(admin, {
       userId,
       rfqId: rfq.id,
       rows: intakeRows,
+      existingDecisionId: prior?.id ?? null,
       final: { title: d.title, detail_keys: Object.keys(d.details ?? {}), attachments: (d.attachments ?? []).length, ...(d.voice_meta?.clarify ? { clarify: d.voice_meta.clarify } : {}) },
     }).catch((e) => console.error('[rfq intake link]', (e as Error).message))
   }

@@ -58,10 +58,16 @@ export async function checkIntakeExtractions(admin: SupabaseClient, userId: stri
 /** After the RFQ insert: ONE ai_decisions row (feature rfq_intake), then rfq_id + decision_id on the rows (only while still unlinked). */
 export async function linkIntakeExtractions(
   admin: SupabaseClient,
-  args: { userId: string; rfqId: string; rows: IntakeRow[]; final: Record<string, unknown> },
+  args: { userId: string; rfqId: string; rows: IntakeRow[]; final: Record<string, unknown>; existingDecisionId?: string | null },
 ): Promise<string | null> {
   if (args.rows.length === 0) return null
   const ids = args.rows.map((r) => r.id)
+  if (args.existingDecisionId) {
+    // S3.1 — the procurement agent's create: the buyer's procurement_step decision IS the confirmation (no second row)
+    const { error } = await admin.from('rfq_intake_extractions').update({ rfq_id: args.rfqId, decision_id: args.existingDecisionId }).in('id', ids).is('rfq_id', null)
+    if (error) console.error('[intake link]', error.message)
+    return args.existingDecisionId
+  }
   const proposed: Record<string, unknown> = {}
   for (const r of args.rows) proposed[r.id] = { kind: r.kind, proposed: r.proposed }
   const tool = args.rows[0]!.kind === 'clarify' ? 'clarify_rfq' : 'extract_document'

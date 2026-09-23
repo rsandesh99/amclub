@@ -8,6 +8,7 @@ import { MessageSquare, Star, ShieldCheck, StarOff } from 'lucide-react'
 import {
   BUYER_DECLINE_REASONS,
   COMPARE_ATTENTION_FLAGS,
+  QUOTE_STATUS,
   COMPARE_FACT_FLAGS,
   compareLabel,
   declineMessageTemplate,
@@ -41,6 +42,12 @@ export interface QuoteCompareProps {
    * all this screen ever gets — never a score. Absent = the price order, exactly as before.
    */
   ordering?: CompareOrdering
+  /**
+   * S3.1 — the procurement agent's "go with B" link, VERIFIED server-side (the buyer's own approved choose_quote for this
+   * RFQ + quote). The page opens its ordinary confirm sheet for that quote once; the checkout call is the one below, on
+   * the buyer's own tap. Absent = nothing changes.
+   */
+  payQuoteId?: string | null
 }
 
 /**
@@ -51,7 +58,7 @@ export interface QuoteCompareProps {
  * Decline opens a sheet: reason, optional private note, the template preview
  * in the provider's language, no undo (the quote machine has no way back).
  */
-export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering }: QuoteCompareProps) {
+export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering, payQuoteId = null }: QuoteCompareProps) {
   const t = useTranslations('rfq')
   const tc = useTranslations('checkout')
   const locale = useLocale()
@@ -80,6 +87,16 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
   const [confirmErr, setConfirmErr] = useState('')
   const quoteKeys = useRef(new Map<string, string>())
   const closeConfirm = useCallback(() => { setConfirming(null); setConfirmErr('') }, [])
+  // S3.1 — open the ORDINARY confirm sheet for the agent-chosen quote once (a submitted quote on an undecided request only)
+  const payOpened = useRef(false)
+  useEffect(() => {
+    if (!payQuoteId || payOpened.current || rfq.status === 'accepted') return
+    const q = rfq.quotes.find((x) => x.id === payQuoteId && x.status === QUOTE_STATUS.submitted)
+    if (!q) return
+    payOpened.current = true
+    setConfirming(q)
+    posthog.capture('procurement_checkout_opened', { rfq_id: rfq.id, device: 'web' })
+  }, [payQuoteId, rfq, posthog])
   const keyForQuote = (quoteId: string) => {
     let k = quoteKeys.current.get(quoteId)
     if (!k) { k = newIdempotencyKey(); quoteKeys.current.set(quoteId, k) }

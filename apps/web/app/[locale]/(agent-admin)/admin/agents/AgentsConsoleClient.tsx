@@ -7,6 +7,7 @@ import { AGENT_NAMES, AGENT_SETTING_DEFS, type AgentName, type AgentSettingKey }
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
+import { formatINR } from '@/lib/format'
 
 interface SettingRow { key: AgentSettingKey; value: unknown; set: boolean; updated_at: string | null; hint: string }
 interface SpendBucket { ai_paise: number; commission_paise: number; ai_share_pct: number | null }
@@ -40,6 +41,8 @@ export function AgentsConsoleClient() {
   const [munshi, setMunshi] = useState<MunshiStats | null>(null)
   // S2.4 — AMC Score distribution (compute / card / ranking switches are ordinary settings rows below)
   const [score, setScore] = useState<{ provider: { subjects: number; scored: number; gated_share_pct: number | null; median: number | null }; buyer: { scored: number }; movers_week: unknown[] } | null>(null)
+  // S3.1 — the buying assistant (30 days): sessions, proposal outcomes, RFQs + completed orders from agent sessions, cost
+  const [procurement, setProcurement] = useState<{ sessions_active: number; sessions_total: number; proposals: { approved: number; edited: number; declined: number; open: number }; rfqs_created: number; orders_from_sessions: number; cost_per_completed_order_paise: number | null } | null>(null)
   const [agentsDraft, setAgentsDraft] = useState<Record<string, boolean>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -49,13 +52,14 @@ export function AgentsConsoleClient() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [s, sp, ds, ts, ms, sc] = await Promise.all([
+    const [s, sp, ds, ts, ms, sc, pr] = await Promise.all([
       fetch('/api/v1/agent/admin/settings', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { settings: [] })),
       fetch('/api/v1/agent/admin/spend', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
       fetch('/api/v1/agent/admin/dossiers/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/api/v1/agent/admin/triages/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/api/v1/agent/admin/munshi/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/api/v1/agent/admin/score/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/v1/agent/admin/procurement/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
     const rows: SettingRow[] = s.settings ?? []
     setSettings(rows)
@@ -67,6 +71,7 @@ export function AgentsConsoleClient() {
     setTriages(ts)
     setMunshi(ms)
     setScore(sc)
+    setProcurement(pr)
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -153,6 +158,14 @@ export function AgentsConsoleClient() {
                 {' · '}
                 {t('munshi_enabled', { n: munshi?.providers_enabled ?? 0 })}
               </p>
+            </div>
+            {/* S3.1 — buying assistant tile (built dark; enablement is the V1.5→V2 gate) */}
+            <div className="rounded-card border border-border bg-surface p-4 shadow-card" data-testid="procurement-tile">
+              <p className="text-xs font-medium text-foreground-secondary">{t('proc_title')}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{procurement?.sessions_active ?? 0}</p>
+              <p className="mt-1 text-xs text-foreground-secondary">{t('proc_active')} · {t('proc_total', { n: procurement?.sessions_total ?? 0 })}</p>
+              <p className="text-xs text-foreground-secondary">{t('proc_proposals', { approved: procurement?.proposals.approved ?? 0, edited: procurement?.proposals.edited ?? 0, declined: procurement?.proposals.declined ?? 0 })}</p>
+              <p className="text-xs text-foreground-secondary">{t('proc_outcomes', { rfqs: procurement?.rfqs_created ?? 0, orders: procurement?.orders_from_sessions ?? 0 })} · {t('proc_cost')}: {procurement?.cost_per_completed_order_paise == null ? '—' : formatINR(procurement.cost_per_completed_order_paise)}</p>
             </div>
             {/* S2.4 — AMC Score tile */}
             <div className="rounded-card border border-border bg-surface p-4 shadow-card" data-testid="score-tile">

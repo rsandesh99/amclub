@@ -265,7 +265,15 @@ export async function enqueueJob(agent: string, data: unknown): Promise<string |
     const t = data as Partial<ProcurementTurnJob>
     const uuid = /^[0-9a-f-]{36}$/i
     if (typeof t.userId !== 'string' || !uuid.test(t.userId) || typeof t.turnId !== 'string' || !uuid.test(t.turnId) || (t.sessionId !== null && t.sessionId !== undefined && !uuid.test(String(t.sessionId))) || (t.surface !== 'web' && t.surface !== 'mobile')) throw new Error('bad_procurement_turn')
-    return enqueueProcurementTurnJob({ userId: t.userId, surface: t.surface, sessionId: t.sessionId ?? null, turnId: t.turnId })
+    const forced = t.forced && typeof t.forced === 'object' ? { ...(typeof t.forced.label === 'string' && /^[A-G]$/.test(t.forced.label) ? { label: t.forced.label } : {}), ...(t.forced.sessionChoice === 'new' || t.forced.sessionChoice === 'current' ? { sessionChoice: t.forced.sessionChoice } : {}) } : null
+    return enqueueProcurementTurnJob({ userId: t.userId, surface: t.surface, sessionId: t.sessionId ?? null, turnId: t.turnId, ...(forced && Object.keys(forced).length ? { forced } : {}) })
+  }
+  if (agent === 'procurement.decide') {
+    // the web / mobile tap (the web route verified the run is the open proposal of the buyer's own session)
+    const d = data as Partial<ProcurementDecideJob>
+    const uuid = /^[0-9a-f-]{36}$/i
+    if (typeof d.runId !== 'string' || !uuid.test(d.runId) || typeof d.userId !== 'string' || !uuid.test(d.userId) || (d.action !== 'ok' && d.action !== 'edit' && d.action !== 'no')) throw new Error('bad_procurement_decide')
+    return enqueueProcurementDecideJob({ runId: d.runId, userId: d.userId, action: d.action, via: 'web' })
   }
   if (agent === 'onboarding') {
     // The web start route: { kind:'start', sessionId }. Validated shape only.

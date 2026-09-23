@@ -78,7 +78,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ quoteId: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const scope = await requireToolScope('reply_thread')
+  // S2.2 the provider's Munshi reply · S3.1 the buyer's procurement question (message_provider) — the S2.3 list form
+  const scope = await requireToolScope(['reply_thread', 'message_provider'])
   if (scope) return scope
   const { quoteId } = await params
   const admin = await createAdminClient()

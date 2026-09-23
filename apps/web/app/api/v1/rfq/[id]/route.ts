@@ -9,8 +9,9 @@ import { getRfqForBuyer, getRfqForProvider } from '@/lib/rfq/queries'
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  // S2.2 — the Munshi detail read (extract_requirements with rfq_id); a no-op for sessions and full-persona tokens.
-  const scope = await requireToolScope(['extract_requirements', 'support_lookup'])
+  // S2.2 — the Munshi detail read (extract_requirements with rfq_id); S3.1 — the procurement agent's read of the buyer's own
+  // request (compare_quotes). A no-op for sessions and full-persona tokens.
+  const scope = await requireToolScope(['extract_requirements', 'support_lookup', 'compare_quotes'])
   if (scope) return scope
   const { id } = await params
 
