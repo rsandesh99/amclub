@@ -1,5 +1,6 @@
 import 'server-only'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { isValidGstin } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -62,6 +63,15 @@ export async function generateInvoices(admin: Admin, orderId: string): Promise<{
   if (!order) return {}
   const { data: provider } = await admin.from('provider_profiles').select('display_name, gstin, state').eq('id', order.provider_id).maybeSingle()
   const { data: msme } = await admin.from('msme_profiles').select('business_name, gstin, state').eq('id', order.msme_id).maybeSingle()
+  // The GSTIN the buyer typed at checkout is frozen on the checkout session
+  // (checkout_sessions.gst_invoice, linked by order_id when materialised) and
+  // wins over the profile GSTIN; the profile is the fallback. Re-validated
+  // here so a malformed legacy value never lands on a tax invoice.
+  const { data: session } = await admin.from('checkout_sessions').select('gst_invoice').eq('order_id', orderId).limit(1).maybeSingle()
+  const typed = (session?.gst_invoice ?? null) as { gstin?: string; businessName?: string } | null
+  const typedGstin = typed?.gstin?.trim().toUpperCase()
+  const buyerGstin: string | null = typedGstin && isValidGstin(typedGstin) ? typedGstin : (msme?.gstin ?? null)
+  const buyerName: string = (typedGstin && isValidGstin(typedGstin) && typed?.businessName?.trim()) || msme?.business_name || 'Buyer'
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const { data: existing } = await admin.from('invoices').select('kind').eq('order_id', orderId)
@@ -87,8 +97,8 @@ export async function generateInvoices(admin: Admin, orderId: string): Promise<{
         'Invoice No': number,
         'Order': order.order_number,
         'From': goods ? 'AMClub (Swathisri Infra Projects Pvt Ltd)' : (provider?.display_name ?? 'Provider'),
-        'To': msme?.business_name ?? 'Buyer',
-        'Buyer GSTIN': msme?.gstin ?? '—',
+        'To': buyerName,
+        'Buyer GSTIN': buyerGstin ?? '—',
         ...(goods ? { 'Supplied by': provider?.display_name ?? 'Seller' } : {}),
       },
       goods
@@ -106,7 +116,7 @@ export async function generateInvoices(admin: Admin, orderId: string): Promise<{
     await admin.storage.from(BUCKET).upload(path, bytes, { contentType: 'application/pdf', upsert: true })
     await admin.from('invoices').insert({
       order_id: orderId, number, kind: 'buyer_invoice', pdf_url: path,
-      gstin_snapshot: { buyer: msme?.gstin ?? null, provider: provider?.gstin ?? null },
+      gstin_snapshot: { buyer: buyerGstin, provider: provider?.gstin ?? null, buyer_source: buyerGstin && buyerGstin === typedGstin ? 'checkout' : 'profile' },
       totals: { total_paise: order.total_paise, gst_paise: order.gst_paise },
     })
     out.buyer = path
