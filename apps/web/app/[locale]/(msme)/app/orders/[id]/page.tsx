@@ -21,7 +21,7 @@ export default async function MsmeOrderPage({ params, searchParams }: { params: 
 
   return (
     <div className="min-h-screen bg-background">
-      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} firstView={sp['first'] === '1'} />
+      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} firstView={sp['first'] === '1'} extras={detail.extras} />
     </div>
   )
 }
