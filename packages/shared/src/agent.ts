@@ -79,6 +79,45 @@ export function tierFor(taskClass: AgentTaskClass): AgentTier {
   return TASK_CLASS_TIER[taskClass]
 }
 
+// ── Data residency per task class (DPDP; SECURITY.md "Model-provider data terms") ──
+// 'in'  = the call carries buyer/provider content (requirements, documents, photos,
+//         transcripts, quotes, onboarding answers, drafts, dispute text, support
+//         messages). When AGENT_RESIDENCY_ENFORCE=true the gateway refuses to send
+//         such a class to a host outside AGENT_IN_RESIDENCY_HOSTS.
+// 'any' = the call carries only platform-owned or derived data, never a user's own
+//         words. Enforcement is OPT-IN (default off), so this table changes nothing
+//         today; when in doubt a class is 'in'.
+export const AGENT_RESIDENCIES = ['in', 'any'] as const
+export type AgentResidency = (typeof AGENT_RESIDENCIES)[number]
+
+export const TASK_CLASS_RESIDENCY: Record<AgentTaskClass, AgentResidency> = {
+  speech_to_text: 'in',       // user audio / transcript
+  text_to_speech: 'in',       // speaks drafts / replies addressed to a named user
+  rfq_parse: 'in',            // buyer's requirement text
+  rfq_clarify: 'in',          // buyer's requirement text
+  rfq_quality: 'in',          // buyer's RFQ body
+  document_extract: 'in',     // buyer/seller documents + photos (also Mart catalog drafts)
+  quote_draft: 'in',          // RFQ + provider price book
+  quote_extract: 'in',        // provider's free text
+  quote_compare: 'in',        // quote terms from several providers
+  decline_message: 'in',      // buyer's decline reason
+  onboarding_interview: 'in', // provider onboarding answers
+  dispute_summary: 'in',      // dispute statements + thread
+  dispute_triage: 'in',       // dispute statements + evidence
+  photo_plausibility: 'in',   // evidence photos
+  support_intent: 'in',       // support messages
+  approval_intent: 'in',      // provider's reply to a Munshi draft
+  thread_reply: 'in',         // quote thread messages
+  support_reply: 'in',        // support messages
+  benchmark_explain: 'any',   // aggregate, anonymised price ranges only
+  translation: 'any',         // platform / public catalogue copy only (e.g. the Mart pool pitch); translating a user's words must use an 'in' class
+  embedding: 'in',            // vectors may be computed over user content
+}
+
+export function residencyFor(taskClass: AgentTaskClass): AgentResidency {
+  return TASK_CLASS_RESIDENCY[taskClass]
+}
+
 export const agentTaskClassSchema = z.enum(AGENT_TASK_CLASSES)
 export const agentTierSchema = z.enum(AGENT_TIERS)
 
@@ -211,7 +250,7 @@ export const AGENT_EVENT_KINDS = [
   'completed',
   'failed',
   'cancelled',
-  'injection_suspected', // S2.1 — an untrusted part scored ≥ 40 by the detector (logged, never blocking); payload { provenance, score, hits, prompt }
+  'injection_suspected', // S2.1 — an untrusted part scored ≥ 40 by the detector (logged, never blocking); payload { suspected, band, source, prompt } — score/hits stay in server logs (users can read their own events)
 ] as const
 export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number]
 export const agentEventKindSchema = z.enum(AGENT_EVENT_KINDS)
