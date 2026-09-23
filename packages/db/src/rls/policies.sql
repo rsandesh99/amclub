@@ -920,12 +920,18 @@ CREATE POLICY "reviews: admin all" ON reviews
 
 -- ─── conversations & messages ──────────────────────────────────────────────────
 
+-- 0059 (E8b): parties READ only; the service-role routes (quote + order threads) are the one writer.
 DROP POLICY IF EXISTS "conversations: parties all" ON conversations;
-CREATE POLICY "conversations: parties all" ON conversations
-  FOR ALL USING (
+DROP POLICY IF EXISTS "conversations: parties read" ON conversations;
+CREATE POLICY "conversations: parties read" ON conversations
+  FOR SELECT USING (
     msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
     OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
   );
+REVOKE INSERT, UPDATE, DELETE ON conversations FROM anon, authenticated;
+DROP POLICY IF EXISTS "conversations: admin read" ON conversations;
+CREATE POLICY "conversations: admin read" ON conversations
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
 
 -- 0043: parties are read-only. The one writer (api/v1/quotes/[quoteId]/messages
 -- POST) masks contact info and inserts with the service role; client roles
@@ -941,6 +947,9 @@ CREATE POLICY "messages: parties read" ON messages
     )
   );
 REVOKE INSERT, UPDATE, DELETE ON messages FROM anon, authenticated;
+DROP POLICY IF EXISTS "messages: admin read" ON messages;
+CREATE POLICY "messages: admin read" ON messages
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
 
 -- ─── saved_providers ──────────────────────────────────────────────────────────
 

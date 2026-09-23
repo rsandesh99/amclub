@@ -198,6 +198,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E11c / N30 (D9): /partner/tenders — tender ALERTS matched by category + state for verified government-licensing providers (Save / Not relevant; the official portal link) and the reviewed GeM checklist. No bidding, applying or submitting inside AMClub. Turn on only after D9 and the mini-PRD settle the data source and its licence.',
   },
+  // ── Experience v3 E8b — messaging on a paid order (FR-8.4, N24); also needs the `orders` experience ──
+  order_messaging_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E8b / N24: the Messages tab on an order — buyer and provider write to each other after payment (phone / email masked exactly like quote threads; in-app + the WhatsApp template "New message on order #…" with no message text; read-only 30 days after completion or resolution). Also needs EXP_V3_ORDERS for the user. Apply migration 0059 and approve the order_message template first.',
+  },
   // ── S3.2 fair price ranges (benchmarks) — compute and display are separate switches, both OFF; the formula is code ──
   benchmark_compute_enabled: {
     schema: z.boolean(),

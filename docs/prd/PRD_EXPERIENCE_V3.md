@@ -1487,6 +1487,14 @@ Compare quotes · GST returns FY 25-26                 Shortlisted only ☐     
 - **Not in E8a.** Mobile order screens (E14 parity), order messaging (E8b).
 - **Acceptance.** `verify-experience` e8: the bar per role and status, five tabs with every panel present, `?tab=`, the Gold Thread, secured / scheduled / held lines, the buyer never sees the provider line. CI runs with `EXP_V3_ORDERS=on`.
 
+**As built (E8b: order messaging, N24).**
+- **Decision.** Order threads reuse `conversations` / `messages` with `context_type = 'order'` (one per order); no new table. Migration 0059 makes `conversations` read-only for parties (writes revoked; the service-role routes are the one writer for quote and order threads), adds admin / ops read on both tables and `messages_conversation_created_idx`.
+- **Switch.** `agent_settings.order_messaging_enabled` (default off) AND the `orders` experience for the user; otherwise every route 404s and there is no Messages tab.
+- **Routes.** `GET / POST /api/v1/orders/[id]/messages`, `POST …/read`: parties only (404 for anyone else), delegated agent tokens refused (reply drafting stays dark), 20 per minute. POST masks phone / email with `redactContactInfo` exactly like quote threads, attaches only this order's `order_documents` (≤ 3), and returns 409 `thread_read_only` 30 days after the order completes or is resolved (shared `orderThreadState`).
+- **Notifications.** In-app + WhatsApp template `order_message` ("New message on order #…", the order number its only parameter; transactional for a party). Never the message text. One notice per 15-minute burst while unread.
+- **UI.** The Messages tab (with the unread count) in the v3 order workspace: the masking note, the thread, attach order documents, read-only when closed; opening it marks the other party's messages read.
+- **Acceptance.** `verify-authz` 7d: switch off → 404; stored body masked + flagged; the other party of the order reads it; another buyer / provider gets 404 and zero rows over PostgREST; no direct insert of a message or a conversation; no update; the notification never carries the text; read receipts.
+
 ---
 
 ### E9: Homes and retention

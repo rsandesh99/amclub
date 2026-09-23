@@ -638,6 +638,52 @@ async function main() {
       }
     }
 
+    // ── 7d. E8b order messaging (FR-8.4, N24) — only while EXP_V3_ORDERS is on for the rig's app ──
+    const ordersFlag = (process.env['EXP_V3_ORDERS'] ?? 'off').trim().toLowerCase()
+    if (ordersFlag !== '' && ordersFlag !== 'off' && ordersFlag !== '0') {
+      console.log('E8b order messaging:')
+      const { data: msgSetting } = await admin.from('agent_settings').select('value').eq('key', 'order_messaging_enabled').maybeSingle()
+      const restoreMsg = async () => {
+        if (msgSetting) await admin.from('agent_settings').upsert({ key: 'order_messaging_enabled', value: msgSetting.value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+        else await admin.from('agent_settings').delete().eq('key', 'order_messaging_enabled')
+      }
+      try {
+        denied('switch OFF: buyerA GET own order thread → 404', (await api(buyerA.token, `/api/v1/orders/${orderA}/messages`, undefined, 'GET')).status)
+        await admin.from('agent_settings').upsert({ key: 'order_messaging_enabled', value: true, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+        const secret = 'call me on 9876543210 or mail a@b.com — E8b'
+        const sent = await api(buyerA.token, `/api/v1/orders/${orderA}/messages`, { body: secret })
+        eq('buyerA sends on OWN order → 201', sent.status, 201)
+        const { data: cvO } = await admin.from('conversations').select('id').eq('context_type', 'order').eq('context_id', orderA).maybeSingle()
+        const { data: stored } = cvO ? await admin.from('messages').select('id, body, redacted').eq('conversation_id', cvO.id).order('created_at', { ascending: false }).limit(1) : { data: null }
+        eq('order thread: phone / email NOT stored in cleartext', /9876543210|a@b\.com/.test(stored?.[0]?.body ?? '9876543210'), false)
+        eq('order thread: message flagged redacted', stored?.[0]?.redacted === true, true)
+        const provRead = await api(provA.token, `/api/v1/orders/${orderA}/messages`, undefined, 'GET')
+        const provJson = (await provRead.json().catch(() => ({}))) as { messages?: { mine: boolean }[]; unread?: number }
+        eq('provA (the other party of the order) reads the thread → 200, 1 unread', provRead.status === 200 && provJson.messages?.length === 1 && provJson.unread === 1, true)
+        denied('buyerB GET order A thread', (await api(buyerB.token, `/api/v1/orders/${orderA}/messages`, undefined, 'GET')).status)
+        denied('provB POST on order A thread', (await api(provB.token, `/api/v1/orders/${orderA}/messages`, { body: 'hello' })).status)
+        if (cvO) {
+          deniedRows('buyerB direct-reads order A messages', await bClient.from('messages').select('id').eq('conversation_id', cvO.id))
+          deniedRows('provB direct-reads order A conversation', await asUser(provB.token).from('conversations').select('id').eq('id', cvO.id))
+          deniedRows('buyerA INSERTs an order message directly (skips masking)', await asUser(buyerA.token).from('messages').insert({ conversation_id: cvO.id, sender_id: buyerA.uid, body: 'call 9876543210', redacted: false }).select('id'))
+          deniedRows('provA UPDATEs read_at / body directly', await asUser(provA.token).from('messages').update({ body: 'x' }).eq('conversation_id', cvO.id).select('id'))
+        }
+        deniedRows('buyerA INSERTs a conversation directly (0059)', await asUser(buyerA.token).from('conversations').insert({ context_type: 'order', context_id: crypto.randomUUID(), msme_id: msmeA!.id, provider_id: provAId }).select('id'))
+        const { data: note } = await admin.from('notifications').select('title_i18n, body_i18n, channels').eq('user_id', provA.uid).eq('kind', 'order_message').order('created_at', { ascending: false }).limit(1)
+        const noteText = JSON.stringify(note?.[0] ?? {})
+        eq('the notification (in-app + WhatsApp) never carries the message text', !!note?.[0] && !noteText.includes('9876543210') && !noteText.includes('E8b') && (note[0]!.channels as string[]).includes('whatsapp'), true)
+        eq('provA marks read → the unread count drops to 0', (await api(provA.token, `/api/v1/orders/${orderA}/messages/read`)).status === 200 && ((await (await api(provA.token, `/api/v1/orders/${orderA}/messages`, undefined, 'GET')).json()) as { unread?: number }).unread === 0, true)
+      } finally {
+        await restoreMsg()
+        await admin.from('notifications').delete().eq('user_id', provA.uid).eq('kind', 'order_message')
+        // conversations.msme_id → msme_profiles has no cascade: drop the order thread before the rig's profile cleanup.
+        const { data: cvDone } = await admin.from('conversations').select('id').eq('context_type', 'order').eq('context_id', orderA).maybeSingle()
+        if (cvDone) { await admin.from('messages').delete().eq('conversation_id', cvDone.id); await admin.from('conversations').delete().eq('id', cvDone.id) }
+      }
+    } else {
+      console.log('  (skipped E8b order messaging — EXP_V3_ORDERS off)')
+    }
+
     // ── 8. Phase 2: terms_acceptances (append-only, self-read) + signup gate ──
     console.log('Phase 2 — terms_acceptances + signup gate:')
     const buyerC = await mkUser('buyerC', ['msme'])
