@@ -11,6 +11,7 @@ import { z } from 'zod'
  * lib/orders/transitions.ts (TDS), /api/v1/mart/checkout + cart/preview.
  */
 import { POOL_PAYMENT_MODES } from './pools'
+import { promiseBreachLimitSchema } from './promises'
 
 export const POOL_ORDER_MODELS = ['per_member'] as const
 
@@ -64,6 +65,11 @@ export const MART_SETTING_DEFS = {
     decision: 'Group-Buy Agent schedule',
     hint: 'Day of month the agent drafts scheduled pools.',
   },
+  promise_breach_limit: {
+    schema: promiseBreachLimitSchema,
+    decision: 'E16 N41 seller promises',
+    hint: 'A promise badge (Ships in 48 h, GST invoice within 24 h) disappears from a product once it has `count` measured breaches within `window_days`. Default 3 in 90 days.',
+  },
   pool_open_limits: {
     schema: z.object({ min_open_hours: z.number().int().min(1).max(720), max_open_days: z.number().int().min(1).max(90) }),
     decision: 'Pool approval limits',
@@ -99,6 +105,10 @@ export const martCategoryPatchSchema = z
     return_window_hours: z.number().int().min(0).max(720).optional(),
     commission_bps: z.number().int().min(0).max(5000).optional(),
     return_freight_payer: z.enum(RETURN_FREIGHT_PAYERS).optional(),
+    /** E16 N43 (0069, staged) — "Not returnable" (damaged / wrong / short stay claimable). */
+    returnable: z.boolean().optional(),
+    /** E16 N43 — the CA-reviewed §17(5) flag: false = "ITC may not be available on this item". */
+    itc_eligible: z.boolean().optional(),
     bis_blocked: z.boolean().optional(),
     is_active: z.boolean().optional(),
     sort_order: z.number().int().min(0).max(1000).nullable().optional(),

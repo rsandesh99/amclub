@@ -2526,6 +2526,21 @@ Nothing in this epic is user-visible.
   - Strong goods results (≥ 3) show a "Make to order" strip: the goods RFQ (ADR-007) prefilled with the query and category. Weak results (< 3) show the prefilled goods RFQ card after the grid; zero results keep the existing empty state with the same link.
 - **Acceptance.** `mart:acceptance` runs the new `verify-mart-storefront` (N39 + N40 now; E16b / E16c add N41–N44) and, on a local DB, the 0069 killtest. `verify-mart-inert` checks `/services` renders no switch with the flag off.
 
+**As built (E16b: seller promises, non-returnable and ITC-ineligible categories; same staged 0069).**
+- **N41 promises.**
+  - The seller opts in per product on the listing wizard: "Ships in 48 h", "Return shipping covered", "GST invoice within 24 h" (`products.promises`, shared `martPromisesSchema`; unknown → 422).
+  - **Measured, never money.** The hourly Mart cron (`pool-close`, still inert with the flag off) runs `measureGoodsPromiseBreaches` over goods orders from the last 14 days. Shared `measurePromiseBreaches` decides:
+    - *Ships in 48 h*: the first dispatch photo is on the order within 48 h of placement. No photo once 48 h have passed is a breach.
+    - *GST invoice within 24 h*: the invoice document named at dispatch is on the order within 24 h of the dispatch photo. Dispatched without one, once 24 h pass, is a breach.
+  - Each breach is one row in `mart_promise_breaches` per (order, product, promise), so a re-run records nothing. No order, payout or release-gate value is read or written; `evaluateGoodsReleaseGate` is unchanged.
+  - **Badges.** Public reads (list, product, products API) carry only the badges still standing (`withActiveBadges` → shared `activePromiseBadges`). A promise with `promise_breach_limit.count` breaches inside `window_days` disappears. That is a registered `mart_settings` key, default 3 in 90 days. The seller's goods list says which badge is hidden and why.
+  - *Return shipping covered* is enforced rather than measured: shared `effectiveReturnFreightPayer` makes the seller the freight payer on that product's return note, whatever the category default.
+- **N43 non-returnable and ITC-ineligible.**
+  - `mart_categories.returnable` / `itc_eligible` are config, edited in the admin category table (`martCategoryPatchSchema`).
+  - **Not returnable** shows on the card, the product page, the cart and checkout lines, and the checkout note. A wholly non-returnable order refuses `open_return` for quality / other with 409 `not_returnable`. Damaged, wrong and short deliveries stay claimable (shared `returnAllowed`), and the workspace offers only those reasons. The release gate's return window is untouched.
+  - **ITC.** "ITC may not be available on this item" replaces the ITC hint, and the after-ITC column and card line disappear. The server computes the credit per line (shared `goodsItcSplit`): cart preview, checkout and pool checkout return `itcPaise` (eligible lines' GST) and `afterItcPaise` = total − credit. With every line eligible this equals the taxable value, as before.
+- **Acceptance.** `verify-mart-storefront` adds N41 (stored promises, badges, a breach recorded once by the cron with no money or status moved, the badge dropping at the limit while the other stays) and N43 (flags on the product page, a zero-credit preview, 409 on a quality return, a damaged claim opening).
+
 ---
 
 ### E17: Analytics consent (N36, gated: D-UX2)

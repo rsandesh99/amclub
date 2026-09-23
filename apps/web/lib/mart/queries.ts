@@ -7,8 +7,8 @@
  */
 import 'server-only'
 import { effectiveCostAfterItcPaise, resolveTier } from '@amclub/shared'
-import { createPublicClient } from '@/lib/supabase/server'
-import type { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, createPublicClient } from '@/lib/supabase/server'
+import { withActiveBadges } from './promises'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -21,7 +21,7 @@ export interface TierRow {
 export interface TierDisplay extends TierRow {
   unit_gst_paise: number
   unit_incl_gst_paise: number
-  /** For GST-registered buyers: cost after input credit = taxable value. */
+  /** For GST-registered buyers: cost after input credit = taxable value (incl. GST when the category is ITC-ineligible, E16 N43). */
   unit_after_itc_paise: number
 }
 
@@ -40,6 +40,14 @@ export interface ProductSummary {
   specs: { k: string; v: string }[]
   /** E16 N40 — typed attributes, validated per category by the seller routes (staged 0069). */
   attributes: Record<string, string | number | boolean>
+  /**
+   * E16 N41 — promises. Public reads carry only the ACTIVE badges (repeated
+   * breaches remove one); seller reads carry what the seller opted into.
+   */
+  promises: string[]
+  /** E16 N43 — the category's flags ("Not returnable", "ITC may not be available"). */
+  returnable: boolean
+  itcEligible: boolean
   availability: 'in_stock' | 'lead_time'
   leadTimeDays: number | null
   status: string
@@ -61,19 +69,21 @@ export interface ProductSummary {
   createdAt: string
 }
 
-export function tierDisplay(t: TierRow, gstRateBps: number): TierDisplay {
+export function tierDisplay(t: TierRow, gstRateBps: number, itcEligible = true): TierDisplay {
   const unitGst = Math.round((t.unit_price_paise * gstRateBps) / 10000)
   return {
     min_qty: t.min_qty,
     unit_price_paise: t.unit_price_paise,
     unit_gst_paise: unitGst,
     unit_incl_gst_paise: t.unit_price_paise + unitGst,
-    unit_after_itc_paise: effectiveCostAfterItcPaise({ taxablePaise: t.unit_price_paise }),
+    // No input credit on an ITC-ineligible category: the effective cost is the GST-inclusive price.
+    unit_after_itc_paise: itcEligible ? effectiveCostAfterItcPaise({ taxablePaise: t.unit_price_paise }) : t.unit_price_paise + unitGst,
   }
 }
 
 const SELECT =
-  'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, brand, specs, attributes, availability, lead_time_days, list_price_paise, status, created_at, ' +
+  'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, brand, specs, attributes, promises, availability, lead_time_days, list_price_paise, status, created_at, ' +
+  'category:mart_categories(returnable, itc_eligible), ' +
   'seller:provider_profiles!inner(id, display_name, slug, city, state, avg_rating, review_count, completed_orders, top_rated), tiers:price_tiers(min_qty, unit_price_paise)'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -82,7 +92,9 @@ export function mapProduct(r: any): ProductSummary {
     .map((t) => ({ min_qty: Number(t.min_qty), unit_price_paise: Number(t.unit_price_paise) }))
     .sort((a, b) => a.min_qty - b.min_qty)
   const gst = Number(r.gst_rate_bps)
-  const displays = tiers.map((t) => tierDisplay(t, gst))
+  const category = Array.isArray(r.category) ? r.category[0] : r.category
+  const itcEligible = category?.itc_eligible !== false
+  const displays = tiers.map((t) => tierDisplay(t, gst, itcEligible))
   const seller = Array.isArray(r.seller) ? r.seller[0] : r.seller
   return {
     id: r.id,
@@ -98,6 +110,9 @@ export function mapProduct(r: any): ProductSummary {
     brand: r.brand ?? null,
     specs: Array.isArray(r.specs) ? (r.specs as { k: string; v: string }[]) : [],
     attributes: r.attributes && typeof r.attributes === 'object' && !Array.isArray(r.attributes) ? (r.attributes as Record<string, string | number | boolean>) : {},
+    promises: Array.isArray(r.promises) ? (r.promises as string[]) : [],
+    returnable: category?.returnable !== false,
+    itcEligible,
     availability: r.availability === 'lead_time' ? 'lead_time' : 'in_stock',
     leadTimeDays: r.lead_time_days == null ? null : Number(r.lead_time_days),
     status: r.status,
@@ -168,7 +183,7 @@ export async function listPublicProducts(f: ProductListFilters): Promise<{ produ
     console.error('[listPublicProducts]', error.message)
     return { products: [], total: 0, nextOffset: null }
   }
-  const products = (data ?? []).map(mapProduct)
+  const products = await withActiveBadges(await createAdminClient(), (data ?? []).map(mapProduct))
   const total = count ?? products.length
   return { products, total, nextOffset: offset + products.length < total ? offset + products.length : null }
 }
@@ -195,7 +210,9 @@ export async function attributeFacetRows(f: Pick<ProductListFilters, 'category' 
 /** One public product (anon client; null when not visible). */
 export async function getPublicProduct(id: string): Promise<ProductSummary | null> {
   const { data } = await createPublicClient().from('products').select(SELECT).eq('id', id).is('deleted_at', null).maybeSingle()
-  return data ? mapProduct(data) : null
+  if (!data) return null
+  const [product] = await withActiveBadges(await createAdminClient(), [mapProduct(data)])
+  return product ?? null
 }
 
 /** Seller's own catalog (service role; caller has verified ownership of sellerId). */

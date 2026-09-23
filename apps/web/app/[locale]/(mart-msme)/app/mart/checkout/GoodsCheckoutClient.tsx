@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { useCart, groupBySeller } from '@/lib/mart/cart-store'
 import { SheetCard, EmeraldCard, GoldNumeral } from '@/components/mart/primitives'
+import { LineFlags } from '@/components/mart/LineFlags'
 import type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
 import { CHECKOUT_ERROR_KEYS, CheckoutError, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 
@@ -20,6 +21,9 @@ interface Preview {
   amounts: { taxablePaise: number; gstPaise: number; totalPaise: number; afterItcPaise: number }
   lineItems: { product_id: string; name: string; qty: number; unit: string; tier_unit_price_paise: number; line_taxable_paise: number; line_gst_paise: number }[]
   returnWindowHours: number
+  /** E16 N43 — server flags per line. */
+  nonReturnableProductIds?: string[]
+  itcIneligibleProductIds?: string[]
 }
 
 export type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
@@ -158,7 +162,10 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
           <ul className="mt-3 divide-y divide-brass/20 text-sm">
             {preview.lineItems.map((li) => (
               <li key={li.product_id} className="flex justify-between py-2">
-                <span className="text-emerald-ink">{t('qty_unit', { qty: li.qty, unit: li.unit })} {li.name}</span>
+                <span className="text-emerald-ink">
+                  {t('qty_unit', { qty: li.qty, unit: li.unit })} {li.name}
+                  <LineFlags nonReturnable={!!preview.nonReturnableProductIds?.includes(li.product_id)} itcIneligible={!!preview.itcIneligibleProductIds?.includes(li.product_id)} />
+                </span>
                 <span className="tabular-nums">{formatINRExact(li.line_taxable_paise)}</span>
               </li>
             ))}
@@ -209,7 +216,10 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
             <div className="flex justify-between text-xs"><dt className="text-ivory/80">{t('after_itc')}</dt><dd className="tabular-nums">{formatINR(preview.amounts.afterItcPaise)}</dd></div>
           </dl>
           <p className="mt-3 text-meta font-medium text-ivory">{form.pickup ? t('pickup_label') : t('delivery_by', { date: deliveryDate(preview.deliveryDays) })}</p>
-          <p className="mt-1 text-xs text-ivory/80">{t('return_window_note', { hours: preview.returnWindowHours })}</p>
+          <p className="mt-1 text-xs text-ivory/80">
+            {/* E16 N43 — nothing returnable in this order: say so instead of a window. */}
+            {preview.nonReturnableProductIds && preview.nonReturnableProductIds.length === preview.lineItems.length ? `${t('not_returnable')} · ${t('not_returnable_claims_only')}` : t('return_window_note', { hours: preview.returnWindowHours })}
+          </p>
         </EmeraldCard>
       )}
 

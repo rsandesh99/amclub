@@ -9,6 +9,7 @@
 import 'server-only'
 import {
   computeGoodsOrderAmounts,
+  goodsItcSplit,
   resolveTier,
   type GoodsLineItem,
   type GoodsOrderAmounts,
@@ -24,9 +25,15 @@ export interface GoodsPrep {
   title: string
   lineItems: GoodsLineItem[]
   amounts: GoodsOrderAmounts
-  /** Longest return window across the order's categories (hours). */
+  /** Longest return window across the order's RETURNABLE categories (hours; 0 when none is returnable). */
   returnWindowHours: number
   categories: string[]
+  /** E16 N43 — GST a registered buyer can claim (eligible lines only) and the cost after it. Server-computed. */
+  itcPaise: number
+  afterItcPaise: number
+  /** E16 N43 — lines whose category is not returnable / not ITC-eligible (product ids). */
+  nonReturnableProductIds: string[]
+  itcIneligibleProductIds: string[]
 }
 
 export type GoodsPrepError =
@@ -62,6 +69,9 @@ export async function prepareGoodsCheckout(
   const categoryCache = new Map<string, MartCategoryRow | null>()
   let returnWindowHours = 0
   const categories = new Set<string>()
+  const nonReturnable: string[] = []
+  const itcIneligible: string[] = []
+  const lineItcEligible: boolean[] = []
 
   for (const id of ids) {
     const qty = qtyById.get(id)!
@@ -104,7 +114,10 @@ export async function prepareGoodsCheckout(
       line_gst_paise: Math.round((taxable * gstRateBps) / 10000),
     })
     lineInputs.push({ qty, unitPricePaise: tier.unit_price_paise, gstRateBps, commissionBps: cat.commission_bps })
-    returnWindowHours = Math.max(returnWindowHours, cat.return_window_hours)
+    if (cat.returnable !== false) returnWindowHours = Math.max(returnWindowHours, cat.return_window_hours)
+    else nonReturnable.push(p.id)
+    if (cat.itc_eligible === false) itcIneligible.push(p.id)
+    lineItcEligible.push(cat.itc_eligible !== false)
     categories.add(cat.slug)
   }
   if (!sellerId || lineItems.length === 0) {
@@ -121,9 +134,16 @@ export async function prepareGoodsCheckout(
 
   const first = lineItems[0]!
   const title = lineItems.length === 1 ? `${first.qty} ${first.unit} ${first.name}` : `${first.name} + ${lineItems.length - 1} more`
+  const itc = goodsItcSplit(
+    amounts.lines.map((l, i) => ({ gstPaise: l.gstPaise, itcEligible: lineItcEligible[i]! })),
+    amounts.totalPaise,
+  )
   return {
     ok: true,
-    prep: { sellerId, sellerName, title, lineItems, amounts, returnWindowHours, categories: [...categories] },
+    prep: {
+      sellerId, sellerName, title, lineItems, amounts, returnWindowHours, categories: [...categories],
+      itcPaise: itc.itcPaise, afterItcPaise: itc.afterItcPaise, nonReturnableProductIds: nonReturnable, itcIneligibleProductIds: itcIneligible,
+    },
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

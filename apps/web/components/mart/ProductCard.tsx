@@ -40,10 +40,19 @@ export function ProductCard({ product, priority = false }: { product: ProductSum
             <span className="text-xs text-foreground-secondary">{t('per_unit', { unit: product.unit })} · {t('excl_gst')}</span>
           </div>
         )}
-        {list && (
+        {list && product.itcEligible && (
           <p className="text-xs text-emerald">
             {t('itc_label')}: <span className="font-semibold tabular-nums">{formatINRExact(list.unit_after_itc_paise)}</span>
           </p>
+        )}
+        {/* E16 N41 / N43 — active promise badges (breached ones are already removed server-side) and "Not returnable". */}
+        {(product.promises.length > 0 || !product.returnable) && (
+          <ul className="mt-1 flex flex-wrap gap-1" aria-label={t('promises_label')}>
+            {product.promises.map((p) => (
+              <li key={p} className="rounded-full bg-emerald/10 px-2 py-0.5 text-[11px] font-medium text-emerald" data-promise={p}>{t(`promise_${p}` as 'promise_ships_48h')}</li>
+            ))}
+            {!product.returnable && <li className="rounded-full bg-ink/5 px-2 py-0.5 text-[11px] text-foreground-secondary">{t('not_returnable')}</li>}
+          </ul>
         )}
         <p className="mt-1 text-[11px] text-foreground-secondary">
           {t('min_order', { qty: product.minOrderQty, unit: product.unit })}

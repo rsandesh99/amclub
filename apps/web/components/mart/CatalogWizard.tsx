@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, Link } from '@/i18n/navigation'
-import { pickLocale, PRODUCT_UNITS, GST_RATE_BPS_OPTIONS, HSN_CODE_RE, type CatalogDraft, type MartAttributeDef, type ProductAvailability } from '@amclub/shared'
+import { pickLocale, MART_PROMISES, PRODUCT_UNITS, GST_RATE_BPS_OPTIONS, HSN_CODE_RE, type CatalogDraft, type MartAttributeDef, type MartPromise, type ProductAvailability } from '@amclub/shared'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,12 +32,14 @@ export interface ListingDraft {
   tiers: { minQty: string; rupees: string }[]
   /** E16 N40 — typed attributes as typed in (bools as 'true' / 'false'); the route validates them per category. */
   attributes: Record<string, string>
+  /** E16 N41 — seller opt-in promises (measured; repeated breaches remove the badge). */
+  promises: MartPromise[]
 }
 
 const EMPTY: ListingDraft = {
   name: '', description: '', categorySlug: '', hsnCode: '', gstRateBps: '', unit: 'pcs', minOrderQty: '1', countryOfOrigin: 'IN',
   brand: '', specs: [], availability: 'in_stock', leadTimeDays: '',
-  images: [], tiers: [{ minQty: '1', rupees: '' }], attributes: {},
+  images: [], tiers: [{ minQty: '1', rupees: '' }], attributes: {}, promises: [],
 }
 
 const MAX_SPECS = 20
@@ -179,6 +181,7 @@ export function CatalogWizard({
       ...(draft.brand.trim() ? { brand: draft.brand.trim() } : {}),
       specs: cleanSpecs(),
       attributes: cleanAttributes(),
+      promises: draft.promises,
       availability: draft.availability,
       ...(draft.availability === 'lead_time' ? { lead_time_days: leadDays() } : {}),
       hsn_code: draft.hsnCode.trim(),
@@ -400,6 +403,24 @@ export function CatalogWizard({
             </fieldset>
           )}
 
+          <fieldset data-testid="promise-inputs">
+            <legend className="text-sm font-medium text-emerald-ink">{t('promises_title')}</legend>
+            <p className="text-xs text-foreground-secondary">{t('promises_hint')}</p>
+            <div className="mt-2 space-y-2">
+              {MART_PROMISES.map((p) => (
+                <label key={p} className="flex items-start gap-3 text-sm text-emerald-ink">
+                  <input
+                    type="checkbox"
+                    checked={draft.promises.includes(p)}
+                    onChange={(e) => set({ promises: e.target.checked ? MART_PROMISES.filter((x) => x === p || draft.promises.includes(x)) : draft.promises.filter((x) => x !== p) })}
+                    className="mt-0.5 h-6 w-6 shrink-0 accent-emerald"
+                  />
+                  <span>{t(`promise_${p}` as 'promise_ships_48h')}<span className="block text-xs text-foreground-secondary">{t(`promise_${p}_hint` as 'promise_ships_48h_hint')}</span></span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <fieldset>
             <legend className="text-sm font-medium text-emerald-ink">{t('specs')}</legend>
             <div className="mt-2 space-y-2">
@@ -454,6 +475,7 @@ export function CatalogWizard({
             <div><dt>{t('field_unit')}</dt><dd className="text-emerald-ink">{draft.unit}</dd></div>
             {draft.brand.trim() && <div><dt>{t('field_brand')}</dt><dd className="text-emerald-ink">{draft.brand.trim()}</dd></div>}
             <div><dt>{t('availability')}</dt><dd className="text-emerald-ink">{draft.availability === 'lead_time' ? t('lead_time_note', { days: leadDays() }) : t('in_stock')}</dd></div>
+            {draft.promises.length > 0 && <div className="col-span-2"><dt>{t('promises_title')}</dt><dd className="text-emerald-ink">{draft.promises.map((p) => t(`promise_${p}` as 'promise_ships_48h')).join(' · ')}</dd></div>}
           </dl>
           {Object.keys(cleanAttributes()).length > 0 && (
             <dl className="grid grid-cols-2 gap-x-2 gap-y-1 border-t border-brass/20 pt-2 text-xs" data-testid="review-attributes">

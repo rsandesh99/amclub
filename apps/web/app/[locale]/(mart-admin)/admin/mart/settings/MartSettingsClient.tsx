@@ -17,6 +17,9 @@ interface CategoryRow {
   return_freight_payer: 'seller' | 'buyer' | 'split'
   bis_blocked: boolean
   is_active: boolean
+  /** E16 N43 (0069, staged). */
+  returnable: boolean
+  itc_eligible: boolean
   sort_order: number | null
   active_listings: number
 }
@@ -112,6 +115,8 @@ export function MartSettingsClient() {
                     <th className="px-2 py-2 font-medium">{t('col_return_window')}</th>
                     <th className="px-2 py-2 font-medium">{t('col_commission')}</th>
                     <th className="px-2 py-2 font-medium">{t('col_freight')}</th>
+                    <th className="px-2 py-2 font-medium">{t('col_returnable')}</th>
+                    <th className="px-2 py-2 font-medium">{t('col_itc')}</th>
                     <th className="px-2 py-2 font-medium">{t('col_bis')}</th>
                     <th className="px-2 py-2 font-medium">{t('col_active')}</th>
                     <th className="px-2 py-2 font-medium">{t('col_sort')}</th>
@@ -138,6 +143,8 @@ export function MartSettingsClient() {
                           {RETURN_FREIGHT_PAYERS.map((p) => <option key={p} value={p}>{t(`freight_${p}`)}</option>)}
                         </select>
                       </td>
+                      <td className="px-2 py-2"><input aria-label={t('col_returnable')} type="checkbox" checked={catVal(c, 'returnable') !== false} onChange={(e) => setCat(c.slug, { returnable: e.target.checked })} className="h-5 w-5 accent-primary" /></td>
+                      <td className="px-2 py-2"><input aria-label={t('col_itc')} type="checkbox" checked={catVal(c, 'itc_eligible') !== false} onChange={(e) => setCat(c.slug, { itc_eligible: e.target.checked })} className="h-5 w-5 accent-primary" /></td>
                       <td className="px-2 py-2"><input aria-label={t('col_bis')} type="checkbox" checked={catVal(c, 'bis_blocked')} onChange={(e) => setCat(c.slug, { bis_blocked: e.target.checked })} className="h-5 w-5 accent-primary" /></td>
                       <td className="px-2 py-2"><input aria-label={t('col_active')} type="checkbox" checked={catVal(c, 'is_active')} onChange={(e) => setCat(c.slug, { is_active: e.target.checked })} className="h-5 w-5 accent-primary" /></td>
                       <td className="px-2 py-2"><Input aria-label={t('col_sort')} type="number" min={0} className="w-16" value={catVal(c, 'sort_order') == null ? '' : String(catVal(c, 'sort_order'))} onChange={(e) => setCat(c.slug, { sort_order: e.target.value === '' ? null : Number(e.target.value) })} /></td>

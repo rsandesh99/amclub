@@ -68,13 +68,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     category_slug: c.product.categorySlug, name: c.product.name, description: c.product.description, hsn_code: c.product.hsnCode,
     gst_rate_bps: c.product.gstRateBps, unit: c.product.unit, images: c.product.images, min_order_qty: c.product.minOrderQty,
     country_of_origin: c.product.countryOfOrigin, brand: c.product.brand, specs: c.product.specs, availability: c.product.availability,
-    lead_time_days: c.product.leadTimeDays, attributes: c.product.attributes,
+    lead_time_days: c.product.leadTimeDays, attributes: c.product.attributes, promises: c.product.promises,
   }
   const after = {
     category_slug: d.category_slug, name: d.name, description: d.description ?? null, hsn_code: d.hsn_code, gst_rate_bps: d.gst_rate_bps,
     unit: d.unit, images: d.images, min_order_qty: d.min_order_qty, country_of_origin: d.country_of_origin, brand: d.brand ?? null,
     specs: d.specs, availability: d.availability, lead_time_days: d.availability === 'lead_time' ? (d.lead_time_days ?? null) : null,
     attributes: attrs.value,
+    promises: d.promises,
   }
   const { error } = await c.admin
     .from('products')

@@ -8,6 +8,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getSellerCtx } from '@/lib/mart/seller'
 import { getGoodsActivation } from '@/lib/mart/activation'
 import { listSellerProducts } from '@/lib/mart/queries'
+import { withActiveBadges } from '@/lib/mart/promises'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { formatINRExact } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +29,8 @@ export default async function PartnerGoodsPage() {
   const seller = await getSellerCtx(admin, user.id)
   if (!seller) redirect('/partner/onboarding')
   const [activation, products] = await Promise.all([getGoodsActivation(admin, seller.id), listSellerProducts(admin, seller.id)])
+  // E16 N41 — which of the seller's promises buyers still see (repeated breaches remove a badge).
+  const shown = new Map((await withActiveBadges(admin, products)).map((p) => [p.id, p.promises]))
 
   return (
     <div className="mart-enter mx-auto max-w-3xl space-y-5 px-4 py-8">
@@ -75,6 +78,9 @@ export default async function PartnerGoodsPage() {
                     {t('hsn')} {p.hsnCode} · {t('gst_rate', { rate: p.gstRateBps / 100 })}
                     {p.list ? ` · ${formatINRExact(p.list.unit_price_paise)} ${t('per_unit', { unit: p.unit })}` : ''}
                   </p>
+                  {p.promises.filter((x) => !(shown.get(p.id) ?? []).includes(x)).map((x) => (
+                    <p key={x} className="mt-0.5 text-xs text-warning" data-testid="promise-removed">{t('promise_badge_removed', { promise: t(`promise_${x}` as 'promise_ships_48h') })}</p>
+                  ))}
                 </div>
               </div>
               <GoodsListingActions productId={p.id} status={p.status} sellsGoods={seller.sellsGoods} />

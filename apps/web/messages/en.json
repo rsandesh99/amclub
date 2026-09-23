@@ -2579,7 +2579,20 @@
     "make_to_order_body": "Need it made to your drawing or spec? Verified sellers quote on it.",
     "make_to_order_cta": "Make to order",
     "weak_results_title": "Not quite what you need?",
-    "weak_results_body": "Tell verified sellers what you need, and how many. They send quotes to compare."
+    "weak_results_body": "Tell verified sellers what you need, and how many. They send quotes to compare.",
+    "promises_label": "Seller promises",
+    "promises_title": "Promises you make on this product",
+    "promises_hint": "Buyers see these as badges. We measure them on every order; after repeated misses a badge comes off by itself.",
+    "promise_ships_48h": "Ships in 48 h",
+    "promise_ships_48h_hint": "A dispatch photo on the order within 48 hours of it being placed.",
+    "promise_return_shipping_covered": "Return shipping covered",
+    "promise_return_shipping_covered_hint": "You pay the freight on any return of this product.",
+    "promise_gst_invoice_24h": "GST invoice within 24 h",
+    "promise_gst_invoice_24h_hint": "Your GST invoice attached to the order within 24 hours of dispatch.",
+    "not_returnable": "Not returnable",
+    "not_returnable_claims_only": "Damaged, wrong or short deliveries can still be claimed.",
+    "itc_not_available": "ITC may not be available on this item",
+    "promise_badge_removed": "“{promise}” is hidden from buyers after repeated misses. It comes back as recent orders keep it."
   },
   "admin_mart": {
     "title": "AMC Mart",
@@ -2764,7 +2777,9 @@
     "updated_at": "Updated {date}",
     "not_set": "Not set — the code default applies",
     "block_capture_warning": "block_capture is refused at pool join until docs/mart/PSP_BLOCK_CAPTURE_REPORT.md §5 is signed off. Saving it here does not enable it.",
-    "save": "Save"
+    "save": "Save",
+    "col_returnable": "Returnable",
+    "col_itc": "ITC eligible"
   },
   "suspended": {
     "title": "Your buyer account is suspended",

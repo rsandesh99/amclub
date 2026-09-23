@@ -2500,7 +2500,20 @@
     "make_to_order_body": "अपनी ड्रॉइंग या स्पेक के हिसाब से बनवाना है? सत्यापित विक्रेता कोटेशन देंगे।",
     "make_to_order_cta": "ऑर्डर पर बनवाएँ",
     "weak_results_title": "ठीक वैसा नहीं मिला?",
-    "weak_results_body": "सत्यापित विक्रेताओं को बताएँ कि क्या और कितना चाहिए। वे तुलना के लिए कोटेशन भेजेंगे।"
+    "weak_results_body": "सत्यापित विक्रेताओं को बताएँ कि क्या और कितना चाहिए। वे तुलना के लिए कोटेशन भेजेंगे।",
+    "promises_label": "विक्रेता के वादे",
+    "promises_title": "इस उत्पाद पर आपके वादे",
+    "promises_hint": "खरीदार इन्हें बैज के रूप में देखते हैं। हम हर ऑर्डर पर इन्हें मापते हैं; बार-बार चूकने पर बैज अपने आप हट जाता है।",
+    "promise_ships_48h": "48 घंटे में डिस्पैच",
+    "promise_ships_48h_hint": "ऑर्डर मिलने के 48 घंटे के भीतर ऑर्डर पर डिस्पैच फ़ोटो।",
+    "promise_return_shipping_covered": "वापसी का भाड़ा हमारी ओर से",
+    "promise_return_shipping_covered_hint": "इस उत्पाद की किसी भी वापसी का भाड़ा आप देंगे।",
+    "promise_gst_invoice_24h": "24 घंटे में GST इनवॉइस",
+    "promise_gst_invoice_24h_hint": "डिस्पैच के 24 घंटे के भीतर आपका GST इनवॉइस ऑर्डर पर लगा हो।",
+    "not_returnable": "वापसी योग्य नहीं",
+    "not_returnable_claims_only": "खराब, गलत या कम डिलीवरी पर दावा फिर भी किया जा सकता है।",
+    "itc_not_available": "इस वस्तु पर ITC शायद न मिले",
+    "promise_badge_removed": "बार-बार चूकने से “{promise}” खरीदारों से छिपा है। हाल के ऑर्डर में वादा निभाने पर यह लौट आएगा।"
   },
   "admin_mart": {
     "title": "AMC मार्ट",
@@ -2685,7 +2698,9 @@
     "updated_at": "अपडेट {date}",
     "not_set": "सेट नहीं — कोड डिफ़ॉल्ट लागू",
     "block_capture_warning": "docs/mart/PSP_BLOCK_CAPTURE_REPORT.md §5 पर हस्ताक्षर तक block_capture पूल जॉइन पर अस्वीकार रहेगा। यहाँ सेव करने से यह सक्षम नहीं होता।",
-    "save": "सहेजें"
+    "save": "सहेजें",
+    "col_returnable": "वापसी योग्य",
+    "col_itc": "ITC योग्य"
   },
   "admin_agents": {
     "munshi_title": "डिजिटल मुंशी (S2.2)",

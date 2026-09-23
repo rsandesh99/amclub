@@ -8,11 +8,15 @@ import { formatINR, formatINRExact } from '@/lib/format'
 import { useCart, groupBySeller } from '@/lib/mart/cart-store'
 import { SheetCard, EmeraldCard, GoldNumeral } from '@/components/mart/primitives'
 import { CartSkeleton } from '@/components/mart/skeletons'
+import { LineFlags } from '@/components/mart/LineFlags'
 
 interface Preview {
   sellerName: string
   amounts: { taxablePaise: number; gstPaise: number; totalPaise: number; afterItcPaise: number }
   lineItems: { product_id: string; line_taxable_paise: number; tier_unit_price_paise: number; tier_min_qty: number }[]
+  /** E16 N43 — server flags per line. */
+  nonReturnableProductIds?: string[]
+  itcIneligibleProductIds?: string[]
 }
 
 const ERR_KEYS: Record<string, string> = {
@@ -110,6 +114,7 @@ export function CartClient() {
                             {formatINRExact(li.tier_unit_price_paise)} {t('per_unit', { unit: l.unit })} · {t('line_total')} {formatINRExact(li.line_taxable_paise)}
                           </p>
                         )}
+                        <LineFlags nonReturnable={!!ok?.nonReturnableProductIds?.includes(l.productId)} itcIneligible={!!ok?.itcIneligibleProductIds?.includes(l.productId)} />
                       </div>
                       <input
                         type="number"

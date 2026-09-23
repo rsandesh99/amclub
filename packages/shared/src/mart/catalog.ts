@@ -14,6 +14,7 @@
  */
 import { z } from 'zod'
 import { productAttributesSchema } from './attributes'
+import { martPromisesSchema } from './promises'
 
 // ── Product status machine ───────────────────────────────────────────────────
 
@@ -177,6 +178,8 @@ export const productInputSchema = z.object({
   tiers: priceTiersSchema,
   /** E16 N40 — typed attributes; the route validates them against the category's definitions. */
   attributes: productAttributesSchema,
+  /** E16 N41 — seller opt-in promises (badges are removed automatically after repeated breaches). */
+  promises: martPromisesSchema,
 })
 export type ProductInput = z.infer<typeof productInputSchema>
 

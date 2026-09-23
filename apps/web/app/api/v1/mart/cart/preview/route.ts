@@ -38,9 +38,13 @@ export async function POST(request: NextRequest) {
         taxablePaise: prep.amounts.taxablePaise,
         gstPaise: prep.amounts.gstPaise,
         totalPaise: prep.amounts.totalPaise,
-        afterItcPaise: prep.amounts.taxablePaise,
+        afterItcPaise: prep.afterItcPaise,
+        itcPaise: prep.itcPaise,
       },
       returnWindowHours: prep.returnWindowHours,
+      // E16 N43 — per-line flags for "Not returnable" / "ITC may not be available".
+      nonReturnableProductIds: prep.nonReturnableProductIds,
+      itcIneligibleProductIds: prep.itcIneligibleProductIds,
     },
     { headers: { 'Cache-Control': 'private, no-store' } },
   )

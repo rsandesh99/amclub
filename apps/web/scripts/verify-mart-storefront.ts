@@ -11,12 +11,22 @@
  *       required values (422 invalid_attributes) and store normalised values;
  *       `a.<key>` facet filters narrow the public list (facetable keys only);
  *       the category page renders the facets, the product page the attributes.
+ *  N41  seller promises: stored from the seller routes (unknown → 422); badges on
+ *       the product page; the hourly Mart cron records a "ships in 48 h" breach
+ *       on an order with no dispatch photo after 48 h (once — a re-run adds
+ *       nothing); at the breach limit the badge disappears for buyers while the
+ *       other promise stays; no money moves.
+ *  N43  a non-returnable, ITC-ineligible category: "Not returnable" and "ITC may
+ *       not be available" on the product page; the cart preview claims no ITC
+ *       for the line (after-ITC = total) and flags it; a quality return → 409
+ *       not_returnable while a damaged claim opens.
  *
  * Run: BASE_URL=http://localhost:3000 pnpm --filter @amclub/web exec tsx scripts/verify-mart-storefront.ts
  * Creates only kill-test rows; removes everything in `finally` (zero residue).
  */
 import { config } from 'dotenv'
 import path from 'path'
+import { randomUUID } from 'crypto'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 
@@ -31,7 +41,8 @@ let pass = 0
 let fail = 0
 const ok = (name: string, cond: boolean, extra = '') => { console.log(`  ${cond ? '✓' : '✗'} ${name}${extra ? ' ' + extra : ''}`); cond ? pass++ : fail++ }
 
-const created = { users: [] as string[], providerIds: [] as string[], productIds: [] as string[], categories: [] as string[] }
+const created = { users: [] as string[], providerIds: [] as string[], msmeIds: [] as string[], productIds: [] as string[], orderIds: [] as string[], categories: [] as string[] }
+let breachLimitBefore: { value: unknown } | null | undefined
 
 async function mkUser(label: string, roles: string[]) {
   const email = `${tag}_${label}@killtest.amclub`
@@ -58,6 +69,9 @@ async function main() {
     // ── Cast: one goods-activated seller, an admin, one kill-test category with typed attributes.
     const seller = await mkUser('seller', ['provider'])
     const ops = await mkUser('admin', ['msme', 'admin'])
+    const buyer = await mkUser('buyer', ['msme'])
+    const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'KT Buyer', state: 'AP' }).select('id').single()
+    created.msmeIds.push(msme!.id)
     const gstin = `37AAACK${String(Date.now()).slice(-4)}A1Z5`
     const { data: prov, error: pErr } = await admin.from('provider_profiles').insert({
       user_id: seller.uid, legal_name: 'KT Seller', display_name: 'KT Seller', slug: `${tag}-seller`.replace(/_/g, '-'), state: 'AP', city: 'Kurnool', status: 'active', languages: ['en'], gstin,
@@ -128,11 +142,87 @@ async function main() {
     const none = await html(`/mart/search?query=${encodeURIComponent(`${tag}-nothing-here`)}`)
     ok('zero goods results still offer the goods RFQ', none.includes('/app/mart/rfq/new?item='))
 
+    // ── N41 seller promises ────────────────────────────────────────────────
+    console.log('N41. Seller promises + measured breaches:')
+    const delivery = { contact_name: 'Ravi', contact_phone: '9876543210', address: 'Plot 4, Industrial Estate', city: 'Kurnool', state: 'AP', pincode: '518001', pickup: false }
+    const badPromise = await json(await api(seller.token, '/api/v1/mart/seller/products', { ...body(`${tag} bad promise`, { material: 'MS' }), promises: ['free_lunch'] }))
+    ok('unknown promise → 422', badPromise.status === 422)
+    const cp = await json(await api(seller.token, '/api/v1/mart/seller/products', { ...body(`${tag} promised bolt`, { material: 'MS' }), promises: ['ships_48h', 'gst_invoice_24h'] }))
+    const pp = cp.body.id as string
+    created.productIds.push(pp)
+    await api(seller.token, `/api/v1/mart/seller/products/${pp}`, { action: 'submit' })
+    await api(ops.token, `/api/v1/mart/admin/products/${pp}`, { action: 'approve' })
+    const { data: prow } = await admin.from('products').select('promises').eq('id', pp).single()
+    ok('promises stored as opted in', JSON.stringify(prow?.promises) === JSON.stringify(['ships_48h', 'gst_invoice_24h']))
+    const ppHtml = await html(`/mart/p/${pp}`)
+    ok('product page shows both badges', ppHtml.includes('data-promise="ships_48h"') && ppHtml.includes('data-promise="gst_invoice_24h"'))
+
+    const buy = async (productId: string, qty = 1) => {
+      const co = await json(await api(buyer.token, '/api/v1/mart/checkout', { items: [{ product_id: productId, qty }], delivery, idempotencyKey: randomUUID() }))
+      if (co.status !== 200) throw new Error(`checkout ${co.status} ${JSON.stringify(co.body)}`)
+      const sim = await json(await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: co.body.checkoutSessionId }))
+      if (!sim.body.orderId) throw new Error(`simulate ${sim.status} ${JSON.stringify(sim.body)}`)
+      created.orderIds.push(sim.body.orderId)
+      return { orderId: sim.body.orderId as string, checkout: co.body }
+    }
+    const { orderId: late } = await buy(pp)
+    const { data: before } = await admin.from('orders').select('total_paise, provider_earning_paise, status').eq('id', late).single()
+    // The seller never dispatches: move the order's clock back past the 48 h promise.
+    await admin.from('orders').update({ created_at: new Date(Date.now() - 49 * 3_600_000).toISOString() }).eq('id', late)
+    const cron = () => fetch(`${BASE}/api/v1/cron/pool-close`, { headers: process.env['CRON_SECRET'] ? { Authorization: `Bearer ${process.env['CRON_SECRET']}` } : {} })
+    ok('hourly Mart cron runs', (await cron()).status === 200)
+    const { data: breaches } = await admin.from('mart_promise_breaches').select('promise, detail').eq('order_id', late)
+    ok('one ships_48h breach recorded (missing dispatch)', breaches?.length === 1 && breaches[0]!.promise === 'ships_48h' && (breaches[0]!.detail as { reason?: string }).reason === 'missing', JSON.stringify(breaches))
+    await cron()
+    ok('a re-run records nothing new', ((await admin.from('mart_promise_breaches').select('id').eq('order_id', late)).data ?? []).length === 1)
+    const { data: after } = await admin.from('orders').select('total_paise, provider_earning_paise, status').eq('id', late).single()
+    ok('no money or status moved', JSON.stringify(before) === JSON.stringify(after))
+    breachLimitBefore = (await admin.from('mart_settings').select('value').eq('key', 'promise_breach_limit').maybeSingle()).data
+    await admin.from('mart_settings').upsert({ key: 'promise_breach_limit', value: { count: 1, window_days: 90 } })
+    const limited = await json(await api(null, `/api/v1/mart/products/${pp}`))
+    const shownPromises = (limited.body.product?.promises ?? limited.body.promises ?? []) as string[]
+    ok('at the limit the breached badge is gone for buyers, the other stays', JSON.stringify(shownPromises) === '["gst_invoice_24h"]', JSON.stringify(shownPromises))
+
+    // ── N43 non-returnable + ITC-ineligible ─────────────────────────────────
+    console.log('N43. Non-returnable + ITC-ineligible category:')
+    const cat2 = `${tag}-nr`.replace(/_/g, '-')
+    await admin.from('mart_categories').insert({ slug: cat2, name_i18n: { en: cat2, hi: cat2, te: cat2 }, return_window_hours: 48, commission_bps: 500, bis_blocked: false, is_active: true, sort_order: 999, returnable: false, itc_eligible: false })
+    created.categories.push(cat2)
+    const cn = await json(await api(seller.token, '/api/v1/mart/seller/products', { ...body(`${tag} solvent`, {}), category_slug: cat2 }))
+    const pn = cn.body.id as string
+    created.productIds.push(pn)
+    await api(seller.token, `/api/v1/mart/seller/products/${pn}`, { action: 'submit' })
+    await api(ops.token, `/api/v1/mart/admin/products/${pn}`, { action: 'approve' })
+    const pnHtml = await html(`/mart/p/${pn}`)
+    ok('product page: "Not returnable" and "ITC may not be available"', pnHtml.includes('data-testid="not-returnable"') && pnHtml.includes('data-testid="itc-ineligible"'))
+    const pv = await json(await api(buyer.token, '/api/v1/mart/cart/preview', { items: [{ product_id: pn, qty: 2 }] }))
+    ok('cart preview: no ITC on the line, after-ITC = total, line flagged', pv.status === 200 && pv.body.amounts.itcPaise === 0 && pv.body.amounts.afterItcPaise === pv.body.amounts.totalPaise && pv.body.nonReturnableProductIds?.includes(pn) && pv.body.itcIneligibleProductIds?.includes(pn))
+    const pvOk = await json(await api(buyer.token, '/api/v1/mart/cart/preview', { items: [{ product_id: p1, qty: 2 }] }))
+    ok('eligible line: after-ITC = taxable (unchanged rule)', pvOk.body.amounts?.afterItcPaise === pvOk.body.amounts?.taxablePaise && pvOk.body.amounts?.itcPaise === pvOk.body.amounts?.gstPaise)
+    const { orderId: nr } = await buy(pn, 2)
+    await admin.from('orders').update({ status: 'delivered' }).eq('id', nr)
+    const quality = await json(await api(buyer.token, `/api/v1/mart/orders/${nr}/transition`, { action: 'open_return', return: { reason: 'quality' } }))
+    ok('quality return on a non-returnable order → 409 not_returnable', quality.status === 409 && quality.body.error === 'not_returnable', JSON.stringify(quality.body))
+    const damaged = await json(await api(buyer.token, `/api/v1/mart/orders/${nr}/transition`, { action: 'open_return', return: { reason: 'damaged' } }))
+    ok('damaged claim still opens → disputed', damaged.status === 200, JSON.stringify(damaged.body))
+
     console.log(`\n${fail === 0 ? '✅' : '❌'} verify-mart-storefront: ${pass} passed, ${fail} failed\n`)
   } catch (e) {
     fail++
     console.error('\n✗ suite aborted:', e instanceof Error ? e.message : e)
   } finally {
+    if (breachLimitBefore !== undefined) {
+      if (breachLimitBefore) await admin.from('mart_settings').upsert({ key: 'promise_breach_limit', value: breachLimitBefore.value })
+      else await admin.from('mart_settings').delete().eq('key', 'promise_breach_limit')
+    }
+    for (const id of created.orderIds) {
+      const { data: pays } = await admin.from('payments').select('id').eq('order_id', id)
+      for (const p of pays ?? []) await admin.from('refunds').delete().eq('payment_id', p.id)
+      for (const t of ['mart_promise_breaches', 'invoices', 'payouts', 'disputes', 'payments', 'order_documents', 'order_events']) await admin.from(t).delete().eq('order_id', id)
+      await admin.from('checkout_sessions').delete().eq('order_id', id)
+      await admin.from('orders').delete().eq('id', id)
+    }
+    for (const m of created.msmeIds) await admin.from('checkout_sessions').delete().eq('msme_id', m)
     for (const p of created.productIds) {
       await admin.from('product_events').delete().eq('product_id', p)
       await admin.from('price_tiers').delete().eq('product_id', p)
@@ -141,6 +231,7 @@ async function main() {
     for (const c of created.categories) await admin.from('mart_categories').delete().eq('slug', c)
     for (const u of created.users) await admin.from('gstin_verifications').delete().eq('user_id', u)
     for (const p of created.providerIds) await admin.from('provider_profiles').delete().eq('id', p)
+    for (const m of created.msmeIds) await admin.from('msme_profiles').delete().eq('id', m)
     for (const u of created.users) {
       await admin.from('audit_logs').delete().eq('actor_id', u)
       await admin.from('notifications').delete().eq('user_id', u)

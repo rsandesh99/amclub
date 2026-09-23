@@ -117,9 +117,12 @@ export async function POST(request: NextRequest) {
       taxablePaise: prep.amounts.taxablePaise,
       gstPaise: prep.amounts.gstPaise,
       totalPaise: prep.amounts.totalPaise,
-      afterItcPaise: prep.amounts.taxablePaise,
+      afterItcPaise: prep.afterItcPaise,
+      itcPaise: prep.itcPaise,
     },
     lineItems: prep.lineItems,
+    nonReturnableProductIds: prep.nonReturnableProductIds,
+    itcIneligibleProductIds: prep.itcIneligibleProductIds,
     sellerName: prep.sellerName,
     deliveryDays,
   })
