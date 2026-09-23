@@ -1,10 +1,11 @@
 # ADR 011 — First-order guarantee: a capped, evidence-backed, platform-funded make-good
 
-**Status: DRAFT — blocked on H2, H3, H4, H6, H7** (2026-09-23, BUILD_PROMPTS S3.3, gate G0). Touches money (§8.4): it
-adds an amount to the order's refund. **Not for approval yet**: G1 needs ADR-014 (H2, H3, H4, H6) merged and the H7
-Razorpay test-mode result recorded in §6 below. No code is written against this draft. Everything it enables ships dark
-behind `guarantee_enabled` (default false). The flag can't be turned on until counsel signs off, which the settings
-validator enforces in code, and until G3 is met.
+**Status: DRAFT — blocked on H7** (2026-09-23, BUILD_PROMPTS S3.3). Touches money (§8.4): the make-good is an amount on
+the order's one refund. H2, H3, H4 and H6 are **decided in ADR-014** (merged: H3 + H4 in PR #21, H2 in PR #23, H6 in
+PR #24). H5 is decided in ADR-015 (PR #22), and H1, the money rigs in CI, is PR #25. **Not for approval yet**: G1 waits
+only on the H7 Razorpay test-mode result, recorded in §6. G2 is met, but no code is written until this ADR is approved.
+Everything it enables ships dark behind `guarantee_enabled` (default false). The flag can't be turned on until counsel
+signs off, which the settings validator enforces in code, and until G3 is met.
 
 ## 1. Context
 
@@ -22,20 +23,23 @@ if the job goes wrong and the evidence supports the buyer, AMClub makes good up 
 not ordered to refund.** The platform pays; the provider's settlement never changes.
 
 **Why the preconditions matter.** The guarantee rides on the dispute → settlement → refund path. A code read on
-2026-09-23 (re-verified the same day at the lines below) found defects in exactly that path. The table lists the ones
-this design needs fixed first, with the decision each needs.
+2026-09-23 found defects in exactly that path. They are now fixed and merged:
 
-| Item | Defect on master (current line) | What this ADR needs from the fix |
+| Item | Decided in | What this ADR relies on |
 |---|---|---|
-| **H2** Which orders can be disputed, and for how long | `DISPUTABLE_STATUSES` (`state-machines.ts:54-60`) lists `accepted` and `requirements_submitted`, but `ORDER_TRANSITIONS` (L37-38) has no edge from either to `disputed`. `applyTransition` checks both lists (`transitions.ts:274`, `:277`), so the server returns 409 and the UI hides the button (`order-actions.ts:61`; mobile `orders/[id].tsx:43`). **There is no dispute window anywhere.** `completed → disputed` is legal forever. **Nothing ever writes `reviewed`:** the review route only inserts into `reviews` (`review/route.ts:72-86`), so a reviewed order stays disputable. | One post-completion dispute window setting, and a statement of what a review does to dispute rights. The guarantee reuses **that** clock (§8); it never adds its own. |
-| **H3** Settlement after a payout is already paid, and an atomic resolve | `raise_dispute` holds only `scheduled` payouts (`transitions.ts:325-331`). `resolveDispute` upserts the payout `onConflict: 'order_id'` with `status: 'scheduled'` (`resolve.ts:108-117`), which overwrites a `paid` row; `runPayouts` (`payout.ts:20`) then transfers again. `createTransfer` has no idempotency key (`types.ts:64-68`). `refund_full` rewrites a `paid` row to `failed` / 0 (`resolve.ts:132-136`). Step 1 (`resolve.ts:94-98`) doesn't read the row count. A crash between steps leaves the order `resolved_*` with the dispute still `open`, and every retry returns 409 (L67-68). | Settlement obeys `PAYOUT_TRANSITIONS` (`paid → []`). ADR-014 decides clawback (a Route transfer reversal) versus refusing in the console when the provider was already paid more than the settlement. An atomic claim (0 rows → `already`) and a resume path. **The make-good runs inside that claim** (§7.4). |
-| **H4** Refunds that collide on the one refund row | `processRefund` looks up the refund row by `payment_id` (`transitions.ts:186-190`). If that row is **processed**, it returns the old amount and moves nothing (L192, L215). A `pending` row resumes at its stored amount (L193-194). The admin `manual_refund` (`admin/orders/[id]/route.ts:73`) goes through the same path. | Keep one refund row per order. `resolveDispute` refuses with 409 when a processed refund exists whose amount differs from the intended total. **Every caller compares the returned amount with the intended one.** The make-good depends on that read-back (§7.4). |
-| **H5** GST added twice | The checkout quote branch doesn't read `gst_included` (`checkout/route.ts:217`) and always adds 18 % on top (`money.ts:42-49`). The compare screen accounts for it (`compare.ts:110-115`); checkout doesn't. Logged in `USER_EXPECTATIONS_AUDIT.md:310`. | Its own money ADR. It changes `total_paise`, which drives both the make-good bound and the order limit. Required before code (G2), not before approval. |
-| **H6** Duplicate paid orders on one RFQ | `finalizeQuoteAcceptance` claims the RFQ atomically. A losing paid order is only **flagged** (`finalize.ts:189-229`, event `duplicate_rfq_order`, "ops must refund"). It stays `placed` and the provider can still accept it. The comment at `checkout/route.ts:235-236` wrongly says it refunds. | A dedicated state and a refund through `processRefund`. **The grant runs after RFQ finalisation, and an order flagged as a duplicate is never eligible** (§3). |
-| **H7** Razorpay test mode with Route | Not yet run. This laptop and prod run in simulate mode (ADR-003) and have no Razorpay test keys. | See §6. Both worked examples pay out more than the payment captured. |
+| **H2** Which orders can be disputed, and for how long | ADR-014 §6, PR #23 | Every status after acceptance can be disputed (`accepted`, `requirements_submitted` and `revision_requested` gained a `→ disputed` edge). After completion, disputes are allowed only inside `agent_settings.dispute_window_days` (default 7, range 1–90) via the one shared `canRaiseDispute`. **Reviews do not end dispute rights.** The claim window reuses this clock (§8). |
+| **H3** Settlement after a payout is already paid, and an atomic resolve | ADR-014 §1, §2 and §4, PR #21 | `planDisputeSettlement` decides before anything is written. A `paid` payout is kept only at exactly the settlement amount, otherwise the resolve refuses with 409 `provider_already_paid`; a `processing` payout gets 409 `payout_in_flight`. The claim is atomic (409 `resolution_in_progress`). An interrupted attempt is finished only with the same resolution and recorded amount (409 `resolution_conflict`). **The make-good runs inside that plan and claim** (§6, §7.4). |
+| **H4** Refunds that collide on the one refund row | ADR-014 §3, PR #21 | **One refund row per order.** Any existing refund row refuses a refunding resolution (409 `refund_exists`). Every caller reads back the amount `processRefund` reports (409 `refund_mismatch`). No payment row gives 409 `no_payment`. |
+| **H5** GST added twice | ADR-015, PR #22 | A quote marked `gst_included` is charged exactly its price (`computeGstInclusiveOrderAmounts`), so `total_paise` is what the buyer actually paid under both GST bases. The bound and the order limit use it (§3, §4, §6). |
+| **H6** Duplicate paid orders on one RFQ | ADR-014 §7, PR #24 | A losing duplicate goes `placed → cancelled_duplicate → refunded` in the same pass that detects it. **A `cancelled_duplicate` order is never eligible** (§3). |
+| **H1** Money logic tested in CI | PR #25 | The money rigs (`verify-money-loop`, both webhook kill-tests, `verify-phase7`, `verify-rfq`, `verify-authz`) run on every PR against a disposable Supabase (`.github/workflows/money-rigs.yml`). **S3.3's database criteria go into that harness** (§16) and never run against production. |
 
-H1 (money logic in CI with a disposable database) and H8 (the agent runtime actually deployed) gate code (G2) and the
-flag (G3) respectively. They don't gate this ADR's approval.
+Still open:
+
+| Item | State | What this ADR needs |
+|---|---|---|
+| **H7** Razorpay test mode with Route | **Not yet run.** Prod runs in simulate mode (ADR-003). The laptop's `.env.local` holds placeholder test keys (not a real key id or secret), which Razorpay rejects as "Authentication failed", and no Route linked account (2026-09-23). | A recorded test-mode run (§6). Every worked example pays out more than the payment captured. |
+| **H8** Agent runtime deployed | Not done (no `FLY_API_TOKEN`) | Required before G3 (the flag), not before approval or code |
 
 ## 2. Decision summary (proposed defaults; the founder may change any of them at review)
 
@@ -43,8 +47,10 @@ flag (G3) respectively. They don't gate this ADR's approval.
   provider in good standing whose score is at least 60, and an order of at most ₹50,000.
 - **What:** a make-good of **0 up to min(₹5,000, what the buyer paid − the dispute refund)**, decided by the founder
   in the existing dispute console. There is no automation; an agent can never set, suggest or mention an amount.
-- **How it's paid:** as an extra amount on the order's **one existing refund row** (`rfnd_<order_id>`, `processRefund`).
-  There is no second refund mechanism and no new order state.
+- **How it's paid:** the make-good **is part of the order's single refund**. The dispute refund and the make-good are
+  one combined amount, planned by `planDisputeSettlement` and paid by one `processRefund` call on the one refund row
+  (`rfnd_<order_id>`), with the amount read back (§6). There is no second refund, no second money path and no new
+  order state.
 - **Who pays:** the platform. The provider's settlement is computed from the dispute refund alone, exactly as today,
   and the platform books the make-good as a cost line.
 - **Exposure:** a monthly budget stops new grants once paid-this-month plus open exposure reaches it. **A promise
@@ -58,7 +64,7 @@ Every condition below must hold, evaluated server-side when the order is created
 |---|---|---|---|
 | 1 | `guarantee_enabled` is on | the setting | `disabled` |
 | 2 | This is the MSME's **first order that reached payment**. No other non-void guarantee exists for the `msme_id` (one per MSME, ever), and no live identity match on the MSME's GSTIN or the buyer's phone (keyed HMAC, §10). | `order_guarantees`, `guarantee_identities` | `not_first_order` / `duplicate_identity` |
-| 3 | Not flagged as a duplicate RFQ order (H6) | the H6 state or event | `duplicate_order` |
+| 3 | Not a duplicate RFQ order: an order that became `cancelled_duplicate` (ADR-014 §7) is **never** eligible, and the grant runs after RFQ finalisation, which is the pass that detects and cancels a duplicate | `orders.status`, the `duplicate_rfq_order` event | `duplicate_order` |
 | 4 | A services order (`orders.kind = 'service'`); goods have their own return flow | `orders.kind` | `goods` |
 | 5 | The provider is `active` (`provider_profiles.status`) | `provider_profiles` | `provider_not_active` |
 | 6 | The provider's bank account is verified: a `bank_account_verifications` row with `verified = true` and `stub = false`, from the vendor **or** an audited `admin_override` (the row's `provider` column records which; the override carries `result.admin_id` + `reason`) | `bank_account_verifications` | `bank_unverified` |
@@ -74,8 +80,9 @@ record, and a provider below the ADR-010 sample gate has none yet. So a brand-ne
 That is deliberate: the platform's money backs demonstrated reliability, not a neutral prior.
 
 **On #8, total rather than taxable.** The limit is on `total_paise`, what the buyer actually paid. The bound in §4 is
-"up to what they paid", so both limits are measured on the same amount. H5 changes `total_paise` for GST-inclusive
-quotes, which is why H5 must land before code.
+"up to what they paid", so both limits are measured on the same amount. Since ADR-015, `total_paise` means exactly
+that under both GST bases: a GST-exclusive quote pays the price plus 18 % GST, and a quote marked `gst_included` pays
+exactly the quoted figure (`computeGstInclusiveOrderAmounts`). Example C in §6 shows the included case.
 
 **When the first order doesn't count.** An order cancelled (by the buyer, or auto-cancelled) **before acceptance**
 voids its guarantee and releases its identities in the same transaction. The buyer's next first order can then
@@ -91,8 +98,12 @@ AMClub*, and the budget stays predictable. FOLLOWUPS keeps the alternative.
 ## 4. The cap and the top-up bound
 
 - `guarantee_cap_paise` = ₹5,000 (500,000 paise).
-- `makeGoodBound = min(cap, total_paid − dispute_refund)`. A make-good can top the buyer up to at most what they paid,
-  never above it.
+- `makeGoodBound = min(cap, total_paise − dispute_refund)`, where `dispute_refund` is the `refundPaise` of
+  `disputeSettlementPaise` for the chosen resolution. A make-good can top the buyer up to at most what they paid, never
+  above it. So the combined refund (dispute refund + make-good) is always ≤ `total_paise`, which is the payment's
+  captured amount; that is the limit `processRefund` and `manual_refund` already enforce (ADR-014 §3,
+  `refund_over_total`).
+- `total_paise` is what the buyer paid under either GST basis (ADR-015), so the bound is the same rule for both.
 - `refund_full` leaves nothing to top up. A make-good there returns 422 and the guarantee becomes `void`.
 - A make-good of 0 is allowed (the founder decides the evidence doesn't support one), and the guarantee becomes `void`.
 
@@ -119,19 +130,68 @@ exposure against the budget. The founder sets the budget knowing that; it is a m
 
 ## 6. One money path, and the Razorpay question (H7)
 
-- **No new refund mechanism.** The make-good **adds to the amount of the order's single refund row**
-  (`rfnd_<order_id>` through `processRefund`). `refunds` gains `guarantee_paise` (≥ 0, ≤ `amount_paise`) so every reader
-  can label that part.
-- **The provider's settlement is computed from the dispute refund only.** It uses today's formula,
-  `round(earning × (total − dispute_refund) / total)` (`resolve.ts:85-90`), extracted into shared as one function that
-  `resolveDispute` calls. The result is byte-identical, and a test asserts it.
-- **Order status follows the resolution unchanged** (`resolved_release`, `resolved_partial` or `resolved_refund`).
-  There is no new order state.
-- **Route ordering stays as `resolveDispute` has it:** the provider transfer goes before the refund.
-- **Invoices stay the only invoicing path.** The make-good never produces a credit note against the provider's
-  invoice, and never changes the provider's TDS 194-O base.
+### The rule this must obey (ADR-014 §3)
 
-### Worked examples (500 bps, derived from `computeOrderAmounts`; the tests derive, never hard-code)
+There is **one refund row per order**. A second refund is refused with 409 `refund_exists`, and every caller reads back
+the amount `processRefund` reports (409 `refund_mismatch` on a difference). A separate make-good refund, a second
+`processRefund` call, or any other transfer to the buyer would be a second money path, which is a design violation
+("one spine", CLAUDE.md).
+
+### How the make-good moves money: it IS the order's single refund
+
+**The make-good is not a second payment. It is part of the one refund the dispute resolution makes.** The resolution's
+refund amount becomes one combined figure, **`dispute_refund + make_good`**, paid by **one** `processRefund` call on the
+order's one refund row (`rfnd_<order_id>`).
+
+- **Planning.** `planDisputeSettlement` gains an optional `makeGoodPaise` (default 0). Without it every plan is
+  byte-identical to today; a shared test pins that over ADR-014's grid.
+  - `providerPaidPaise` is still `disputeSettlementPaise(…)` from the **dispute refund only**. The make-good never
+    reduces it, and it is the same shared formula `resolveDispute` uses today.
+  - The refund leg's amount is `refundPaise + makeGoodPaise`. So a `release` with a make-good becomes a *refunding*
+    plan (`refund: true`) whose amount is the make-good alone.
+  - Every ADR-014 conflict applies unchanged, to the combined amount:
+    - `refund_exists` when any refund row exists (a resumed attempt must match the recorded combined amount)
+    - `provider_already_paid` and `payout_in_flight` for the payout leg
+    - `no_payment`
+- **Paying.** `processRefund` receives the combined amount. `computeRefundPaise` gains an optional `makeGoodPaise`
+  (added after its clamp, and the combined figure never exceeds `total_paise`, §4). Every existing call site passes
+  nothing and gets the same value. Then the amount is read back. **A mismatch is ADR-014's `refund_mismatch`:** the
+  dispute stays open, the guarantee stays `claimed` and nothing is marked paid.
+- **Labelling.** `refunds` gains `guarantee_paise` (≥ 0, ≤ `amount_paise`, CHECK), so every reader can label the
+  make-good part "First-order guarantee — paid by AMClub". One `guarantee_payments` row (append-only, unique
+  `order_id`) is the platform's cost line.
+- **Resuming.** ADR-014 §4 records the intended resolution and refund amount on the open dispute right after the claim.
+  With a make-good, the recorded amount is the **combined** figure, plus the make-good part separately. A resume must
+  match both, or it is refused with 409 `resolution_conflict`.
+
+**What this rule rules out, stated plainly:**
+- **A refund before the dispute.** If a refund row already exists (a cancellation refund, or ADR-014 §2's interim
+  `manual_refund`), the make-good **cannot** be paid. There is only one row and it has already been used, so resolve
+  returns 409 `refund_exists`. The guarantee stays `claimed`, and the founder records a 0 make-good (the guarantee
+  becomes `void`).
+  - In particular, ADR-014 §2's interim path for an already-paid provider ("refund the buyer with `manual_refund`, then
+    resolve as `release`") is **incompatible** with a make-good.
+  - For a guaranteed order in that position, the founder instead resolves as **`release` + make-good**. The payout is
+    `paid` at the full earning, so it is `keep`, and the make-good is the order's one refund. That is example A below.
+- **A partial refund after a payout was paid** stays refused (`provider_already_paid`), as it is today. A make-good
+  doesn't change that.
+
+**Why not two rows or a second path.** ADR-014 §3 already weighed several refund rows per order and rejected them: it
+changes the refund engine, reconcile, invoices and the buyer refund display. The make-good needs none of that, because
+one combined amount on the existing row carries it.
+
+**Everything else is unchanged:**
+- **Order status** follows the resolution (`resolved_release`, `resolved_partial` or `resolved_refund`). There is no new
+  order state.
+- **Route ordering** stays as `resolveDispute` has it: the provider transfer goes before the refund.
+- **Invoices** stay the only invoicing path. The make-good never produces a credit note against the provider's invoice,
+  and never changes the provider's TDS 194-O base.
+
+### Worked examples (500 bps; every figure from the shared money functions — the tests derive, never hard-code)
+
+**Examples A and B are GST-exclusive:** a quote of ₹20,000 **plus** 18 % GST (`computeOrderAmounts`). A quote of
+**₹23,600 marked `gst_included`** produces exactly the same order under ADR-015 (`computeGstInclusiveOrderAmounts`:
+taxable ₹20,000, GST ₹3,600, total ₹23,600, commission ₹1,000, earning ₹19,000), so A and B hold for it too.
 
 Order: price ₹20,000, no discount → taxable ₹20,000 → GST (1800 bps) ₹3,600 → **total ₹23,600** → commission
 ₹1,000 → provider earning **₹19,000**.
@@ -147,14 +207,28 @@ Order: price ₹20,000, no discount → taxable ₹20,000 → GST (1800 bps) ₹
   - The buyer is refunded ₹13,000 on one refund row, with `guarantee_paise` = ₹5,000.
   - **Money out is ₹25,559.32 against ₹23,600 captured.**
 
+**Example C is GST-included:** a quote of **₹20,000 marked `gst_included`** (ADR-015). The guarantee bound and the order
+limit use `total_paise`, which here is the quoted figure itself.
+`computeGstInclusiveOrderAmounts({ grossPaise: 2,000,000, commissionBps: 500 })` gives:
+- taxable round(2,000,000 × 10000 / 11800) = **1,694,915 paise**
+- GST 305,085 paise
+- **total ₹20,000**
+- commission round(1,694,915 × 0.05) = 84,746 paise
+- provider earning **1,610,169 paise (₹16,101.69)**
+
+- **C — `release` + make-good ₹5,000.**
+  - The bound is min(₹5,000, ₹20,000 − 0) = ₹5,000.
+  - The provider is paid ₹16,101.69 (`disputeSettlementPaise` for `release`), and the buyer is refunded ₹5,000.
+  - **Money out is ₹21,101.69 against ₹20,000 captured.**
+  - The platform bears the ₹5,000: its ₹847.46 commission plus ₹4,152.54 from its balance, plus fees. The ₹3,050.85
+    GST is a liability, not a cushion.
+
 ### H7: what Razorpay has to allow (NOT YET RUN; blocks approval)
 
-Both examples transfer the provider's share **and** refund more than the payment captured. Route transfers draw on the
-captured payment. A refund larger than what's left needs the merchant balance to cover the gap, and a refund can never
-exceed the captured amount of its payment.
-
-Example A's refund (₹5,000) is below the capture, but the transfer (₹19,000) plus the refund (₹5,000) is above it.
-Example B's refund (₹13,000) is also below the capture, and the transfer plus refund is above it.
+Every example transfers the provider's share **and** refunds, and together they exceed the payment captured. Each
+refund on its own is below its capture (A ₹5,000 and B ₹13,000 of ₹23,600; C ₹5,000 of ₹20,000); the combined
+refund is ≤ `total_paise` by §4. The open question is only whether Razorpay lets transfer + refund exceed the capture,
+and from which balance.
 
 The recorded test-mode run must answer, for a payment of ₹23,600 with a ₹19,000 Route transfer made **first**:
 
@@ -166,7 +240,20 @@ The recorded test-mode run must answer, for a payment of ₹23,600 with a ₹19,
 
 **If Razorpay refuses, the one-row design can't pay a make-good, and this ADR must change before approval.** The
 result, and the merchant-balance funding it implies (G3: the balance must be funded to at least the exposure cap),
-will be recorded here.
+will be recorded here. The same run answers ADR-014 §2's open clawback question (a Route transfer reversal).
+
+**Attempt log.**
+- **2026-09-23 — not run.** `apps/web/.env.local` holds `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` with the `rzp_test_`
+  prefix, but they are placeholders: a 13-character key id and an 8-character secret, where a real test key id is 23
+  characters and a secret 24. Razorpay answered every read-only probe (`GET /v1/payments`, `/v1/transfers`,
+  `/v1/balance`) with 401 "Authentication failed". No payment, transfer, refund or reversal was attempted, and no
+  Route linked account is configured.
+- **To run it, the founder provides:**
+  - real Razorpay **test-mode** keys, never live, and never placed in Vercel
+  - Route enabled on the test account, with one test linked account
+- **The run:** one ₹23,600 test payment, captured; transfer ₹19,000 to the linked account; refund ₹5,000; then try a
+  transfer reversal. Record (a) whether the refund is allowed, (b) which balance it debits, and (c) whether a reversal
+  is needed or possible, with the API responses (ids redacted).
 
 ## 7. How it works (the design the code will follow at G2)
 
@@ -192,35 +279,43 @@ will be recorded here.
    - The "Make-good amount" input accepts 0 up to the bound, defaults to **0**, and is **never** pre-filled from the
      triage.
    - The panel shows any existing refund row (H4).
-4. **Resolve.** `POST /admin/disputes/[id]/resolve` gains an optional `makeGoodPaise`. It returns:
-   - **422** above the bound, or when the guarantee isn't `claimed`
-   - **422** on `refund_full` (and the guarantee becomes `void`)
-   - **409** when a processed refund already exists (H4)
+4. **Resolve.** `POST /admin/disputes/[id]/resolve` gains an optional `makeGoodPaise`. It refuses with **422** when:
+   - the make-good is above the bound
+   - the guarantee isn't `claimed`
+   - the resolution is `refund_full` (the guarantee becomes `void`)
 
-   Then, inside H3's atomic claim:
-   - The provider settlement is unchanged (the shared formula).
-   - `processRefund` receives the dispute refund + the make-good. `computeRefundPaise` gains an optional
-     `makeGoodPaise`; every existing caller passes nothing and gets the same value.
-   - **Read back:** the amount `processRefund` returns must equal the intended amount.
-     - On a mismatch, the guarantee stays `claimed`, nothing is marked paid, and the console shows the error.
+   Everything else is ADR-014's path, with the combined amount (§6):
+   - `planDisputeSettlement` (with `makeGoodPaise`) decides before anything is written. Its conflicts (409
+     `refund_exists` / `provider_already_paid` / `payout_in_flight` / `no_payment`) leave the guarantee `claimed` and
+     are shown in the console with ADR-014 §5's messages.
+   - Then the atomic claim (409 `resolution_in_progress`), and the intended resolution + combined amount + make-good
+     are recorded on the dispute (§4 resume).
+   - The payout leg is unchanged (the shared formula, from the dispute refund only).
+   - One `processRefund` call with the combined amount, then the **read-back**:
+     - On a mismatch it is `refund_mismatch`: the dispute stays open, the guarantee stays `claimed`, and nothing is
+       marked paid.
      - On a match, it sets `refunds.guarantee_paise`, inserts one `guarantee_payments` row (append-only, unique
-       `order_id`), and moves the guarantee to `paid`.
-   - A replayed or concurrent resolve moves no money and writes nothing.
+       `order_id`), and moves the guarantee to `paid`. A make-good of 0 moves it to `void`.
+   - A replayed or concurrent resolve moves no money and writes nothing: ADR-014's claim and resume rules, plus the
+     guarded guarantee transitions.
    - The audit `after` includes `make_good_paise`.
-5. **Expiry.** A step in `cron/auto-accept` (hourly, where completion happens) moves `active → expired` after
-   `expires_at`, as a guarded update.
+5. **Expiry.** A step in `cron/auto-accept` (hourly, where completion happens) moves `active → expired` as a guarded
+   update, once `canRaiseDispute` reports `window_closed` for the order (§8). There is no stored clock.
 6. **Statuses.** `GUARANTEE_STATUSES = active | claimed | paid | expired | void`. Transitions: `active → claimed |
    expired | void`; `claimed → paid | void`; the rest are terminal. They live only in `state-machines.ts`.
 
 ## 8. Claim window
 
-- Claims follow the H2 rules and ADR-014's **single post-completion dispute window**.
-- `expires_at` stays null until the order completes, then is set to completion + that window, in the same place
-  completion is written.
-- **Reviews.** Today nothing ever sets an order to `reviewed`, so a review changes nothing. If ADR-014 makes a review
-  end dispute rights (by writing `reviewed`), a review ends the claim as well. This ADR follows ADR-014 either way and
-  adds no clock of its own. **Proposed for ADR-014:** a review does *not* end dispute rights inside the window, because
-  a buyer shouldn't lose a remedy by being polite.
+- **One clock: ADR-014 §6.** A claim is possible exactly when a dispute is: `canRaiseDispute` (`dispute-window.ts`) is
+  true for the order.
+  - Before completion, that means every status after the provider accepts.
+  - After completion, it means until `completed_at + dispute_window_days` (the registered `agent_settings` key, default
+    7).
+- **Computed on read.** ADR-014 §6 computes the window on read from the current setting, not frozen at completion, so
+  the guarantee stores **no `expires_at` of its own**. The buyer-facing deadline is the order's
+  `disputeWindowEndsAt`, which the server already exposes. The expiry step uses the same function (§7.5).
+- **Reviews do not end dispute rights** (ADR-014 §6): posting a review leaves the order `completed`, so a review
+  doesn't end the claim either. This ADR adds no clock and no review rule of its own.
 
 ## 9. Adjudication
 
@@ -250,7 +345,8 @@ will be recorded here.
 - **Orders cancelled or auto-cancelled before acceptance:** the guarantee is void and eligibility is restored.
 - **`refund_full`:** there is nothing to top up.
 - **Fraud and duplicate accounts:** caught by the identity HMACs and the one-per-MSME index.
-- **Duplicate RFQ orders (H6).**
+- **Duplicate RFQ orders:** a `cancelled_duplicate` order (ADR-014 §7) is never eligible. It is refunded in full in the pass that detects it.
+- **An order whose one refund row is already used** (a cancellation refund, or a `manual_refund` before the dispute) can't receive a make-good: 409 `refund_exists` (§6).
 - **Honoured, not excluded:** a provider suspended *after* the order was paid. The promise was made at payment.
 
 ## 12. Settings (closed registry `AGENT_SETTING_DEFS`)
@@ -312,5 +408,25 @@ will be recorded here.
 - Buyers get a concrete reason to try a verified provider on AMClub first. Providers are unaffected.
 - The platform takes on a bounded, budgeted cost, visible per order (`guarantee_payments`) and in aggregate (the
   exposure tile).
-- The dispute path gets hardened first (H1–H6). That is worth doing whatever happens to this ADR.
+- It relies on the dispute path hardened in ADR-014 and ADR-015 (H1–H6, merged in PRs #21–#25).
 - It depends on the Razorpay behaviour recorded in §6. If that fails, the design changes before any code.
+
+## 16. Verification (where S3.3's database tests run)
+
+- **Pure logic** runs in shared vitest, in CI with the other shared tests:
+  - eligibility
+  - `makeGoodBound`
+  - `planDisputeSettlement` with `makeGoodPaise` (byte-identical without it, over ADR-014's grid)
+  - `computeRefundPaise` byte-identity
+  - examples A, B and C derived from the shared money functions
+- **Database criteria** are added to the **money-rigs harness** (H1, PR #25, `.github/workflows/money-rigs.yml`): a
+  `verify-guarantee.ts` step, plus new criteria in `verify-phase7.ts` where they concern resolve. They run on every PR
+  against the disposable Supabase stack with the simulate gateway, and **never against production**. They cover:
+  - grant, no second grant, the duplicate identity, `cancelled_duplicate`, the budget
+  - claim, resolve A / B / C, the 422s
+  - the 409s from ADR-014 with the guarantee still `claimed`
+  - replay and concurrency
+  - expiry via `canRaiseDispute`
+  - RLS
+- **Real money behaviour** comes only from the recorded Razorpay **test-mode** run of example A (§6, H7), attached to the
+  S3.3 PR.
