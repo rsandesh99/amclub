@@ -4,6 +4,9 @@ export * from './state-machines'
 // Money math — order amounts, GST, commission split, refund policy matrix
 export * from './money'
 
+// ADR-014 — what a dispute resolution may do to the payout and refund rows
+export * from './dispute-settlement'
+
 // Category taxonomy
 export * from './categories'
 

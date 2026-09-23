@@ -6,6 +6,7 @@ import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { ConfirmSheet } from '@/components/ui/confirm-sheet'
+import { useMoneyError } from '@/components/admin/useMoneyError'
 import type { DisputeResolution } from '@amclub/shared'
 
 type Resolution = DisputeResolution
@@ -21,6 +22,7 @@ type Resolution = DisputeResolution
 export default function DisputeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const t = useTranslations('admin_ops')
+  const moneyError = useMoneyError()
   const router = useRouter()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -72,7 +74,7 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
     })
     const d = await res.json().catch(() => ({}))
     setBusy(false)
-    if (!res.ok) { setError(typeof d.error === 'string' ? d.error : t('action_failed')); return }
+    if (!res.ok) { setError(moneyError(d) ?? (typeof d.error === 'string' ? d.error : t('action_failed'))); return }
     setConfirming(null)
     await load()
   }

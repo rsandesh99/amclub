@@ -7,12 +7,14 @@ import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { DossierPanel } from '@/components/admin/DossierPanel'
+import { useMoneyError } from '@/components/admin/useMoneyError'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const t = useTranslations('admin_ops')
+  const moneyError = useMoneyError()
   const router = useRouter()
   const { toast } = useToast()
   const [data, setData] = useState<any>(null)
@@ -31,7 +33,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     const res = await fetch(`/api/v1/admin/orders/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setBusy(false)
     if (res.ok) { await load(); toast(t('action_done'), 'success') }
-    else { const d = await res.json().catch(() => ({})); toast(typeof d.error === 'string' ? d.error : t('action_failed'), 'error') }
+    else { const d = await res.json().catch(() => ({})); toast(moneyError(d) ?? (typeof d.error === 'string' ? d.error : t('action_failed')), 'error') }
   }
   function manualRefund() {
     const r = window.prompt(t('refund_amount'))
