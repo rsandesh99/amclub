@@ -15,6 +15,7 @@ import { isOnForEveryone } from '@/lib/experiments'
 import { TierProvider, type BuyOption } from '@/components/packages-v3/TierContext'
 import { BuyBox, StickyBuyBar, TierTabs } from '@/components/packages-v3/BuyBox'
 import { PackageTierMatrix } from '@/components/packages-v3/TierMatrix'
+import { RecentViewTracker } from '@/components/recent-v3/RecentViewTracker'
 
 export const revalidate = 300
 
@@ -120,6 +121,7 @@ export default async function PackageDetailPage({
     // pb-28 below lg keeps the last section clear of the sticky buy bar.
     <div className="mx-auto max-w-5xl px-4 pb-28 pt-8 lg:pb-8">
       <JsonLd data={jsonLd} />
+      {isOnForEveryone('search') && <RecentViewTracker kind="package" id={pkg.id} title={title} href={`/p/${provider.slug}/${pkg.slug}`} />}
 
       {/* Breadcrumb */}
       <nav className="mb-4 flex flex-wrap items-center gap-1 text-xs text-foreground-secondary">

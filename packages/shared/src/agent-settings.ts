@@ -168,6 +168,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E3 / F4: the nightly job re-checks every active provider\'s GSTIN with the KYC vendor (paid calls) and flags cancelled or suspended ones to ops. It never suspends anyone by itself.',
   },
+  // ── Experience v3 E2b — voice search (PRD_EXPERIENCE_V3 FR-2.5, N5) ──
+  voice_search_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E2b / N5: the mic in the catalog search field (speech → an English query + the detected language, the Phase 8b pipeline in mode=query). Paid STT + one parse per use; signed-in buyers only. Turn on only after the 30-query eval (te/hi/en, code-mixed) finds the right category ≥ 85 %.',
+  },
   // ── S3.2 fair price ranges (benchmarks) — compute and display are separate switches, both OFF; the formula is code ──
   benchmark_compute_enabled: {
     schema: z.boolean(),

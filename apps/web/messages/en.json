@@ -95,7 +95,9 @@
     "update_publish": "Update & publish",
     "save_failed": "Couldn't save the listing. Please try again.",
     "offer_tiers_title": "Offer tiers?",
-    "offer_tiers_body": "Show two or three of your packages in one category as Basic, Standard and Premium, side by side."
+    "offer_tiers_body": "Show two or three of your packages in one category as Basic, Standard and Premium, side by side.",
+    "service_label": "Service",
+    "service_hint": "Pick the service this package delivers — it lists you on that service's page."
   },
   "checkout": {
     "title": "Checkout",
@@ -3122,7 +3124,10 @@
     "weak_title_noq": "Get quotes from up to 7 verified providers{state, select, none {} other { in {state}}}.",
     "weak_body": "Not quite right? Describe what you need — your number stays hidden.",
     "weak_body_zero": "No exact matches yet. Describe what you need — your number stays hidden.",
-    "weak_cta": "Post requirement"
+    "weak_cta": "Post requirement",
+    "voice_search": "Search by voice",
+    "voice_listening": "Listening… tap ■ when you're done.",
+    "you_said": "You said: “{text}”"
   },
   "services": {
     "pvt-ltd-incorporation": "Private limited incorporation",
@@ -3165,5 +3170,43 @@
     "pmegp-application": "PMEGP application",
     "gem-onboarding": "GeM onboarding",
     "tender-support": "Tender support"
+  },
+  "compare_v3": {
+    "compare": "Compare",
+    "full": "Up to {n} at a time",
+    "tray": "Compare ({n})",
+    "clear": "Clear the shortlist",
+    "view": "View",
+    "title": "Compare",
+    "subtitle": "Side by side, before you ask anyone for a quote.",
+    "empty_title": "Nothing to compare yet",
+    "empty_body": "Tick “Compare” on up to 4 services in search results.",
+    "browse": "Browse services",
+    "group_price": "Price",
+    "group_time": "Time",
+    "group_trust": "Trust",
+    "group_terms": "Terms",
+    "group_actions": "Next step",
+    "row_price": "Price",
+    "row_total": "With GST",
+    "row_tier": "Tier",
+    "row_delivery": "Delivery",
+    "row_verification": "Verified",
+    "row_on_time": "On time",
+    "row_rating": "Rating",
+    "row_orders": "Completed orders",
+    "row_revisions": "Revisions",
+    "row_refund": "Refunds",
+    "post_requirement": "Post a requirement"
+  },
+  "recent_v3": {
+    "title": "Recently viewed"
+  },
+  "service_page": {
+    "meta_description": "Compare verified providers for {service}: prices with GST, delivery time and ratings — or get quotes.",
+    "hero": "{n, plural, one {# provider offers} other {# providers offer}} {service} here. Compare prices with GST, delivery and ratings — or post a requirement and get quotes.",
+    "hero_empty": "No provider lists {service} as a package yet. Post a requirement and verified providers will quote.",
+    "compare_heading": "Providers at a glance",
+    "col_from": "From"
   }
 }

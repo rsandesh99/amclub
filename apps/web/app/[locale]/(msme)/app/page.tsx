@@ -13,6 +13,8 @@ import { AGENT_ENABLED } from '@/lib/flags'
 import { isSupportEnabledFor } from '@/lib/support/settings'
 import { isProcurementEnabledFor } from '@/lib/agent/procurement'
 import { createAdminClient } from '@/lib/supabase/server'
+import { isOnFor } from '@/lib/experiments'
+import { RecentlyViewed } from '@/components/recent-v3/RecentlyViewed'
 
 function getGreeting() {
   const hour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getHours()
@@ -92,6 +94,9 @@ export default async function MsmeHomePage() {
           </Link>
         ))}
       </div>
+
+      {/* Experience v3 E2b (N8, flag `search`): recently viewed providers and packages. */}
+      {isOnFor('search', user.id) && <RecentlyViewed />}
 
       {/* Recent orders (real) */}
       <section>

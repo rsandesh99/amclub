@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { MEMBER_PRICING_ENABLED } from '@/lib/public-flags'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
-import { CATEGORY_LIST, priceDisplay } from '@amclub/shared'
+import { CATEGORY_LIST, priceDisplay, SPECIALIZATIONS, type CategorySlug } from '@amclub/shared'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,12 +28,14 @@ export interface PackageDraft {
   deliveryDays: string
   revisionCount: string
   faqs: { question: string; answer: string }[]
+  /** Experience v3 E2 — the level-2 service ('' = none). */
+  serviceSlug?: string
 }
 
 const EMPTY: PackageDraft = {
   categorySlug: '', title: '', scopeIncluded: [], scopeExcluded: [],
   deliverables: [], requirements: [], priceRupees: '', discountPct: '0',
-  memberPct: '0', deliveryDays: '7', revisionCount: '1', faqs: [],
+  memberPct: '0', deliveryDays: '7', revisionCount: '1', faqs: [], serviceSlug: '',
 }
 
 const STEPS = ['basics', 'scope', 'deliverables', 'pricing', 'faqs', 'preview'] as const
@@ -43,11 +45,15 @@ export function PackageWizard({
   mode,
   initial,
   allowedCategorySlugs,
+  offerServices = false,
 }: {
   mode: 'create' | 'edit'
   initial?: Partial<PackageDraft>
   allowedCategorySlugs: string[]
+  /** Experience v3 E2 (flag `search`): ask which service this package is. */
+  offerServices?: boolean
 }) {
+  const tServices = useTranslations('services')
   const t = useTranslations('listings')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -127,6 +133,7 @@ export function PackageWizard({
       revision_count: Math.round(Number(draft.revisionCount || '0')),
       faqs: draft.faqs.filter((f) => f.question.trim() && f.answer.trim()),
       status,
+      ...(offerServices ? { service_slug: draft.serviceSlug || null } : {}),
     }
   }
 
@@ -180,7 +187,7 @@ export function PackageWizard({
               <Select
                 id="cat"
                 value={draft.categorySlug}
-                onChange={(e) => set({ categorySlug: e.target.value })}
+                onChange={(e) => set({ categorySlug: e.target.value, serviceSlug: '' })}
               >
                 <option value="">{t('select_category')}</option>
                 {categories.map((c) => (
@@ -190,6 +197,28 @@ export function PackageWizard({
                 ))}
               </Select>
             </div>
+            {offerServices && draft.categorySlug && SPECIALIZATIONS[draft.categorySlug as CategorySlug] && (
+              <div>
+                <Label>{t('service_label')}</Label>
+                <p className="mb-2 text-xs text-foreground-secondary">{t('service_hint')}</p>
+                <div className="flex flex-wrap gap-2" role="group" aria-label={t('service_label')}>
+                  {SPECIALIZATIONS[draft.categorySlug as CategorySlug].map((sv) => {
+                    const on = draft.serviceSlug === sv
+                    return (
+                      <button
+                        key={sv}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => set({ serviceSlug: on ? '' : sv })}
+                        className={on ? 'min-h-[36px] rounded-chip border border-primary bg-primary/10 px-3 text-sm font-medium text-primary' : 'min-h-[36px] rounded-chip border border-border px-3 text-sm text-foreground-secondary hover:border-primary/40'}
+                      >
+                        {tServices(sv as 'gst-filing')}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             <div>
               <Label htmlFor="title">{t('title_label')}</Label>
               <Input

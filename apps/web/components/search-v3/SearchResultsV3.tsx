@@ -20,6 +20,10 @@ import { ResultRow } from './ResultRow'
 import { SearchFeedback } from './SearchFeedback'
 import { SearchTracker } from './SearchTracker'
 import { WeakResultsCard } from './WeakResultsCard'
+import { ServiceChips } from './ServiceChips'
+import { YouSaidChip } from './YouSaidChip'
+import { CompareTray } from '@/components/compare-v3/CompareTray'
+import { RecentlyViewed } from '@/components/recent-v3/RecentlyViewed'
 
 /**
  * Experience v3 E2 (flag `search`) — the results surface for /services,
@@ -28,10 +32,10 @@ import { WeakResultsCard } from './WeakResultsCard'
  * more (phones), relevance feedback and the weak-results card. Filters show
  * before a query on category pages (`fixedCategory`).
  */
-export async function SearchResultsV3({ search, basePath, fixedCategory }: { search: SearchV2; basePath: string; fixedCategory?: string }) {
+export async function SearchResultsV3({ search, basePath, fixedCategory, fixedService, youSaid }: { search: SearchV2; basePath: string; fixedCategory?: string; fixedService?: string; youSaid?: string | undefined }) {
   const t = await getTranslations('filters_v3')
   const tc = await getTranslations('catalog')
-  const s: SearchV2 = fixedCategory ? { ...search, category: fixedCategory } : search
+  const s: SearchV2 = { ...search, ...(fixedCategory ? { category: fixedCategory } : {}), ...(fixedService ? { service: fixedService } : {}) }
   const jar = await cookies()
   const remembered = jar.get('amc_search_view')?.value
   const view: SearchView = s.view ?? (remembered === 'list' || remembered === 'grid' ? remembered : 'grid')
@@ -44,6 +48,7 @@ export async function SearchResultsV3({ search, basePath, fixedCategory }: { sea
     const relaxed: SearchV2 = {}
     if (s.query) relaxed.query = s.query
     if (s.category) relaxed.category = s.category
+    if (fixedService) relaxed.service = fixedService
     if (s.sort) relaxed.sort = s.sort
     const r2 = await searchCatalogV2(relaxed, { withFacets: false })
     if (r2.total > 0) {
@@ -63,6 +68,7 @@ export async function SearchResultsV3({ search, basePath, fixedCategory }: { sea
   const urlFor = (next: SearchV2) => {
     const own: SearchV2 = { ...next }
     if (fixedCategory) delete own.category
+    if (fixedService) delete own.service
     const qs = searchV2ToQueryString(own)
     return qs ? `${basePath}?${qs}` : basePath
   }
@@ -81,10 +87,12 @@ export async function SearchResultsV3({ search, basePath, fixedCategory }: { sea
   return (
     <div className="xl:grid xl:grid-cols-[15rem_minmax(0,1fr)] xl:gap-8" data-search-v3="" data-view={view}>
       <aside className="hidden xl:block">
-        <FacetRail facets={facets} {...(fixedCategory ? { fixedCategory } : {})} />
+        <FacetRail facets={facets} {...(fixedCategory ? { fixedCategory } : {})} {...(fixedService ? { fixedService } : {})} />
       </aside>
       <div className="min-w-0 space-y-4">
-        <FilterChipBar className="xl:hidden" facets={facets} {...(fixedCategory ? { fixedCategory } : {})} />
+        {youSaid && <YouSaidChip text={youSaid} />}
+        {s.category && <ServiceChips category={s.category} current={s.service} />}
+        <FilterChipBar className="xl:hidden" facets={facets} {...(fixedCategory ? { fixedCategory } : {})} {...(fixedService ? { fixedService } : {})} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-foreground-secondary" data-testid="results-count">{tc('results_count', { count: total })}</p>
           <div className="flex items-center gap-2">
@@ -95,6 +103,7 @@ export async function SearchResultsV3({ search, basePath, fixedCategory }: { sea
 
         {widened && <div className="rounded-button border border-border bg-muted px-4 py-3 text-sm text-foreground-secondary">{tc('widened_notice')}</div>}
         {(total === 0 || widened) && <WeakResultsCard query={s.query} category={s.category} state={s.state} zero />}
+        {total === 0 && <RecentlyViewed />}
 
         {results.length > 0 &&
           (view === 'list' ? (
@@ -109,12 +118,12 @@ export async function SearchResultsV3({ search, basePath, fixedCategory }: { sea
                 <span className="text-right">{t('col_price')}</span>
               </div>
               <ul className="divide-y divide-separator" data-density="compact">
-                {results.map((r) => <ResultRow key={r.packageId} result={r} trust={cardTrust(r.providerId)} />)}
+                {results.map((r) => <ResultRow key={r.packageId} result={r} trust={cardTrust(r.providerId)} compare />)}
               </ul>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {results.map((r) => <ResultCard key={r.packageId} result={r} equation={equation} trust={cardTrust(r.providerId)} />)}
+              {results.map((r) => <ResultCard key={r.packageId} result={r} equation={equation} trust={cardTrust(r.providerId)} compare />)}
             </div>
           ))}
 
@@ -151,6 +160,7 @@ export async function SearchResultsV3({ search, basePath, fixedCategory }: { sea
         {results.length > 0 && page === 1 && !widened && (
           <SearchFeedback query={s.query ?? null} filters={feedbackFilters} resultIds={results.slice(0, 24).map((r) => r.packageId)} />
         )}
+        <CompareTray />
         <SearchTracker signature={searchV2ToQueryString(s)} qLen={s.query?.length ?? 0} filters={filtersForEvents} sort={s.sort ?? 'best'} results={total} view={view} />
       </div>
     </div>

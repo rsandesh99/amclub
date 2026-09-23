@@ -91,11 +91,12 @@ function SectionView({ section, variant, onSet }: { section: FilterSection; vari
   )
 }
 
-function useSections(facets: SearchFacets | null, fixedCategory?: string) {
+function useSections(facets: SearchFacets | null, fixedCategory?: string, fixedService?: string) {
   const t = useTranslations()
   const locale = useLocale()
   const nav = useSearchNav()
   const sections = filterSections((k, v) => t(k as never, v as never), locale, nav.current, facets, fixedCategory)
+    .filter((sec) => !(fixedService && sec.key === 'service'))
   return { nav, sections }
 }
 
@@ -103,9 +104,9 @@ function useSections(facets: SearchFacets | null, fixedCategory?: string) {
  * FR-2.2 phones / tablets: ≤ 5 chips (Verified · ≤ 7 days · Price · 4★+ ·
  * Language) + "More" → the full filter sheet. Visible before a query.
  */
-export function FilterChipBar({ facets, fixedCategory, className }: { facets: SearchFacets | null; fixedCategory?: string; className?: string }) {
+export function FilterChipBar({ facets, fixedCategory, fixedService, className }: { facets: SearchFacets | null; fixedCategory?: string; fixedService?: string; className?: string }) {
   const t = useTranslations('filters_v3')
-  const { nav, sections } = useSections(facets, fixedCategory)
+  const { nav, sections } = useSections(facets, fixedCategory, fixedService)
   const [open, setOpen] = useState(false)
   const s = nav.current
   const active = activeFilterCountV2(s)
@@ -163,9 +164,9 @@ export function FilterChipBar({ facets, fixedCategory, className }: { facets: Se
 }
 
 /** FR-2.2 desktop ≥ 1280: a collapsible facet rail with counts. */
-export function FacetRail({ facets, fixedCategory }: { facets: SearchFacets | null; fixedCategory?: string }) {
+export function FacetRail({ facets, fixedCategory, fixedService }: { facets: SearchFacets | null; fixedCategory?: string; fixedService?: string }) {
   const t = useTranslations('filters_v3')
-  const { nav, sections } = useSections(facets, fixedCategory)
+  const { nav, sections } = useSections(facets, fixedCategory, fixedService)
   return (
     <nav aria-label={t('filters')} className="space-y-4" data-testid="facet-rail">
       <div className="flex items-center justify-between">

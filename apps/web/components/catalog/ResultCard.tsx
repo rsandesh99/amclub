@@ -1,6 +1,7 @@
 import { useLocale, useTranslations } from 'next-intl'
 import { Clock, MapPin, RefreshCw } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
+import { CompareToggle } from '@/components/compare-v3/CompareToggle'
 import { pickI18n, formatResponseTime, initials } from '@/lib/format'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { PriceBlock } from './PriceBlock'
@@ -17,14 +18,14 @@ const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
  * package title, the canonical PriceBlock, and delivery/state/response chips.
  * One result = one package shown with its provider's trust signals.
  */
-export function ResultCard({ result, trust, equation = false }: { result: CatalogResult; trust?: CardTrust | undefined; equation?: boolean }) {
+export function ResultCard({ result, trust, equation = false, compare = false }: { result: CatalogResult; trust?: CardTrust | undefined; equation?: boolean; compare?: boolean }) {
   const locale = useLocale()
   const t = useTranslations('catalog')
   const title = pickI18n(result.titleI18n, locale)
   const responseTime = formatResponseTime(result.medianResponseMinutes)
   const stateLabel = STATE_LABEL.get(result.state) ?? result.state
 
-  return (
+  const card = (
     <Link
       href={`/p/${result.providerSlug}/${result.packageSlug}`}
       className="card-interactive group flex h-full flex-col gap-3 p-4"
@@ -88,5 +89,13 @@ export function ResultCard({ result, trust, equation = false }: { result: Catalo
         <PriceBlock display={result.display} equation={equation} />
       </div>
     </Link>
+  )
+  // Experience v3 E2 FR-2.9: the Compare toggle sits beside the link, never inside it.
+  if (!compare) return card
+  return (
+    <div className="relative h-full">
+      {card}
+      <CompareToggle id={result.packageId} title={title} className="absolute bottom-4 right-4" />
+    </div>
   )
 }

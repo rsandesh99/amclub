@@ -9,6 +9,7 @@ import { hasNarrowingV2, parseSearchV2 } from '@amclub/shared'
 import { getSessionUser } from '@/lib/auth/session'
 import { isOnFor } from '@/lib/experiments'
 import { SearchResultsV3 } from '@/components/search-v3/SearchResultsV3'
+import { isVoiceSearchOn } from '@/lib/voice/search'
 
 export default async function AppSearchPage({
   searchParams,
@@ -33,10 +34,10 @@ export default async function AppSearchPage({
       </header>
       <div className={v3 ? 'mx-auto max-w-[1280px] px-4 py-6' : 'mx-auto max-w-3xl px-4 py-6'}>
         <div className="mb-6">
-          <SearchBar defaultValue={sp['query'] ?? ''} action="/app/search" />
+          <SearchBar defaultValue={sp['query'] ?? ''} action="/app/search" voice={v3 && (await isVoiceSearchOn())} />
         </div>
         {searching && v3 ? (
-          <SearchResultsV3 search={search} basePath="/app/search" />
+          <SearchResultsV3 search={search} basePath="/app/search" youSaid={sp['voice'] === '1' ? search.query : undefined} />
         ) : searching ? (
           <div className="space-y-5">
             <ListingControls />

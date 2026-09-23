@@ -132,6 +132,9 @@ export const packageSchema = z.object({
     .optional(),
   /** publish → 'active'; save draft → 'draft'. */
   status: z.enum(['draft', 'active']).default('active'),
+  /** Experience v3 E2 — the level-2 service (a SPECIALIZATIONS slug of the
+   *  category; the route checks membership). Absent = leave unchanged. */
+  service_slug: z.string().regex(/^[a-z0-9-]{1,48}$/).nullable().optional(),
 })
 
 export type PackageInput = z.infer<typeof packageSchema>
