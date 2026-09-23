@@ -192,7 +192,7 @@ async function e1() {
   const ba = (await (await api(buyer.token, '/api/v1/me/actions', undefined, 'GET')).json()) as { buyer?: { counts: { orders: number; requirements: number }; items: { kind: string; objectId: string; action: string | null; dueAt: string | null }[] } | null; provider?: unknown }
   const review = ba.buyer?.items.find((i) => i.objectId === delivered)
   check('N2: buyer — the delivered order needs review by auto_accept_at; placed waits on the provider',
-    ba.buyer?.counts.orders === 1 && review?.action === 'review_delivery' && review?.dueAt === autoAcceptAt && !ba.buyer?.items.some((i) => i.objectId === placed),
+    ba.buyer?.counts.orders === 1 && review?.action === 'review_delivery' && !!review?.dueAt && Date.parse(review.dueAt) === Date.parse(autoAcceptAt) && !ba.buyer?.items.some((i) => i.objectId === placed),
     JSON.stringify(ba.buyer?.counts))
   check('N2: buyer — quotes waiting on an open requirement', ba.buyer?.counts.requirements === 1 && !!ba.buyer?.items.some((i) => i.kind === 'quotes_waiting' && i.objectId === rfq?.id))
   check('N2: a buyer-only user has no provider section', ba.provider === null)
