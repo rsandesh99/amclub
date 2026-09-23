@@ -457,6 +457,92 @@ async function e4() {
   check('FR-4.1: after ungrouping the page has no matrix', !back.includes('data-testid="tier-matrix"') && back.includes('₹2,699.10 + 18 % GST = ₹3,184.94'))
 }
 
+async function e2a() {
+  console.log('\nE2a — search v2, facets, feedback, weak results')
+  const word = `Quillon${Date.now() % 100000}`
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const { data: legal } = await admin.from('categories').select('id').eq('slug', 'legal').single()
+  const mkProv = async (label: string, extra: Record<string, unknown>) => {
+    const u = await mkUser(label, ['provider'])
+    const { data } = await admin.from('provider_profiles').insert({
+      user_id: u.uid, legal_name: label, display_name: label, slug: `${tag}-${label}`, status: 'active', ...extra,
+    }).select('id').single()
+    created.providerIds.push(data!.id)
+    return data!.id as string
+  }
+  const p1 = await mkProv('e2p1', { state: 'TS', city: 'Hyderabad', languages: ['en', 'te'], avg_rating: 4.8, review_count: 20, median_response_minutes: 90 })
+  const p2 = await mkProv('e2p2', { state: 'DL', city: 'Delhi', languages: ['en', 'hi'], avg_rating: 4.2, review_count: 5, median_response_minutes: 600 })
+  await admin.from('provider_verifications').insert({ provider_id: p1, kind: 'icai', value: 'X', status: 'api_verified', verified_at: new Date().toISOString() })
+  const mkPkg = async (s: string, provider: string, cat: string, service: string, price: number, days: number, discountBps = 0) => {
+    const { data, error } = await admin.from('packages').insert({
+      provider_id: provider, category_id: cat, slug: `${tag}-${s}`, title_i18n: { en: `${word} ${service.replace(/-/g, ' ')}` },
+      scope_included: ['x'], deliverables: ['y'], price_paise: price, discount_bps: discountBps, delivery_days: days, service_slug: service, status: 'active',
+    }).select('id').single()
+    if (error) throw new Error(`e2 package ${s}: ${error.message}`)
+    created.packageIds.push(data!.id)
+    return data!.id as string
+  }
+  const A = await mkPkg('e2a', p1, tax!.id, 'gst-filing', 1499_00, 3)
+  const B = await mkPkg('e2b', p1, tax!.id, 'itr-filing', 2999_00, 7, 1000)
+  const C = await mkPkg('e2c', p2, tax!.id, 'gst-filing', 999_00, 10)
+  const D = await mkPkg('e2d', p2, legal!.id, 'trademark', 4999_00, 14)
+
+  type Facets = Record<string, Record<string, number>>
+  type SR = { results: { packageId: string; providerId: string; display: { taxablePaise: number } }[]; total: number; facets: Facets | null; weak: boolean }
+  const search = async (qs: string) => (await (await fetch(`${BASE}/api/v1/catalog/search?query=${word}${qs}&_=${Date.now()}`)).json()) as SR
+  const ids = (r: SR) => r.results.map((x) => x.packageId)
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
+
+  const all = await search('')
+  const f = all.facets ?? {}
+  check('FR-2.1: search v2 answers with facets and display prices', all.total === 4 && !!all.facets && all.results.every((r) => typeof r.display?.taxablePaise === 'number'), `total ${all.total}`)
+  check('FR-2.1: facet counts = fixture truth (category, state, credential, verified)',
+    f['category']?.['tax-accounting'] === 3 && f['category']?.['legal'] === 1 && f['state']?.['TS'] === 2 && f['state']?.['DL'] === 2 && f['credential']?.['icai'] === 2 && f['verified']?.['true'] === 2,
+    JSON.stringify({ c: f['category'], s: f['state'], cr: f['credential'], v: f['verified'] }))
+  check('FR-2.1: facet counts = fixture truth (service, delivery, language)',
+    f['service']?.['gst-filing'] === 2 && f['service']?.['itr-filing'] === 1 && f['delivery']?.['3'] === 1 && f['delivery']?.['7'] === 2 && f['delivery']?.['14'] === 4 && f['language']?.['te'] === 2 && f['language']?.['hi'] === 2,
+    JSON.stringify({ s: f['service'], d: f['delivery'], l: f['language'] }))
+  const ts = await search('&state=TS')
+  check('FR-2.1: a facet ignores its own filter (state=TS still counts DL)', ts.total === 2 && ts.facets?.['state']?.['DL'] === 2 && ts.facets?.['category']?.['tax-accounting'] === 2)
+  check('FR-2.1: service filter', same(ids(await search('&service=gst-filing')), [A, C]))
+  check('FR-2.1: credential filter', same(ids(await search('&credential=icai')), [A, B]))
+  check('FR-2.1: delivery ≤ 7 days', same(ids(await search('&deliveryMaxDays=7')), [A, B]))
+  check('FR-2.1: replies within 2 h', same(ids(await search('&responseMaxHours=2')), [A, B]))
+  check('FR-2.1: price band on the price before GST (under ₹2,000)', same(ids(await search('&price=under2k')), [A, C]))
+  check('FR-2.1: city filter', same(ids(await search('&city=Delhi')), [C, D]))
+  check('FR-2.1: sort price_asc uses the discounted price', ids(await search('&sort=price_asc')).join() === [C, A, B, D].join())
+  check('FR-2.1: sort fastest', ids(await search('&sort=fastest')).join() === [A, B, C, D].join())
+  const best = await search('')
+  check('FR-2.1: best match puts the verified, better-rated provider first', best.results[0]?.providerId === p1 && best.results[1]?.providerId === p1)
+  check('FR-2.1: a forged sort / state is dropped, not an error', (await search('&sort=sponsored&state=ZZ')).total === 4)
+
+  // FR-2.2 / 2.4 — pages, round-tripped through the URL.
+  const listHtml = visible(await (await fetch(`${BASE}/services?query=${word}&state=TS&view=list`)).text())
+  check('FR-2.4: list view renders rows (URL view=list)', listHtml.includes('data-view="list"') && (listHtml.match(/data-testid="result-row"/g) ?? []).length === 2)
+  check('FR-2.2: facet rail + chip bar render', listHtml.includes('data-testid="facet-rail"') && listHtml.includes('data-testid="filter-chips"'))
+  const rt = visible(await (await fetch(`${BASE}/services?query=${word}&deliveryMaxDays=7&sort=fastest`)).text())
+  check('FR-2.1: filters round-trip through the URL (2 results, fastest)', rt.includes('2 results') && rt.indexOf(`${word} gst filing`) < rt.indexOf(`${word} itr filing`))
+  const catHtml = visible(await (await fetch(`${BASE}/services/tax-accounting`)).text())
+  check('FR-2.2: filters show before a query on a category page', catHtml.includes('data-testid="filter-chips"'))
+
+  // FR-2.7 — weak and zero results never dead-end.
+  const weak = visible(await (await fetch(`${BASE}/services?query=${word}&service=trademark`)).text())
+  check('FR-2.7: < 3 results → the requirement card, query carried', weak.includes('data-testid="weak-results"') && weak.includes(`href="/app/rfq/new?q=${word}"`))
+  const zero = visible(await (await fetch(`${BASE}/services?query=${word}xyzzy`)).text())
+  check('FR-2.7: zero results → the requirement card (no signup dead end)', zero.includes('data-testid="weak-results"') && zero.includes(`href="/app/rfq/new?q=${word}xyzzy"`))
+
+  // FR-2.6 — relevance feedback: anyone may answer, nobody reads it back.
+  const fb = (body: unknown) => fetch(`${BASE}/api/v1/search/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const ok = await fb({ query: word, filters: { state: 'TS' }, resultIds: [A, B], helpful: false, reason: 'too_slow', surface: 'web' })
+  const { data: fbRow } = await admin.from('search_feedback').select('helpful, reason, result_ids, user_id').eq('query', word).maybeSingle()
+  check('FR-2.6: feedback is stored (signed out → no user)', ok.status === 201 && fbRow?.helpful === false && fbRow.reason === 'too_slow' && fbRow.result_ids?.length === 2 && fbRow.user_id === null, `status ${ok.status}`)
+  check('FR-2.6: an unknown reason → 422', (await fb({ query: word, filters: {}, resultIds: [], helpful: false, reason: 'ugly' })).status === 422)
+  const anonRead = await createClient(URL_, ANON, { auth: { persistSession: false } }).from('search_feedback').select('id').limit(1)
+  check('FR-2.6: no client can read search_feedback', !!anonRead.error || (anonRead.data ?? []).length === 0)
+  await admin.from('search_feedback').delete().eq('query', word)
+  void D
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -464,6 +550,7 @@ async function main() {
     await e1()
     await e3()
     await e4()
+    await e2a()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }
@@ -472,7 +559,7 @@ async function main() {
     for (const id of created.rfqIds) await t(admin.from('rfqs').delete().eq('id', id))
     for (const id of created.providerIds) { await t(admin.from('provider_categories').delete().eq('provider_id', id)); await t(admin.from('provider_verifications').delete().eq('provider_id', id)); await t(admin.from('provider_public_stats').delete().eq('provider_id', id)); await t(admin.from('provider_profiles').delete().eq('id', id)) }
     for (const id of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', id))
-    for (const uid of created.users) { await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
+    for (const uid of created.users) { await t(admin.from('audit_logs').delete().eq('actor_id', uid)); await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
   }
   console.log(`\n${pass} passed, ${fail} failed\n`)
   process.exit(fail ? 1 : 0)

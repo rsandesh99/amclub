@@ -308,8 +308,16 @@ const MANIFEST: Entry[] = [
   {
     file: '0050_packages_v3.sql',
     tables: ['package_groups'],
-    triggers: [['package_groups', 'package_groups_set_updated_at']],
+    triggers: [['package_groups', 'package_groups_set_updated_at'], ['packages', 'packages_group_same_provider']],
+    functions: ['packages_group_same_provider'],
     note: 'E4: package_groups (tiers), packages group_id/tier/ideal_for_i18n/compare_values/govt_dependent_override, categories.govt_dependent',
+  },
+  {
+    file: '0051_search_v2.sql',
+    tables: ['search_feedback'],
+    functions: ['search_packages_v2', 'search_facets_v2'],
+    triggers: [['search_feedback', 'search_feedback_set_updated_at']],
+    note: 'E2a: search_packages_v2 + search_facets_v2 (v1 untouched), packages.service_slug, search_feedback (service role only)',
   },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },

@@ -823,6 +823,16 @@ Each row is a UX element the survey found missing or weak. It's **paired with th
 
 **RICE:** R 0.8 · I 2 · C 0.7 · E 4 → **0.28**.
 
+**As built (E2a: search v2, filters, feedback, weak results).** E2 ships as two PRs: E2a is this one; E2b adds the service pages, shortlist compare, recently viewed and voice search.
+- **Level-2 services** are the shared `SPECIALIZATIONS` vocabulary (40 services, already the voice parser's list) plus `packages.service_slug`. `categories.parent_id` stays unused, so RFQ fan-out, commission and `provider_categories` keep the eight-category graph.
+- **Two new RPCs.** `search_packages_v2` and `search_facets_v2` arrive in migration 0051, and v1 is untouched. The app falls back to v1 on any v2 error, so a deploy ahead of the migration keeps search working without facets.
+- **Facets** are disjunctive: each facet ignores its own filter.
+- **Price** bands and price sorts use the price before GST, after the package discount.
+- **"best" sort** is text rank × weighted rating × a verification boost. A shared test reads the SQL block and fails on any other input.
+- **Paging.** The URL carries `page` (`offset` still parses). Phones use `page=N&more=1` for load-more, showing pages 1..N, capped at 4.
+- **List rows** leave out the save heart: one saved-state fetch per row is too costly. Save stays on the card and the provider page, and E2b's compare checkbox covers shortlisting.
+- **The grid/list choice** is remembered in the `amc_search_view` cookie.
+
 ---
 
 ### E3: Trust made visible

@@ -80,6 +80,8 @@ export const packages = pgTable('packages', {
   idealForI18n: jsonb('ideal_for_i18n'),
   compareValues: jsonb('compare_values'),
   govtDependentOverride: boolean('govt_dependent_override'),
+  // Experience v3 E2 (0051): the level-2 service (shared SPECIALIZATIONS slug).
+  serviceSlug: text('service_slug'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -89,3 +91,19 @@ export const packages = pgTable('packages', {
   unique('packages_provider_slug_uniq').on(table.providerId, table.slug),
   check('packages_price_positive', sql`${table.pricePaise} > 0`),
 ])
+
+// Experience v3 E2 N6 (0051): "Did you find what you need?" — service role
+// writes only; no client reads.
+export const searchFeedback = pgTable('search_feedback', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id'),
+  query: text('query'),
+  filters: jsonb('filters').default(sql`'{}'::jsonb`).notNull(),
+  resultIds: uuid('result_ids').array().default(sql`'{}'`).notNull(),
+  helpful: boolean('helpful').notNull(),
+  // not_relevant | too_expensive | too_slow | not_in_my_state
+  reason: text('reason'),
+  surface: text('surface').default('web').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+})
