@@ -77,7 +77,7 @@ ALTER TABLE IF EXISTS product_events   ENABLE ROW LEVEL SECURITY;
 
 -- ─── users ────────────────────────────────────────────────────────────────────
 
--- 0041: owner is read-only. Every write goes through the service role; client
+-- 0042: owner is read-only. Every write goes through the service role; client
 -- roles hold no INSERT/UPDATE/DELETE, and users_roles_guard refuses a roles
 -- change by any client role (the "owner all" policy let a user self-promote).
 DROP POLICY IF EXISTS "users: owner all" ON users;

@@ -254,7 +254,7 @@ const MANIFEST: Entry[] = [
     note: 'S2.2 Digital Munshi: munshi_drafts (proposals the provider decides on) + munshi_provider_state (scan cursor, daily cap, reminders); provider_price_book gains accepted_at / deleted_at / source (source_quote_id nullable for manual rows; accepted_at backfilled from accepted quotes); quotes.munshi_draft_id (+ the S1.2 column grant restated); ai_decisions feature CHECK gains munshi_reply',
   },
   {
-    file: '0041_users_privilege_guard.sql',
+    file: '0042_users_privilege_guard.sql',
     tables: ['users'],
     functions: ['users_roles_guard'],
     triggers: [['users', 'users_roles_guard']],

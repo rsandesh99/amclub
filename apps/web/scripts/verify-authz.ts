@@ -557,8 +557,8 @@ async function main() {
     deniedRows('buyerB direct-reads bank_account_verifications', await bClient.from('bank_account_verifications').select('id'))
     deniedRows('provA direct-reads bank_account_verifications', await asUser(provA.token).from('bank_account_verifications').select('id'))
 
-    // ── 7b. users privilege guard (0041) — no self-promotion, no self-delete ──
-    console.log('users privilege guard (0041, direct PostgREST):')
+    // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
+    console.log('users privilege guard (0042, direct PostgREST):')
     eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)
     deniedRows('buyerB sets OWN roles to admin', await bClient.from('users').update({ roles: ['admin'] }).eq('id', buyerB.uid).select('id'))
     deniedRows('buyerB DELETEs OWN users row', await bClient.from('users').delete().eq('id', buyerB.uid).select('id'))
