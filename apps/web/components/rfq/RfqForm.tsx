@@ -5,7 +5,23 @@ import { useLocale, useTranslations } from 'next-intl'
 import { useAnalytics } from '@/components/providers/posthog'
 import { useRouter } from '@/i18n/navigation'
 import { Mic } from 'lucide-react'
-import { voiceMetaSchema, rfqFieldLabel, type RfqTemplateField, type VoiceMeta, type VoiceParseResponse } from '@amclub/shared'
+import {
+  voiceMetaSchema,
+  rfqFieldLabel,
+  rfqQualityScore,
+  quoteSlaHours,
+  RFQ_BUDGET_BANDS,
+  RFQ_BUDGET_BAND_KEYS,
+  type RfqBudgetBand,
+  type RfqEntryPoint,
+  type RfqMustHaves,
+  type RfqTemplateField,
+  type VoiceMeta,
+  type VoiceParseResponse,
+} from '@amclub/shared'
+import { Picker } from '@/components/ui-v3/Picker'
+import { SegmentedControl } from '@/components/ui-v3/SegmentedControl'
+import { Link } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,8 +44,30 @@ export interface RfqCategoryOption {
 const DRAFT_KEY = 'amclub_rfq_draft'
 const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
 
+/** Experience v3 E6 — what the page hands the v3 form (flag `requirements`). */
+export interface RfqFormV3 {
+  /** category slug → its level-2 service slugs. */
+  services: Record<string, readonly string[]>
+  /** category slug → reviewed document suggestions (empty while document_suggestions_enabled is off). */
+  documents: Record<string, { key: string; label: string; required: boolean; service: string | null; reviewedAt: string }[]>
+  /** category slug → the quote-time stat for the buyer's state. */
+  sla: Record<string, { medianMinutes: number | null; n: number }>
+  stateName: string
+  entry: RfqEntryPoint
+}
+
+const MUST_HAVE_CREDENTIALS = ['icai', 'icsi', 'bar_council', 'gstin'] as const
+const MUST_HAVE_LANGUAGES = ['en', 'hi', 'te', 'ta'] as const
+const EMPTY_MUST_HAVES: RfqMustHaves = { credentials: [], languages: [], onSite: false, inStateOnly: false }
+
 interface DraftState {
   categorySlug: string
+  /** E6 — the level-2 service ('' = none). */
+  service?: string
+  /** E6 — budget chip (writes budget_min/max). */
+  budgetBand?: RfqBudgetBand | ''
+  mustHaves?: RfqMustHaves
+  documents?: string[]
   title: string
   details: Record<string, string>
   budgetMin: string
@@ -62,10 +100,13 @@ function specLabel(slug: string): string {
 }
 
 /** "Repost with edits" — fields copied from one of the buyer's own earlier RFQs (loaded server-side, RLS-scoped). */
-export type RfqPrefill = Pick<DraftState, 'categorySlug' | 'title' | 'details' | 'budgetMin' | 'budgetMax'>
+export type RfqPrefill = Pick<DraftState, 'categorySlug' | 'title' | 'details' | 'budgetMin' | 'budgetMax'> & { service?: string }
 
-export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: { categories: RfqCategoryOption[]; documentIntakeEnabled?: boolean; prefill?: RfqPrefill | undefined }) {
+export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3 }: { categories: RfqCategoryOption[]; documentIntakeEnabled?: boolean; prefill?: RfqPrefill | undefined; v3?: RfqFormV3 | undefined }) {
   const t = useTranslations('rfq')
+  const t3 = useTranslations('rfq_v3')
+  const tSvc = useTranslations('services')
+  const tCat = useTranslations('catalog')
   const tv = useTranslations('voice')
   const locale = useLocale()
   const router = useRouter()
@@ -90,7 +131,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
   useEffect(() => {
     // A repost starts from the earlier request, not from whatever draft this device holds.
     if (prefill) {
-      setS({ ...EMPTY, ...prefill })
+      setS({ ...EMPTY, ...prefill, ...(prefill.service ? { service: prefill.service } : {}) })
       setRestored(true)
       setTimeout(() => setRestored(false), 3000)
       return
@@ -114,6 +155,15 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
 
   const category = categories.find((c) => c.slug === s.categorySlug)
 
+  // ── Experience v3 E6 ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (v3) track('requirement_form_started', { entry: v3.entry })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per form
+  }, [])
+  const band = v3 && s.budgetBand ? (RFQ_BUDGET_BANDS[s.budgetBand] as { min?: number; max?: number }) : null
+  const mustHaves = s.mustHaves ?? EMPTY_MUST_HAVES
+  const docChoices = v3 && category ? (v3.documents[category.slug] ?? []).filter((d) => !d.service || d.service === s.service) : []
+
   function setField(name: string, value: string) {
     setS((prev) => ({ ...prev, details: { ...prev.details, [name]: value } }))
   }
@@ -135,6 +185,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
   function applyParse(res: VoiceParseResponse & { vendor: VoiceVendorTag }, durationMs: number, clarifyMeta?: VoiceMetaClarify) {
     const p = res.parse
     const description = p.description_english
+    if (v3) track('requirement_voice_used', { lang: p.original_language, ok: true })
     // S1.8 — round one may carry the ONE question; round two never does.
     if (res.clarify) setClarify({ payload: res.clarify, prior: { transcript_english: res.transcript_english, parse: p } })
     setS((prev) => ({
@@ -227,6 +278,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
   }
 
   function applyTranscriptOnly(transcript: string, durationMs: number) {
+    if (v3) track('requirement_voice_used', { lang: null, ok: false })
     setS((prev) => ({
       ...prev,
       details: { ...prev.details, additional_details: transcript },
@@ -255,6 +307,39 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
   const freeField = category?.fields.find((f) => f.type === 'textarea') ?? null
   const freeValue = s.details['additional_details'] ?? (freeField ? s.details[freeField.name] : undefined) ?? ''
 
+  /** The details object exactly as it is sent (the score reads the same one). */
+  function detailsForSubmit(): Record<string, unknown> {
+    const details: Record<string, unknown> = { ...s.details }
+    if (freeField) {
+      delete details['additional_details']
+      details[freeField.name] = freeValue
+    }
+    if (v3) {
+      if (s.service) details['service_slug'] = s.service
+      const docs = (s.documents ?? []).filter((k) => docChoices.some((d) => d.key === k))
+      if (docs.length > 0) details['documents_expected'] = docs
+    }
+    return details
+  }
+
+  // FR-6.2 — the strength meter runs the server's pre-check rules on what would be sent.
+  const strength = v3 && category
+    ? rfqQualityScore({
+        categorySlug: category.slug,
+        template: { fields: category.fields },
+        title: s.title,
+        details: detailsForSubmit(),
+        budgetMinPaise: band?.min ?? null,
+        budgetMaxPaise: band?.max ?? null,
+        neededBy: s.neededBy || null,
+        recentOpenSameCategory: false,
+      })
+    : null
+  const strengthBucket = strength?.bucket
+  useEffect(() => {
+    if (strengthBucket) track('requirement_strength_changed', { bucket: strengthBucket })
+  }, [strengthBucket, track])
+
   async function submit() {
     setError('')
     if (!category) { setError(t('required_field')); return }
@@ -265,11 +350,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
     }
     setLoading(true)
     try {
-      const details: Record<string, unknown> = { ...s.details }
-      if (freeField) {
-        delete details['additional_details']
-        details[freeField.name] = freeValue
-      }
+      const details = detailsForSubmit()
       // S1.8 — the (edited) document facts travel with the request as one readable line.
       const facts = (s.intake?.facts ?? []).filter((f) => f.k.trim() && f.v.trim())
       if (facts.length > 0) details['document_facts'] = facts.map((f) => `${f.k}: ${f.v}`).join(' · ').slice(0, 2000)
@@ -293,8 +374,13 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
           details,
           attachments: s.intake?.attachments ?? [],
           ...(s.intake?.extractionIds.length ? { intake_extraction_ids: s.intake.extractionIds } : {}),
-          ...(s.budgetMin ? { budget_min_paise: Math.round(Number(s.budgetMin) * 100) } : {}),
-          ...(s.budgetMax ? { budget_max_paise: Math.round(Number(s.budgetMax) * 100) } : {}),
+          ...(v3
+            ? { ...(band?.min !== undefined ? { budget_min_paise: band.min } : {}), ...(band?.max !== undefined ? { budget_max_paise: band.max } : {}) }
+            : {
+                ...(s.budgetMin ? { budget_min_paise: Math.round(Number(s.budgetMin) * 100) } : {}),
+                ...(s.budgetMax ? { budget_max_paise: Math.round(Number(s.budgetMax) * 100) } : {}),
+              }),
+          ...(v3 && (mustHaves.credentials.length || mustHaves.languages.length || mustHaves.onSite || mustHaves.inStateOnly) ? { must_haves: mustHaves } : {}),
           ...(s.neededBy ? { needed_by: s.neededBy } : {}),
           ...(voiceMeta ? { voice_meta: voiceMeta } : {}),
         }),
@@ -312,6 +398,10 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
           edited_fields: voiceMeta.edited_fields,
           edit_count: voiceMeta.edited_fields.length,
         })
+      }
+      if (v3) {
+        const required = category.fields.filter((f) => f.required)
+        track('requirement_submitted', { score: strength?.score ?? null, required_filled: required.every((f) => (f === freeField ? freeValue : s.details[f.name])?.trim()), entry: v3.entry })
       }
       localStorage.removeItem(DRAFT_KEY)
       // S1.5 — DEFERRED: the RFQ exists but is not sent yet; show the questions instead of redirecting.
@@ -440,6 +530,180 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
         </div>
       )}
 
+      {v3 ? (
+        <div className="space-y-5" data-testid="rfq-v3">
+          <p className="text-center text-xs font-medium uppercase tracking-wide text-foreground-tertiary">{t3('or_type')}</p>
+          {/* FR-6.1 — category Picker, then the service. */}
+          <Picker
+            id="rfq-category"
+            label={`${t('pick_category')} *`}
+            value={s.categorySlug || null}
+            options={categories.map((c) => ({ value: c.slug, label: c.name }))}
+            onChange={(v) => {
+              markEdited('category')
+              setS((p) => ({ ...p, categorySlug: v ?? '', service: '', documents: [], details: p.voice ? p.details : {} }))
+            }}
+          />
+          {category && (v3.services[category.slug]?.length ?? 0) > 0 && (
+            <Picker
+              id="rfq-service"
+              label={t3('service')}
+              value={s.service || null}
+              allowClear
+              clearLabel={t3('any_service')}
+              options={(v3.services[category.slug] ?? []).map((sv) => ({ value: sv, label: tSvc(sv as 'gst-filing') }))}
+              onChange={(v) => setS((p) => ({ ...p, service: v ?? '' }))}
+            />
+          )}
+          {category && (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rfq-title">{t('title_label')}<span className="text-danger"> *</span></Label>
+                <Input id="rfq-title" value={s.title} onChange={(e) => { markEdited('title'); setS((p) => ({ ...p, title: e.target.value })) }} placeholder={t('title_placeholder')} />
+              </div>
+
+              {/* Template fields — a segmented control for ≤ 5 options, a Picker for more. */}
+              {category.fields.filter((f) => f !== freeField).map((f) => (
+                <div key={f.name} className="flex flex-col gap-1.5">
+                  {f.type === 'select' && (f.options ?? []).length > 5 ? (
+                    <Picker
+                      id={`f-${f.name}`}
+                      label={`${label(f)}${f.required ? ' *' : ''}`}
+                      value={s.details[f.name] || null}
+                      options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
+                      onChange={(v) => setField(f.name, v ?? '')}
+                    />
+                  ) : (
+                    <>
+                      <Label htmlFor={`f-${f.name}`}>{label(f)}{f.required && <span className="text-danger"> *</span>}</Label>
+                      {f.type === 'select' ? (
+                        <SegmentedControl<string>
+                          size="sm"
+                          ariaLabel={label(f)}
+                          options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
+                          value={s.details[f.name] || null}
+                          onChange={(v) => setField(f.name, v)}
+                        />
+                      ) : f.type === 'textarea' ? (
+                        <Textarea id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} rows={3} />
+                      ) : (
+                        <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={f.placeholder_en ?? ''} />
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+
+              {/* ONE free-text field. */}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rfq-free">{freeField ? label(freeField) : t('free_details_label')}{freeField?.required && <span className="text-danger"> *</span>}</Label>
+                <Textarea id="rfq-free" value={freeValue} onChange={(e) => { markEdited('description'); setField('additional_details', e.target.value) }} placeholder={t('free_details_placeholder')} rows={3} />
+              </div>
+
+              {/* Budget chips — bands write budget_min / budget_max. */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">{t('budget_label')}</span>
+                <div className="flex flex-wrap gap-2" role="group" aria-label={t('budget_label')}>
+                  {RFQ_BUDGET_BAND_KEYS.map((b) => {
+                    const on = s.budgetBand === b
+                    return (
+                      <button key={b} type="button" aria-pressed={on} onClick={() => setS((p) => ({ ...p, budgetBand: on ? '' : b }))} className={on ? 'min-h-[36px] rounded-chip border border-primary bg-primary/10 px-3 text-sm font-medium text-primary' : 'min-h-[36px] rounded-chip border border-border px-3 text-sm text-foreground-secondary hover:border-primary/40'}>
+                        {t3(`budget_${b}`)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rfq-needed">{t('needed_by_label')}</Label>
+                <Input id="rfq-needed" type="date" value={s.neededBy} onChange={(e) => setS((p) => ({ ...p, neededBy: e.target.value }))} />
+              </div>
+
+              {/* FR-6.4 — must-haves: shown to providers, never used to match (D-PRD6). */}
+              <fieldset className="space-y-2" data-testid="rfq-must-haves">
+                <legend className="text-sm font-medium">{t3('must_haves')}</legend>
+                <p className="text-xs text-foreground-secondary">{t3('must_haves_hint')}</p>
+                <div className="flex flex-wrap gap-2">
+                  {MUST_HAVE_CREDENTIALS.map((k) => {
+                    const on = mustHaves.credentials.includes(k)
+                    return (
+                      <button key={k} type="button" aria-pressed={on} onClick={() => { track('requirement_must_have_set', { kind: 'credential', value: k, on: !on }); setS((p) => { const m = p.mustHaves ?? EMPTY_MUST_HAVES; return { ...p, mustHaves: { ...m, credentials: on ? m.credentials.filter((x) => x !== k) : [...m.credentials, k] } } }) }} className={on ? 'min-h-[36px] rounded-chip border border-primary bg-primary/10 px-3 text-sm font-medium text-primary' : 'min-h-[36px] rounded-chip border border-border px-3 text-sm text-foreground-secondary'}>
+                        {tCat(`badge_${k}` as 'badge_gstin')}
+                      </button>
+                    )
+                  })}
+                  {MUST_HAVE_LANGUAGES.map((l) => {
+                    const on = mustHaves.languages.includes(l)
+                    return (
+                      <button key={l} type="button" aria-pressed={on} onClick={() => { track('requirement_must_have_set', { kind: 'language', value: l, on: !on }); setS((p) => { const m = p.mustHaves ?? EMPTY_MUST_HAVES; return { ...p, mustHaves: { ...m, languages: on ? m.languages.filter((x) => x !== l) : [...m.languages, l] } } }) }} className={on ? 'min-h-[36px] rounded-chip border border-primary bg-primary/10 px-3 text-sm font-medium text-primary' : 'min-h-[36px] rounded-chip border border-border px-3 text-sm text-foreground-secondary'}>
+                        {tCat(`lang_${l}` as 'lang_en')}
+                      </button>
+                    )
+                  })}
+                  {(['onSite', 'inStateOnly'] as const).map((k) => {
+                    const on = mustHaves[k]
+                    return (
+                      <button key={k} type="button" aria-pressed={on} onClick={() => { track('requirement_must_have_set', { kind: k, on: !on }); setS((p) => ({ ...p, mustHaves: { ...(p.mustHaves ?? EMPTY_MUST_HAVES), [k]: !on } })) }} className={on ? 'min-h-[36px] rounded-chip border border-primary bg-primary/10 px-3 text-sm font-medium text-primary' : 'min-h-[36px] rounded-chip border border-border px-3 text-sm text-foreground-secondary'}>
+                        {t3(k === 'onSite' ? 'on_site' : 'in_state_only', { state: v3.stateName })}
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+
+              {/* FR-6.3 — documents you'll likely need (reviewed content only). */}
+              {docChoices.length > 0 && (
+                <fieldset className="space-y-2" data-testid="rfq-documents">
+                  <legend className="text-sm font-medium">{t3('documents')}</legend>
+                  <ul className="space-y-1.5">
+                    {docChoices.map((d) => {
+                      const on = (s.documents ?? []).includes(d.key)
+                      return (
+                        <li key={d.key}>
+                          <label className="flex min-h-[36px] items-center gap-2 text-sm">
+                            <input type="checkbox" checked={on} onChange={() => { track('requirement_document_toggled', { key: d.key, on: !on }); setS((p) => ({ ...p, documents: on ? (p.documents ?? []).filter((x) => x !== d.key) : [...(p.documents ?? []), d.key] })) }} className="h-4 w-4 accent-primary" />
+                            <span>{d.label}{d.required && <span className="text-foreground-secondary"> · {t3('usually_needed')}</span>}</span>
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  <p className="text-[11px] text-foreground-tertiary">{t3('documents_reviewed', { date: new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }).format(new Date(docChoices[0]!.reviewedAt)) })}</p>
+                </fieldset>
+              )}
+
+              {/* FR-6.2 — strength meter: a thin bar and the one change that helps most. */}
+              {strength && (
+                <div data-testid="rfq-strength" data-score={strength.score}>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-sunken" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={strength.score} aria-label={t3('strength_label')}>
+                    <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${strength.score}%` }} />
+                  </div>
+                  <p className="mt-1 text-xs text-foreground-secondary">
+                    {t3(`strength_${strength.bucket}`)}
+                    {strength.next && ` · ${strength.next.reason === 'required' ? t3('next_required', { field: category.fields.find((f) => f.name === strength.next!.field) ? label(category.fields.find((f) => f.name === strength.next!.field)!) : strength.next.field, gain: strength.next.gain }) : t3(`next_${strength.next.reason}`, { gain: strength.next.gain })}`}
+                  </p>
+                </div>
+              )}
+
+              {/* FR-6.7 — the promise block. */}
+              <p className="rounded-card bg-primary/5 px-4 py-3 text-sm text-foreground-secondary" data-testid="rfq-promise">
+                {(() => {
+                  const sla = quoteSlaHours(v3.sla[category.slug] ?? null)
+                  return t3('promise', { state: v3.stateName, sla: sla.measured ? t3('sla_measured', { hours: sla.hours }) : t3('sla_default', { hours: sla.hours }) })
+                })()}{' '}
+                <Link href="/app/profile" className="font-medium text-primary hover:underline">{t3('change')}</Link>
+              </p>
+
+              {error && <p className="text-sm text-danger">{error}</p>}
+              <div className="sticky bottom-[calc(var(--tabbar-h,0px)+env(safe-area-inset-bottom,0px))] z-20 -mx-4 border-t border-border bg-surface px-4 py-3 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0">
+                <Button onClick={submit} loading={loading} className="w-full" size="lg" data-testid="rfq-submit">{loading ? t('submitting') : t3('send')}</Button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <>
       {/* Category */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="rfq-category">{t('pick_category')}<span className="text-danger"> *</span></Label>
@@ -518,6 +782,8 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
 
           {error && <p className="text-sm text-danger">{error}</p>}
           <Button onClick={submit} loading={loading} className="w-full">{loading ? t('submitting') : t('submit')}</Button>
+        </>
+      )}
         </>
       )}
     </div>

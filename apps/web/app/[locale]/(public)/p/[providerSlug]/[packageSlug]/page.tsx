@@ -16,6 +16,7 @@ import { TierProvider, type BuyOption } from '@/components/packages-v3/TierConte
 import { BuyBox, StickyBuyBar, TierTabs } from '@/components/packages-v3/BuyBox'
 import { PackageTierMatrix } from '@/components/packages-v3/TierMatrix'
 import { RecentViewTracker } from '@/components/recent-v3/RecentViewTracker'
+import { TrackedLink } from '@/components/analytics/TrackedLink'
 
 export const revalidate = 300
 
@@ -55,6 +56,7 @@ export default async function PackageDetailPage({
   const { provider, pkg } = detail
   const t = await getTranslations('catalog')
   const tv = await getTranslations('packages_v3')
+  const tr = await getTranslations('rfq_v3')
   const locale = await getLocale()
   const title = pickI18n(pkg.titleI18n, locale)
   const appUrl = getSiteUrl()
@@ -220,6 +222,16 @@ export default async function PackageDetailPage({
                 ))}
               </ul>
             </section>
+          )}
+
+          {/* Experience v3 E6 (N20): a requirement prefilled from this package's category + service. */}
+          {isOnForEveryone('requirements') && (
+            <p className="rounded-card border border-dashed border-border px-4 py-3 text-sm text-foreground-secondary" data-testid="need-different">
+              {tr('need_different')}{' '}
+              <TrackedLink href={`/app/rfq/new?from_package=${pkg.id}&entry=package` as '/app/rfq/new'} event="requirement_entry_clicked" eventProps={{ entry: 'package' }} className="font-medium text-primary hover:underline">
+                {tr('need_different_cta')}
+              </TrackedLink>
+            </p>
           )}
 
           {/* FAQs */}

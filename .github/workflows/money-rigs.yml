@@ -58,6 +58,7 @@ jobs:
       EXP_V3_PACKAGES: "on"
       EXP_V3_SEARCH: "on"
       EXP_V3_CHECKOUT: "on"
+      EXP_V3_REQUIREMENTS: "on"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -45,6 +45,7 @@ export * from './experiments'
 export * from './price-display'
 export * from './packages-v3'
 export * from './search-v2'
+export * from './rfq-v3'
 
 // N9 — public measured stats (gated; never the composite score)
 export * from './public-stats'

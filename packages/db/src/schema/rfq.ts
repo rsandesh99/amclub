@@ -35,6 +35,8 @@ export const rfqs = pgTable('rfqs', {
   qualityDecision: text('quality_decision'), // answered | sent_as_is | auto_released | skipped (CHECK)
   qualityDecisionAt: timestamp('quality_decision_at', { withTimezone: true }),
   qualityDecisionId: uuid('quality_decision_id'), // FK → ai_decisions in SQL
+  // Experience v3 E6 (0053) — { credentials, languages, onSite, inStateOnly }; shown to providers, not used by fan-out.
+  mustHaves: jsonb('must_haves'),
   // open | quoted | accepted | expired | cancelled
   status: text('status').default('open').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -143,4 +145,35 @@ export const rfqClarifications = pgTable('rfq_clarifications', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => [
   index('rfq_clarifications_rfq_asked_idx').on(table.rfqId, table.askedAt),
+])
+
+// Experience v3 E6 (0053) — "documents you'll likely need" per category (+ service).
+// Public read; only rows with reviewed_at are shown (content review gate).
+export const serviceDocumentRequirements = pgTable('service_document_requirements', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  categorySlug: text('category_slug').notNull(),
+  serviceSlug: text('service_slug'),
+  docKey: text('doc_key').notNull(),
+  labelI18n: jsonb('label_i18n').notNull(),
+  required: boolean('required').default(false).notNull(),
+  noteI18n: jsonb('note_i18n'),
+  sortOrder: integer('sort_order').default(0).notNull(),
+  reviewedBy: uuid('reviewed_by'),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+})
+
+// Experience v3 E6 N38 (0053) — median first-quote minutes per category × buyer state (90 days).
+export const quoteSlaStats = pgTable('quote_sla_stats', {
+  categorySlug: text('category_slug').notNull(),
+  state: text('state').notNull(),
+  medianMinutes: integer('median_minutes'),
+  n: integer('n').default(0).notNull(),
+  computedAt: timestamp('computed_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  primaryKey({ columns: [table.categorySlug, table.state] }),
 ])

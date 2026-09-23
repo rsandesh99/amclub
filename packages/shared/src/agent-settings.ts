@@ -174,6 +174,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E2b / N5: the mic in the catalog search field (speech → an English query + the detected language, the Phase 8b pipeline in mode=query). Paid STT + one parse per use; signed-in buyers only. Turn on only after the 30-query eval (te/hi/en, code-mixed) finds the right category ≥ 85 %.',
   },
+  // ── Experience v3 E6 — document suggestions on the requirement form (FR-6.3) ──
+  document_suggestions_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E6 / N19: "Documents you\'ll likely need" on the requirement form. Only rows a CA / lawyer has stamped (service_document_requirements.reviewed_at) are ever shown; keep off until the content review is done.',
+  },
   // ── S3.2 fair price ranges (benchmarks) — compute and display are separate switches, both OFF; the formula is code ──
   benchmark_compute_enabled: {
     schema: z.boolean(),

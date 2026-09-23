@@ -4,6 +4,7 @@ import { CATEGORY_SLUGS } from '../categories'
 import { SUPPORTED_LOCALES, PROVIDER_LANGUAGES } from '../locales'
 import { goodsRfqSpecSchema, goodsQuoteTermsSchema } from '../mart/goods'
 import { quoteDeclineReasonSchema } from '../decline-message'
+import { rfqMustHavesSchema } from '../rfq-v3'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -251,6 +252,8 @@ export const rfqSchema = z
     // AMC Mart M2 — goods RFQ: a Mart category + a goods spec instead of a services template.
     mart_category_slug: z.string().min(1).max(60).optional(),
     goods_spec: goodsRfqSpecSchema.optional(),
+    /** Experience v3 E6 (FR-6.4): shown to providers; never used by fan-out (D-PRD6). Absent = none. */
+    must_haves: rfqMustHavesSchema.optional(),
   })
   .superRefine((d, ctx) => {
     if (d.kind === 'goods') {
