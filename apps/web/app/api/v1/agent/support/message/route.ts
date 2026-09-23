@@ -74,7 +74,8 @@ export async function POST(request: NextRequest) {
           feature: 'support',
           taskClass: 'support_intent',
           promptId: 'support_intent',
-          promptVersion: 'v1',
+          // S3.1 — v2 adds new_need; the web chat has no buttons, so a new need gets the create-request how-to (procurementAvailable unset)
+          promptVersion: 'v2',
           schema: supportIntentSchema,
           parts,
           temperature: 0,

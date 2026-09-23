@@ -465,3 +465,53 @@ describe('Track F — paid-but-rejected and unpriced calls are never free', () =
     expect(out).toMatchObject({ status: 'failed', error: 'model_output_invalid' })
   })
 })
+
+describe('S3.1 — procurement routes + the scripted call', () => {
+  it('the buyer writes resolve to the ordinary routes with the path ids (and card-only fields) stripped from the body', () => {
+    expect(resolveToolRoute('decline_quote', { rfq_id: 'r1', quote_id: 'q1', label: 'B', reason: 'price_high' })).toEqual({ method: 'POST', path: '/api/v1/rfq/r1/quote/q1/decline', body: { reason: 'price_high' } })
+    expect(resolveToolRoute('answer_clarification', { rfq_id: 'r1', clarification_id: 'c1', answer: 'Three GSTINs' })).toEqual({ method: 'POST', path: '/api/v1/rfq/r1/clarifications/c1/answer', body: { answer: 'Three GSTINs' } })
+    expect(resolveToolRoute('complete_rfq', { rfq_id: 'r1', mode: 'answer', answers: { f: 'x' } })).toEqual({ method: 'POST', path: '/api/v1/rfq/r1/quality/answer', body: { answers: { f: 'x' } } })
+    expect(resolveToolRoute('complete_rfq', { rfq_id: 'r1', mode: 'send' })).toEqual({ method: 'POST', path: '/api/v1/rfq/r1/quality/send', body: {} })
+    expect(resolveToolRoute('message_provider', { quote_id: 'q1', label: 'A', body: 'Can you start Monday?' })).toEqual({ method: 'POST', path: '/api/v1/quotes/q1/messages', body: { body: 'Can you start Monday?' } })
+    expect(resolveToolRoute('compare_quotes', { rfq_id: 'r1' })).toEqual({ method: 'GET', path: '/api/v1/rfq/r1/compare' })
+    expect(resolveToolRoute('choose_quote', { rfq_id: 'r1', quote_id: 'q1' }).path).toBe('local:choose_quote')
+    expect(resolveToolRoute('nudge_counterparty', { subject_kind: 'rfq', subject_id: 'r1', via: 'web' }).body).toEqual({ via: 'web' })
+  })
+
+  it('choose_quote is local: an approved resume calls NO route (the decision row is the effect)', async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'whatsapp' })
+    const calls: string[] = []
+    const run = new AgentRun({ ...ctxWith(ledger, id), fetchImpl: (async (u: string) => { calls.push(String(u)); return { status: 200, ok: true, json: async () => ({}) } }) as unknown as typeof fetch })
+    await run.proposeTool('choose_quote', { rfq_id: 'r1', quote_id: 'q1', label: 'B', price_paise: 100 })
+    await ledger.recordDecision({ feature: 'procurement_step', runId: id, tool: 'choose_quote', inputRefs: {}, proposed: {}, final: {}, decidedBy: 'u1' })
+    const out = await run.resume('choose_quote', { rfq_id: 'r1', quote_id: 'q1' })
+    expect(out.status).toBe('done')
+    expect(calls).toEqual([])
+  })
+
+  it('scriptedCall: a read-only / local scope runs (GET or a prefill POST) and is logged', async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'whatsapp' })
+    const seen: string[] = []
+    const run = new AgentRun({ ...ctxWith(ledger, id, false, ['draft_rfq', 'compare_quotes']), fetchImpl: (async (u: string, init?: RequestInit) => { seen.push(`${init?.method ?? 'GET'} ${u}`); return { status: 200, ok: true, json: async () => ({ ok: 1 }) } }) as unknown as typeof fetch })
+    const r1 = await run.scriptedCall('compare_quotes', { method: 'GET', path: '/api/v1/rfq/r1' })
+    const r2 = await run.scriptedCall('draft_rfq', { method: 'POST', path: '/api/v1/rfq/voice-parse', json: { text: 'x' } })
+    expect(r1.ok && r2.ok).toBe(true)
+    expect(seen).toEqual(['GET http://local/api/v1/rfq/r1', 'POST http://local/api/v1/rfq/voice-parse'])
+  })
+
+  it('scriptedCall refuses a confirm:true tool, an out-of-scope tool and every money route — before any fetch', async () => {
+    const { ledger } = makeFakeLedger()
+    const { id } = await ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'whatsapp' })
+    const seen: string[] = []
+    const run = new AgentRun({ ...ctxWith(ledger, id, false, ['draft_rfq', 'create_rfq', 'support_lookup']), fetchImpl: (async (u: string) => { seen.push(String(u)); return { status: 200, ok: true, json: async () => ({}) } }) as unknown as typeof fetch })
+    await expect(run.scriptedCall('create_rfq', { method: 'POST', path: '/api/v1/rfq', json: {} })).rejects.toThrow(/proposeTool/)
+    await expect(run.scriptedCall('compare_quotes', { method: 'GET', path: '/api/v1/rfq/r1' })).rejects.toBeInstanceOf(ToolOutOfScopeError)
+    for (const p of ['/api/v1/checkout', '/api/v1/checkout?x=1', '/api/v1/payments/p1', '/api/v1/admin/payouts', '/api/v1/orders/o1/transition', '/api/v1/orders/o1/refunds', 'http://evil/api/v1/rfq']) {
+      await expect(run.scriptedCall('draft_rfq', { method: 'POST', path: p, json: {} })).rejects.toThrow(/refused/)
+    }
+    await expect(run.scriptedCall('place_order', { method: 'POST', path: '/api/v1/checkout', json: {} })).rejects.toBeInstanceOf(ToolOutOfScopeError)
+    expect(seen).toEqual([])
+  })
+})

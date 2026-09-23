@@ -27,6 +27,8 @@ export function stubSupportIntent(text: string, locale: SupportLocale, orderNumb
   if (/(payment|paid|charged)/.test(t)) return { ...base, intent: 'payment_status', order_ref: orderRef ?? 'latest' }
   if (/(my quote|quotation|kotation|accepted my)/.test(t)) return { ...base, intent: 'quote_status', as_role: 'provider', rfq_ref: 'latest' }
   if (/(request|rfq|quotes did|any quotes)/.test(t)) return { ...base, intent: 'rfq_status', rfq_ref: 'latest' }
+  // S3.1 — someone describing work they need (the procurement entry point); after every status / how-to rule above
+  if (/(i need|we need|need a |looking for|require a|want a |want to get|chahiye|चाहिए|kavali|కావాలి|vendum|வேண்டும்)/.test(t) && !orderRef) return { ...base, intent: 'new_need', as_role: 'buyer' }
   if (orderRef) return { ...base, intent: 'order_status', order_ref: orderRef }
   if (/^(hi|hello|hey|namaste|good (morning|evening)|vanakkam|namaskaram)\b/.test(t.trim())) return { ...base, intent: 'greeting' }
   return base

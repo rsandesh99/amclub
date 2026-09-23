@@ -272,7 +272,7 @@ function supportTurnAgent(deps: SupportRuntimeDeps, settings: { escalateAfterTur
           classify: async (parts) =>
             run.callModel<SupportIntentOutput>({
               taskClass: 'support_intent',
-              prompt: getPrompt('support_intent', 'v1'),
+              prompt: getPrompt('support_intent', 'v2'),
               schema: supportIntentSchema,
               parts,
               temperature: 0,
