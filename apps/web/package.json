@@ -17,6 +17,7 @@
     "mart:static": "tsx scripts/verify-mart-static-inert.ts",
     "i18n:coverage": "tsx scripts/i18n-coverage.ts",
     "i18n:promote": "tsx scripts/i18n-promote.ts",
+    "voice:eval": "tsx scripts/voice-eval.ts",
     "agents:verify": "tsx scripts/verify-agents.ts",
     "trust:verify": "tsx scripts/verify-trust.ts",
     "whatsapp:verify": "tsx scripts/verify-whatsapp.ts",

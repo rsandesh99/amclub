@@ -2267,7 +2267,12 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 - **FR-14.6.** `/admin/dev/ui` links the same gallery in all four languages and shows a long-label strip (buttons size to their label; only names truncate, full text on hover / focus); its own strings are now in te / ta.
 - **Events.** `locale_changed { from, to }` from the header switcher and the gateway (web) and the mobile language setting (`platform: 'android'`).
 - **Rig** `e14`: te drafts stay dark with the flag off (English fallback), category names carry te / ta and render on `/te` and `/ta` pages.
-- **E14b.** Notification templates as the `notify` namespace (into the gate), N32b provider content translation (dark), voice-language eval gates (FR-14.5).
+- **E14b / E14c.** Below.
+
+**As built (E14b: notification copy in the gate, voice search one language at a time).**
+- **Notifications (FR-14.1).** The buyer / provider notification copy (order lifecycle, milestones, auto-cancel / auto-accept, disputes, quotes, RFQ expiry, clarifications, quote and order messages, payouts, duplicate payments) is the `notify` namespace of the message files; `lib/i18n/notify.ts` `notifyText(key, values)` builds the stored `{ en, hi, te?, ta? }` map with next-intl's translator. en / hi text is unchanged; `te` / `ta` are carried only when live, or drafted while `EXP_V3_LOCALES` covers `notify` — otherwise absent, so the reader gets English. `notify` is in the buying-path gate (68 te / ta drafts). Ops-only notices (payout dossier, dispute triage, the ops statement ping) stay en / hi.
+- **FR-14.5 (N5).** Shared `voice-languages.ts`: nine candidate languages; `voiceLanguageAllowed` = listed in `agent_settings.voice_search_languages` AND a recorded eval that passes (`voiceEvalPasses`: current `VOICE_EVAL_VERSION`, ≥ 50 queries, WER ≤ 20 %, right category ≥ 85 %; `wordErrorRate` is word-level edit distance over the reference). The catalog mic (`voice-parse` mode=query) answers a transcribed query only in an allowed language; otherwise `unsupported_language` with no parse call, and the mic says "type instead". `pnpm --filter @amclub/web voice:eval -- --lang te --set <jsonl> --token … [--record]` runs a native-speaker set through the app's own STT + parse and records pass or fail in `agent_settings.voice_language_evals` (a stub STT never records). Runbook: `docs/i18n/REVIEW.md` § Voice languages.
+- **Rig** `e14b`: notification en / hi from `notify.*`, te / ta absent with the flag off; voice: no eval / 49 queries / unlisted → "type instead", listed + passing → answered.
 
 ---
 

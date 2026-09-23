@@ -88,6 +88,7 @@ export * from './profile'
 // UI locale + provider spoken-language single sources of truth (S3)
 export * from './locales'
 export * from './i18n-text'
+export * from './voice-languages'
 
 // Agentic assistant contract: task classes → tiers, personas, tool allowlists,
 // confirm gates, event kinds (H0 groundwork, DESIGN.md §8.6 / ADR-008)

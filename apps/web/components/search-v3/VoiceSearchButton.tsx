@@ -66,10 +66,11 @@ export function VoiceSearchButton({ action }: { action: string }) {
         router.push(`/login?next=${encodeURIComponent(pathname)}` as '/login')
         return
       }
-      const d = (await res.json().catch(() => ({}))) as { query?: string; original_language?: string; category_slug?: string | null; service_slug?: string | null; error?: string }
+      const d = (await res.json().catch(() => ({}))) as { query?: string | null; original_language?: string; category_slug?: string | null; service_slug?: string | null; error?: string; unsupported_language?: boolean }
       if (!res.ok || !d.query) {
-        analytics.capture('search_voice_used', { device: 'web', ok: false, lang: null })
-        setError(res.status === 429 ? t('err_rate_limited') : d.error === 'transcription_empty' ? t('err_no_speech') : t('err_transcribe'))
+        analytics.capture('search_voice_used', { device: 'web', ok: false, lang: d.unsupported_language ? (d.original_language ?? null) : null, ...(d.unsupported_language ? { reason: 'language_unavailable' } : {}) })
+        // E14 FR-14.5 — a language whose eval has not passed: say so and let them type.
+        setError(res.status === 429 ? t('err_rate_limited') : d.unsupported_language ? t('err_language_unavailable') : d.error === 'transcription_empty' ? t('err_no_speech') : t('err_transcribe'))
         setPhase('idle')
         return
       }

@@ -15,7 +15,7 @@ reviewer or switched on deliberately with the flag.
 | `apps/web/messages/<locale>.json` | Live copy | Always (English fallback key by key) |
 | `apps/web/messages/drafts/<locale>.json` | Machine drafts awaiting review — buying-path namespaces only | Only while `EXP_V3_LOCALES=on`, and only for the namespaces in `EXP_V3_LOCALES_NAMESPACES` (comma list; unset = all buying-path namespaces). Live copy always wins over a draft. The flag honours `on` only (message files load without a user). |
 | `apps/web/messages/drafts/REVIEW_LOG.json` | One line per promotion: locale, namespace, key count, reviewer, date | — |
-| `apps/web/i18n/coverage.config.json` | The ONE list of buying-path namespaces | — |
+| `apps/web/i18n/coverage.config.json` | The ONE list of buying-path namespaces (incl. `notify`, the notification copy built by `lib/i18n/notify.ts`) | — |
 
 ## The gate (CI)
 
@@ -50,3 +50,20 @@ Money, dates and counts use Latin digits in every locale with Indian grouping
 (₹1,23,456): `numeralsTag(locale)` / `formatCount` in `packages/shared/src/i18n-text.ts`
 (unit-tested for en / hi / te / ta). Words stay in the locale's script. The drafts
 contain no Telugu or Tamil digits.
+
+## Voice languages (FR-14.5)
+
+The catalog mic answers a spoken query only in a language that is listed in
+`agent_settings.voice_search_languages` **and** has a passing eval in
+`agent_settings.voice_language_evals` (≥ 50 queries, WER ≤ 20 %, right
+category ≥ 85 %, current eval version — shared `voice-languages.ts`).
+
+1. Build a set: ≥ 50 real queries in the language (take the phrasing from F6's
+   `search_queries` sample), recorded by a native speaker, as JSON lines:
+   `{"audio": "te/001.webm", "duration_ms": 3200, "reference": "gst registration for my shop", "category": "company-registrations"}`.
+   `reference` is the English the pipeline should produce.
+2. Run it against the environment you will switch on, as a signed-in buyer:
+   `pnpm --filter @amclub/web voice:eval -- --lang te --set evals/voice/te.jsonl --token <access token> --base <url> --record`.
+   A pass or a fail is recorded; a keyless (stub) STT is never recorded.
+3. Add the language to `voice_search_languages` at `/admin/agents`. A failing
+   re-run switches it back off by itself.

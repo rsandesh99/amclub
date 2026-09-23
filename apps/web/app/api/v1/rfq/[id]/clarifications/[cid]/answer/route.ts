@@ -9,6 +9,7 @@ import { serverError } from '@/lib/api/errors'
 import { createNotificationsBulk } from '@/lib/notifications/create'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { matchedProviderUserIds, resolveClarificationParty, rfqAcceptsClarifications, toClarificationView } from '@/lib/rfq/clarifications'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 /**
  * S1.3 — the buyer answers ONE clarification, once. The answer is visible to
@@ -61,8 +62,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const audience = await matchedProviderUserIds(admin, rfqId)
   await createNotificationsBulk(admin, audience, {
     kind: 'rfq_answer',
-    titleI18n: { en: 'The buyer answered a question', hi: 'खरीदार ने एक सवाल का जवाब दिया' },
-    bodyI18n: { en: answer, hi: answer },
+    titleI18n: notifyText('rfq_answer.title'),
+    bodyI18n: sameText(answer),
     link: `/partner/rfqs/${rfqId}`,
     channels: ['whatsapp'],
   })

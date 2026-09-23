@@ -1,11 +1,12 @@
 {
-  "$comment": "E14 FR-14.1 — the ONE list of buying-path namespaces. `pnpm --filter @amclub/web i18n:coverage` fails when any key in these namespaces is missing in a locale below (live file or reviewed-pending draft); `--strict` counts drafts as missing (the launch gate). The drafts overlay (EXP_V3_LOCALES) reads the same list. Notification templates join as the `notify` namespace (E14b).",
+  "$comment": "E14 FR-14.1 — the ONE list of buying-path namespaces. `pnpm --filter @amclub/web i18n:coverage` fails when any key in these namespaces is missing in a locale below (live file or reviewed-pending draft); `--strict` counts drafts as missing (the launch gate). The drafts overlay (EXP_V3_LOCALES) reads the same list. Notification templates are the `notify` namespace (`lib/i18n/notify.ts`).",
   "locales": ["te", "ta"],
   "buyingPath": [
     "catalog", "services", "service_page", "search_v3", "filters_v3", "recent_v3", "trust", "packages_v3",
     "checkout", "checkout_v3", "coupons",
     "rfq", "rfq_v3", "voice", "compare_v3",
     "orders", "orders_v3", "order", "next_action", "reviews", "evidence", "invoices", "notifications",
-    "common", "errors", "shell", "nav_v3", "public_nav", "locale", "ui", "not_found", "error_boundary"
+    "common", "errors", "shell", "nav_v3", "public_nav", "locale", "ui", "not_found", "error_boundary",
+    "notify"
   ]
 }

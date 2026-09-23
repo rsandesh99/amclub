@@ -11,6 +11,7 @@ import { createNotification } from '@/lib/notifications/create'
 import { releaseDeferredRfq } from '@/lib/rfq/release'
 import { getRfqQualityHoldMinutes } from '@/lib/agent/rfq-quality'
 import { captureServerEvent } from '@/lib/analytics/server'
+import { notifyText } from '@/lib/i18n/notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,11 +74,8 @@ export async function GET(request: NextRequest) {
         await createNotification(admin, {
           userId: buyerUserId,
           kind: 'rfq_sent_as_is',
-          titleI18n: { en: 'We sent your request', hi: 'हमने आपका अनुरोध भेज दिया' },
-          bodyI18n: {
-            en: `We sent your request to ${matched} providers; you can still answer questions from them.`,
-            hi: `हमने आपका अनुरोध ${matched} प्रदाताओं को भेज दिया; आप अभी भी उनके सवालों के जवाब दे सकते हैं।`,
-          },
+          titleI18n: notifyText('rfq_sent_as_is.title'),
+          bodyI18n: notifyText('rfq_sent_as_is.body', { matched }),
           link: `/app/rfq/${row.id}`,
         })
         captureServerEvent(buyerUserId, 'rfq_quality_auto_released', { rfq_id: row.id, matched, hold_minutes: holdMinutes, role: 'msme' })

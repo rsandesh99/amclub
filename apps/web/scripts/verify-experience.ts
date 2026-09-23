@@ -11,7 +11,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, autofilledFields, quotePreview, type ActionItem, type GstinAutofill, type OrderStatus } from '@amclub/shared'
+import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, autofilledFields, quotePreview, VOICE_EVAL_VERSION, type ActionItem, type GstinAutofill, type OrderStatus } from '@amclub/shared'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -1514,6 +1514,64 @@ async function e14() {
   check('FR-14.2: a ta page shows the Tamil category name', ta.includes('வரி &amp; கணக்கியல்') || ta.includes('வரி & கணக்கியல்'))
 }
 
+async function e14b() {
+  console.log('\nE14b — notification copy from the notify namespace; voice search one language at a time')
+  // FR-14.1 — a notification built from `notify.*`: en + hi exactly as before, te / ta drafts absent while the flag is off.
+  const flagOn = (process.env['EXP_V3_LOCALES'] ?? '').trim().toLowerCase() === 'on'
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const buyer = await mkUser('e14bbuyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E14b Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  const pu = await mkUser('e14bprov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: pu.uid, legal_name: 'E14b Prov', display_name: 'E14b Prov', slug: `${tag.replace(/_/g, '-')}-e14bprov`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  const { data: r } = await admin.from('rfqs').insert({ msme_id: msme!.id, category_id: tax!.id, title: 'E14b GST returns', details: {}, status: 'open', fanout_at: new Date().toISOString(), expires_at: new Date(Date.now() + 48 * 3600e3).toISOString() }).select('id').single()
+  created.rfqIds.push(r!.id)
+  await admin.from('rfq_matches').insert({ rfq_id: r!.id, provider_id: pp!.id })
+  try {
+    const ask = await api(pu.token, `/api/v1/rfq/${r!.id}/clarifications`, { question: 'Which financial year are the returns for?' })
+    const { data: n } = await admin.from('notifications').select('title_i18n').eq('user_id', buyer.uid).eq('kind', 'rfq_question').maybeSingle()
+    const t = (n?.title_i18n ?? {}) as Record<string, string>
+    check('FR-14.1: notification copy comes from notify.* — en / hi unchanged', ask.ok && t['en'] === 'A provider asked a question' && t['hi'] === 'एक प्रदाता ने सवाल पूछा', JSON.stringify(t))
+    check(flagOn ? 'FR-14.1: with EXP_V3_LOCALES on, the te / ta drafts are carried' : 'FR-14.1: te / ta drafts are not carried while EXP_V3_LOCALES is off (readers get English)', flagOn ? !!t['te'] && !!t['ta'] : !('te' in t) && !('ta' in t))
+  } finally {
+    await admin.from('notifications').delete().eq('user_id', buyer.uid)
+    await admin.from('rfq_clarifications').delete().eq('rfq_id', r!.id)
+    await admin.from('rfq_matches').delete().eq('rfq_id', r!.id)
+  }
+
+  // FR-14.5 — the keyless STT stub reports te-IN: listed but no passing eval → "type instead"; a passing eval → answered.
+  // The voice route allows 3 calls a minute per user: two buyers, two calls each.
+  const buyer2 = await mkUser('e14bbuyer2')
+  const spoken = (who: { token: string } = buyer) => {
+    const fd = new FormData()
+    fd.append('audio', new Blob([new Uint8Array(2048)], { type: 'audio/webm' }), 'q.webm')
+    fd.append('duration_ms', '2500')
+    fd.append('mode', 'query')
+    return fetch(`${BASE}/api/v1/rfq/voice-parse`, { method: 'POST', headers: { Authorization: `Bearer ${who.token}` }, body: fd })
+  }
+  const restores: (() => Promise<void>)[] = []
+  try {
+    restores.push(await setSetting('voice_search_enabled', true))
+    restores.push(await setSetting('voice_search_languages', ['en', 'hi', 'te']))
+    restores.push(await setSetting('voice_language_evals', {}))
+    const noEval = (await (await spoken()).json()) as { query?: string | null; unsupported_language?: boolean; original_language?: string }
+    check('FR-14.5: a listed language with no eval is not answered ("type instead", no parse)', noEval.unsupported_language === true && !noEval.query && noEval.original_language === 'te-IN', JSON.stringify(noEval))
+    const good = { version: VOICE_EVAL_VERSION, n: 50, wer: 0.12, categoryAccuracy: 0.9, ranAt: new Date().toISOString() }
+    await setSetting('voice_language_evals', { te: { ...good, n: 49 } })
+    const short = (await (await spoken()).json()) as { unsupported_language?: boolean }
+    check('FR-14.5: an eval under 50 queries does not count', short.unsupported_language === true)
+    await setSetting('voice_language_evals', { te: good })
+    const ok = (await (await spoken(buyer2)).json()) as { query?: string | null; unsupported_language?: boolean }
+    check('FR-14.5: listed + a passing eval → the mic answers', !ok.unsupported_language && typeof ok.query === 'string' && ok.query.length > 0, JSON.stringify(ok))
+    await setSetting('voice_search_languages', ['en', 'hi'])
+    const unlisted = (await (await spoken(buyer2)).json()) as { unsupported_language?: boolean }
+    check('FR-14.5: a passing eval alone is not enough — the language must be listed', unlisted.unsupported_language === true)
+  } finally {
+    for (const restore of restores.reverse()) await restore()
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1536,6 +1594,7 @@ async function main() {
     await e13()
     await e13c()
     await e14()
+    await e14b()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

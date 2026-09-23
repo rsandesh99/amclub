@@ -16,6 +16,7 @@ import { recordAiDecision } from '@/lib/mart/events'
 import { recordPriceBookEntry } from '@/lib/agent/price-book'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { AGENT_ENABLED } from '@/lib/flags'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 const bodySchema = quoteSchema.omit({ rfq_id: true })
 
@@ -219,8 +220,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await createNotification(admin, {
       userId: rfq.buyerUserId,
       kind: 'rfq_new_quote',
-      titleI18n: { en: 'New quote received', hi: 'नया कोटेशन प्राप्त हुआ' },
-      bodyI18n: { en: rfq.title, hi: rfq.title },
+      titleI18n: notifyText('new_quote.title'),
+      bodyI18n: sameText(rfq.title),
       link: `/app/rfq/${rfqId}`,
       channels: ['sms'],
     })
@@ -320,8 +321,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     await createNotification(admin, {
       userId: rfq.buyerUserId,
       kind: 'quote_revised',
-      titleI18n: { en: 'A quote was updated', hi: 'एक कोटेशन अपडेट हुआ' },
-      bodyI18n: { en: rfq.title, hi: rfq.title },
+      titleI18n: notifyText('quote_revised.title'),
+      bodyI18n: sameText(rfq.title),
       link: `/app/rfq/${rfqId}`,
       channels: ['sms'],
     })

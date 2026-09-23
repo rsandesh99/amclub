@@ -10,6 +10,7 @@ import { addQuoteEvent } from '@/lib/rfq/events'
 import { composeDeclineMessage, providerMessageLocale } from '@/lib/rfq/decline'
 import { createNotification } from '@/lib/notifications/create'
 import { captureServerEvent } from '@/lib/analytics/server'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 /**
  * POST /api/v1/rfq/[id]/quote/[quoteId]/decline (S1.2 §4) — the first
@@ -76,8 +77,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await createNotification(admin, {
       userId: providerUserId,
       kind: 'quote_declined',
-      titleI18n: { en: 'An update on your quote', hi: 'आपके कोटेशन पर एक अपडेट' },
-      bodyI18n: { en: composed.message, hi: composed.message },
+      titleI18n: notifyText('quote_declined.title'),
+      bodyI18n: sameText(composed.message),
       link: `/partner/rfqs/${rfqId}`,
       channels: ['whatsapp'],
     })

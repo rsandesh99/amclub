@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { createNotification } from '@/lib/notifications/create'
 import { serverError } from '@/lib/api/errors'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 /** Resolve the quote thread + verify the caller is a party (buyer or the quote's
  *  provider). Returns the conversation context + the counterparty user id. */
@@ -114,8 +115,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   await createNotification(admin, {
     userId: thread.counterpartyUserId,
     kind: 'quote_message',
-    titleI18n: { en: 'New message on a quote', hi: 'कोटेशन पर नया संदेश' },
-    bodyI18n: { en: thread.rfqTitle, hi: thread.rfqTitle },
+    titleI18n: notifyText('quote_message.title'),
+    bodyI18n: sameText(thread.rfqTitle),
     // Role-aware deep link: the provider's RFQ page for a provider, the buyer's compare view for a buyer.
     link: thread.counterpartyRole === 'provider' ? `/partner/rfqs/${thread.rfqId}` : `/app/rfq/${thread.rfqId}`,
   })

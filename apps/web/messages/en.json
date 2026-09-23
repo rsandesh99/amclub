@@ -2086,7 +2086,8 @@
     "clarify_skip": "Skip",
     "clarify_skip_back": "Back",
     "clarify_answered_note": "Thanks — the form was updated with your answer.",
-    "clarify_skipped_note": "Skipped — check the form and fill anything missing."
+    "clarify_skipped_note": "Skipped — check the form and fill anything missing.",
+    "err_language_unavailable": "Voice search isn't available in this language yet — please type your search."
   },
   "legal": {
     "help_link": "Help & support",
@@ -3568,5 +3569,150 @@
     "msg_placeholder": "Write a message…",
     "msg_attach": "Attach order documents (up to {max})",
     "msg_send": "Send"
+  },
+  "notify": {
+    "your_request": "your request",
+    "a_request": "a request",
+    "order_placed_provider": {
+      "title": "New order received",
+      "body": "Order {ref} is awaiting your acceptance."
+    },
+    "order_placed_buyer": {
+      "title": "Payment received — order placed",
+      "body": "Your order {ref} is placed."
+    },
+    "order_accepted": {
+      "title": "Provider accepted your order",
+      "body": "Submit your requirements to start {ref}."
+    },
+    "requirements_submitted": {
+      "title": "Requirements submitted",
+      "body": "The buyer submitted requirements for {ref}."
+    },
+    "order_started": {
+      "title": "Work has started",
+      "body": "Your provider started work on {ref}."
+    },
+    "order_delivered": {
+      "title": "Delivery ready for review",
+      "body": "Review and accept the delivery for {ref}."
+    },
+    "order_completed": {
+      "title": "Order completed",
+      "body": "{ref} is complete — your payout is scheduled."
+    },
+    "revision_requested": {
+      "title": "Revision requested",
+      "body": "The buyer requested a revision on {ref}."
+    },
+    "revision_in_progress": {
+      "title": "Revision in progress",
+      "body": "Your provider is working on the revision for {ref}."
+    },
+    "order_cancelled": {
+      "title": "Order cancelled by buyer",
+      "body": "{ref} was cancelled by the buyer."
+    },
+    "order_disputed": {
+      "title": "A dispute was opened",
+      "body": "A dispute was opened on {ref}. Our team will review it."
+    },
+    "providers_unavailable": {
+      "title": "An update on your request",
+      "body": "{unavailable} of {total} providers could not take up \"{title}\". The others can still quote — you can also rebroadcast to reach more."
+    },
+    "milestone": {
+      "title": "Update: {label}",
+      "body": "{ref}: {label}."
+    },
+    "milestone_label": {
+      "accepted": "Provider accepted",
+      "site_or_materials": "Reached site / materials ready",
+      "in_progress": "Work in progress",
+      "work_complete": "Work complete"
+    },
+    "review_prompt": {
+      "title": "How was your experience?",
+      "body": "Leave a review for {ref}."
+    },
+    "auto_cancelled_buyer": {
+      "title": "Order cancelled & refunded",
+      "body": "{ref} was not accepted in time and has been fully refunded."
+    },
+    "auto_cancelled_provider": {
+      "title": "Order auto-cancelled",
+      "body": "{ref} was cancelled because it was not accepted within 24 hours. The buyer has been refunded in full."
+    },
+    "auto_completed_provider": {
+      "title": "Order auto-completed",
+      "body": "{ref} was auto-accepted after 72h — payout scheduled."
+    },
+    "auto_accepted_buyer": {
+      "title": "Delivery auto-accepted",
+      "body": "The delivery for {ref} was accepted automatically after 72 hours without a response, and the order is complete."
+    },
+    "quote_withdrawn": {
+      "title": "A provider withdrew their quote",
+      "body": "A quote on \"{title}\" is no longer available. Your other quotes are unaffected."
+    },
+    "rfq_expired": {
+      "title": "Your request expired",
+      "body": "\"{title}\" closed without an accepted quote. Post it again to reach providers afresh."
+    },
+    "quote_expired": {
+      "title": "Your quote expired",
+      "body": "\"{title}\" closed before the buyer chose a quote, so your quote has expired."
+    },
+    "payout_paid": {
+      "title": "Payout sent",
+      "body": "₹{amount} has been transferred to your bank account."
+    },
+    "review_reply": {
+      "title": "The provider replied to your review",
+      "body": "See the provider’s response to your review."
+    },
+    "dispute_statement": {
+      "title": "{who, select, buyer {The buyer} other {The provider}} {edited, select, yes {updated their} other {submitted a}} statement on {ref}",
+      "body": "You can read it on the order and add or edit your own statement while the dispute is open."
+    },
+    "rfq_matched": {
+      "title": "New request matched to you"
+    },
+    "quote_accepted": {
+      "title": "Your quote was accepted"
+    },
+    "quote_lost": {
+      "title": "A request you quoted on was awarded to another provider"
+    },
+    "duplicate_payment": {
+      "title": "We noticed a duplicate payment",
+      "body_refunded": "You paid twice for the same request. We cancelled order {ref} and refunded it in full; your bank usually shows it within 5–7 working days. Your other order stands.",
+      "body_pending": "You paid twice for the same request. Our team will refund order {ref} in full; your other order stands."
+    },
+    "new_quote": {
+      "title": "New quote received"
+    },
+    "quote_revised": {
+      "title": "A quote was updated"
+    },
+    "quote_declined": {
+      "title": "An update on your quote"
+    },
+    "rfq_question": {
+      "title": "A provider asked a question"
+    },
+    "rfq_answer": {
+      "title": "The buyer answered a question"
+    },
+    "quote_message": {
+      "title": "New message on a quote"
+    },
+    "order_message": {
+      "title": "New message on order {ref}"
+    },
+    "rfq_sent_as_is": {
+      "title": "We sent your request",
+      "body": "We sent your request to {matched} providers; you can still answer questions from them."
+    }
   }
 }

@@ -3,6 +3,7 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotificationsBulk } from '@/lib/notifications/create'
 import { RFQ_GOODS_LIST_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { fanoutGoodsRfq } from '@/lib/mart/goods-fanout'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -63,8 +64,8 @@ export async function fanoutRfq(admin: Admin, rfqId: string): Promise<{ matched:
 
   await createNotificationsBulk(admin, providers.map((p) => p.user_id), {
     kind: 'rfq_matched',
-    titleI18n: { en: 'New request matched to you', hi: 'आपके लिए नया अनुरोध' },
-    bodyI18n: { en: rfq.title, hi: rfq.title },
+    titleI18n: notifyText('rfq_matched.title'),
+    bodyI18n: sameText(rfq.title),
     link: `/partner/rfqs/${rfqId}`,
     channels: ['sms', 'whatsapp'],
   })

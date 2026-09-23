@@ -7,6 +7,7 @@ import { addEvent, processRefund } from '@/lib/orders/transitions'
 import { writeAudit } from '@/lib/audit/log'
 import { addQuoteEvent, addQuoteEvents } from './events'
 import { labelLostQuotes } from './loss-labels'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -123,8 +124,8 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     await createNotification(admin, {
       userId: winner.user_id,
       kind: 'quote_accepted',
-      titleI18n: { en: 'Your quote was accepted', hi: 'आपका कोटेशन स्वीकार किया गया' },
-      bodyI18n: { en: claimed.title, hi: claimed.title },
+      titleI18n: notifyText('quote_accepted.title'),
+      bodyI18n: sameText(claimed.title),
       link: '/partner/orders',
       channels: ['sms', 'whatsapp'],
     })
@@ -139,11 +140,8 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     const userIds = (provs ?? []).map((p) => p.user_id).filter(Boolean) as string[]
     await createNotificationsBulk(admin, userIds, {
       kind: 'quote_declined',
-      titleI18n: {
-        en: 'A request you quoted on was awarded to another provider',
-        hi: 'जिस अनुरोध पर आपने कोटेशन दिया वह किसी अन्य प्रदाता को दिया गया',
-      },
-      bodyI18n: { en: claimed.title, hi: claimed.title },
+      titleI18n: notifyText('quote_lost.title'),
+      bodyI18n: sameText(claimed.title),
       link: '/partner/rfqs',
     })
   }
@@ -227,16 +225,8 @@ async function handleDuplicateRfqOrder(admin: Admin, orderId: string, rfqId: str
     await createNotification(admin, {
       userId: msme.user_id as string,
       kind: 'order_duplicate_payment',
-      titleI18n: { en: 'We noticed a duplicate payment', hi: 'हमें एक दोहरा भुगतान दिखा' },
-      bodyI18n: refunded
-        ? {
-            en: `You paid twice for the same request. We cancelled order ${order.order_number} and refunded it in full; your bank usually shows it within 5–7 working days. Your other order stands.`,
-            hi: `आपने एक ही अनुरोध के लिए दो बार भुगतान किया। हमने ऑर्डर ${order.order_number} रद्द करके पूरी राशि वापस कर दी है; आपका बैंक इसे आमतौर पर 5–7 कार्य दिवसों में दिखाता है। आपका दूसरा ऑर्डर जारी है।`,
-          }
-        : {
-            en: `You paid twice for the same request. Our team will refund order ${order.order_number} in full; your other order stands.`,
-            hi: `आपने एक ही अनुरोध के लिए दो बार भुगतान किया। हमारी टीम ऑर्डर ${order.order_number} की पूरी राशि वापस करेगी; आपका दूसरा ऑर्डर जारी है।`,
-          },
+      titleI18n: notifyText('duplicate_payment.title'),
+      bodyI18n: notifyText(refunded ? 'duplicate_payment.body_refunded' : 'duplicate_payment.body_pending', { ref: String(order.order_number) }),
       link: `/app/orders/${orderId}`,
       channels: ['email', 'sms'],
     })

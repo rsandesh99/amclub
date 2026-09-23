@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VOICE_SEARCH_LANGUAGES, voiceLanguageEvalsSchema } from './voice-languages'
 
 /**
  * Agent config registry (ADR-009 §7, ARCHITECTURE.md §8). Every key the runtime
@@ -173,6 +174,17 @@ export const AGENT_SETTING_DEFS = {
     schema: z.boolean(),
     default: false,
     hint: 'E2b / N5: the mic in the catalog search field (speech → an English query + the detected language, the Phase 8b pipeline in mode=query). Paid STT + one parse per use; signed-in buyers only. Turn on only after the 30-query eval (te/hi/en, code-mixed) finds the right category ≥ 85 %.',
+  },
+  // ── Experience v3 E14 — voice search, one language at a time (FR-14.5) ──
+  voice_search_languages: {
+    schema: z.array(z.enum(VOICE_SEARCH_LANGUAGES)).max(VOICE_SEARCH_LANGUAGES.length),
+    default: ['en', 'hi', 'te'],
+    hint: 'E14 / FR-14.5: the languages the catalog mic may answer in. A listed language still stays off until its recorded eval passes (voice_language_evals: ≥ 50 queries, WER ≤ 20 %, right category ≥ 85 %); an unlisted or failing language gets "type instead".',
+  },
+  voice_language_evals: {
+    schema: voiceLanguageEvalsSchema,
+    default: {},
+    hint: 'E14 / FR-14.5: the last eval per language, written by `pnpm --filter @amclub/web voice:eval -- --lang <code> --set <file> --record`. Edit only to clear a result; a hand-typed pass does not count unless it carries the current eval version.',
   },
   // ── Experience v3 E6 — document suggestions on the requirement form (FR-6.3) ──
   document_suggestions_enabled: {

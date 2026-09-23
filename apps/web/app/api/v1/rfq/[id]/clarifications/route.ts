@@ -15,6 +15,7 @@ import {
   rfqAcceptsClarifications,
   toClarificationView,
 } from '@/lib/rfq/clarifications'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 /**
  * S1.3 — RFQ clarification thread (RFQ-level, visible to every matched provider).
@@ -82,8 +83,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await createNotification(admin, {
       userId: party.rfq.buyerUserId,
       kind: 'rfq_question',
-      titleI18n: { en: 'A provider asked a question', hi: 'एक प्रदाता ने सवाल पूछा' },
-      bodyI18n: { en: question, hi: question },
+      titleI18n: notifyText('rfq_question.title'),
+      bodyI18n: sameText(question),
       link: `/app/rfq/${rfqId}`,
       channels: ['whatsapp'],
     })
