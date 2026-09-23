@@ -23,6 +23,9 @@ Deferred / notes:
   disposable Supabase" as required (repository owner).
 - The CI database carries the staged Mart migrations, so it is a superset of
   production; staged-column leaks are still caught by `mart:static`.
+- Rigs run in ~2 s on the local stack, so a probe that spends a user's
+  rate-limit budget (the `adminMutation` hammer in `verify-authz`) must not share
+  that user with later calls in the same minute. Mint a fresh fixture.
 
 ## ADR-014 — dispute settlement safety, H3 + H4 (2026-09-23)
 
@@ -35,14 +38,12 @@ second manual refund (409 `refund_exists`), and every refund amount is read back
 finished after 10 minutes.
 
 Deferred / notes:
-- **Run the new rig criteria.** `verify-phase7.ts` criteria 3b and 3c are written
-  and typechecked but not yet run. They need a test database: the disposable-DB
-  CI harness (S3.3 prompt H1) or a test project, never production.
+- **Rig criteria run in CI.** `verify-phase7.ts` 3b–3e and `verify-rfq.ts` 4b run
+  in the H1 money-rigs job on every PR (first green run 2026-09-23).
 - **H2 landed** (ADR-014 §6): the missing `→ disputed` edges, and a post-completion
-  window (`dispute_window_days`, default 7) shown to the buyer. Rig criteria 3d
-  and 3e are not yet run.
+  window (`dispute_window_days`, default 7) shown to the buyer.
 - **H6 landed** (ADR-014 §7): `placed → cancelled_duplicate → refunded`, settled at
-  detection. Rig criterion 4b is not yet run. Note: the benchmark inputs
+  detection. Note: the benchmark inputs
   (0046 `benchmark_inputs`) exclude `refunded` but not `cancelled_duplicate`; this
   only matters if a duplicate's refund fails and the order stays
   `cancelled_duplicate`. Add it to that exclusion list with the next benchmarks

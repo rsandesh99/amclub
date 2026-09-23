@@ -63,8 +63,8 @@ Goods quotes are untouched: they state a GST slab and HSN, and use their own mat
   `taxable + gst = gross`, integer paise, GST within 1 paisa of the exclusive
   formula).
 - `verify-rfq.ts` criterion **3c** (checkout for the rig's GST-included quote
-  charges exactly its price). It needs a test database, like the ADR-014
-  criteria.
+  charges exactly its price). It runs in the `Money rigs · disposable Supabase`
+  CI job (H1, PR #25); first green run 2026-09-23, `verify-rfq` 15/15.
 
 ## Rollback
 

@@ -183,18 +183,22 @@ waited for a manual refund, and if nobody acted, the 24-hour cron cancelled it a
 - `verify-phase7.ts` gains criteria **3b** (dispute on an already-paid order: partial
   refused, release moves nothing, same transfer id, no reschedule) and **3c** (earlier
   refund: second manual refund and refunding resolution refused, release closes it).
-  **Not yet run.** It needs the disposable-DB CI harness (S3.3 prompt, H1) or a test
-  project, never production.
 
 **H2 (§6):** shared tests (`dispute-window.test.ts`: edges, window boundaries,
 fail-safe, setting bounds) plus `verify-phase7.ts` criteria **3d** (dispute from
 `requirements_submitted` accepted) and **3e** (deadline exposed; a dispute past the
-window is refused). The rig criteria need a test database.
+window is refused).
 
 **H6 (§7):** shared `order-duplicate.test.ts` (edges, not disputable, no payout,
 full refund from `placed`) plus `verify-rfq.ts` criterion **4b** (a duplicate paid
 session on the accepted RFQ ends `refunded` with one full refund row; the winner
-stands). The rig needs a test database.
+stands).
+
+**Rig run (H1, PR #25):** the `Money rigs · disposable Supabase` CI job runs these
+criteria on every PR against a throwaway Supabase stack. First green run on
+2026-09-23: `verify-phase7` 10/10 (3b–3e included), `verify-rfq` 15/15 (4b
+included), with the money loop, both webhook kill-tests and `verify-authz` green
+alongside. No production data was used.
 
 ## Rollback
 
