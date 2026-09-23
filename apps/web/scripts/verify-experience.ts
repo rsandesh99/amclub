@@ -1117,9 +1117,17 @@ async function e11a() {
     check('FR-11.3: with the D2 badge off, "verified" shows nothing', ids(noBadge).length === 0 && !noBadge.includes('data-verified="1"'))
     const restore = await setSetting('buyer_verified_badge_enabled', true)
     try {
+      // r1 and r2 are both this buyer's (identity verified + a paid order) — the filter keeps both.
       const badge = await inbox('?verified=1')
-      check('FR-11.3: badge on → the verified buyer’s request, as a boolean only (no buyer name or id)', ids(badge).join() === r1 && badge.includes('data-verified="1"') && !badge.includes('Rao Textiles Secret Name') && !badge.includes(msme!.id))
-    } finally { await restore() }
+      check('FR-11.3: badge on → the verified buyer’s requests, as a boolean only (no buyer name or id)', ids(badge).join() === [r1, r2].join() && badge.includes('data-verified="1"') && !badge.includes('Rao Textiles Secret Name') && !badge.includes(msme!.id), ids(badge).join())
+      // Without a verified identity the same buyer (still with a paid order) is not "verified".
+      await admin.from('msme_profiles').update({ udyam_verified: false }).eq('id', msme!.id)
+      const unverified = await inbox('?verified=1')
+      check('FR-11.3: the badge needs a verified identity — a paid order alone is not enough', ids(unverified).length === 0 && !unverified.includes('data-verified="1"'), ids(unverified).join())
+    } finally {
+      await admin.from('msme_profiles').update({ udyam_verified: true }).eq('id', msme!.id)
+      await restore()
+    }
 
     // FR-11.1 Today.
     const { data: q2 } = await admin.from('quotes').insert({ rfq_id: r2, provider_id: pp!.id, price_paise: 5000_00, delivery_days: 5, scope: 'E11 fixture quote scope text' }).select('id').single()
