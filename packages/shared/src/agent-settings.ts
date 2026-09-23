@@ -234,6 +234,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E11c / N30 (D9): /partner/tenders — tender ALERTS matched by category + state for verified government-licensing providers (Save / Not relevant; the official portal link) and the reviewed GeM checklist. No bidding, applying or submitting inside AMClub. Turn on only after D9 and the mini-PRD settle the data source and its licence.',
   },
+  // ── Experience v3 E12a — package add-ons (ADR 019; money) ──
+  addons_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E12a / ADR 019: providers add up to 3 priced extras per package ("+₹500 · 1 day faster"); buyers pick them in the buy box and checkout (one computeOrderAmounts on package + add-ons, frozen on the session, one invoice line each). Off: the editor and buy box show nothing and checkout refuses addonIds (409 addon_changed). Apply migration 0065 first.',
+  },
   // ── Experience v3 E8b — messaging on a paid order (FR-8.4, N24); also needs the `orders` experience ──
   order_messaging_enabled: {
     schema: z.boolean(),

@@ -133,7 +133,8 @@
     "err_rfq_already_paid": "You have already paid for a quote on this request. You will find the order under My orders.",
     "err_razorpay_load_failed": "The payment window could not load. Check your connection and try again — you have not been charged.",
     "err_network": "No connection. Check your internet and try again.",
-    "err_rate_limited": "Too many attempts. Please wait a minute and try again."
+    "err_rate_limited": "Too many attempts. Please wait a minute and try again.",
+    "err_addon_changed": "An add-on changed since you chose it. Go back to the package to see the new total."
   },
   "orders": {
     "nudge_button": "Send a reminder",
@@ -1435,7 +1436,8 @@
     "coupon_not_started": "This coupon isn't active yet.",
     "coupon_expired": "This coupon has expired.",
     "coupon_usage_exceeded": "This coupon has reached its usage limit.",
-    "coupon_category_mismatch": "This coupon doesn't apply to this service."
+    "coupon_category_mismatch": "This coupon doesn't apply to this service.",
+    "addon_changed": "An add-on changed. Go back to the package to see the new total."
   },
   "admin_support": {
     "title": "Support queue",
@@ -3073,7 +3075,15 @@
     "refund_line": "Full refund before work starts · 50 % while in progress · disputes after delivery.",
     "refund_policy_link": "Refund policy",
     "govt_line": "Approval depends on the government portal. We can't guarantee it, and your provider's clock pauses while the portal is processing.",
-    "govt_link": "How this works"
+    "govt_link": "How this works",
+    "addons_title": "Add-ons",
+    "addon_price": "+{price}",
+    "addon_faster": "{days, plural, one {# day faster} other {# days faster}}",
+    "addon_slower": "{days, plural, one {# extra day} other {# extra days}}",
+    "addon_revisions": "{count, plural, one {+# revision} other {+# revisions}}",
+    "addons_updating": "Updating the total…",
+    "addons_changed": "An add-on changed since the page loaded. Choose again to see the new total.",
+    "addons_failed": "Couldn't update the total. Please try again."
   },
   "tier_editor": {
     "title": "Offer tiers",
@@ -3267,7 +3277,9 @@
     "business_name": "Business name",
     "continue_to_pay": "Continue to payment",
     "err_details": "Enter your name and business name.",
-    "err_save": "Couldn't save your details. Please try again."
+    "err_save": "Couldn't save your details. Please try again.",
+    "addon_included": "Includes: {label}",
+    "addons_dropped": "An add-on you picked is no longer offered, so it isn't included. The total below is what you'll pay."
   },
   "rfq_v3": {
     "or_type": "or type",
@@ -3580,7 +3592,8 @@
     "msg_label": "Your message",
     "msg_placeholder": "Write a message…",
     "msg_attach": "Attach order documents (up to {max})",
-    "msg_send": "Send"
+    "msg_send": "Send",
+    "addons_title": "Add-ons bought"
   },
   "notify": {
     "your_request": "your request",
@@ -3764,5 +3777,29 @@
     "col_predicted": "Predicted",
     "col_resolved": "Resolved",
     "col_error": "Mean error"
+  },
+  "addons": {
+    "editor_title": "Add-ons",
+    "editor_body": "Offer up to 3 priced extras on this package, like faster delivery or one more revision. You set every price; buyers pick them at checkout. Prices are before GST.",
+    "active_count": "{count} of {max} active",
+    "label": "What the buyer gets",
+    "label_hint": "e.g. Delivered 2 days faster",
+    "label_hi": "Same in Hindi (optional)",
+    "price": "Price in ₹ (before GST)",
+    "days": "Change to delivery time (days)",
+    "days_hint": "Use a minus sign for faster, e.g. -2",
+    "revisions": "Extra revisions",
+    "add": "Add this add-on",
+    "pause": "Pause",
+    "resume": "Resume",
+    "remove": "Remove",
+    "paused": "Paused",
+    "price_line": "+{price}",
+    "faster": "{days, plural, one {# day faster} other {# days faster}}",
+    "slower": "{days, plural, one {# extra day} other {# extra days}}",
+    "more_revisions": "{count, plural, one {+# revision} other {+# revisions}}",
+    "err_fields": "Add a short description and a price above ₹0.",
+    "err_limit": "You can have 3 active add-ons. Pause one first.",
+    "err_save": "Couldn't save. Please try again."
   }
 }

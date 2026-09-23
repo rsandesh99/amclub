@@ -395,6 +395,13 @@ const MANIFEST: Entry[] = [
     tables: [],
     note: 'ADR 018 security hotfix: EXECUTE on materialize_order / claim_quote_slot / release_quote_slot / increment_coupon_usage for service_role only; no client INSERT/UPDATE/DELETE on orders, checkout_sessions, payments, payouts, refunds, invoices, disputes, order_documents, rfqs, quotes, rfq_matches, coupons, coupon_redemptions, provider_bank_accounts, reviews',
   },
+  {
+    file: '0065_package_addons.sql',
+    tables: ['package_addons'],
+    functions: ['package_addons_limit', 'checkout_sessions_copy_addons'],
+    triggers: [['package_addons', 'package_addons_limit'], ['checkout_sessions', 'checkout_sessions_copy_addons']],
+    note: 'E12a / ADR 019: package_addons (<= 3 active, public reads active of active packages, provider reads own, no client writes); checkout_sessions.addons + orders.addons snapshot, copied by trigger when materialize_order links the session',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

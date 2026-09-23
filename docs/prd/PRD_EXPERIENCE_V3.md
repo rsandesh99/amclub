@@ -2065,6 +2065,49 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.5 · I 1 · C 0.6 · E 2 → **0.15**.
 
+**As built (E12a: ADR 019, migration 0065; dark behind `addons_enabled`).**
+- **Prerequisite (ADR 018, migration 0064).** Checkout sessions and orders became server-written only before this landed, so the frozen snapshot cannot be rewritten from the client.
+- **Data.**
+  - `package_addons`: ≤ 3 active per package (the trigger `package_addons_limit` locks the package row; shared `packageAddonInputSchema`). Anyone reads the active add-ons of an active package; the provider reads their own. No client writes.
+  - `checkout_sessions.addons` / `orders.addons`: the snapshot `[{ id, label, pricePaise, daysDelta, extraRevisions }]`.
+  - The trigger `checkout_sessions_copy_addons` copies the snapshot onto the order when `materialize_order` links the session. Neither version of the function is redefined, and a replay copies nothing.
+- **One rule.** Shared `packageCharge`:
+  - subtotal = package + Σ add-ons;
+  - the package % discount applies to the package price only;
+  - a coupon applies to the whole pre-GST subtotal (`couponBasePaise`);
+  - one `computeOrderAmounts` call, byte-identical to before when there are no add-ons (unit-pinned);
+  - delivery = max(1, days + Σ delta); revisions = count + Σ extras.
+- **Where the rule runs.** Checkout's package branch, `POST /api/v1/checkout/preview` (public, per-IP limited, 404 while off), the coupon route (`addonIds`) and the v3 checkout page all call it.
+- **Checkout.**
+  - `addonIds[]` covers the package branch only.
+  - An id that isn't an active add-on of this package, or any add-on while the switch is off → **409 `addon_changed`**, with no session.
+  - A resumed session with a different selection → 409. The web idempotency key includes the selection.
+  - Anything else the client sends about prices is never read.
+- **Invoices.** The buyer invoice has the package line plus one line per add-on at the same GST rate. `totals.lines` + `discount_paise` are recorded, and PDF labels are made safe for the standard font.
+- **UI.**
+  - Provider: an "Add-ons" editor on the listing edit page (own package only): create, pause / resume, remove. It is written through `/api/v1/partner/packages/[id]/addons[/…]` on the service role; delegated tokens are refused.
+  - Buyer:
+    - The v3 buy box shows `AddOnList` ("+₹500 · 2 days faster"). Ticking one asks the preview for the new total, delivery and revisions, and Buy now carries `?addons=`.
+    - Checkout re-reads and re-prices the selection, lists "Includes: …", and drops anything no longer offered with a note.
+    - The order overview lists "Add-ons bought" for both parties.
+- **Disputes / payouts.** Unchanged (settled on the order total).
+- **Mobile.** Mobile Buy now sends no add-ons and is unchanged.
+- **Tests.**
+  - Shared unit tests (`addons`).
+  - `verify-money-loop` E12a:
+    - preview = shared rule = checkout amount, with tampered client prices ignored;
+    - a replayed capture (simulate and `materialize_order`) creates nothing;
+    - order amounts, days and revisions come from the snapshot;
+    - the buyer invoice lines − discount + GST = the order total;
+    - a paused add-on → 409 with no session;
+    - switch off → 409 / 404.
+  - `verify-authz` 7a2:
+    - off → 404;
+    - owner-only writes; another provider or a buyer is locked out;
+    - a 4th active add-on → 409;
+    - anon reads active only;
+    - no direct client insert or update.
+
 #### E12b: Speed tiers in quotes (N21, ADR-XB)
 
 **Why:** Xometry quotes Economy / Standard / Express (XM-04), and Moglix offers 24 h vs 5 days (MG-04). The buyer picks the trade-off; no negotiation.

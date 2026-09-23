@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useTranslations } from 'next-intl'
-import { BUYER_LEGAL_DOCS, gstPercent, isValidGstin, type PriceDisplay } from '@amclub/shared'
+import { BUYER_LEGAL_DOCS, addonSelectionKey, gstPercent, isValidGstin, type PriceDisplay } from '@amclub/shared'
 import { useRouter } from '@/i18n/navigation'
 import { formatINRExact } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,13 @@ const AuthPanel = dynamic(() => import('@/components/auth/AuthPanel').then((m) =
 const PaisaMoment = dynamic(() => import('@/components/mart/PaisaMoment').then((m) => m.PaisaMoment), { ssr: false })
 
 export type CheckoutMode = 'guest' | 'profile' | 'pay'
+
+/** E12a — one chosen add-on as checkout lists it (the price is the server's). */
+export interface CheckoutAddonLine {
+  id: string
+  label: string
+  pricePaise: number
+}
 
 /**
  * Experience v3 E5 — checkout. Every figure is a server `display` (N16): the
@@ -45,6 +52,9 @@ export function CheckoutV3({
   providerPaused,
   couponsEnabled,
   nextSteps,
+  addonIds = [],
+  addonLines = [],
+  addonsDropped = false,
 }: {
   mode: CheckoutMode
   locale: string
@@ -59,6 +69,11 @@ export function CheckoutV3({
   providerPaused: boolean
   couponsEnabled: boolean
   nextSteps: string[]
+  /** E12a / ADR 019 — the add-ons this checkout charges (validated and priced on the server). */
+  addonIds?: string[]
+  addonLines?: CheckoutAddonLine[]
+  /** A chosen add-on is no longer offered, so it was left out. */
+  addonsDropped?: boolean
 }) {
   const t = useTranslations('checkout')
   const tv = useTranslations('checkout_v3')
@@ -114,7 +129,7 @@ export function CheckoutV3({
     setCouponBusy(true)
     setCouponMsg('')
     try {
-      const res = await fetch('/api/v1/coupons/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, packageId }) })
+      const res = await fetch('/api/v1/coupons/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, packageId, ...(addonIds.length ? { addonIds } : {}) }) })
       const d = (await res.json()) as { ok?: boolean; discountPaise?: number; code?: string; error?: string; display?: PriceDisplay }
       if (d.ok && d.discountPaise && d.discountPaise > 0 && d.display) setApplied({ code: d.code ?? code.toUpperCase(), discountPaise: d.discountPaise, display: d.display })
       else {
@@ -159,11 +174,14 @@ export function CheckoutV3({
     const couponCode = applied ? applied.code : ''
     const gst = gstin.trim().toUpperCase()
     analytics.capture('payment_initiated', { device: 'web', coupon: !!couponCode, gst_invoice: !!gst })
+    if (addonIds.length) analytics.capture('checkout_addons', { device: 'web', count: addonIds.length })
     const attribution = readSearchAttribution(packageId)
     try {
       const data = await startCheckout('/api/v1/checkout', {
         packageId,
-        idempotencyKey: keyFor(`${couponCode}|${gst}`),
+        // The key covers the add-on selection too: a different selection is a different session.
+        idempotencyKey: keyFor(`${couponCode}|${gst}|${addonSelectionKey(addonIds)}`),
+        ...(addonIds.length ? { addonIds } : {}),
         ...(couponCode ? { couponCode } : {}),
         ...(gst ? { gstInvoice: { gstin: gst } } : {}),
         // E15 F5 — the search that led here (never part of the charge).
@@ -195,8 +213,15 @@ export function CheckoutV3({
       <section className="rounded-card border border-border bg-surface p-5 shadow-card">
         <h2 className="font-medium">{title}</h2>
         <p className="text-sm text-foreground-secondary">{providerName} · {t('delivery_days', { days: deliveryDays })}</p>
+        {addonsDropped && <p className="mt-2 text-xs font-medium text-warning" role="status" data-testid="addons-dropped">{tv('addons_dropped')}</p>}
         <dl className="mt-4 space-y-2 border-t border-separator pt-4 text-sm" data-testid="checkout-breakdown">
           {row(t('price'), formatINRExact(shown.listPaise))}
+          {addonLines.map((a) => (
+            <div key={a.id} className="flex items-center justify-between pl-3 text-xs text-foreground-secondary" data-testid="checkout-addon">
+              <dt>{tv('addon_included', { label: a.label })}</dt>
+              <dd className="tabular-nums">{formatINRExact(a.pricePaise)}</dd>
+            </div>
+          ))}
           {display.discountPaise > 0 && row(t('discount'), '− ' + formatINRExact(display.discountPaise))}
           {applied && row(`${tc('applied')} (${applied.code})`, '− ' + formatINRExact(applied.discountPaise))}
           {row(t('taxable'), formatINRExact(shown.taxablePaise))}

@@ -12,7 +12,46 @@ import { cn } from '@/lib/utils'
 import { useTierState } from './TierContext'
 import { TranslatedText } from '@/components/catalog/TranslatedText'
 
-const buyHref = (packageId: string) => `/app/checkout/${packageId}`
+// E12a — the chosen add-on ids ride to checkout, which re-prices them on the server.
+const buyHref = (packageId: string, addons: string[] = []) => `/app/checkout/${packageId}${addons.length ? `?addons=${addons.join(',')}` : ''}`
+
+/**
+ * E12a / ADR 019 — the add-ons the provider set ("+₹500 · 2 days faster").
+ * Ticking one asks the server for the new total; nothing is added here.
+ */
+export function AddOnList() {
+  const tv = useTranslations('packages_v3')
+  const { selected, chosen, toggleAddon, quoteBusy, addonNote } = useTierState()
+  const addons = selected.addons ?? []
+  if (addons.length === 0) return null
+  return (
+    <fieldset className="mt-4 border-t border-border pt-4" data-testid="addon-list">
+      <legend className="mb-2 text-sm font-semibold">{tv('addons_title')}</legend>
+      <ul className="space-y-2">
+        {addons.map((a) => {
+          const effect = [
+            a.daysDelta < 0 ? tv('addon_faster', { days: -a.daysDelta }) : a.daysDelta > 0 ? tv('addon_slower', { days: a.daysDelta }) : null,
+            a.extraRevisions > 0 ? tv('addon_revisions', { count: a.extraRevisions }) : null,
+          ].filter(Boolean)
+          return (
+            <li key={a.id}>
+              <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+                <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" checked={chosen.includes(a.id)} disabled={quoteBusy} onChange={() => toggleAddon(a.id)} data-addon={a.id} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{a.label}</span>
+                  {effect.length > 0 && <span className="block text-xs text-foreground-secondary">{effect.join(' · ')}</span>}
+                </span>
+                <span className="shrink-0 font-medium tabular-nums">{tv('addon_price', { price: formatINRExact(a.pricePaise) })}</span>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+      {quoteBusy && <p className="mt-2 text-xs text-foreground-secondary" role="status">{tv('addons_updating')}</p>}
+      {addonNote && <p className="mt-2 text-xs text-danger" role="alert">{tv(addonNote === 'changed' ? 'addons_changed' : 'addons_failed')}</p>}
+    </fieldset>
+  )
+}
 
 /** Tier tabs (Basic / Standard / Premium). Rendered only for a tier group. */
 export function TierTabs({ className }: { className?: string }) {
@@ -76,8 +115,12 @@ export function BuyBox({ buyNote }: { buyNote: string }) {
   const t = useTranslations('catalog')
   const tv = useTranslations('packages_v3')
   const analytics = useAnalytics()
-  const { options, selected, mostChosen } = useTierState()
+  const { options, selected, mostChosen, chosen, quote, quoteBusy } = useTierState()
   const locale = useLocale()
+  // With add-ons chosen every figure is the server quote; without, the option's own display.
+  const display = quote?.display ?? selected.display
+  const days = quote?.deliveryDays ?? selected.deliveryDays
+  const revisions = quote?.revisionMax ?? selected.revisionCount
 
   return (
     <div className="sticky top-20 rounded-card border border-border bg-surface p-5 shadow-card" data-testid="buy-box">
@@ -85,19 +128,19 @@ export function BuyBox({ buyNote }: { buyNote: string }) {
       {selected.tier && mostChosen === selected.tier && (
         <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-primary">{tv('most_chosen')}</p>
       )}
-      <PriceBlock display={selected.display} size="detail" equation />
+      <PriceBlock display={display} size="detail" equation />
       <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
         <div className="flex items-center justify-between">
           <dt className="inline-flex items-center gap-1.5 text-foreground-secondary">
             <Clock className="h-4 w-4" /> {t('delivery_time')}
           </dt>
-          <dd className="font-medium">{t('delivery_days', { days: selected.deliveryDays })}</dd>
+          <dd className="font-medium">{t('delivery_days', { days })}</dd>
         </div>
         <div className="flex items-center justify-between">
           <dt className="inline-flex items-center gap-1.5 text-foreground-secondary">
             <RefreshCw className="h-4 w-4" /> {t('revisions_label')}
           </dt>
-          <dd className="font-medium">{selected.revisionCount}</dd>
+          <dd className="font-medium">{revisions}</dd>
         </div>
       </dl>
       {selected.idealFor && (
@@ -106,11 +149,16 @@ export function BuyBox({ buyNote }: { buyNote: string }) {
           {selected.idealForOriginal ? <TranslatedText key={selected.packageId} text={selected.idealFor} original={selected.idealForOriginal} lang={locale} /> : selected.idealFor}
         </p>
       )}
+      <AddOnList />
       <Link
-        href={buyHref(selected.packageId)}
+        href={buyHref(selected.packageId, quote ? chosen : [])}
         data-testid="buy-now"
-        onClick={() => analytics.capture('buy_now_clicked', { device: 'web', tier: selected.tier, total_bucket: totalBucket(selected.display.totalPaise) })}
-        className="mt-5 block w-full rounded-button bg-primary px-4 py-3 text-center font-semibold text-white transition-colors hover:bg-primary/90"
+        aria-disabled={quoteBusy || undefined}
+        onClick={(e) => {
+          if (quoteBusy) return e.preventDefault()
+          analytics.capture('buy_now_clicked', { device: 'web', tier: selected.tier, total_bucket: totalBucket(display.totalPaise), ...(chosen.length ? { addons: chosen.length } : {}) })
+        }}
+        className={cn('mt-5 block w-full rounded-button bg-primary px-4 py-3 text-center font-semibold text-white transition-colors hover:bg-primary/90', quoteBusy && 'pointer-events-none opacity-60')}
       >
         {t('buy_now')}
       </Link>
@@ -132,8 +180,10 @@ export function StickyBuyBar() {
   const t = useTranslations('catalog')
   const tv = useTranslations('packages_v3')
   const analytics = useAnalytics()
-  const { options, selected } = useTierState()
+  const { options, selected, chosen, quote, quoteBusy } = useTierState()
   const tiered = options.length > 1
+  const display = quote?.display ?? selected.display
+  const days = quote?.deliveryDays ?? selected.deliveryDays
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 pt-3 shadow-card lg:hidden"
@@ -143,19 +193,23 @@ export function StickyBuyBar() {
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="font-display text-lg font-bold leading-none tabular-nums">
-            {tiered
-              ? tv('total_incl_gst', { total: formatINRExact(selected.display.totalPaise) })
-              : t('price_plus_gst', { price: formatINR(selected.display.taxablePaise) })}
+            {tiered || quote
+              ? tv('total_incl_gst', { total: formatINRExact(display.totalPaise) })
+              : t('price_plus_gst', { price: formatINR(display.taxablePaise) })}
           </p>
           <p className="mt-1 truncate text-xs text-foreground-secondary">
             {tiered && selected.tier ? `${tv(`tier_${selected.tier}`)} · ` : ''}
-            {t('delivery_days', { days: selected.deliveryDays })}
+            {t('delivery_days', { days })}
           </p>
         </div>
         <Link
-          href={buyHref(selected.packageId)}
-          onClick={() => analytics.capture('buy_now_clicked', { device: 'web', tier: selected.tier, total_bucket: totalBucket(selected.display.totalPaise), surface: 'sticky' })}
-          className="shrink-0 rounded-button bg-primary px-5 py-3 text-center font-semibold text-white transition-colors hover:bg-primary/90"
+          href={buyHref(selected.packageId, quote ? chosen : [])}
+          aria-disabled={quoteBusy || undefined}
+          onClick={(e) => {
+            if (quoteBusy) return e.preventDefault()
+            analytics.capture('buy_now_clicked', { device: 'web', tier: selected.tier, total_bucket: totalBucket(display.totalPaise), surface: 'sticky', ...(chosen.length ? { addons: chosen.length } : {}) })
+          }}
+          className={cn('shrink-0 rounded-button bg-primary px-5 py-3 text-center font-semibold text-white transition-colors hover:bg-primary/90', quoteBusy && 'pointer-events-none opacity-60')}
         >
           {t('buy_now')}
         </Link>

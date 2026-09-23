@@ -585,6 +585,38 @@ async function main() {
       deniedRows('provA INSERTs a payout row', await uProv.from('payouts').insert({ provider_id: provAId, order_id: orderA, amount_paise: 1, status: 'scheduled' }).select('id'))
     }
 
+    // ── 7a2. E12a / ADR 019 — package add-ons: owner-only, server-written, public reads active only ──
+    console.log('package add-ons (E12a / ADR 019):')
+    {
+      const addonUrl = `/api/v1/partner/packages/${pkgA!.id}/addons`
+      eq('switch off → the partner add-on route is 404', (await api(provA.token, addonUrl, undefined, 'GET')).status, 404)
+      eq('switch off → the checkout preview is 404', (await fetch(`${BASE}/api/v1/checkout/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packageId: pkgA!.id }) })).status, 404)
+      const { data: addonSetting } = await admin.from('agent_settings').select('value').eq('key', 'addons_enabled').maybeSingle()
+      await admin.from('agent_settings').upsert({ key: 'addons_enabled', value: true, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      try {
+        const mk = (label: string, active = true) => api(provA.token, addonUrl, { label_i18n: { en: label }, price_paise: 10_000, days_delta: -1, active })
+        const first = await mk('Authz fast-track')
+        eq('provA adds an add-on to OWN package → 201', first.status, 201)
+        denied('provB lists add-ons of A’s package', (await api(provB.token, addonUrl, undefined, 'GET')).status)
+        denied('provB adds an add-on to A’s package', (await api(provB.token, addonUrl, { label_i18n: { en: 'forged' }, price_paise: 1 })).status)
+        denied('buyerA adds an add-on to A’s package', (await api(buyerA.token, addonUrl, { label_i18n: { en: 'forged' }, price_paise: 1 })).status)
+        const paused = await mk('Authz paused', false)
+        await mk('Authz second')
+        await mk('Authz third')
+        const fourth = await mk('Authz fourth')
+        eq('a 4th active add-on → 409 addon_limit (3 max)', fourth.status, 409)
+        const pausedId = ((await paused.json().catch(() => ({}))) as { addon?: { id: string } }).addon?.id
+        const anonRows = ((await createClient(URL_, ANON, { auth: { persistSession: false } }).from('package_addons').select('id, active').eq('package_id', pkgA!.id)).data ?? []) as { id: string; active: boolean }[]
+        eq('anon reads only ACTIVE add-ons of an active package (never the paused one)', anonRows.length > 0 && anonRows.every((r) => r.active) && !anonRows.some((r) => r.id === pausedId), true)
+        deniedRows('provA INSERTs an add-on directly (no client write grant)', await asUser(provA.token).from('package_addons').insert({ package_id: pkgA!.id, label_i18n: { en: 'direct' }, price_paise: 1 }).select('id'))
+        deniedRows('provA re-prices an add-on directly', await asUser(provA.token).from('package_addons').update({ price_paise: 1 }).eq('package_id', pkgA!.id).select('id'))
+      } finally {
+        await admin.from('package_addons').delete().eq('package_id', pkgA!.id)
+        if (addonSetting) await admin.from('agent_settings').upsert({ key: 'addons_enabled', value: addonSetting.value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+        else await admin.from('agent_settings').delete().eq('key', 'addons_enabled')
+      }
+    }
+
     // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
     console.log('users privilege guard (0042, direct PostgREST):')
     eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)

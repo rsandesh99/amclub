@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
-import { useTranslations } from 'next-intl'
-import { nextAction, nextStepTarget, orderIsActive, parseOrderTab, providerMoneyLine, REFUND_POLICY_BPS, visibleOrderTabs, type OrderStatus, type OrderTab } from '@amclub/shared'
+import { useLocale, useTranslations } from 'next-intl'
+import { addonSnapshotSchema, nextAction, nextStepTarget, orderIsActive, parseOrderTab, pickI18n, providerMoneyLine, REFUND_POLICY_BPS, visibleOrderTabs, type OrderStatus, type OrderTab } from '@amclub/shared'
 import { NudgeButton } from '@/components/orders/NudgeButton'
 import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
@@ -209,6 +209,10 @@ function ServicesOrderWorkspace({
   const autoAcceptAt = typeof order['auto_accept_at'] === 'string' ? (order['auto_accept_at'] as string) : null
   const deliveryDays = order['delivery_days'] == null ? null : Number(order['delivery_days'])
   const hasDeliverable = documents.some((d) => d.kind === 'deliverable')
+  // E12a / ADR 019 — the add-ons this order was bought with (frozen snapshot; absent = none).
+  const locale = useLocale()
+  const addonSnap = addonSnapshotSchema.safeParse(order['addons'] ?? [])
+  const boughtAddons = addonSnap.success ? addonSnap.data : []
 
   const disputeEndsAt = extras.disputeWindowEndsAt
   const actions = actionsFor(viewerRole, status, { revisionsLeft, disputeWindowEndsAt: disputeEndsAt })
@@ -600,6 +604,19 @@ function ServicesOrderWorkspace({
                 {viewerRole === 'provider' && <div><dt className="text-foreground-secondary">{t('you_earn')}</dt><dd className="font-medium tabular-nums">{formatINR(earningPaise)}</dd></div>}
                 {revisionMax != null && <div><dt className="text-foreground-secondary">{t('revisions')}</dt><dd className="font-medium">{t('revisions_used', { used: revisionUsed, max: revisionMax })}</dd></div>}
               </dl>
+              {boughtAddons.length > 0 && (
+                <div className="border-t border-border pt-3 text-sm" data-testid="order-addons">
+                  <p className="text-foreground-secondary">{to('addons_title')}</p>
+                  <ul className="mt-1 space-y-1">
+                    {boughtAddons.map((a) => (
+                      <li key={a.id} className="flex justify-between gap-3">
+                        <span>{pickI18n(a.label, locale)}</span>
+                        <span className="tabular-nums">{formatINR(a.pricePaise)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {disputeDeadline && <p className="text-xs text-foreground-secondary" data-testid="order-dispute-deadline">{t('dispute_window_until', { date: disputeDeadline })}</p>}
               {orderIsActive(status) && <div><NudgeButton subjectKind="order" subjectId={id} /></div>}
             </div>

@@ -6,13 +6,16 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon, COUPON_ERROR_KEY } from '@/lib/coupons/apply'
 import { COUPONS_ENABLED } from '@/lib/flags'
-import { priceDisplay } from '@amclub/shared'
+import { addonIdsSchema, couponBasePaise, packageCharge, packageChargeDisplay, priceDisplay, resolveAddonSelection, type PackageAddonRow } from '@amclub/shared'
+import { activeAddonsFor, addonsOn } from '@/lib/addons'
 
 const bodySchema = z
   .object({
     code: z.string().trim().min(1).max(40),
     packageId: z.string().uuid().optional(),
     quoteId: z.string().uuid().optional(),
+    // E12a / ADR 019 — the chosen add-ons; the coupon applies to the whole pre-GST subtotal.
+    addonIds: addonIdsSchema.optional(),
   })
   .refine((d) => !!d.packageId !== !!d.quoteId, { message: 'Provide exactly one of packageId or quoteId' })
 
@@ -42,16 +45,23 @@ export async function POST(request: NextRequest) {
   // Experience v3 N16: the package price inputs, so the reply can carry the
   // server display with the coupon applied (the client renders it, never sums).
   let pkgPrice: { pricePaise: number; discountBps: number } | null = null
+  let addonRows: PackageAddonRow[] = []
 
   if (packageId) {
     const { data: p } = await supabase
       .from('packages')
-      .select('price_paise, discount_bps, category_id, status')
+      .select('id, price_paise, discount_bps, delivery_days, revision_count, category_id, status')
       .eq('id', packageId)
       .eq('status', 'active')
       .maybeSingle()
     if (!p) return NextResponse.json({ ok: false, error: 'package_unavailable' }, { status: 404 })
-    taxableBeforeCoupon = Number(p.price_paise) - Math.round((Number(p.price_paise) * (p.discount_bps ?? 0)) / 10000)
+    if (parsed.data.addonIds?.length) {
+      const adminAddons = await createAdminClient()
+      const sel = (await addonsOn(adminAddons)) ? resolveAddonSelection(await activeAddonsFor(adminAddons, p.id as string), parsed.data.addonIds) : ({ ok: false } as const)
+      if (!sel.ok) return NextResponse.json({ ok: false, error: 'addon_changed' }, { status: 409 })
+      addonRows = sel.rows
+    }
+    taxableBeforeCoupon = couponBasePaise({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps ?? 0, addons: addonRows })
     categoryId = p.category_id
     pkgPrice = { pricePaise: Number(p.price_paise), discountBps: p.discount_bps ?? 0 }
   } else {
@@ -83,6 +93,12 @@ export async function POST(request: NextRequest) {
     discountPaise: result.discountPaise,
     code: result.code,
     kind: result.kind,
-    ...(pkgPrice ? { display: priceDisplay({ ...pkgPrice, extraDiscountPaise: result.discountPaise }) } : {}),
+    ...(pkgPrice
+      ? {
+          display: addonRows.length
+            ? packageChargeDisplay(packageCharge({ ...pkgPrice, commissionBps: 0, deliveryDays: 1, revisionCount: null, addons: addonRows, couponDiscountPaise: result.discountPaise }), { discountBps: pkgPrice.discountBps })
+            : priceDisplay({ ...pkgPrice, extraDiscountPaise: result.discountPaise }),
+        }
+      : {}),
   })
 }

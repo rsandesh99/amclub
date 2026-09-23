@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { computeOrderAmounts, isValidGstin, quoteChargeAmounts } from '@amclub/shared'
+import { addonIdsSchema, addonSelectionKey, couponBasePaise, isValidGstin, packageCharge, quoteChargeAmounts, resolveAddonSelection, type AddonSnapshot, type OrderAmounts, type PackageAddonRow } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
@@ -13,6 +13,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { prepareGoodsQuoteCheckout, type GoodsQuotePrep } from '@/lib/mart/goods-rfq'
 import { searchAttributionSchema } from '@amclub/shared'
 import { storeCheckoutAttribution } from '@/lib/search/attribution'
+import { activeAddonsFor, addonsOn } from '@/lib/addons'
 
 const bodySchema = z
   .object({
@@ -30,11 +31,14 @@ const bodySchema = z
     idempotencyKey: z.string().uuid(),
     // E15 F5 — the search that led here; stored best-effort, never part of the charge.
     attribution: searchAttributionSchema.optional(),
+    // E12a / ADR 019 — the chosen add-ons (ids only; the server prices them).
+    addonIds: addonIdsSchema.optional(),
   })
   // Exactly one source — package (Buy Now) OR quote (accepted RFQ quote).
   .refine((d) => !!d.packageId !== !!d.quoteId, {
     message: 'Provide exactly one of packageId or quoteId',
   })
+  .refine((d) => !d.addonIds?.length || !!d.packageId, { message: 'Add-ons apply to packages only' })
 
 /**
  * Stable machine codes on every error body (`{ error, code }`). Clients map the
@@ -56,6 +60,7 @@ type CheckoutErrorCode =
   | 'rfq_already_paid'
   | 'checkout_failed'
   | 'goods_quote_unavailable'
+  | 'addon_changed'
 
 function fail(status: number, code: CheckoutErrorCode, error: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error, code, ...(extra ?? {}) }, { status })
@@ -110,7 +115,9 @@ interface Prep {
   scopeSnapshot: Record<string, unknown>
   deliveryDays: number
   revisionMax: number | null
-  amounts: ReturnType<typeof computeOrderAmounts>
+  amounts: OrderAmounts
+  /** E12a — the frozen add-on snapshot (package branch only; empty = none). */
+  addons: AddonSnapshot
 }
 
 export async function POST(request: NextRequest) {
@@ -127,6 +134,7 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten(), code: 'invalid_body' }, { status: 422 })
   const { packageId, quoteId, idempotencyKey } = parsed.data
+  const addonIds = parsed.data.addonIds ?? []
   // GSTIN typed at checkout: normalised and checksum-validated HERE — the
   // invoice (lib/invoices/generate.ts) prefers it over the profile GSTIN, so
   // the server is the authority on what gets frozen into the session.
@@ -151,7 +159,16 @@ export async function POST(request: NextRequest) {
     .select(SESSION_COLS)
     .eq('idempotency_key', idempotencyKey)
     .maybeSingle()
-  if (existing?.razorpay_order_id) return resumeResponse(existing as SessionRow)
+  if (existing?.razorpay_order_id) {
+    // E12a — a resumed session never answers a different add-on selection
+    // (the web client keys its idempotency on the selection).
+    if (addonIds.length || (await addonsOn(await createAdminClient()))) {
+      const { data: frozen } = await supabase.from('checkout_sessions').select('addons').eq('id', existing.id).maybeSingle()
+      const had = ((frozen?.addons ?? []) as AddonSnapshot).map((a) => a.id)
+      if (addonSelectionKey(had) !== addonSelectionKey(addonIds)) return fail(409, 'addon_changed', 'Your add-ons changed; review the total and pay again')
+    }
+    return resumeResponse(existing as SessionRow)
+  }
 
   // Buyer's MSME profile (RLS: owner read).
   const { data: msme } = await supabase.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle()
@@ -184,12 +201,35 @@ export async function POST(request: NextRequest) {
     }
     const commissionBps: number = p.category?.commission_bps ?? 1000
 
+    // E12a / ADR 019 — the chosen add-ons, re-read from the package's ACTIVE
+    // add-ons (client prices, if any were sent, are never read). An id that is
+    // not one of them — removed since the preview, another package's, or the
+    // switch is off — is refused, never silently dropped.
+    let addonRows: PackageAddonRow[] = []
+    if (addonIds.length) {
+      const admin = await createAdminClient()
+      const sel = (await addonsOn(admin)) ? resolveAddonSelection(await activeAddonsFor(admin, p.id), addonIds) : ({ ok: false } as const)
+      if (!sel.ok) return fail(409, 'addon_changed', 'An add-on changed; review the total and pay again')
+      addonRows = sel.rows
+    }
+
     let extraDiscountPaise = 0
     if (couponCode) {
       const { data: coupon } = await supabase.from('coupons').select('*').eq('code', couponCode).maybeSingle()
-      const taxableBeforeCoupon = p.price_paise - Math.round((p.price_paise * p.discount_bps) / 10000)
+      // The coupon applies to the whole pre-GST subtotal (package after its discount + add-ons).
+      const taxableBeforeCoupon = couponBasePaise({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, addons: addonRows })
       extraDiscountPaise = evaluateCoupon(coupon, taxableBeforeCoupon, p.category_id).discountPaise
     }
+    // ONE rule (shared packageCharge): with no add-ons it is exactly computeOrderAmounts as before.
+    const charge = packageCharge({
+      pricePaise: Number(p.price_paise),
+      discountBps: p.discount_bps,
+      commissionBps,
+      deliveryDays: p.delivery_days,
+      revisionCount: p.revision_count ?? null,
+      addons: addonRows,
+      couponDiscountPaise: extraDiscountPaise,
+    })
 
     prep = {
       providerId: p.provider_id,
@@ -204,14 +244,10 @@ export async function POST(request: NextRequest) {
         deliverables: p.deliverables ?? [],
         requirementsTemplate: p.requirements_template ?? null,
       },
-      deliveryDays: p.delivery_days,
-      revisionMax: p.revision_count,
-      amounts: computeOrderAmounts({
-        pricePaise: Number(p.price_paise),
-        discountBps: p.discount_bps,
-        commissionBps,
-        extraDiscountPaise,
-      }),
+      deliveryDays: charge.deliveryDays,
+      revisionMax: charge.revisionMax,
+      amounts: charge.amounts,
+      addons: charge.addons,
     }
   } else {
     // Quote branch — accepting a submitted quote on the buyer's own RFQ.
@@ -283,7 +319,8 @@ export async function POST(request: NextRequest) {
         scopeSnapshot: { kind: 'goods', title: { en: rfq.title, hi: rfq.title }, scope: quote.scope, rfq_id: rfq.id, categories: [rfq.mart_category_slug], seller_name: g.prep.sellerName },
         deliveryDays: quote.delivery_days,
         revisionMax: null,
-        amounts: g.prep.amounts as unknown as ReturnType<typeof computeOrderAmounts>,
+        amounts: g.prep.amounts as unknown as OrderAmounts,
+        addons: [],
       }
     } else {
     const { data: cat } = await supabase.from('categories').select('commission_bps').eq('id', rfq.category_id).maybeSingle()
@@ -308,6 +345,7 @@ export async function POST(request: NextRequest) {
       // (the confirm sheet says GST is applied at checkout) adds it as before.
       // ADR-017 — the ONE shared rule (quoteChargeAmounts); compare and the provider preview use it too.
       amounts: quoteChargeAmounts({ pricePaise: Number(quote.price_paise), gstIncluded: quote.gst_included ?? null, commissionBps }),
+      addons: [],
     }
     }
   }
@@ -345,6 +383,8 @@ export async function POST(request: NextRequest) {
         // Goods-quote sessions carry the goods columns; every other session
         // leaves them at their defaults exactly as before.
         ...(goodsPrep ? { kind: 'goods', line_items: goodsPrep.lineItems, delivery_snapshot: goodsPrep.delivery } : {}),
+        // E12a — only a session with add-ons names the column (0065), so checkout is unchanged before it.
+        ...(prep.addons.length ? { addons: prep.addons } : {}),
         idempotency_key: idempotencyKey,
         status: 'created',
         expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),

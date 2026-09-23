@@ -9,14 +9,15 @@ import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
 import { getPackageDetail } from '@/lib/catalog/queries'
 import { packageI18nSources } from '@/lib/translations/content'
-import { createPublicClient } from '@/lib/supabase/server'
+import { createAdminClient, createPublicClient } from '@/lib/supabase/server'
+import { activeAddonsFor, addonsOn } from '@/lib/addons'
 import { TranslatedText } from '@/components/catalog/TranslatedText'
 import { deliverableLabel, isMachineTranslated } from '@amclub/shared'
 import { getPackageExtras } from '@/lib/catalog/package-groups'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatINR } from '@/lib/format'
 import { isExperienceLive, isOnForEveryone } from '@/lib/experiments'
-import { TierProvider, type BuyOption } from '@/components/packages-v3/TierContext'
+import { TierProvider, type BuyAddon, type BuyOption } from '@/components/packages-v3/TierContext'
 import { BuyBox, StickyBuyBar, TierTabs } from '@/components/packages-v3/BuyBox'
 import { PackageTierMatrix } from '@/components/packages-v3/TierMatrix'
 import { RecentViewTracker } from '@/components/recent-v3/RecentViewTracker'
@@ -103,6 +104,18 @@ export default async function PackageDetailPage({
     },
   }
 
+  // E12a / ADR 019 — each option's active add-ons (v3 buy box only; nothing while the switch is off).
+  const addonsBy = new Map<string, BuyAddon[]>()
+  if (v3) {
+    const admin = await createAdminClient()
+    if (await addonsOn(admin)) {
+      for (const id of [pkg.id, ...(extras?.tiers?.tiers.map((o) => o.packageId) ?? [])]) {
+        if (addonsBy.has(id)) continue
+        addonsBy.set(id, (await activeAddonsFor(admin, id)).map((a) => ({ id: a.id, label: pickI18n(a.label_i18n, locale), pricePaise: Number(a.price_paise), daysDelta: a.days_delta, extraRevisions: a.extra_revisions })))
+      }
+    }
+  }
+
   // One purchasable option per tier (or just this package), priced on the server.
   const options: BuyOption[] = extras?.tiers
     ? extras.tiers.tiers.map((o) => ({
@@ -117,6 +130,7 @@ export default async function PackageDetailPage({
         revisionCount: o.revisionCount,
         display: o.display,
         govtDependent: o.govtDependent,
+        addons: addonsBy.get(o.packageId) ?? [],
       }))
     : [{
         packageId: pkg.id,
@@ -129,6 +143,7 @@ export default async function PackageDetailPage({
         revisionCount: pkg.revisionCount,
         display: pkg.display,
         govtDependent: extras?.govtDependent ?? false,
+        addons: addonsBy.get(pkg.id) ?? [],
       }]
 
   const body = (
