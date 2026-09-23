@@ -839,7 +839,10 @@
     "intake_err_failed": "ఇప్పుడు పత్రం చదవలేకపోయాం. జతచేసి వివరాలు టైప్ చేయవచ్చు.",
     "intake_stub_note": "మోడల్ కీ లేకుండా పత్రం చదవడం నడుస్తోంది — వాస్తవాలు పరిమితం.",
     "intake_attached_only": "జతచేశాం (చదవలేదు)",
-    "attachments_title": "జతపరచినవి"
+    "attachments_title": "జతపరచినవి",
+    "intake_take_photo": "ఫోటో తీయండి",
+    "intake_choose_file": "ఫైల్ ఎంచుకోండి",
+    "intake_choose_file_hint": "ఫోటో, PDF, STEP లేదా DXF"
   },
   "provider_signup": {
     "wa_card_title": "WhatsAppలో పూర్తి చేయండి",

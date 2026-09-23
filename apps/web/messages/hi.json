@@ -1081,7 +1081,10 @@
     "intake_err_failed": "अभी दस्तावेज़ पढ़ा नहीं जा सका। आप इसे अटैच करके विवरण टाइप कर सकते हैं।",
     "intake_stub_note": "दस्तावेज़ पढ़ना बिना मॉडल कुंजी के चल रहा है — तथ्य सीमित हैं।",
     "intake_attached_only": "अटैच किया (पढ़ा नहीं)",
-    "attachments_title": "अटैचमेंट"
+    "attachments_title": "अटैचमेंट",
+    "intake_take_photo": "फ़ोटो लें",
+    "intake_choose_file": "फ़ाइल चुनें",
+    "intake_choose_file_hint": "फ़ोटो, PDF, STEP या DXF"
   },
   "coming_soon": {
     "badge": "जल्द आ रहा है",

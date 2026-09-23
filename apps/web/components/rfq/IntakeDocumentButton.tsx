@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Paperclip, Loader2 } from 'lucide-react'
+import { Camera, Paperclip, Loader2 } from 'lucide-react'
 import { RFQ_ATTACHMENT_MAX_BYTES, intakeResultSchema, type IntakeMode, type IntakeResult } from '@amclub/shared'
 
 /**
@@ -16,6 +16,8 @@ import { RFQ_ATTACHMENT_MAX_BYTES, intakeResultSchema, type IntakeMode, type Int
  */
 
 const ACCEPT = '.jpg,.jpeg,.png,.webp,.pdf,.step,.stp,.dxf,image/jpeg,image/png,image/webp,application/pdf'
+/** Camera capture: photos only (the route accepts these image types). */
+const CAMERA_ACCEPT = 'image/jpeg,image/png,image/webp'
 
 export interface IntakeDocumentButtonProps {
   mode: IntakeMode
@@ -30,6 +32,7 @@ export interface IntakeDocumentButtonProps {
 export function IntakeDocumentButton({ mode, enabled, onResult, onAttachmentOnly, track, compact = false }: IntakeDocumentButtonProps) {
   const t = useTranslations('rfq')
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const cameraRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -69,21 +72,39 @@ export function IntakeDocumentButton({ mode, enabled, onResult, onAttachmentOnly
     } finally {
       setBusy(false)
       if (inputRef.current) inputRef.current.value = ''
+      if (cameraRef.current) cameraRef.current.value = ''
     }
   }
 
+  const btn = 'inline-flex min-h-11 items-center gap-2 rounded-button border border-border bg-surface px-4 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60'
+
+  // Two inputs: `capture` makes Android open the camera directly and hides the
+  // file picker, so it may only sit on the photo input — the PDF / STEP / DXF
+  // picker must never carry it.
   return (
     <div className={compact ? 'inline-flex flex-col gap-1' : 'flex flex-col gap-1.5'}>
-      <input ref={inputRef} type="file" accept={ACCEPT} capture="environment" className="sr-only" aria-hidden onChange={(e) => void onFile(e.target.files?.[0] ?? null)} />
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => inputRef.current?.click()}
-        className="inline-flex min-h-11 items-center gap-2 rounded-button border border-border bg-surface px-4 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
-      >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Paperclip className="h-4 w-4" aria-hidden />}
-        {busy ? t('intake_uploading') : t('intake_add_cta')}
-      </button>
+      <input ref={cameraRef} type="file" accept={CAMERA_ACCEPT} capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => void onFile(e.target.files?.[0] ?? null)} />
+      <input ref={inputRef} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => void onFile(e.target.files?.[0] ?? null)} />
+      <div role="group" aria-label={t('intake_add_cta')} className="flex flex-wrap gap-2">
+        {busy ? (
+          <span className={btn} role="status">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            {t('intake_uploading')}
+          </span>
+        ) : (
+          <>
+            <button type="button" onClick={() => cameraRef.current?.click()} className={btn}>
+              <Camera className="h-4 w-4" aria-hidden />
+              {t('intake_take_photo')}
+            </button>
+            <button type="button" onClick={() => inputRef.current?.click()} className={btn}>
+              <Paperclip className="h-4 w-4" aria-hidden />
+              {t('intake_choose_file')}
+            </button>
+          </>
+        )}
+      </div>
+      {!compact && <p className="text-xs text-foreground-secondary">{t('intake_choose_file_hint')}</p>}
       {error && <p className="text-xs text-danger" role="alert">{error}</p>}
     </div>
   )
