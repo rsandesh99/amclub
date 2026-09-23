@@ -568,7 +568,11 @@ async function e2b(fx: { word: string; A: string; B: string; C: string; D: strin
   check('FR-2.3: service page renders hero + provider table for that service', svc.includes('data-testid="service-hero"') && svc.includes('data-testid="service-provider-table"') && svc.includes('e2p1') && svc.includes('e2p2'))
   check('FR-2.3: the table shows each provider’s from-price + GST', svc.includes('₹1,499 + GST') && svc.includes('₹999 + GST'))
   check('FR-2.3: sibling service chips link to the other services', svc.includes('data-testid="service-chips"') && svc.includes('href="/services/tax-accounting/itr-filing"'))
-  check('FR-2.3: a service of another category → 404', (await fetch(`${BASE}/services/tax-accounting/trademark`)).status === 404)
+  // Not found either way: a 404, or — behind the (public) loading boundary, which
+  // has already streamed — Next's not-found UI marked noindex.
+  const wrongSvc = await fetch(`${BASE}/services/tax-accounting/trademark`)
+  const wrongHtml = await wrongSvc.text()
+  check('FR-2.3: a service of another category is not found (404 / noindex)', wrongSvc.status === 404 || (wrongHtml.includes('noindex') && !wrongHtml.includes('data-testid="service-hero"')), `status ${wrongSvc.status}`)
 
   // FR-2.9 — shortlist compare: four columns, identical rows.
   const cmp = visible(await (await fetch(`${BASE}/compare?items=${[A, B, C, D].join(',')}`)).text())
