@@ -146,6 +146,41 @@ export function isValidPayoutTransition(from: PayoutStatus, to: PayoutStatus): b
   return (PAYOUT_TRANSITIONS[from] as readonly string[]).includes(to)
 }
 
+// ── Procurement session (S3.1) ────────────────────────────────────────────────
+// One buyer need followed by the procurement agent. drafting → awaiting_create
+// (the create_rfq proposal is out) → quality (S1.5 held for answers) | live
+// (fanned out) → quotes_in → chosen (the buyer tapped "go with" — a checkout
+// LINK was sent; nothing is paid here) → closed (the RFQ was accepted, expired or
+// cancelled, or the buyer said no). expired = the session TTL lapsed; failed =
+// the grant was revoked or the agent switched off. Terminal states are final.
+
+export const PROCUREMENT_SESSION_STATES = ['drafting', 'awaiting_create', 'quality', 'live', 'quotes_in', 'chosen', 'closed', 'expired', 'failed'] as const
+export type ProcurementSessionState = (typeof PROCUREMENT_SESSION_STATES)[number]
+
+export const PROCUREMENT_SESSION_TRANSITIONS: Record<ProcurementSessionState, readonly ProcurementSessionState[]> = {
+  drafting: ['awaiting_create', 'closed', 'expired', 'failed'],
+  // back to drafting when the buyer edits / adds detail; quality or live once the create ran
+  awaiting_create: ['drafting', 'quality', 'live', 'closed', 'expired', 'failed'],
+  quality: ['live', 'closed', 'expired', 'failed'],
+  live: ['quotes_in', 'closed', 'expired', 'failed'],
+  quotes_in: ['chosen', 'closed', 'expired', 'failed'],
+  // the buyer may choose again (a different quote, or after declining) until the RFQ closes
+  chosen: ['quotes_in', 'closed', 'expired', 'failed'],
+  closed: [],
+  expired: [],
+  failed: [],
+}
+
+export const PROCUREMENT_SESSION_TERMINAL: readonly ProcurementSessionState[] = ['closed', 'expired', 'failed']
+
+export function isValidProcurementSessionTransition(from: ProcurementSessionState, to: ProcurementSessionState): boolean {
+  return (PROCUREMENT_SESSION_TRANSITIONS[from] as readonly string[]).includes(to)
+}
+
+export function procurementSessionIsActive(state: string): boolean {
+  return (PROCUREMENT_SESSION_STATES as readonly string[]).includes(state) && !(PROCUREMENT_SESSION_TERMINAL as readonly string[]).includes(state)
+}
+
 // ── Agent run (H0 groundwork, ADR-008) ────────────────────────────────────────
 // One run = one agent task on behalf of one user. `awaiting_confirmation` is
 // the confirm-gate: a tool marked `confirm: true` (see agent.ts) parks the run

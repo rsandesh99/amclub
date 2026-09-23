@@ -819,6 +819,76 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
+## Agent S3.1 — Buyer Procurement Agent (logged 2026-09-23)
+
+**Shipped (dark; A2 — enablement at the V1.5→V2 gate + its own §8.1 mini-PRD):** the shared contract
+(`procurement.ts`: `PROCUREMENT_SCOPES` without `accept_quote` / `place_order`, the turn classifier with no reply
+field, the clarification-answer backstop, the no-negotiation clamp, the code-built chat summary, `pr:` buttons,
+the session machine in `state-machines.ts`); three prompts (`procurement_turn@v1`, `clarification_answer@v1`,
+`provider_message@v1`) + `support_intent@v2` (`new_need`); `procurementTurnAgent` / `procurementWatchAgent` driven
+through the harness in 24 golden conversations; the runtime jobs; the web / mobile mirror; the pay deep link;
+migration **0045**. Runbook `docs/agents/PROCUREMENT.md`.
+
+- **Migration number.** The prompt says "after S2.4 the last migration is 0042 → S3.1 is 0043". The tree has 0042 /
+  0043 (PR #15) and 0044 (S2.4), so S3.1 is **0045**.
+- **Dispatcher placement (prompt vs tree).** The prompt places the procurement branch "after the S2.3 support branch's
+  halt check and before the support branch" — i.e. after the S0.5 opt-in keywords. But "yes", "ok" and "hi" ARE opt-in
+  keywords: there, a buyer's typed yes to a draft would be read as an opt-in and never reach the session. Procurement
+  sits with Munshi (after the onboarding session, **before** the keywords) for `pr:` buttons and messages in an active
+  session; the ticket halt is applied inside the turn; the `new_need` start stays in the Support branch (a need is not
+  a keyword). STOP still wins.
+- **Fixed on the way (pre-existing, S0.5 / S2.2):** `grantWhatsApp` revoked the active WhatsApp grant and re-inserted it
+  with `scopes: []` on ANY opt-in keyword — a provider typing "hi" silently lost the Munshi scopes on WhatsApp (and the
+  procurement scopes would have gone the same way). It now keeps the scopes of the grant it refreshes (the consent
+  snapshot is still refreshed). Proven in the rig ("hi" keeps the widened scopes).
+- **Typed "no" is STOP.** `WA_OPT_OUT_KEYWORDS` includes "no" / "cancel" / "नहीं" / "వద్దు"; a buyer typing "no" to a
+  card revokes WhatsApp (S0.5 law, unchanged). The cards use buttons (payload `pr:no:<runId>`, never the keyword);
+  the runbook says so. **Founder decision (2026-09-23):** while a card is open, a typed "no" / "cancel" / "नहीं"
+  means "no to this card"; STOP / UNSUBSCRIBE and their translations always opt out, whatever is open. One shared
+  classifier change for Munshi, Support and Procurement, as its own PR after S3.1 and **before any WhatsApp agent
+  cohort** (it changes live consent handling); recorded in the S0.5 runbook when it lands.
+- **Button payloads** are `pr:ok|edit|no:<runId>` (the prompt: `ok:|edit:|no:<runId>`): Munshi already parses
+  `edit:<runId>`, and the `pr:` namespace keeps the three agents' payloads disjoint.
+- **The chat labels follow the compare page's letters, not `ordering.ids`.** The compare page letters quotes by their
+  position in the buyer's quote list (price as quoted — `loadBuyerQuotes`), whatever the display sort; the prompt's
+  "labels in the same order as ordering.ids" would put a different letter beside the same quote on the page when
+  reliability ordering is on. `summariseQuotesForChat` letters by the list and orders the LINES by `ordering.ids`.
+- **`new_need` needed a prompt version.** Adding the intent to `SUPPORT_INTENTS` without teaching the classifier would
+  never produce it; `support_intent@v2` = v1 + the intent (v1 unchanged, still registered); the runtime, the web chat
+  and the eval / red-team loop run v2. The web chat (no buttons) answers a new need with the create-request how-to.
+- **A typed need had no parse route.** `voice-parse` took audio (or a typed answer only in round two). It now also takes
+  a typed round one (`text` + `language_code`, no STT); every existing caller is byte-identical (the branch needs `text`
+  and no audio / prior). A WhatsApp voice note goes STT (`transcript_only`) → the typed parse.
+- **Photo / PDF start**: `document-extract` 404s unless `document_intake` is on for the buyer; it now also serves a buyer
+  procurement is on for (the agent's photo start is the same intake).
+- **One ai_decisions row per create.** A procurement create's S1.8 intake rows link to the buyer's `procurement_step`
+  decision (`POST /rfq` reads `delegatedRunId()`), not a second `rfq_intake` row. This needs the run-bound delegated
+  token; the rig's stand-in session tokens carry no run, so it records `rfq_intake` too — the branch is proven by
+  inspection and noted as a rig skip.
+- **The decision route's feature** comes from the run: `meta.agent = 'procurement'` → `procurement_step` for every
+  procurement confirmation (the chase nudge too, which would otherwise be `support_nudge`).
+- **The runtime ticket route** accepted `channel: 'whatsapp'` only; it now takes `web` / `mobile` (a WhatsApp ticket
+  still needs its conversation) so a web-mirror escalation opens a web ticket through the same path.
+- **Columns beyond the prompt's list:** `procurement_sessions.locale / title / draft / pending / open_run_id /
+  proposals_today / proposals_date / close_reason`, `procurement_turns.user_id / surface / updated_at / deleted_at`
+  (hard rule 4; RLS by owner; the proposal cap). `root_run_id` / `open_run_id` / `turns.run_id` reference `agent_runs`
+  ON DELETE SET NULL.
+- **The chase clock** runs from `rfqs.created_at` (the buyer read does not expose `fanout_at`); for an S1.5-held request
+  the hold time counts toward `procurement_chase_hours`. Minor; revisit if the hold is long.
+- **The router sees letters only.** The prompt's "providers' display labels" is read as the A–G letters: provider names
+  are provider-authored text and stay out of the trusted block.
+- **`ask_provider` names its target through `choose_label`** (the strict schema has no separate field; one letter per
+  turn is the only thing the router ever names).
+- **The web tap** goes to the runtime's decide job (the WhatsApp path — one decision path). Without
+  `AGENT_RUNTIME_URL` the web route answers 202 `enqueued: false` and nothing happens until the runtime is reachable
+  (the watcher only resumes decisions that exist). Fine in production; noted for local testing.
+- **Recorded rig skips:** the HMAC token exchange + the scoped token's 403 on `/checkout` (no `SUPABASE_JWT_SECRET`
+  here — the runner scopes + `SCRIPTED_CALL_FORBIDDEN` + `requireToolScope('place_order')` are the proven locks), pg-boss +
+  the runtime webhook, the live models, the buyer's own payment (the unchanged checkout route).
+- **Before any cohort (the §8.1 mini-PRD):** the live evals with the key (see the runbook), the
+  `amc_procurement_update_*` template approval, the runtime actually deployed (the Fly deploy step has been a guarded
+  SKIP since S1.8 — no `FLY_API_TOKEN`), and the typed-"no" decision above.
+
 ## Agent S2.4 — AMC Score v1 (logged 2026-09-23)
 
 **Shipped (dark):** ADR-010 first; the deterministic formula in shared `score.ts` (`SCORE_VERSION = 'v1'`, weights in
@@ -922,7 +992,8 @@ migration **0041**. Runbook `docs/agents/SUPPORT.md`.
   read-only `GET /api/v1/partner/quotes` (scope `support_lookup`) give both surfaces the real status + price;
   (4) `quote_status.no_matches` for a provider with no request at all (`quote_status.none` rendered `("")`).
 - **Typed "no" is still the S0.5 opt-out keyword.** On a BSP without interactive buttons (Interakt: numbered lines), a
-  user who types "no" to the nudge offer opts out of WhatsApp. Meta sends real buttons; revisit when Interakt buttons land.
+  user who types "no" to the nudge offer opts out of WhatsApp. Meta sends real buttons. Decided 2026-09-23: a typed "no"
+  to an open card will mean "no to the card" (the shared classifier PR after S3.1; see "Agent S3.1").
 - **Rig skips (recorded, never passes):** the HMAC token exchange (session tokens stand in; `requireToolScope` on the
   reads and the nudge routes is the S0.1-proven lock); pg-boss + the runtime webhook; a voice note (the S1.6 STT
   leg); the live model. The runtime-credential ticket route runs when `AGENT_RUNTIME_SECRET` is set to the same

@@ -9,6 +9,7 @@ import { isComparePointersEnabledFor } from '@/lib/rfq/compare'
 import { isOnboardingEnabledFor } from '@/lib/agent/onboarding'
 import { isMunshiEnabledFor } from '@/lib/agent/munshi'
 import { isSupportEnabledFor } from '@/lib/support/settings'
+import { isProcurementEnabledFor } from '@/lib/agent/procurement'
 import { providerProfileGaps } from '@amclub/shared'
 
 /** S2.4 — the slugs of the categories the provider lists (their own rows). */
@@ -53,6 +54,8 @@ export async function GET() {
   const munshiEnabled = provider ? await isMunshiEnabledFor(admin, userId) : false
   // S2.3 — the Support chat for anyone with a profile (flag + agent switch + cohort).
   const supportEnabled = msme || provider ? await isSupportEnabledFor(admin, userId) : false
+  // S3.1 — the procurement assistant for active buyers (flag + agent switch + cohort); a suspended buyer never
+  const procurementEnabled = msme ? await isProcurementEnabledFor(admin, userId) : false
 
   const primaryRole =
     roles.includes('admin') || roles.includes('ops')
@@ -80,6 +83,7 @@ export async function GET() {
     onboardingWhatsAppEnabled,
     munshiEnabled,
     supportEnabled,
+    procurementEnabled,
     // S2.4 — the caller's own listing facts (Munshi's weekly growth nudge reads them under the provider's token)
     providerProfileGaps: provider ? providerProfileGaps(provider as Parameters<typeof providerProfileGaps>[0]) : null,
     providerState: provider ? ((provider as { state?: string | null }).state ?? null) : null,

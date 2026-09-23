@@ -13,6 +13,7 @@
     { "path": "/api/v1/cron/agent-onboarding-expire", "schedule": "20 * * * *" },
     { "path": "/api/v1/cron/agent-munshi-scan", "schedule": "*/15 * * * *" },
     { "path": "/api/v1/cron/agent-munshi-followup", "schedule": "5 * * * *" },
-    { "path": "/api/v1/cron/agent-munshi-growth", "schedule": "0 5 * * 1" }
+    { "path": "/api/v1/cron/agent-munshi-growth", "schedule": "0 5 * * 1" },
+    { "path": "/api/v1/cron/agent-procurement-watch", "schedule": "*/15 * * * *" }
   ]
 }

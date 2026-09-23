@@ -1,0 +1,252 @@
+/**
+ * S3.1 — every message the procurement agent sends, per locale. The model never
+ * writes these (`procurementTurnSchema` has no reply field); code fills the
+ * `{slots}` from `/api/v1` reads made under the buyer's own delegated token.
+ * Money slots arrive pre-formatted (`formatRupees`); `{link}` is an AMClub URL
+ * built by code. The runtime has no next-intl, so the copy lives here (the S2.2
+ * `munshi.ts` / S2.3 `support-copy.ts` precedent); the web mirror renders the
+ * stored turn bodies and its own chrome through next-intl.
+ */
+import type { ProcurementLocale } from './procurement'
+import { toProcurementLocale } from './procurement'
+import type { QuoteDeclineReason } from './decline-message'
+
+export const PROCUREMENT_COPY_KEYS = [
+  'draft_card',
+  'need_more',
+  'clarify',
+  'draft_failed',
+  'created',
+  'created_deferred',
+  'quality_card',
+  'quality_send_card',
+  'released',
+  'clar_draft',
+  'clar_relay',
+  'clar_card',
+  'clar_posted',
+  'quotes_summary',
+  'choose_card',
+  'choose_link',
+  'choose_which',
+  'choose_unknown',
+  'decline_card',
+  'declined',
+  'ask_card',
+  'asked',
+  'no_negotiation',
+  'chase',
+  'nudged',
+  'nudge_capped',
+  'closed_accepted',
+  'closed_expired',
+  'closed_cancelled',
+  'closed_ttl',
+  'closed_no',
+  'session_which',
+  'reask',
+  'proposal_gone',
+  'failed',
+  'edit_link',
+  'declined_no',
+  'proposal_cap',
+  'busy',
+] as const
+export type ProcurementCopyKey = (typeof PROCUREMENT_COPY_KEYS)[number]
+
+type Copy = Record<ProcurementCopyKey, string>
+
+const en: Copy = {
+  draft_card: 'Here is the request I drafted:\n{summary}\nShall I send it to matching providers? Tap Yes, Edit to change it in AMClub, or No.',
+  need_more: 'Tell me a little more: what work do you need done, and by when?',
+  clarify: 'One question before I draft it: {question}',
+  draft_failed: 'I could not draft that. You can create the request in AMClub instead: {link}',
+  created: 'Done — "{title}" is live and {matched} matching providers were told. I will message you when quotes arrive.',
+  created_deferred: '"{title}" is saved but not sent yet. A few details will help providers quote accurately:\n{questions}\nReply with the answers, or say "send as is".',
+  quality_card: 'I will add these answers to "{title}" and send it to providers:\n{answers}\nConfirm?',
+  quality_send_card: 'Send "{title}" to providers as it is?',
+  released: 'Sent — "{title}" is now with {matched} matching providers.',
+  clar_draft: 'A provider asked about "{title}": "{question}"\nFrom what you told me, I would answer: "{answer}"\nPost this answer? Every matched provider will see it.',
+  clar_relay: 'A provider asked about "{title}": "{question}"\nReply with your answer and I will show it to you before posting.',
+  clar_card: 'Post this answer on "{title}"?\n"{answer}"\nEvery matched provider will see it.',
+  clar_posted: 'Posted your answer on "{title}".',
+  quotes_summary: 'Quotes on "{title}":\n{line1}\n{line2}\n{line3}\nCompare them: {link}\nWhen you have decided, reply "go with A" (or B, C…).',
+  choose_card: 'Open the payment page for quote {label} ({price}) on "{title}"? Nothing is paid here — you confirm and pay on the AMClub page.',
+  choose_link: 'Here is quote {label} ready to pay on AMClub: {link}\nPayment happens only when you confirm on that page.',
+  choose_which: 'Which quote do you mean? Tap one, or reply with its letter. Compare them: {link}',
+  choose_unknown: 'I could not find quote {label} on "{title}". Compare the quotes here: {link}',
+  decline_card: 'Decline quote {label} on "{title}" ({reason})? The provider is told politely.',
+  declined: 'Declined quote {label}.',
+  ask_card: 'Send this question to provider {label} on "{title}"?\n"{body}"',
+  asked: 'Sent your question to provider {label}. Their reply will be on the quote thread.',
+  no_negotiation: 'I can’t negotiate prices: AMClub does not bargain on anyone’s behalf. If you want to discuss the price, message the provider yourself here: {link}',
+  chase: 'No quotes yet on "{title}" after {hours} hours. Shall I remind the matched providers?',
+  nudged: 'Reminded the matched providers about "{title}".',
+  nudge_capped: 'A reminder was sent recently; I can send another after {hours} hours.',
+  closed_accepted: 'Your order for "{title}" is placed, so I have stopped watching this request. Track the order in AMClub.',
+  closed_expired: '"{title}" expired without a choice. Start a new request any time.',
+  closed_cancelled: '"{title}" was cancelled, so I have stopped watching it.',
+  closed_ttl: 'I have stopped following "{title}" after {days} days without activity. Open AMClub for the latest: {link}',
+  closed_no: 'Okay — I will not send it.',
+  session_which: 'Is this a new request, or about "{title}"?',
+  reask: 'I did not catch that. Tap a button, or tell me in a few words.',
+  proposal_gone: 'That suggestion is no longer open.',
+  failed: 'Something went wrong and nothing was sent. You can continue in AMClub: {link}',
+  edit_link: 'Sure — make your changes in AMClub: {link}',
+  declined_no: 'Okay, not sent.',
+  proposal_cap: 'I have reached today’s limit of suggestions for you. Please continue in AMClub: {link}',
+  busy: 'I am waiting for your answer on my last suggestion first. Tap a button on it, or reply to it.',
+}
+
+const hi: Copy = {
+  draft_card: 'मैंने यह माँग तैयार की है:\n{summary}\nक्या इसे मिलते-जुलते प्रोवाइडरों को भेज दूँ? Yes दबाएँ, बदलने के लिए Edit (AMClub में), या No.',
+  need_more: 'थोड़ा और बताइए: कौन-सा काम चाहिए, और कब तक?',
+  clarify: 'ड्राफ्ट से पहले एक सवाल: {question}',
+  draft_failed: 'मैं इसका ड्राफ्ट नहीं बना सका। आप AMClub में माँग बना सकते हैं: {link}',
+  created: 'हो गया — "{title}" लाइव है और {matched} मिलते-जुलते प्रोवाइडरों को बताया गया। कोटेशन आने पर मैं आपको संदेश भेजूँगा।',
+  created_deferred: '"{title}" सहेज ली गई है पर अभी भेजी नहीं गई। कुछ जानकारी से प्रोवाइडर सही कोटेशन दे पाएँगे:\n{questions}\nजवाब लिखें, या "जैसा है वैसा भेजो" कहें।',
+  quality_card: 'मैं ये जवाब "{title}" में जोड़कर प्रोवाइडरों को भेजूँगा:\n{answers}\nपुष्टि करें?',
+  quality_send_card: '"{title}" को जैसा है वैसा प्रोवाइडरों को भेज दूँ?',
+  released: 'भेज दिया — "{title}" अब {matched} मिलते-जुलते प्रोवाइडरों के पास है।',
+  clar_draft: '"{title}" पर एक प्रोवाइडर ने पूछा: "{question}"\nआपकी बताई बातों से मेरा जवाब होगा: "{answer}"\nयह जवाब पोस्ट करूँ? सभी मिलते-जुलते प्रोवाइडर इसे देखेंगे।',
+  clar_relay: '"{title}" पर एक प्रोवाइडर ने पूछा: "{question}"\nअपना जवाब लिखें — पोस्ट करने से पहले मैं आपको दिखाऊँगा।',
+  clar_card: 'यह जवाब "{title}" पर पोस्ट करूँ?\n"{answer}"\nसभी मिलते-जुलते प्रोवाइडर इसे देखेंगे।',
+  clar_posted: '"{title}" पर आपका जवाब पोस्ट हो गया।',
+  quotes_summary: '"{title}" पर कोटेशन:\n{line1}\n{line2}\n{line3}\nतुलना करें: {link}\nतय करने पर लिखें "A के साथ जाओ" (या B, C…)।',
+  choose_card: '"{title}" पर कोटेशन {label} ({price}) का भुगतान पेज खोलूँ? यहाँ कोई भुगतान नहीं होता — आप AMClub पेज पर पुष्टि करके भुगतान करते हैं।',
+  choose_link: 'कोटेशन {label} AMClub पर भुगतान के लिए तैयार है: {link}\nभुगतान तभी होगा जब आप उस पेज पर पुष्टि करेंगे।',
+  choose_which: 'आप किस कोटेशन की बात कर रहे हैं? एक चुनें, या उसका अक्षर लिखें। तुलना करें: {link}',
+  choose_unknown: '"{title}" पर कोटेशन {label} नहीं मिला। कोटेशन की तुलना यहाँ करें: {link}',
+  decline_card: '"{title}" पर कोटेशन {label} अस्वीकार करूँ ({reason})? प्रोवाइडर को विनम्रता से बताया जाएगा।',
+  declined: 'कोटेशन {label} अस्वीकार कर दिया।',
+  ask_card: '"{title}" पर प्रोवाइडर {label} को यह सवाल भेजूँ?\n"{body}"',
+  asked: 'आपका सवाल प्रोवाइडर {label} को भेज दिया। उनका जवाब कोटेशन थ्रेड पर होगा।',
+  no_negotiation: 'मैं कीमत पर मोलभाव नहीं कर सकता: AMClub किसी की ओर से मोलभाव नहीं करता। कीमत पर बात करनी हो तो प्रोवाइडर को खुद यहाँ संदेश भेजें: {link}',
+  chase: '"{title}" पर {hours} घंटे बाद भी कोई कोटेशन नहीं। क्या मैं मिलते-जुलते प्रोवाइडरों को याद दिलाऊँ?',
+  nudged: '"{title}" के लिए मिलते-जुलते प्रोवाइडरों को याद दिला दिया।',
+  nudge_capped: 'हाल ही में याद दिलाया गया था; {hours} घंटे बाद फिर भेज सकता हूँ।',
+  closed_accepted: '"{title}" का आपका ऑर्डर हो गया है, इसलिए मैंने यह माँग देखना बंद कर दिया। ऑर्डर AMClub में देखें।',
+  closed_expired: '"{title}" बिना चुनाव के समाप्त हो गई। जब चाहें नई माँग शुरू करें।',
+  closed_cancelled: '"{title}" रद्द हो गई, इसलिए मैंने इसे देखना बंद कर दिया।',
+  closed_ttl: '{days} दिन तक कोई गतिविधि नहीं होने से मैंने "{title}" को देखना बंद कर दिया। ताज़ा जानकारी AMClub में: {link}',
+  closed_no: 'ठीक है — मैं इसे नहीं भेजूँगा।',
+  session_which: 'यह नई माँग है, या "{title}" के बारे में?',
+  reask: 'समझ नहीं आया। एक बटन दबाएँ, या कुछ शब्दों में बताएँ।',
+  proposal_gone: 'वह सुझाव अब खुला नहीं है।',
+  failed: 'कुछ गड़बड़ हुई और कुछ भी नहीं भेजा गया। आप AMClub में जारी रख सकते हैं: {link}',
+  edit_link: 'ठीक है — बदलाव AMClub में करें: {link}',
+  declined_no: 'ठीक है, नहीं भेजा।',
+  proposal_cap: 'आज के लिए आपके सुझावों की सीमा पूरी हो गई। कृपया AMClub में जारी रखें: {link}',
+  busy: 'पहले मैं अपने पिछले सुझाव पर आपके जवाब का इंतज़ार कर रहा हूँ। उस पर बटन दबाएँ, या उसका जवाब दें।',
+}
+
+const te: Copy = {
+  draft_card: 'నేను రూపొందించిన అభ్యర్థన ఇది:\n{summary}\nదీన్ని సరిపోయే ప్రొవైడర్లకు పంపమంటారా? Yes నొక్కండి, మార్చడానికి Edit (AMClub లో), లేదా No.',
+  need_more: 'ఇంకొంచెం చెప్పండి: ఏ పని కావాలి, ఎప్పటిలోగా?',
+  clarify: 'డ్రాఫ్ట్ చేసే ముందు ఒక ప్రశ్న: {question}',
+  draft_failed: 'నేను దీన్ని డ్రాఫ్ట్ చేయలేకపోయాను. మీరు AMClub లో అభ్యర్థన చేయవచ్చు: {link}',
+  created: 'పూర్తయింది — "{title}" లైవ్‌లో ఉంది, {matched} సరిపోయే ప్రొవైడర్లకు తెలియజేశాం. కొటేషన్లు వచ్చినప్పుడు మీకు సందేశం పంపుతాను.',
+  created_deferred: '"{title}" సేవ్ అయింది కానీ ఇంకా పంపలేదు. కొన్ని వివరాలు ప్రొవైడర్లు సరైన కొటేషన్ ఇవ్వడానికి సహాయపడతాయి:\n{questions}\nజవాబులు పంపండి, లేదా "ఉన్నది ఉన్నట్టు పంపు" అనండి.',
+  quality_card: 'ఈ జవాబులను "{title}" కి జోడించి ప్రొవైడర్లకు పంపుతాను:\n{answers}\nనిర్ధారించమంటారా?',
+  quality_send_card: '"{title}" ను ఉన్నది ఉన్నట్టు ప్రొవైడర్లకు పంపమంటారా?',
+  released: 'పంపాను — "{title}" ఇప్పుడు {matched} సరిపోయే ప్రొవైడర్ల వద్ద ఉంది.',
+  clar_draft: '"{title}" గురించి ఒక ప్రొవైడర్ అడిగారు: "{question}"\nమీరు చెప్పిన దాని ప్రకారం నా జవాబు: "{answer}"\nఈ జవాబు పోస్ట్ చేయమంటారా? సరిపోయే ప్రొవైడర్లందరూ చూస్తారు.',
+  clar_relay: '"{title}" గురించి ఒక ప్రొవైడర్ అడిగారు: "{question}"\nమీ జవాబు పంపండి — పోస్ట్ చేసే ముందు మీకు చూపిస్తాను.',
+  clar_card: 'ఈ జవాబును "{title}" పై పోస్ట్ చేయమంటారా?\n"{answer}"\nసరిపోయే ప్రొవైడర్లందరూ చూస్తారు.',
+  clar_posted: '"{title}" పై మీ జవాబు పోస్ట్ అయింది.',
+  quotes_summary: '"{title}" పై కొటేషన్లు:\n{line1}\n{line2}\n{line3}\nపోల్చండి: {link}\nనిర్ణయించాక "A తో వెళ్దాం" (లేదా B, C…) అని పంపండి.',
+  choose_card: '"{title}" పై కొటేషన్ {label} ({price}) చెల్లింపు పేజీ తెరవమంటారా? ఇక్కడ ఏదీ చెల్లించబడదు — మీరు AMClub పేజీలో నిర్ధారించి చెల్లిస్తారు.',
+  choose_link: 'కొటేషన్ {label} AMClub లో చెల్లింపుకు సిద్ధంగా ఉంది: {link}\nఆ పేజీలో మీరు నిర్ధారించినప్పుడే చెల్లింపు జరుగుతుంది.',
+  choose_which: 'మీరు ఏ కొటేషన్ అంటున్నారు? ఒకటి ఎంచుకోండి, లేదా దాని అక్షరం పంపండి. పోల్చండి: {link}',
+  choose_unknown: '"{title}" పై కొటేషన్ {label} కనబడలేదు. కొటేషన్లను ఇక్కడ పోల్చండి: {link}',
+  decline_card: '"{title}" పై కొటేషన్ {label} ను తిరస్కరించమంటారా ({reason})? ప్రొవైడర్‌కు మర్యాదగా తెలియజేస్తాం.',
+  declined: 'కొటేషన్ {label} తిరస్కరించాను.',
+  ask_card: '"{title}" పై ప్రొవైడర్ {label} కి ఈ ప్రశ్న పంపమంటారా?\n"{body}"',
+  asked: 'మీ ప్రశ్నను ప్రొవైడర్ {label} కి పంపాను. వారి జవాబు కొటేషన్ థ్రెడ్‌లో ఉంటుంది.',
+  no_negotiation: 'నేను ధరలపై బేరం చేయలేను: AMClub ఎవరి తరఫునా బేరం చేయదు. ధర గురించి మాట్లాడాలంటే ప్రొవైడర్‌కు మీరే ఇక్కడ సందేశం పంపండి: {link}',
+  chase: '"{title}" పై {hours} గంటల తర్వాత కూడా కొటేషన్లు రాలేదు. సరిపోయే ప్రొవైడర్లకు గుర్తు చేయమంటారా?',
+  nudged: '"{title}" గురించి సరిపోయే ప్రొవైడర్లకు గుర్తు చేశాను.',
+  nudge_capped: 'ఇటీవలే గుర్తు చేశాం; {hours} గంటల తర్వాత మళ్లీ పంపగలను.',
+  closed_accepted: '"{title}" కోసం మీ ఆర్డర్ అయింది, కాబట్టి ఈ అభ్యర్థనను గమనించడం ఆపాను. ఆర్డర్‌ను AMClub లో చూడండి.',
+  closed_expired: '"{title}" ఎంపిక లేకుండా గడువు ముగిసింది. ఎప్పుడైనా కొత్త అభ్యర్థన మొదలుపెట్టండి.',
+  closed_cancelled: '"{title}" రద్దయింది, కాబట్టి గమనించడం ఆపాను.',
+  closed_ttl: '{days} రోజులు ఎలాంటి కార్యకలాపం లేనందున "{title}" ను అనుసరించడం ఆపాను. తాజా సమాచారం AMClub లో: {link}',
+  closed_no: 'సరే — నేను దీన్ని పంపను.',
+  session_which: 'ఇది కొత్త అభ్యర్థనా, లేక "{title}" గురించా?',
+  reask: 'అర్థం కాలేదు. ఒక బటన్ నొక్కండి, లేదా కొన్ని మాటల్లో చెప్పండి.',
+  proposal_gone: 'ఆ సూచన ఇప్పుడు తెరిచి లేదు.',
+  failed: 'ఏదో తప్పు జరిగింది, ఏదీ పంపలేదు. మీరు AMClub లో కొనసాగించవచ్చు: {link}',
+  edit_link: 'సరే — మార్పులు AMClub లో చేయండి: {link}',
+  declined_no: 'సరే, పంపలేదు.',
+  proposal_cap: 'ఈ రోజు మీకు సూచనల పరిమితి పూర్తయింది. దయచేసి AMClub లో కొనసాగించండి: {link}',
+  busy: 'ముందుగా నా చివరి సూచనపై మీ జవాబు కోసం వేచి ఉన్నాను. దానిపై బటన్ నొక్కండి, లేదా దానికి జవాబివ్వండి.',
+}
+
+const ta: Copy = {
+  draft_card: 'நான் தயாரித்த கோரிக்கை இது:\n{summary}\nஇதை பொருந்தும் வழங்குநர்களுக்கு அனுப்பட்டுமா? Yes அழுத்தவும், மாற்ற Edit (AMClub இல்), அல்லது No.',
+  need_more: 'இன்னும் கொஞ்சம் சொல்லுங்கள்: என்ன வேலை வேண்டும், எப்போதுக்குள்?',
+  clarify: 'வரைவு செய்யும் முன் ஒரு கேள்வி: {question}',
+  draft_failed: 'என்னால் இதை வரைவு செய்ய முடியவில்லை. AMClub இல் கோரிக்கையை உருவாக்கலாம்: {link}',
+  created: 'முடிந்தது — "{title}" நேரலையில் உள்ளது, {matched} பொருந்தும் வழங்குநர்களுக்கு தெரிவிக்கப்பட்டது. விலைப்புள்ளிகள் வந்ததும் உங்களுக்கு செய்தி அனுப்புவேன்.',
+  created_deferred: '"{title}" சேமிக்கப்பட்டது, ஆனால் இன்னும் அனுப்பப்படவில்லை. சில விவரங்கள் வழங்குநர்கள் சரியான விலைப்புள்ளி தர உதவும்:\n{questions}\nபதில்களை அனுப்புங்கள், அல்லது "இருப்பதை அப்படியே அனுப்பு" என்று சொல்லுங்கள்.',
+  quality_card: 'இந்த பதில்களை "{title}" இல் சேர்த்து வழங்குநர்களுக்கு அனுப்புவேன்:\n{answers}\nஉறுதிப்படுத்தவா?',
+  quality_send_card: '"{title}" ஐ இருப்பதை அப்படியே வழங்குநர்களுக்கு அனுப்பட்டுமா?',
+  released: 'அனுப்பப்பட்டது — "{title}" இப்போது {matched} பொருந்தும் வழங்குநர்களிடம் உள்ளது.',
+  clar_draft: '"{title}" பற்றி ஒரு வழங்குநர் கேட்டார்: "{question}"\nநீங்கள் சொன்னதிலிருந்து என் பதில்: "{answer}"\nஇந்த பதிலை பதிவிடவா? பொருந்தும் அனைத்து வழங்குநர்களும் பார்ப்பார்கள்.',
+  clar_relay: '"{title}" பற்றி ஒரு வழங்குநர் கேட்டார்: "{question}"\nஉங்கள் பதிலை அனுப்புங்கள் — பதிவிடும் முன் உங்களுக்குக் காட்டுவேன்.',
+  clar_card: 'இந்த பதிலை "{title}" இல் பதிவிடவா?\n"{answer}"\nபொருந்தும் அனைத்து வழங்குநர்களும் பார்ப்பார்கள்.',
+  clar_posted: '"{title}" இல் உங்கள் பதில் பதிவிடப்பட்டது.',
+  quotes_summary: '"{title}" இல் விலைப்புள்ளிகள்:\n{line1}\n{line2}\n{line3}\nஒப்பிடுங்கள்: {link}\nமுடிவு செய்ததும் "A உடன் செல்" (அல்லது B, C…) என்று அனுப்புங்கள்.',
+  choose_card: '"{title}" இல் விலைப்புள்ளி {label} ({price}) க்கான கட்டணப் பக்கத்தைத் திறக்கவா? இங்கே எதுவும் செலுத்தப்படாது — AMClub பக்கத்தில் நீங்கள் உறுதிசெய்து செலுத்துவீர்கள்.',
+  choose_link: 'விலைப்புள்ளி {label} AMClub இல் செலுத்தத் தயாராக உள்ளது: {link}\nஅந்தப் பக்கத்தில் நீங்கள் உறுதிசெய்தால் மட்டுமே கட்டணம் நடக்கும்.',
+  choose_which: 'எந்த விலைப்புள்ளியைச் சொல்கிறீர்கள்? ஒன்றைத் தேர்ந்தெடுக்கவும், அல்லது அதன் எழுத்தை அனுப்பவும். ஒப்பிடுங்கள்: {link}',
+  choose_unknown: '"{title}" இல் விலைப்புள்ளி {label} கிடைக்கவில்லை. விலைப்புள்ளிகளை இங்கே ஒப்பிடுங்கள்: {link}',
+  decline_card: '"{title}" இல் விலைப்புள்ளி {label} ஐ நிராகரிக்கவா ({reason})? வழங்குநருக்கு மரியாதையாகத் தெரிவிக்கப்படும்.',
+  declined: 'விலைப்புள்ளி {label} நிராகரிக்கப்பட்டது.',
+  ask_card: '"{title}" இல் வழங்குநர் {label} க்கு இந்தக் கேள்வியை அனுப்பவா?\n"{body}"',
+  asked: 'உங்கள் கேள்வி வழங்குநர் {label} க்கு அனுப்பப்பட்டது. அவர்களின் பதில் விலைப்புள்ளி உரையாடலில் இருக்கும்.',
+  no_negotiation: 'நான் விலையில் பேரம் பேச முடியாது: AMClub யாருக்காகவும் பேரம் பேசுவதில்லை. விலை பற்றிப் பேச வேண்டுமானால் வழங்குநருக்கு நீங்களே இங்கே செய்தி அனுப்புங்கள்: {link}',
+  chase: '"{title}" இல் {hours} மணி நேரத்திற்குப் பிறகும் விலைப்புள்ளிகள் இல்லை. பொருந்தும் வழங்குநர்களுக்கு நினைவூட்டவா?',
+  nudged: '"{title}" பற்றி பொருந்தும் வழங்குநர்களுக்கு நினைவூட்டப்பட்டது.',
+  nudge_capped: 'சமீபத்தில் நினைவூட்டப்பட்டது; {hours} மணி நேரத்திற்குப் பிறகு மீண்டும் அனுப்ப முடியும்.',
+  closed_accepted: '"{title}" க்கான உங்கள் ஆர்டர் செய்யப்பட்டது, எனவே இந்தக் கோரிக்கையைக் கவனிப்பதை நிறுத்தினேன். ஆர்டரை AMClub இல் பாருங்கள்.',
+  closed_expired: '"{title}" தேர்வு இல்லாமல் காலாவதியானது. எப்போது வேண்டுமானாலும் புதிய கோரிக்கையைத் தொடங்குங்கள்.',
+  closed_cancelled: '"{title}" ரத்து செய்யப்பட்டது, எனவே கவனிப்பதை நிறுத்தினேன்.',
+  closed_ttl: '{days} நாட்கள் எந்தச் செயல்பாடும் இல்லாததால் "{title}" ஐப் பின்தொடர்வதை நிறுத்தினேன். சமீபத்திய தகவல் AMClub இல்: {link}',
+  closed_no: 'சரி — நான் இதை அனுப்ப மாட்டேன்.',
+  session_which: 'இது புதிய கோரிக்கையா, அல்லது "{title}" பற்றியதா?',
+  reask: 'புரியவில்லை. ஒரு பொத்தானை அழுத்தவும், அல்லது சில வார்த்தைகளில் சொல்லுங்கள்.',
+  proposal_gone: 'அந்தப் பரிந்துரை இனி திறந்திருக்கவில்லை.',
+  failed: 'ஏதோ தவறு நடந்தது, எதுவும் அனுப்பப்படவில்லை. AMClub இல் தொடரலாம்: {link}',
+  edit_link: 'சரி — மாற்றங்களை AMClub இல் செய்யுங்கள்: {link}',
+  declined_no: 'சரி, அனுப்பப்படவில்லை.',
+  proposal_cap: 'இன்று உங்களுக்கான பரிந்துரை வரம்பு முடிந்தது. தயவுசெய்து AMClub இல் தொடருங்கள்: {link}',
+  busy: 'முதலில் என் கடைசிப் பரிந்துரைக்கு உங்கள் பதிலுக்காகக் காத்திருக்கிறேன். அதில் பொத்தானை அழுத்தவும், அல்லது அதற்குப் பதிலளிக்கவும்.',
+}
+
+export const PROCUREMENT_COPY: Record<ProcurementLocale, Copy> = { en, hi, te, ta }
+
+/** Every `{slot}` a template may use (the completeness test checks each locale uses the same set per key). */
+export const PROCUREMENT_SLOT_NAMES = ['summary', 'question', 'link', 'title', 'matched', 'questions', 'answers', 'answer', 'line1', 'line2', 'line3', 'label', 'price', 'reason', 'body', 'hours', 'days'] as const
+
+export function renderProcurementCopy(key: ProcurementCopyKey, slots: Record<string, string | number>, locale: ProcurementLocale | string): string {
+  let s = PROCUREMENT_COPY[toProcurementLocale(locale)][key]
+  for (const [k, v] of Object.entries(slots)) s = s.split(`{${k}}`).join(String(v))
+  return s
+}
+
+/** Button titles (≤ 20 characters — the WhatsApp reply-button limit). */
+export const PROCUREMENT_BUTTON_TITLES: Record<ProcurementLocale, { yes: string; edit: string; no: string; start: string; skip: string; newReq: string; thisOne: string; label: (l: string) => string }> = {
+  en: { yes: 'Yes', edit: 'Edit', no: 'No', start: 'Yes, start', skip: 'No, thanks', newReq: 'New request', thisOne: 'This one', label: (l) => `Quote ${l}` },
+  hi: { yes: 'हाँ', edit: 'बदलें', no: 'नहीं', start: 'हाँ, शुरू करें', skip: 'नहीं, धन्यवाद', newReq: 'नई माँग', thisOne: 'यही वाली', label: (l) => `कोटेशन ${l}` },
+  te: { yes: 'అవును', edit: 'మార్చండి', no: 'వద్దు', start: 'అవును, మొదలుపెట్టు', skip: 'వద్దు, ధన్యవాదాలు', newReq: 'కొత్త అభ్యర్థన', thisOne: 'ఇదే', label: (l) => `కొటేషన్ ${l}` },
+  ta: { yes: 'ஆம்', edit: 'மாற்று', no: 'வேண்டாம்', start: 'ஆம், தொடங்கு', skip: 'வேண்டாம், நன்றி', newReq: 'புதிய கோரிக்கை', thisOne: 'இதுவே', label: (l) => `விலைப்புள்ளி ${l}` },
+}
+
+/** The decline reason as the buyer reads it on the decline card. */
+export const PROCUREMENT_DECLINE_REASON_LABELS: Record<ProcurementLocale, Record<Exclude<QuoteDeclineReason, 'chose_other'>, string>> = {
+  en: { price_high: 'price too high', delivery_slow: 'delivery too slow', details_unclear: 'details unclear', terms_unacceptable: 'terms not acceptable', other: 'another reason' },
+  hi: { price_high: 'कीमत ज़्यादा', delivery_slow: 'डिलीवरी धीमी', details_unclear: 'जानकारी अस्पष्ट', terms_unacceptable: 'शर्तें मंज़ूर नहीं', other: 'कोई और कारण' },
+  te: { price_high: 'ధర ఎక్కువ', delivery_slow: 'డెలివరీ నెమ్మది', details_unclear: 'వివరాలు అస్పష్టం', terms_unacceptable: 'షరతులు ఆమోదయోగ్యం కాదు', other: 'వేరే కారణం' },
+  ta: { price_high: 'விலை அதிகம்', delivery_slow: 'டெலிவரி தாமதம்', details_unclear: 'விவரங்கள் தெளிவில்லை', terms_unacceptable: 'நிபந்தனைகள் ஏற்கத்தக்கவை அல்ல', other: 'வேறு காரணம்' },
+}

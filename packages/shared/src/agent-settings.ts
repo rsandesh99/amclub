@@ -135,6 +135,22 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'S2.4 Munshi providers get at most one informational growth nudge a week (fixed copy; WhatsApp + in-app). Also needs agents_enabled.munshi + cohort + the provider’s grant.',
   },
+  // ── S3.1 Buyer Procurement Agent (built dark; enablement is the V1.5 → V2 gate + a §8.1 mini-PRD) ──
+  procurement_chase_hours: {
+    schema: z.number().int().min(1).max(168),
+    default: 24,
+    hint: 'S3.1 hours after fan-out with ZERO quotes before the procurement agent tells the buyer and offers one nudge to the matched providers (the S2.3 nudge cap still applies).',
+  },
+  procurement_session_ttl_days: {
+    schema: z.number().int().min(1).max(30),
+    default: 7,
+    hint: 'S3.1 days a procurement session stays open without activity (sliding on each buyer turn) before the watcher closes it with a final message.',
+  },
+  procurement_max_proposals_per_day: {
+    schema: z.number().int().min(1).max(200),
+    default: 30,
+    hint: 'S3.1 max proposals (create / answer / message / choose / decline / nudge cards) the procurement agent may put to ONE buyer per IST day; past it the agent points the buyer to the app.',
+  },
   // ── S2.3 Support agent ───────────────────────────────────────────────────
   support_escalate_after_turns: {
     schema: z.number().int().min(1).max(5),
@@ -200,7 +216,7 @@ export const AGENT_SETTING_DEFS = {
     // Partial map agent → per-run cap; an absent agent uses budget_run_paise. Unknown agent names never parse.
     schema: z.record(z.enum(AGENT_NAMES), z.number().int().min(0).max(1_000_000)),
     default: {} as Partial<Record<AgentName, number>>,
-    hint: 'S1.6 per-agent override of budget_run_paise (paise). Absent agent = the global cap. Onboarding launches at 1500 (₹15).',
+    hint: 'S1.6 per-agent override of budget_run_paise (paise). Absent agent = the global cap. Onboarding launches at 1500 (₹15); procurement (S3.1) is documented at 1500 (₹15) per turn run.',
   },
   onboarding_session_ttl_hours: {
     schema: z.number().int().min(1).max(168),

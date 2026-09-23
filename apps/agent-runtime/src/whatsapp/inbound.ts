@@ -14,6 +14,8 @@ import { RUNTIME_ENV } from '../env'
 import { isAgentEnabledForUser, onboardingSessionTtlHours } from '../settings'
 import { routeMunshiInbound } from '../agents/munshi/index'
 import { routeSupportInbound } from '../agents/support/index'
+import { routeProcurementInbound } from '../agents/procurement/index'
+import type { ProcurementDecideJob, ProcurementTurnJob } from '../agents/procurement/index'
 import { buttonPayloadOf } from '../agents/onboarding/index'
 
 /**
@@ -57,6 +59,9 @@ export interface InboundHooks {
   /** S2.3 — a support turn, or the Yes / No on a nudge offer. */
   enqueueSupportReply?: (job: { conversationId: string; messageId: string }) => Promise<string | null>
   enqueueSupportDecide?: (job: { runId: string; messageId: string; action: 'yes' | 'no' }) => Promise<string | null>
+  /** S3.1 — a procurement turn (a message in an active session, a label / session button) or a decision (pr:ok|edit|no). */
+  enqueueProcurementTurn?: (job: Omit<ProcurementTurnJob, 'kind'>) => Promise<string | null>
+  enqueueProcurementDecide?: (job: Omit<ProcurementDecideJob, 'kind'>) => Promise<string | null>
 }
 
 export async function ingestWaWebhook(rawBody: string, headers: Record<string, string | undefined>, enqueue: EnqueueFn): Promise<IngestResult> {
@@ -190,6 +195,16 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
     const routed = await routeMunshiInbound(db, { messageId, userId: conv.user_id as string, row: { kind: msg.kind as string, body: msg.body as string | null, payload: (msg.payload as Record<string, unknown> | null) ?? null } }, hooks)
     if (routed) return
   }
+  // S3.1 — the procurement agent, beside Munshi and BEFORE the opt-in keywords: "yes" / "ok" / "hi" are S0.5 opt-in
+  // words, so a buyer's typed yes to a draft must reach the session first. A pr: button of this user, or any message
+  // while the conversation's procurement session is active (the S2.3 ticket halt applies inside the turn).
+  if (RUNTIME_ENV.AGENT_ENABLED && conv.user_id && hooks.enqueueProcurementTurn) {
+    // the session pointer is read HERE, not in the conversation select above: a missing column (0045 not applied yet)
+    // then costs this branch only, never the rest of the dispatcher (the S2.4 staged-column lesson)
+    const { data: ps } = await db.from('wa_conversations').select('procurement_session_id').eq('id', conv.id as string).maybeSingle()
+    const routed = await routeProcurementInbound(db, { messageId, conversationId: conv.id as string, userId: conv.user_id as string, row: { kind: msg.kind as string, body: msg.body as string | null, payload: (msg.payload as Record<string, unknown> | null) ?? null }, procurementSessionId: ((ps as { procurement_session_id?: string | null } | null)?.procurement_session_id as string | null) ?? null }, hooks)
+    if (routed) return
+  }
   if (intent === 'opt_in') {
     if (conv.user_id) {
       await grantWhatsApp(conv.user_id as string, conv.phone_e164 as string, locale)
@@ -284,12 +299,16 @@ async function grantWhatsApp(userId: string, phoneE164: string, locale: WaLocale
   const persona: AgentPersona = roles.includes('msme') ? 'buyer' : roles.includes('provider') ? 'provider' : 'buyer'
   const { data: setting } = await db.from('agent_settings').select('value').eq('key', 'whatsapp_opt_in_text_version').maybeSingle()
   const textVersion = typeof setting?.value === 'string' ? setting.value : 'v1'
-  // Revoke any stale active grant on this channel, then insert the fresh consent (scopes empty: S0.5 grants no tools yet).
+  // Revoke any stale active grant on this channel, then insert the fresh consent. S3.1: a re-sent opt-in keyword ("hi",
+  // "ok", "yes" with no session open) refreshes the consent but KEEPS the scopes a Munshi / procurement enable widened it
+  // to — it used to re-insert [] and silently drop them. A first opt-in still grants no tools ([]).
+  const { data: prior } = await db.from('agent_grants').select('scopes').eq('user_id', userId).eq('persona', persona).eq('channel', 'whatsapp').is('revoked_at', null)
+  const keep = [...new Set((((prior as { scopes: string[] | null }[] | null) ?? []).flatMap((g) => g.scopes ?? [])))]
   await db.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', userId).eq('persona', persona).eq('channel', 'whatsapp').is('revoked_at', null)
   await db.from('agent_grants').insert({
     user_id: userId,
     persona,
-    scopes: [],
+    scopes: keep,
     channel: 'whatsapp',
     channel_identity: `+${phoneE164}`,
     consent: { locale, surface: 'whatsapp', ip: null, user_agent: 'whatsapp', text_version: textVersion, keyword: 'START', at: new Date().toISOString() },

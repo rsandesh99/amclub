@@ -134,6 +134,23 @@ Weekly (`munshi.growth`), at most one line per Munshi provider: template `munshi
 only while the provider holds the WhatsApp grant (STOP halts it; the in-app copy still arrives). Fixed copy, no
 model. Runbook `docs/agents/SCORE.md`.
 
+## S3.1 — the Buyer Procurement Agent
+
+**Dispatcher order** now: STOP → active onboarding session → Munshi (S2.2) → **procurement (S3.1)** → opt-in
+keywords → JOIN → support (S2.3) → holding reply. Procurement sits with Munshi, BEFORE the opt-in keywords, because
+"yes" / "ok" / "hi" are opt-in words: after them a buyer's typed yes to a draft would never reach the session. It
+takes a `pr:` button of this buyer (`pr:ok|edit|no:<runId>`, `pr:label:<session>:<A-G>`, `pr:sess:new|cur:<messageId>`
+— the `pr:` namespace keeps them apart from Munshi's `edit:` and Support's `nudge:`) or any message while
+`wa_conversations.procurement_session_id` points at an active session. With no session, Support's `new_need`
+(`support_intent@v2`) offers "Shall I start a request for this?" with one `pr:sess:new` button. STOP still wins, and a
+typed "no" / "cancel" / "नहीं" is the S0.5 opt-out — the agent's cards use buttons. `grantWhatsApp` now keeps the
+scopes of the grant it refreshes (a re-sent "hi" used to re-insert `[]`, silently dropping Munshi / procurement
+scopes).
+
+**Template** `procurement_update` (`amc_procurement_update_{en,hi,te}`, params `[one line, the assistant link]`; opt-in
+gated) carries any procurement message outside the 24 h window; the buttons are in-window only, so decisions then
+happen in the app. Runbook `docs/agents/PROCUREMENT.md`.
+
 ## S1.4 note — founder one-tap
 
 The Payout-Evidence agent notifies the ops user by kind `payout_dossier_ready`

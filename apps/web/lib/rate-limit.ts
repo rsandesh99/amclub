@@ -78,6 +78,9 @@ export const limiters = {
   /** S2.3 — the support chat: one bounded classifier call per turn. */
   supportChat: build(10, '1 m', 'rl:support-chat'),
   supportChatHourly: build(60, '1 h', 'rl:support-chat-h'),
+  /** S3.1 — the procurement assistant composer (each message is one routed model call + maybe a parse). */
+  procurementChat: build(10, '1 m', 'rl:procurement-chat'),
+  procurementChatHourly: build(60, '1 h', 'rl:procurement-chat-h'),
   /** S1.2 compare pointers per buyer — one reasoning-tier call per cache miss. */
   comparePointers: build(6, '10 m', 'rl:compare-pointers'),
   /** S1.8 document intake per buyer — one frontier-tier vision/text call each; burst + hourly pair. */

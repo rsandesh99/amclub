@@ -20,6 +20,8 @@ export const waConversations = pgTable('wa_conversations', {
   supportTicketId: uuid('support_ticket_id'),
   supportLastIntents: jsonb('support_last_intents').default(sql`'[]'::jsonb`).notNull(),
   supportUnclearStreak: integer('support_unclear_streak').default(0).notNull(),
+  // S3.1 (0045) — the dispatcher's O(1) route to the buyer's active procurement session (FK in SQL; no import cycle here)
+  procurementSessionId: uuid('procurement_session_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
 }, (table) => [

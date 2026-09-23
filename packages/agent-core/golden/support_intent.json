@@ -3,6 +3,10 @@
   "orders": [{ "number": "AMC-2026-000123", "status": "in_progress" }, { "number": "AMC-2026-000122", "status": "completed" }],
   "rfqs": [{ "title": "Monthly GST filing", "status": "quoted", "quote_count": 2 }, { "title": "Logo for a bakery", "status": "open", "quote_count": 0 }],
   "cases": [
+    { "id": "en_new_need_procurement_on", "locale": "en", "roles": ["buyer"], "text": "I need a CA for GST filing for my shop", "procurement_available": true, "expect": { "intent": "new_need", "escalate": false, "reply_key": "new_need.offer" } },
+    { "id": "en_new_need_procurement_off", "locale": "en", "roles": ["buyer"], "text": "We need a logo designed for our bakery", "expect": { "intent": "new_need", "escalate": false, "reply_key": "how_to.create_rfq" } },
+    { "id": "hi_new_need", "locale": "hi", "roles": ["buyer"], "text": "मुझे जीएसटी रजिस्ट्रेशन चाहिए", "procurement_available": true, "expect": { "intent": "new_need", "escalate": false, "reply_key": "new_need.offer" } },
+    { "id": "en_new_need_provider_hat_gets_howto", "locale": "en", "roles": ["provider"], "text": "I need a CA for my own GST filing", "procurement_available": true, "expect": { "intent": "new_need", "escalate": false, "reply_key": "how_to.create_rfq" } },
     { "id": "en_where_is_my_order", "locale": "en", "roles": ["buyer"], "text": "Where is my order?", "expect": { "intent": "order_status", "order_ref": "latest", "escalate": false } },
     { "id": "en_order_by_number", "locale": "en", "roles": ["buyer"], "text": "What is the status of AMC-2026-000122?", "expect": { "intent": "order_status", "order_ref": "AMC-2026-000122", "escalate": false } },
     { "id": "en_did_provider_accept", "locale": "en", "roles": ["buyer"], "text": "did the provider accept my last order yet", "expect": { "intent": "order_status", "order_ref": "latest", "escalate": false } },

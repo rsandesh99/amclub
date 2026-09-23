@@ -880,3 +880,30 @@ export async function sendNudge(kind: 'order' | 'rfq', id: string, supportMessag
   })
   return { ok: res.ok, status: res.status }
 }
+
+// ── S3.1 — the buying assistant (Android parity of /app/assistant; one engine: the runtime's procurement.turn) ──
+export interface ProcurementSession { id: string; state: string; active: boolean; title: string | null; rfq_id: string | null; surface: string; open_run_id: string | null; updated_at: string }
+export interface ProcurementTurn { id: string; role: 'user' | 'agent' | 'system'; surface: string; body: string | null; run_id: string | null; proposal: { tool?: string; status?: string; edit?: boolean; labels?: string[]; session_choice?: boolean; message_id?: string | null } | null; created_at: string }
+export interface ProcurementState { enabled: boolean; whatsapp: boolean; consent_text_version: string; sessions: ProcurementSession[] }
+export async function fetchProcurementState(): Promise<ProcurementState | null> {
+  const res = await fetch(`${API_URL}/api/v1/agent/procurement`, { headers: await authHeaders() })
+  return res.ok ? ((await res.json()) as ProcurementState) : null
+}
+export async function fetchProcurementThread(sessionId: string): Promise<{ session: ProcurementSession | null; turns: ProcurementTurn[] } | null> {
+  const res = await fetch(`${API_URL}/api/v1/agent/procurement/sessions/${sessionId}`, { headers: await authHeaders() })
+  return res.ok ? ((await res.json()) as { session: ProcurementSession | null; turns: ProcurementTurn[] }) : null
+}
+export async function setProcurementEnabled(on: boolean, locale: string, consentTextVersion: string): Promise<ProcurementState | null> {
+  const res = await fetch(`${API_URL}/api/v1/agent/procurement/${on ? 'enable' : 'disable'}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: on ? JSON.stringify({ locale, consent_text_version: consentTextVersion }) : '{}' })
+  return res.ok ? ((await res.json()) as ProcurementState) : null
+}
+/** A composer message, a label tap or the new / this-one tap — the web route passes taps to the runtime as taps. */
+export async function sendProcurementMessage(body: { session_id?: string | null; text?: string; label?: string; session_choice?: 'new' | 'current'; message_id?: string }, locale: string): Promise<{ ok: boolean; status: number; data?: { session_id: string; enqueued: boolean } }> {
+  const res = await fetch(`${API_URL}/api/v1/agent/procurement/message`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-amc-locale': locale, ...(await authHeaders()) }, body: JSON.stringify({ ...body, surface: 'mobile' }) })
+  return res.ok ? { ok: true, status: res.status, data: await res.json() } : { ok: false, status: res.status }
+}
+/** The buyer's tap on a proposal card — the same decision path as a WhatsApp button. Never a payment. */
+export async function sendProcurementDecision(runId: string, action: 'ok' | 'edit' | 'no'): Promise<{ ok: boolean; status: number }> {
+  const res = await fetch(`${API_URL}/api/v1/agent/procurement/decision`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: JSON.stringify({ run_id: runId, action }) })
+  return { ok: res.ok, status: res.status }
+}

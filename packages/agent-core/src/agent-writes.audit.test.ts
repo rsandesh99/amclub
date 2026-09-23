@@ -40,6 +40,8 @@ export const AGENT_WRITE_ALLOWLIST: Readonly<Record<string, string>> = {
   nudges: 'the counterparty nudge ledger (S2.3) — the spine nudge routes write it; the agent only proposes',
   quote_extractions: 'quote prefill the provider confirms with Submit (S1.1)',
   provider_price_book: 'the provider\'s own price memory, upserted from their confirmed quotes (S1.1)',
+  procurement_sessions: 'the buyer procurement agent\'s session (S3.1) — draft / pending / labels / the open proposal; every RFQ / quote / message write is an ordinary buyer route after the buyer\'s tap',
+  procurement_turns: 'the procurement thread the web mirror shows (S3.1) — user text masked, agent text = the rendered template',
 }
 
 /**

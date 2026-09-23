@@ -113,6 +113,16 @@ export type ToolOutcome =
   | { status: 'awaiting_confirmation'; tool: AgentToolName }
   | { status: 'done'; tool: AgentToolName; result: ToolCallResult }
 
+/** S3.1 — routes a scripted call may never reach, whatever the tool (money moves only through the buyer's own tap). */
+export const SCRIPTED_CALL_FORBIDDEN: readonly RegExp[] = [
+  /^\/api\/v1\/checkout(?:[/?]|$)/,
+  /^\/api\/v1\/payments?(?:[/?]|$)/,
+  /\/payouts?(?:[/?]|$)/,
+  /\/refunds?(?:[/?]|$)/,
+  /^\/api\/v1\/orders\/[^/]+\/transition(?:[/?]|$)/,
+  /^\/api\/v1\/admin\//,
+]
+
 /** A confirm:false tool is read-only/local: its `wraps` is a GET or a pure local computation. */
 export function isReadOnlyOrLocal(spec: AgentToolSpec): boolean {
   return spec.wraps.startsWith('GET ') || spec.wraps.startsWith('local')
@@ -177,8 +187,43 @@ export function resolveToolRoute(
     case 'nudge_counterparty': {
       const { subject_kind, subject_id, ...body } = payload
       const kind = subject_kind === 'rfq' ? 'rfq' : 'orders'
-      return { method: 'POST', path: `/api/v1/${kind}/${String(subject_id ?? '')}/nudge`, body: { ...body, via: 'whatsapp' } }
+      return { method: 'POST', path: `/api/v1/${kind}/${String(subject_id ?? '')}/nudge`, body: { ...body, via: typeof body['via'] === 'string' ? body['via'] : 'whatsapp' } }
     }
+    // S3.1 — the procurement agent (buyer persona). Reads: the compare results + order. Writes: the ORDINARY buyer
+    // routes, each confirm:true (the run parks; the buyer's button / web tap resumes it). The path ids are stripped
+    // from the body; `label` / `price_paise` ride only on the proposal for the card, never to a route.
+    case 'compare_quotes':
+      return { method: 'GET', path: `/api/v1/rfq/${id('rfq_id')}/compare` }
+    case 'decline_quote': {
+      const { rfq_id: _r, quote_id: _q, label: _l, ...body } = payload
+      void _r
+      void _q
+      void _l
+      return { method: 'POST', path: `/api/v1/rfq/${id('rfq_id')}/quote/${id('quote_id')}/decline`, body }
+    }
+    case 'answer_clarification': {
+      const { rfq_id: _r, clarification_id: _c, ...body } = payload
+      void _r
+      void _c
+      return { method: 'POST', path: `/api/v1/rfq/${id('rfq_id')}/clarifications/${id('clarification_id')}/answer`, body }
+    }
+    case 'complete_rfq': {
+      const { rfq_id: _r, mode, ...body } = payload
+      void _r
+      return mode === 'send'
+        ? { method: 'POST', path: `/api/v1/rfq/${id('rfq_id')}/quality/send`, body: {} }
+        : { method: 'POST', path: `/api/v1/rfq/${id('rfq_id')}/quality/answer`, body }
+    }
+    case 'message_provider': {
+      const { quote_id: _q, label: _l, ...body } = payload
+      void _q
+      void _l
+      return { method: 'POST', path: `/api/v1/quotes/${id('quote_id')}/messages`, body }
+    }
+    // S3.1 — "go with B": a LOCAL confirm gate (no route). The approved ai_decisions row IS the outcome; the runtime
+    // sends the decision-bound link to the ordinary pay page. executeTool short-circuits before any fetch.
+    case 'choose_quote':
+      return { method: 'POST', path: 'local:choose_quote', body: payload }
     default:
       throw new AgentRunError('tool_route_unwired', `no /api/v1 route wired for tool '${tool}' yet`)
   }
@@ -397,6 +442,39 @@ export class AgentRun {
     await this.ctx.ledger.appendEvent({ runId: this.ctx.runId, kind: 'confirmed', tool, actor: 'user' })
     const result = await this.executeTool(tool, payload)
     return { status: 'done', tool, result }
+  }
+
+  /**
+   * S3.1 — a SCRIPTED call the agent's own code makes (never a model-proposed tool): a GET under the delegated token,
+   * or a POST to a prefill route that writes nothing the user did not ask for (the S1.8 parse / STT / document intake).
+   * Recorded as a `tool_called` event like any tool. Restricted by code, not by the prompt:
+   *  - the tool must be the persona's and inside the grant's scopes;
+   *  - it must be confirm:false AND read-only / local (a confirm:true tool runs ONLY through proposeTool → park → resume);
+   *  - the path must be an /api/v1 route and never a money route (checkout, payments, payouts, refunds, order transitions).
+   */
+  async scriptedCall(tool: AgentToolName, req: { method: 'GET' | 'POST'; path: string; json?: unknown; form?: FormData }): Promise<ToolCallResult> {
+    if (!isToolAllowed(this.ctx.persona, tool)) throw new ToolNotAllowedError(tool, this.ctx.persona)
+    if (this.ctx.scopes && !this.ctx.scopes.includes(tool)) throw new ToolOutOfScopeError(tool)
+    const spec = agentTool(tool)
+    if (spec.confirm || !isReadOnlyOrLocal(spec)) throw new AgentRunError('scripted_write_refused', `tool '${tool}' may only run through proposeTool`)
+    if (!req.path.startsWith('/api/v1/') || SCRIPTED_CALL_FORBIDDEN.some((re) => re.test(req.path))) {
+      throw new AgentRunError('scripted_path_refused', `scripted call refused for ${req.method} ${req.path}`)
+    }
+    const token = await this.ctx.getToken()
+    const f = this.ctx.fetchImpl ?? fetch
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+    let body: FormData | string | undefined
+    if (req.method === 'POST') {
+      if (req.form) body = req.form
+      else {
+        headers['Content-Type'] = 'application/json'
+        body = JSON.stringify(req.json ?? {})
+      }
+    }
+    const res = await f(`${this.ctx.apiBaseUrl}${req.path}`, { method: req.method, headers, ...(body !== undefined ? { body } : {}) })
+    const parsed = await res.json().catch(() => null)
+    await this.ctx.ledger.appendEvent({ runId: this.ctx.runId, kind: 'tool_called', tool, actor: 'agent', payload: { scripted: true, method: req.method, path: req.path.split('?')[0], status: res.status, ok: res.ok } })
+    return { status: res.status, ok: res.ok, body: parsed }
   }
 
   private async executeTool(tool: AgentToolName, payload: Record<string, unknown>): Promise<ToolCallResult> {

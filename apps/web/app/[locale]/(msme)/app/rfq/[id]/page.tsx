@@ -16,13 +16,16 @@ import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
 import { QualityQuestionsCard, QualitySummary } from '@/components/rfq/QualityQuestionsCard'
 import { NudgeButton } from '@/components/orders/NudgeButton'
 import { compareOrderingFor } from '@/lib/score/ordering'
+import { verifyChooseDecision } from '@/lib/agent/procurement'
+import { AGENT_ENABLED } from '@/lib/flags'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
 }
 
-export default async function BuyerRfqPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function BuyerRfqPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ pay?: string; d?: string }> }) {
   const { id } = await params
+  const { pay, d } = await searchParams
   const user = await getSessionUser()
   if (!user) redirect(`/login?next=/app/rfq/${id}`)
   const t = await getTranslations('rfq')
@@ -30,6 +33,10 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
   if (!rfq) notFound()
   // AMC Mart M2 — goods RFQ: category name for the spec card (row exists only when the flag is on).
   const admin = await createAdminClient()
+  // S3.1 — the procurement agent's "go with B" link (?pay=<quote>&d=<decision>): the page opens its OWN confirm sheet for that
+  // quote only when the decision is this buyer's approved choose_quote for this RFQ + quote. The checkout call is the
+  // page's existing one, on the buyer's own tap. Anything else (a stale or forged link) is ignored.
+  const payQuoteId = pay && d && AGENT_ENABLED && (await verifyChooseDecision(admin, { userId: user.id, rfqId: rfq.id, quoteId: pay, decisionId: d })) ? pay : null
   const goodsCat = rfq.kind === 'goods' && rfq.martCategorySlug ? await getMartCategory(admin, rfq.martCategorySlug) : null
   const locale = await getLocale()
   // S1.2 — deterministic flags + normalised totals (never a model); pointers only from the
@@ -127,7 +134,7 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
           {/* S1.3 — questions from providers, above the compare table; answers are visible to every matched provider. */}
           <ClarificationsCard rfqId={rfq.id} role="buyer" initial={rfq.clarifications} canWrite={active} closed={!active} />
 
-          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} />
+          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} payQuoteId={payQuoteId} />
         </>
       )}
     </div>

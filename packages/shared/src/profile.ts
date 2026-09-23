@@ -36,6 +36,8 @@ export interface ProfileMeResponse {
   munshiEnabled: boolean
   /** S2.3 — the Support chat (Help) for this user (AGENT_ENABLED + agents_enabled.support + cohort). */
   supportEnabled: boolean
+  /** S3.1 — the procurement assistant (buyers only; flag + agents_enabled.procurement + cohort). Mobile shows the Assistant tab from it. */
+  procurementEnabled?: boolean
   /**
    * S2.4 — the caller's OWN provider listing facts, for Munshi's weekly growth nudge (read under the provider's
    * delegated token, so the runtime never reads provider_profiles with the service role). null for non-providers.

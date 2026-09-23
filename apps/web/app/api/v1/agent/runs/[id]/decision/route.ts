@@ -53,7 +53,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
 
   const admin = await createAdminClient()
-  const { data: run } = await admin.from('agent_runs').select('id, user_id, persona, status').eq('id', id).maybeSingle()
+  const { data: run } = await admin.from('agent_runs').select('id, user_id, persona, status, meta').eq('id', id).maybeSingle()
   if (!run || (run as { user_id: string }).user_id !== userId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if ((run as { status: string }).status !== 'awaiting_confirmation') {
     return NextResponse.json({ error: 'not_awaiting_confirmation' }, { status: 409 })
@@ -87,7 +87,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const final = parsed.data.final ?? proposed
   const decision = await ledger.recordDecision({
-    feature: FEATURE_BY_TOOL[tool] ?? 'agent_tool',
+    // S3.1 — a procurement run's confirmation is procurement_step whatever the tool (nudge_counterparty included)
+    feature: (run as { meta?: { agent?: string } | null }).meta?.agent === 'procurement' ? 'procurement_step' : (FEATURE_BY_TOOL[tool] ?? 'agent_tool'),
     runId: id,
     tool,
     inputRefs: { ...(parsed.data.input_refs ?? {}), run_id: id },

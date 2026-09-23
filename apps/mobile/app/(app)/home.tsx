@@ -16,12 +16,15 @@ export default function HomeScreen() {
   const [q, setQ] = useState('')
   const [unread, setUnread] = useState(0)
   const [supportEnabled, setSupportEnabled] = useState(false)
+  const [assistantEnabled, setAssistantEnabled] = useState(false)
 
   useEffect(() => {
     void (async () => {
       // S2.3 — the Help chat exists only for an enabled, cohorted user (the server decides).
       const me = await fetchMe()
       setSupportEnabled(me?.supportEnabled === true)
+      // S3.1 — the buying assistant for an enabled, cohorted buyer (the server decides; the routes 404 for everyone else)
+      setAssistantEnabled(me?.procurementEnabled === true)
     })()
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserName((user?.user_metadata?.['full_name'] as string | undefined) ?? '')
@@ -45,6 +48,11 @@ export default function HomeScreen() {
           </View>
           <View className="flex-row items-center gap-2">
             <LocaleToggle />
+            {assistantEnabled && (
+              <TouchableOpacity onPress={() => router.push('/assistant' as never)} className="rounded-lg border border-gray-200 p-2" testID="assistant-entry" accessibilityLabel={t('assistant.title')}>
+                <Ionicons name="chatbubbles-outline" size={18} color="#5C645C" />
+              </TouchableOpacity>
+            )}
             {supportEnabled && (
               <TouchableOpacity onPress={() => router.push('/support' as never)} className="rounded-lg border border-gray-200 p-2" testID="support-entry">
                 <Ionicons name="help-circle-outline" size={18} color="#5C645C" />

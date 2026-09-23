@@ -44,6 +44,8 @@ export interface SupportTurnInput {
   /** An open ticket on this conversation / thread: store only, reply the escalated_open template, no model call. */
   openTicket: boolean
   ticketRef?: string | null
+  /** S3.1 — the procurement agent is enabled for this buyer on this channel: a new_need gets the offer (else the create-request how-to). */
+  procurementAvailable?: boolean
 }
 
 export interface SupportTurnDeps {
@@ -160,6 +162,7 @@ export async function runSupportTurn(deps: SupportTurnDeps, input: SupportTurnIn
     }
   }
   if (intent.intent === 'how_to') lookup.how_to_topic = intent.how_to_topic ?? 'other'
+  if (intent.intent === 'new_need') lookup.procurement_available = input.procurementAvailable === true && role === 'buyer'
 
   const forceKey: SupportReply['key'] | undefined = unclear && streak > 0 && input.history.unclearStreak > 0 ? 'unclear_again' : undefined
   return finish(role, intent, lookup, refs, streak, undefined, forceKey)

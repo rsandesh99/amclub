@@ -72,9 +72,13 @@ export async function POST(request: NextRequest) {
   const answerText = prior && typeof answerTextRaw === 'string' ? answerTextRaw.trim().slice(0, MAX_ANSWER_TEXT) : ''
   const audio = form.get('audio')
   const typedAnswer = !!prior && answerText.length > 0 && !(audio instanceof File)
+  // S3.1 — round one from TYPED text (the procurement agent's text need, WhatsApp or web): `text` (≤ 1000) + an
+  // optional BCP-47 `language_code`; no STT. Absent (every existing client) → the audio path, byte-identical.
+  const needRaw = form.get('text')
+  const typedNeed = !prior && typeof needRaw === 'string' && needRaw.trim().length > 0 && !(audio instanceof File)
 
   let durationMs = 0
-  if (!typedAnswer) {
+  if (!typedAnswer && !typedNeed) {
     if (!(audio instanceof File)) return NextResponse.json({ error: 'audio_required' }, { status: 422 })
     if (audio.size === 0) return NextResponse.json({ error: 'audio_required' }, { status: 422 })
     if (audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: 'audio_too_large' }, { status: 413 })
@@ -97,6 +101,12 @@ export async function POST(request: NextRequest) {
     // A typed answer needs no STT: the answer is the transcript of round two.
     transcript = answerText
     languageCode = prior!.parse.original_language
+    sttVendor = 'typed'
+    sttStub = false
+  } else if (typedNeed) {
+    transcript = String(needRaw).trim().slice(0, MAX_ANSWER_TEXT)
+    const lc = form.get('language_code')
+    languageCode = typeof lc === 'string' && /^[a-z]{2}(-[A-Z]{2})?$/.test(lc) ? lc : 'unknown'
     sttVendor = 'typed'
     sttStub = false
   } else {
