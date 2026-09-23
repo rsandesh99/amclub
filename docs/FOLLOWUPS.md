@@ -843,8 +843,10 @@ migration **0045**. Runbook `docs/agents/PROCUREMENT.md`.
   snapshot is still refreshed). Proven in the rig ("hi" keeps the widened scopes).
 - **Typed "no" is STOP.** `WA_OPT_OUT_KEYWORDS` includes "no" / "cancel" / "नहीं" / "వద్దు"; a buyer typing "no" to a
   card revokes WhatsApp (S0.5 law, unchanged). The cards use buttons (payload `pr:no:<runId>`, never the keyword);
-  the runbook says so. Worth a founder decision before A2 is enabled: whether a typed "no" inside an open procurement
-  proposal should mean "no" to the card (it would narrow the opt-out words while a card is open).
+  the runbook says so. **Founder decision (2026-09-23):** while a card is open, a typed "no" / "cancel" / "नहीं"
+  means "no to this card"; STOP / UNSUBSCRIBE and their translations always opt out, whatever is open. One shared
+  classifier change for Munshi, Support and Procurement, as its own PR after S3.1 and **before any WhatsApp agent
+  cohort** (it changes live consent handling); recorded in the S0.5 runbook when it lands.
 - **Button payloads** are `pr:ok|edit|no:<runId>` (the prompt: `ok:|edit:|no:<runId>`): Munshi already parses
   `edit:<runId>`, and the `pr:` namespace keeps the three agents' payloads disjoint.
 - **The chat labels follow the compare page's letters, not `ordering.ids`.** The compare page letters quotes by their
@@ -990,7 +992,8 @@ migration **0041**. Runbook `docs/agents/SUPPORT.md`.
   read-only `GET /api/v1/partner/quotes` (scope `support_lookup`) give both surfaces the real status + price;
   (4) `quote_status.no_matches` for a provider with no request at all (`quote_status.none` rendered `("")`).
 - **Typed "no" is still the S0.5 opt-out keyword.** On a BSP without interactive buttons (Interakt: numbered lines), a
-  user who types "no" to the nudge offer opts out of WhatsApp. Meta sends real buttons; revisit when Interakt buttons land.
+  user who types "no" to the nudge offer opts out of WhatsApp. Meta sends real buttons. Decided 2026-09-23: a typed "no"
+  to an open card will mean "no to the card" (the shared classifier PR after S3.1; see "Agent S3.1").
 - **Rig skips (recorded, never passes):** the HMAC token exchange (session tokens stand in; `requireToolScope` on the
   reads and the nudge routes is the S0.1-proven lock); pg-boss + the runtime webhook; a voice note (the S1.6 STT
   leg); the live model. The runtime-credential ticket route runs when `AGENT_RUNTIME_SECRET` is set to the same
