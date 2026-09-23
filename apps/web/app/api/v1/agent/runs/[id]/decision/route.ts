@@ -37,6 +37,7 @@ const FEATURE_BY_TOOL: Partial<Record<AgentToolName, AiDecisionFeature>> = {
   submit_quote: 'munshi_draft', // S2.2 — the provider's tap on a Munshi quote draft
   ask_clarification: 'munshi_draft', // S2.2 — … on a Munshi question draft
   reply_thread: 'munshi_reply', // S2.2 — … on a Munshi thread reply
+  nudge_counterparty: 'support_nudge', // S2.3 — the user's yes to a Support-agent nudge (WhatsApp)
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

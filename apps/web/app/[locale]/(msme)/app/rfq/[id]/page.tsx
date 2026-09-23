@@ -14,6 +14,7 @@ import { computeCompare, getComparePointers, isComparePointersEnabledFor, toPoin
 import { isInClarification, rfqIsActive } from '@amclub/shared'
 import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
 import { QualityQuestionsCard, QualitySummary } from '@/components/rfq/QualityQuestionsCard'
+import { NudgeButton } from '@/components/orders/NudgeButton'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
@@ -62,7 +63,11 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
 
         {/* RFQ pending state copy (§3.8) */}
         {(rfq.status === 'open' || rfq.status === 'quoted') && (
-          <p className="mt-2 text-xs text-foreground-secondary">{t('sent_to_providers', { n: rfq.quoteCount > 0 ? rfq.quoteCount : '—' })}</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-foreground-secondary">{t('sent_to_providers', { n: rfq.quoteCount > 0 ? rfq.quoteCount : '—' })}</p>
+            {/* S2.3 — remind the matched providers (spine; once per 24 h). Held RFQs have nobody matched yet. */}
+            {active && !rfq.quality.deferred && <NudgeButton subjectKind="rfq" subjectId={rfq.id} />}
+          </div>
         )}
 
         {details.length > 0 && (

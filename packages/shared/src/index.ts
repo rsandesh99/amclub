@@ -71,6 +71,10 @@ export * from './decline-message'
 // S2.2 — Digital Munshi contract (scopes, draft schema + clamp, price band, the voice allow-list, thread replies, WhatsApp copy)
 export * from './munshi'
 
+// S2.3 — Support agent contract (intents, the reply matrix, the numbers rule) and every user-visible reply per locale
+export * from './support'
+export * from './support-copy'
+
 // S1.6 — onboarding agent contract (steps + transitions, strict draft schema, capability facts) and interview copy (en/hi/te)
 export * from './onboarding'
 export * from './onboarding-copy'

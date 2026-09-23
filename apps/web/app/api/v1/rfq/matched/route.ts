@@ -8,7 +8,7 @@ export async function GET() {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   // S2.2 — the Munshi read (extract_requirements); a no-op for sessions and full-persona tokens.
-  const scope = await requireToolScope('extract_requirements')
+  const scope = await requireToolScope(['extract_requirements', 'support_lookup'])
   if (scope) return scope
   return NextResponse.json({ rfqs: await listMatchedRfqsForProvider(userId) })
 }

@@ -157,6 +157,13 @@ export function resolveToolRoute(
       void _q
       return { method: 'POST', path: `/api/v1/quotes/${id('quote_id')}/messages`, body }
     }
+    // S2.3 — the ONE Support write: a fixed-template nudge through the spine route for the subject kind.
+    // support_lookup is never routed: the support core calls the lookups interface (session client / token GETs).
+    case 'nudge_counterparty': {
+      const { subject_kind, subject_id, ...body } = payload
+      const kind = subject_kind === 'rfq' ? 'rfq' : 'orders'
+      return { method: 'POST', path: `/api/v1/${kind}/${String(subject_id ?? '')}/nudge`, body: { ...body, via: 'whatsapp' } }
+    }
     default:
       throw new AgentRunError('tool_route_unwired', `no /api/v1 route wired for tool '${tool}' yet`)
   }

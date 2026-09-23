@@ -17,6 +17,7 @@ import type { QuoteComposerGoods } from '@/components/rfq/QuoteComposer'
 import { isQuoteExtractEnabledFor } from '@/lib/agent/quote-extract'
 import { MAX_QUOTE_REVISIONS, rfqIsActive } from '@amclub/shared'
 import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
+import { NudgeButton } from '@/components/orders/NudgeButton'
 import { ReviseQuote } from '@/components/rfq/ReviseQuote'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { munshiDraftForComposer } from '@/lib/agent/munshi'
@@ -129,6 +130,10 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
           )}
           <p className="mt-2 whitespace-pre-wrap text-sm text-foreground-secondary">{rfq.myQuote.scope}</p>
           <div className="mt-3"><QuoteTermsRow terms={rfq.myQuote} compact /></div>
+          {/* S2.3 — remind the buyer to decide (spine; once per 24 h) while this quote is live. */}
+          {rfq.myQuote.status === 'submitted' && active && !rfq.declinedAt && (
+            <div className="mt-3 flex justify-end"><NudgeButton subjectKind="rfq" subjectId={rfq.id} /></div>
+          )}
           {/* S1.3 — revise in place (PATCH): same composer, prefilled, no extraction box. */}
           {canRevise && (
             <ReviseQuote
@@ -163,7 +168,9 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
         <div className="space-y-3">
           <QuoteComposer rfqId={rfq.id} goods={goods ?? undefined} extractEnabled={extractEnabled} {...(munshi ? { initial: { ...munshi.initial, message: null }, munshiDraftId: munshi.draftId } : {})} />
           {/* S0.4 quote-or-decline: an honest "no" beside "Quote". */}
-          <div className="flex justify-end"><DeclineRfqButton rfqId={rfq.id} /></div>
+          <div className="flex justify-end gap-2">
+            <DeclineRfqButton rfqId={rfq.id} />
+          </div>
         </div>
       ) : (
         <div className="rounded-card border border-border bg-muted p-4 text-center text-sm text-foreground-secondary">

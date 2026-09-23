@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatINR } from '@/lib/format'
 import { MART_ENABLED } from '@/lib/flags'
+import { AGENT_ENABLED } from '@/lib/flags'
+import { isSupportEnabledFor } from '@/lib/support/settings'
+import { createAdminClient } from '@/lib/supabase/server'
 
 function getGreeting() {
   const hour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getHours()
@@ -19,6 +22,7 @@ function getGreeting() {
 
 export default async function MsmeHomePage() {
   const t = await getTranslations('msme_home')
+  const tShell = await getTranslations('shell')
   const tProfile = await getTranslations('profile')
   const tOrders = await getTranslations('orders')
 
@@ -28,6 +32,8 @@ export default async function MsmeHomePage() {
   const profile = await getMsmeProfile(user.id)
   if (!profile) redirect('/signup?complete=1')
 
+  // S2.3 — the Help chat for an enabled, cohorted buyer (the page 404s for everyone else).
+  const supportOn = AGENT_ENABLED ? await isSupportEnabledFor(await createAdminClient(), user.id) : false
   const orders = (await listMyOrders(user.id, 'msme')).slice(0, 3)
   const greeting = getGreeting()
   const name = user.fullName?.split(' ')[0] ?? 'there'
@@ -67,6 +73,8 @@ export default async function MsmeHomePage() {
             { label: t('my_rfqs'), href: '/app/rfq', icon: '📨' },
             { label: t('my_orders'), href: '/app/orders', icon: '📦' },
             { label: t('saved'), href: '/app/saved', icon: '❤️' },
+            // S2.3 — the Help chat for an enabled, cohorted buyer (the page 404s for everyone else).
+            ...(supportOn ? [{ label: tShell('help_entry'), href: '/app/support', icon: '💬' }] : []),
           ] as { label: string; href: string; icon: string }[]
         ).map((action) => (
           <Link

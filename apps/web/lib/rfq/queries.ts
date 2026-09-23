@@ -305,6 +305,39 @@ export async function listMatchedRfqsForProvider(userId: string): Promise<Provid
     }))
 }
 
+/**
+ * S2.3 — the provider's OWN quotes, newest activity first, with the RFQ facts and the quote's real status + price.
+ * Party-scoped exactly like listMatchedRfqsForProvider (actor from the session user). rfqs RLS shows a matched
+ * provider only status='open' requests, so a session read loses every quoted / accepted request — this loader is
+ * how the Support agent answers "has the buyer accepted my quote" (web directly; WhatsApp via GET /partner/quotes).
+ */
+export interface MyQuoteItem {
+  rfqId: string
+  title: string
+  rfqStatus: string
+  quoteCount: number
+  maxQuotes: number
+  expiresAt: string | null
+  quoteStatus: string
+  pricePaise: number
+  updatedAt: string
+}
+export async function listMyQuotesForProvider(userId: string, limit = 10): Promise<MyQuoteItem[]> {
+  const admin = await createAdminClient()
+  const actor = await resolveActor(admin, userId)
+  if (!actor.providerId) return []
+  const { data } = await admin
+    .from('quotes')
+    .select('rfq_id, status, price_paise, updated_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at)')
+    .eq('provider_id', actor.providerId)
+    .order('updated_at', { ascending: false })
+    .limit(limit)
+  return ((data as any[]) ?? []).filter((q) => q.rfq).map((q) => ({
+    rfqId: q.rfq_id, title: q.rfq.title, rfqStatus: q.rfq.status, quoteCount: q.rfq.quote_count, maxQuotes: q.rfq.max_quotes, expiresAt: q.rfq.expires_at,
+    quoteStatus: q.status, pricePaise: Number(q.price_paise), updatedAt: q.updated_at,
+  }))
+}
+
 export interface RfqDetailForProvider {
   id: string
   title: string

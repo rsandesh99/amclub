@@ -41,7 +41,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   // S2.2 — a reply scope implies reading the thread it replies to (Munshi's follow-up); no-op for sessions.
-  const scope = await requireToolScope('reply_thread')
+  const scope = await requireToolScope(['reply_thread', 'support_lookup'])
   if (scope) return scope
   const { quoteId } = await params
   const admin = await createAdminClient()

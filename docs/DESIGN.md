@@ -356,6 +356,11 @@ Payout to provider releases ONLY from `completed` or `resolved_release/partial`.
 - **Quality deadline passed while the card is open (S1.5):** answer / send-as-is get 409 `already_sent` (the cron guard released it); the UI says "This request was already sent — refreshing" and goes to the RFQ page.
 - **Quality check, zero questions (S1.5):** never shown — the RFQ is released inline (`skipped`) and the create redirects exactly as before.
 - **Deferred RFQ in the list (S1.5):** badge "Answer N questions to send"; the detail page shows the questions card instead of the (empty) compare table.
+- **Help chat empty (S2.3):** "Ask me anything about your orders, requests, payments or payouts." plus quick chips (refund, payout timing, fees, talk to a person); never a blank pane.
+- **Help chat, not understood (S2.3):** the `unclear` template asks the user to name the order or pick a chip; a second miss (`support_escalate_after_turns`) opens a ticket instead of looping.
+- **Help chat escalated (S2.3):** a banner "A person is looking at this (T-…)" + "We acknowledge within 24 hours. Anything you write here is added to the ticket." (the SLA from `lib/legal/grievance.ts`); the escalated reply carries the ticket ref, the SLA (24 hours / 15 days) and the human contact line; further messages are kept for the person and answered with the same template — no automated answers until the ticket is resolved.
+- **Help chat, classifier unavailable (S2.3):** treated as a not-understood turn (never a guessed answer); the numbers in any reply come only from the user's own data.
+- **Nudge already sent (S2.3):** the Nudge button toasts "A reminder was already sent in the last {hours} hours." with `{hours}` = the configured `support_nudge_cooldown_hours` returned by the 429 (`cooldown_hours`); a plain rate-limit 429 says "A reminder was already sent recently."; a failed nudge toasts "Could not send the reminder" — never a false "sent".
 
 ## 3.9 Redirect map
 
@@ -896,6 +901,8 @@ Gateway funnel (Phase 8a): `gateway_viewed · gateway_door_chosen · gateway_wiz
 Voice RFQ v2 (S1.8): `voice_rfq_clarify_shown { gap, tts, locale } · voice_rfq_clarify_answered { by: voice|text|skipped, gap } · rfq_intake_document { kind, doc_type, mode, stub, facts } · rfq_intake_document_failed { reason } · rfq_intake_document_added · rfq_intake_chip_edited { k }`.
 
 Voice RFQ funnel (Phase 8b): `voice_rfq_started · voice_rfq_transcribed · voice_rfq_parsed · voice_rfq_edited · voice_rfq_submitted · voice_rfq_failed` (props: `surface ('rfq_form'|'gateway'), original_language, uncertain, duration_ms, field` — `voice_rfq_edited` fires once per corrected field; `voice_rfq_submitted` marks an RFQ created with voice_meta attached).
+Support agent (S2.3): `support_turn { channel: web|mobile|whatsapp, intent, escalated, reply_key, role, ticket_open? }` (server + runtime) · `nudge_sent { subject_kind: order|rfq, via: web|mobile|whatsapp|agent, recipients? }` (server; spine, flag-independent) · `support_nudge_decided { outcome: sent|capped|declined }` (runtime) · `support_ticket_opened { channel, role, reason, has_summary }` · `support_ticket_resolved { ticket_id, channel, minutes_open }` (server).
+
 Digital Munshi (agent S2.2): `munshi_enabled · munshi_paused · munshi_disabled` (server) · `munshi_draft_proposed { kind, action, confidence, has_basis }` (runtime) · `munshi_draft_decided { via: whatsapp_button|voice_yes|whatsapp_text|web|mobile|run|composer|system, outcome, kind }` (server + runtime) · `munshi_reminder_sent { rfq_id, whatsapp }` · `munshi_reply_proposed { quote_id, needs_provider_input }` · `munshi_price_book_row_added / _deleted`.
 
 Quote extraction (agent S1.1): `agent_quote_extract_requested` (server; props `rfq_id, kind, source, stub, uncertain_count`) · `quote_extract_filled` · `quote_extract_cleared` (client; props `rfq_id, uncertain_count, stub`). The confirmation itself rides the existing `quote_submitted` / `quote_events.submitted` payload (`extraction_id`, `edited_fields`).

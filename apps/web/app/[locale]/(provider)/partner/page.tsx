@@ -11,11 +11,13 @@ import { formatINR } from '@/lib/format'
 import { AGENT_ENABLED, MART_ENABLED } from '@/lib/flags'
 import { onboardingDraftView } from '@/lib/agent/onboarding'
 import { isMunshiEnabledFor } from '@/lib/agent/munshi'
+import { isSupportEnabledFor } from '@/lib/support/settings'
 
 const ACTIVE_STATUSES = ['placed', 'accepted', 'requirements_submitted', 'in_progress', 'delivered', 'revision_requested']
 
 export default async function PartnerDashboardPage() {
   const t = await getTranslations('partner_home')
+  const tShell = await getTranslations('shell')
 
   const user = await getSessionUser()
   if (!user) redirect('/login?next=/partner')
@@ -35,6 +37,8 @@ export default async function PartnerDashboardPage() {
   const suggested = onboarding?.draft?.packages ?? []
   // S2.2 — the Munshi tile exists only for an enabled, cohorted provider (the page 404s for everyone else).
   const munshiOn = AGENT_ENABLED && profile.status === 'active' ? await isMunshiEnabledFor(admin, user.id) : false
+  // S2.3 — the Help chat for an enabled, cohorted provider (the page 404s for everyone else).
+  const supportOn = AGENT_ENABLED ? await isSupportEnabledFor(admin, user.id) : false
   const orders = await listMyOrders(user.id, 'provider')
   const activeCount = orders.filter((o) => ACTIVE_STATUSES.includes(o.status)).length
   const completedCount = orders.filter((o) => o.status === 'completed').length
@@ -119,6 +123,7 @@ export default async function PartnerDashboardPage() {
             { label: t('earnings'), href: '/partner/earnings', icon: '💰' },
             { label: t('view_rfqs'), href: '/partner/rfqs', icon: '📬' },
             ...(munshiOn ? [{ label: t('munshi'), href: '/partner/munshi', icon: '🧑‍💼' }] : []),
+            ...(supportOn ? [{ label: tShell('help_entry'), href: '/partner/support', icon: '💬' }] : []),
             { label: t('view_reviews'), href: '/partner/reviews', icon: '⭐' },
           ] as { label: string; href: string; icon: string }[]
         ).map((link) => (

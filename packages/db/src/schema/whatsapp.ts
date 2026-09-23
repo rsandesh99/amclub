@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb, index, check } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, timestamp, jsonb, integer, index, check } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { users } from './identity'
 
@@ -16,6 +16,10 @@ export const waConversations = pgTable('wa_conversations', {
   lastHoldingReplyAt: timestamp('last_holding_reply_at', { withTimezone: true }),
   // 0036 (S1.6): the dispatcher's O(1) route to the active onboarding session (FK in SQL; no import cycle here).
   activeSessionId: uuid('active_session_id'),
+  // S2.3 (0041) — the open support ticket (the agent stays quiet while set), the classifier's last intents, the unclear streak
+  supportTicketId: uuid('support_ticket_id'),
+  supportLastIntents: jsonb('support_last_intents').default(sql`'[]'::jsonb`).notNull(),
+  supportUnclearStreak: integer('support_unclear_streak').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
 }, (table) => [
