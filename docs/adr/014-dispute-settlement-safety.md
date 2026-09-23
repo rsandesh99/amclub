@@ -1,11 +1,11 @@
 # ADR 014 — Dispute settlement safety: never pay twice, never refund silently
 
-**Status:** Proposed 2026-09-23; accepted when the founder merges the PR. Touches money
-(§8.4). Decides hardening items **H3** and **H4** from the S3.3 prompt. **H2** (which
-orders can be disputed, and for how long) and **H6** (duplicate paid orders on one
-RFQ) are recorded below as open questions; they are decided in this ADR, in a later
-PR, before ADR-011 (first-order guarantee) can be approved. Numbering: 011–013 are
-reserved by `BUILD_PROMPTS.md` for S3.3, S4.1 and S4.3.
+**Status:** Accepted 2026-09-23. Touches money and the order state machine (§8.4).
+Decides hardening items **H3** and **H4** (merged in PR #21) and **H2** (§6 below,
+a later PR; the founder delegated the decision). **H6** (duplicate paid orders on
+one RFQ) is still an open question; it is decided here before ADR-011
+(first-order guarantee) can be approved. Numbering: 011–013 are reserved by
+`BUILD_PROMPTS.md` for S3.3, S4.1 and S4.3.
 
 ## Context
 
@@ -99,6 +99,36 @@ The 409s carry a stable code plus the paise amounts. The dispute console and the
 order page translate them (`admin_ops.money_err_*`, en and hi), and each message tells
 the founder the next step.
 
+### 6. Which orders can be disputed, and for how long (H2)
+
+- **Before completion: every status after the provider accepts.** §3.7 has always
+  said "any-pre-completed → disputed", but `ORDER_TRANSITIONS` lacked the edges
+  from `accepted` and `requirements_submitted` (both listed in
+  `DISPUTABLE_STATUSES`, so the server refused them and the UI hid the button) and
+  from `revision_requested` (in neither list). A buyer whose provider accepted and
+  then never started, or never came back after a revision request, had no exit. The
+  three edges are **added**; no transition is repurposed. `placed` stays
+  non-disputable: the buyer cancels it with a full refund instead. A shared test
+  pins that every `DISPUTABLE_STATUSES` entry has a `→ disputed` edge, and that no
+  other status does.
+- **After completion: inside a window.** `completed → disputed` existed with no
+  limit. It is now accepted only until `completed_at + dispute_window_days`
+  (registered `agent_settings` key, default **7**, 1–90, edited at `/admin/agents`).
+  A completed order with no `completed_at` is treated as closed. The rule is one
+  shared function (`canRaiseDispute`, `dispute-window.ts`); `applyTransition`
+  enforces it (409 `dispute_window_closed` with `endsAt`). The window follows the
+  current setting: it is computed on read, not frozen at completion.
+- **The buyer sees the clock.** The order page (web and mobile) shows "You can
+  report a problem with this order until …" on a completed order, and hides the
+  button once the window closes. The deadline comes from the server
+  (`ServicesOrderExtras.disputeWindowEndsAt`, `GET /api/v1/orders/[id]`
+  `.disputeWindowEndsAt`); clients never compute it.
+- **Reviews do not end dispute rights.** Nothing in the code moves an order to
+  `reviewed`: posting a review leaves the order `completed`, so the window alone
+  decides.
+- Goods orders are unaffected: they never use `raise_dispute`; their returns follow
+  the Mart category return window.
+
 ## Consequences
 
 - No second transfer and no silent refund no-op. An interrupted resolve can be
@@ -114,14 +144,8 @@ the founder the next step.
   - `processRefund` can still race two callers completing the same pending row.
   - `createTransfer` still has no gateway-side idempotency key.
 
-## Open questions (decided in this ADR before ADR-011 approval)
+## Open question (decided in this ADR before ADR-011 approval)
 
-- **H2.** `DISPUTABLE_STATUSES` lists `accepted` and `requirements_submitted`, but
-  `ORDER_TRANSITIONS` has no edge from either to `disputed`, so the server refuses them.
-  A buyer whose provider accepts and never starts has no exit at
-  `requirements_submitted`. Also: there is no post-completion dispute window, and
-  `completed → reviewed` silently ends dispute rights. Options: extend the machine
-  (allowed, §8.4) or narrow the list, plus one window setting.
 - **H6.** A racing duplicate paid order on one RFQ is flagged for an ops refund only.
   It needs a dedicated state and a refund route through `processRefund`.
 
@@ -136,6 +160,11 @@ the founder the next step.
   refund: second manual refund and refunding resolution refused, release closes it).
   **Not yet run.** It needs the disposable-DB CI harness (S3.3 prompt, H1) or a test
   project, never production.
+
+**H2 (§6):** shared tests (`dispute-window.test.ts`: edges, window boundaries,
+fail-safe, setting bounds) plus `verify-phase7.ts` criteria **3d** (dispute from
+`requirements_submitted` accepted) and **3e** (deadline exposed; a dispute past the
+window is refused). The rig criteria need a test database.
 
 ## Rollback
 

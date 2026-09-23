@@ -1,5 +1,6 @@
 import 'server-only'
 import {
+  canRaiseDispute,
   isValidOrderTransition,
   computeRefundPaise,
   PAYOUT_RELEASE_STATUSES,
@@ -16,6 +17,7 @@ import { getGoodsDossier } from '@/lib/mart/release'
 import { getTdsConfig } from '@/lib/mart/config'
 import { getServicesEvidence } from '@/lib/orders/evidence'
 import { maybeEnqueuePayoutDossier } from '@/lib/agent/dossier-trigger'
+import { getAgentSetting } from '@/lib/agent/settings'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -62,6 +64,8 @@ export interface TransitionResult {
   ok: boolean
   status?: number
   error?: string
+  /** ADR-014 (H2) — when the dispute window closed (with error 'dispute_window_closed'). */
+  endsAt?: string
   order?: Record<string, unknown>
 }
 
@@ -276,6 +280,17 @@ export async function applyTransition(
   }
   if (!isValidOrderTransition(from, rule.to)) {
     return { ok: false, status: 409, error: `Illegal transition ${from} → ${rule.to}` }
+  }
+
+  // ADR-014 (H2): after completion a dispute is accepted only inside the
+  // post-completion window (agent_settings.dispute_window_days, from completed_at).
+  if (action === 'raise_dispute' && from === 'completed') {
+    const windowDays = Number(await getAgentSetting(admin, 'dispute_window_days'))
+    const check = canRaiseDispute({ status: from, completedAt: order.completed_at ?? null, windowDays })
+    if (!check.ok) {
+      const endsAt = check.reason === 'window_closed' ? check.endsAt : null
+      return { ok: false, status: 409, error: 'dispute_window_closed', ...(endsAt ? { endsAt } : {}) }
+    }
   }
 
   // Revision cap.

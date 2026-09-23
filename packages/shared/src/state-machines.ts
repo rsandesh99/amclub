@@ -34,11 +34,14 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number]
  */
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   placed: ['accepted', 'auto_cancelled', 'cancelled_by_buyer'],
-  accepted: ['requirements_submitted', 'cancelled_by_buyer'],
-  requirements_submitted: ['in_progress'],
+  // ADR-014 (H2): accepted / requirements_submitted / revision_requested → disputed
+  // are §3.7's "any-pre-completed → disputed" — edges the map had been missing,
+  // so a buyer whose provider accepted and went silent had no exit.
+  accepted: ['requirements_submitted', 'cancelled_by_buyer', 'disputed'],
+  requirements_submitted: ['in_progress', 'disputed'],
   in_progress: ['delivered', 'disputed'],
   delivered: ['completed', 'revision_requested', 'disputed'],
-  revision_requested: ['in_progress'],
+  revision_requested: ['in_progress', 'disputed'],
   completed: ['reviewed', 'disputed'],
   disputed: ['resolved_refund', 'resolved_release', 'resolved_partial'],
   resolved_refund: [],
@@ -50,12 +53,16 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   reviewed: [],
 }
 
-/** Pre-completion statuses from which a dispute may be raised (§3.7). */
+/** Statuses from which a dispute may be raised: every status after the provider
+ *  accepts and before completion (§3.7), plus `completed` inside the
+ *  post-completion window (`dispute_window_days`, shared `dispute-window.ts`).
+ *  Every entry has a `→ disputed` edge in ORDER_TRANSITIONS (a tested invariant). */
 export const DISPUTABLE_STATUSES: readonly OrderStatus[] = [
   'accepted',
   'requirements_submitted',
   'in_progress',
   'delivered',
+  'revision_requested',
   'completed',
 ]
 

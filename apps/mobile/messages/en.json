@@ -361,6 +361,8 @@
     "real_pay_note": "Real Razorpay payment activates once test keys are set."
   },
   "orders": {
+    "dispute_window_until": "You can report a problem with this order until {date} IST.",
+    "dispute_window_closed": "The window to report a problem with this order has closed. If something is still wrong, contact support.",
     "dispute_statement_title": "Your statement",
     "dispute_statement_intro": "Tell our team what happened, in your own words. Both statements are shown to the reviewer side by side.",
     "dispute_statement_placeholder": "What was agreed, what was delivered, and what went wrong…",

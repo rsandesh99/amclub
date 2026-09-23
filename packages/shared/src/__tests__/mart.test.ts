@@ -264,7 +264,11 @@ describe('services order machine is byte-untouched by Mart (inertness)', () => {
       'completed', 'disputed', 'resolved_refund', 'resolved_release', 'resolved_partial',
       'auto_cancelled', 'cancelled_by_buyer', 'refunded', 'reviewed',
     ])
-    expect(ORDER_TRANSITIONS.accepted).toEqual(['requirements_submitted', 'cancelled_by_buyer'])
+    // ADR-014 (H2) added the §3.7 "any-pre-completed → disputed" edges on purpose
+    // (a services decision, not Mart); the pin stays exact.
+    expect(ORDER_TRANSITIONS.accepted).toEqual(['requirements_submitted', 'cancelled_by_buyer', 'disputed'])
+    expect(ORDER_TRANSITIONS.requirements_submitted).toEqual(['in_progress', 'disputed'])
+    expect(ORDER_TRANSITIONS.revision_requested).toEqual(['in_progress', 'disputed'])
     expect(isValidOrderTransition('accepted', 'in_progress')).toBe(false)
     expect(isValidOrderTransition('completed', 'disputed')).toBe(true)
   })

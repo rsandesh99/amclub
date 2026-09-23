@@ -332,10 +332,13 @@ placed → accepted → requirements_submitted → in_progress
 in_progress → delivered → completed (buyer accepts or 72h auto)
 in_progress → delivered → revision_requested → in_progress  (max N revisions per package)
 any-pre-completed → disputed → {resolved_refund | resolved_release | resolved_partial}
+completed → disputed  (only within dispute_window_days of completion — ADR-014)
 placed|accepted → cancelled_by_buyer (policy-based refund %)
 completed → reviewed
 ```
 Payout to provider releases ONLY from `completed` or `resolved_release/partial`.
+
+**Dispute reachability and window (ADR-014 §6).** "Any-pre-completed" means every status after the provider accepts: `accepted`, `requirements_submitted`, `in_progress`, `delivered`, `revision_requested` (not `placed`, where the buyer cancels with a full refund). After completion a dispute is accepted only until `completed_at + agent_settings.dispute_window_days` (default 7). The order page shows the buyer that deadline and hides the action once it passes. Goods returns keep their own Mart category window.
 
 **External/government-wait sub-state (display only — not a new enum):** while an order is `in_progress`, work may block on a government portal/registrar/bank — time outside the provider's control. This is modelled as a marker on the order (`external_wait_since timestamptz NULL` + an `external_wait` / `external_resume` timeline event), **not** a new status in the canonical machine above. While the marker is set the timeline shows **"Pending Government Portal Processing"** (External time), and the delivery-SLA / 72h auto-accept clock **pauses**. Canonical transitions and the payout-release set are unchanged (§8.4-safe).
 

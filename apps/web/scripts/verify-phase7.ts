@@ -198,6 +198,33 @@ async function main() {
     payout5!.status === 'paid' && Number(payout5!.amount_paise) === Number(ord5b!.provider_earning_paise),
     `manual=${man5.status} manual2=${man5b.status}:${man5bd.error} partial=${partial5.status}:${partial5d.error}(${partial5d.existingPaise}) order=${ord5a!.status} release=${release5.status}→${ord5b!.status} refunds=${(refunds5 ?? []).map((r) => r.amount_paise).join(',')} payout=${payout5!.status}/${payout5!.amount_paise}`)
 
+  // ── Criterion 3d (ADR-014 H2): a buyer stuck before work starts can dispute ──
+  const o6 = await placeOrder(buyer.token, pkg!.id); created.orderIds.push(o6)
+  await api(prov.token, `/api/v1/orders/${o6}/transition`, { action: 'accept' })
+  await api(buyer.token, `/api/v1/orders/${o6}/transition`, { action: 'submit_requirements' })
+  const disp6 = await api(buyer.token, `/api/v1/orders/${o6}/transition`, { action: 'raise_dispute', disputeReason: 'provider never started' })
+  const { data: ord6 } = await admin.from('orders').select('status').eq('id', o6).single()
+  const { data: disp6row } = await admin.from('disputes').select('status').eq('order_id', o6).maybeSingle()
+  check('3d. Dispute from requirements_submitted (provider silent) is accepted',
+    disp6.ok && ord6!.status === 'disputed' && disp6row?.status === 'open',
+    `http=${disp6.status} order=${ord6!.status} dispute=${disp6row?.status}`)
+
+  // ── Criterion 3e (ADR-014 H2): after completion, only inside dispute_window_days ──
+  const o7 = await placeOrder(buyer.token, pkg!.id); created.orderIds.push(o7)
+  await completeOrder(buyer, prov, o7)
+  const detail7 = await (await api(buyer.token, `/api/v1/orders/${o7}`, undefined, 'GET')).json()
+  const endsAt7 = typeof detail7.disputeWindowEndsAt === 'string' ? Date.parse(detail7.disputeWindowEndsAt) : NaN
+  // Age the completion past any window the setting allows (max 90 days).
+  await admin.from('orders').update({ completed_at: new Date(Date.now() - 91 * 86_400_000).toISOString() }).eq('id', o7)
+  const late7 = await api(buyer.token, `/api/v1/orders/${o7}/transition`, { action: 'raise_dispute', disputeReason: 'too late to report this' })
+  const late7d = await late7.json()
+  const { data: ord7 } = await admin.from('orders').select('status').eq('id', o7).single()
+  const { data: disp7 } = await admin.from('disputes').select('id').eq('order_id', o7).maybeSingle()
+  check('3e. Completed order: deadline exposed; a dispute past the window is refused (409 dispute_window_closed)',
+    Number.isFinite(endsAt7) && endsAt7 > Date.now() &&
+    late7.status === 409 && late7d.error === 'dispute_window_closed' && ord7!.status === 'completed' && !disp7,
+    `endsAt=${detail7.disputeWindowEndsAt} late=${late7.status}:${late7d.error} order=${ord7!.status} dispute=${disp7 ? 'created' : 'none'}`)
+
   // ── Criterion 4: commission change affects NEW orders only ──────────────────
   const { data: existingOrd } = await admin.from('orders').select('commission_bps').eq('id', o2).single()
   await api(adminUser.token, '/api/v1/admin/categories', { id: catId, commissionBps: 1500 }, 'PATCH')

@@ -32,7 +32,7 @@ const ACTION_DEFS: readonly { action: ActionKey; role: 'msme' | 'provider'; to: 
 ]
 
 // Returns action keys; labels come from t(`order_actions.${action}`).
-function actionsFor(role: string, status: string, revisionsLeft: number): ActionKey[] {
+function actionsFor(role: string, status: string, revisionsLeft: number, disputeWindowEndsAt: string | null): ActionKey[] {
   const s = status as OrderStatus
   const next = ORDER_TRANSITIONS[s] ?? []
   const out = ACTION_DEFS.filter((d) => d.role === role && next.includes(d.to) && (!d.from || d.from === s))
@@ -40,7 +40,10 @@ function actionsFor(role: string, status: string, revisionsLeft: number): Action
     // The server rejects a revision once revision_used >= revision_max.
     .filter((a) => a !== 'request_revision' || revisionsLeft > 0)
   // Buyer "report a problem": the server checks DISPUTABLE_STATUSES AND the machine.
-  if (role === 'msme' && DISPUTABLE_STATUSES.includes(s) && next.includes(DISPUTED)) out.push('raise_dispute')
+  // After completion the server also requires the post-completion window (ADR-014 H2);
+  // the deadline comes from the server (GET /orders/[id].disputeWindowEndsAt).
+  const windowOpen = s !== COMPLETED || (!!disputeWindowEndsAt && Date.now() < Date.parse(disputeWindowEndsAt))
+  if (role === 'msme' && DISPUTABLE_STATUSES.includes(s) && next.includes(DISPUTED) && windowOpen) out.push('raise_dispute')
   return out
 }
 
@@ -96,7 +99,7 @@ export default function OrderScreen() {
     setBusy(true)
     const { ok, data: res } = await transitionOrder(id, action, extra)
     setBusy(false)
-    if (!ok) { Alert.alert(t('common.error'), typeof res.error === 'string' ? res.error : t('order_actions.failed')); return }
+    if (!ok) { Alert.alert(t('common.error'), res.error === 'dispute_window_closed' ? t('orders.dispute_window_closed') : typeof res.error === 'string' ? res.error : t('order_actions.failed')); return }
     setCompose(null); setText('')
     load()
   }
@@ -110,7 +113,9 @@ export default function OrderScreen() {
   const revisionUsed = Number(o.revision_used ?? 0)
   const revisionMax = o.revision_max == null ? null : Number(o.revision_max)
   const revisionsLeft = Math.max(0, (revisionMax ?? 0) - revisionUsed)
-  const actions = actionsFor(role, o.status, revisionsLeft)
+  const disputeEndsAt: string | null = typeof data.disputeWindowEndsAt === 'string' ? data.disputeWindowEndsAt : null
+  const actions = actionsFor(role, o.status, revisionsLeft, disputeEndsAt)
+  const disputeDeadline = role === 'msme' && o.status === COMPLETED && disputeEndsAt && actions.includes('raise_dispute') ? istDateTime(disputeEndsAt) : null
   const nextKey = `orders.next_${role}_${o.status}`
   const nextLine = t(nextKey)
   const statusKey = `orders.status_${o.status}`
@@ -196,6 +201,7 @@ export default function OrderScreen() {
             <View className="rounded-full bg-primary/10 px-3 py-1"><Text className="text-xs font-semibold text-primary">{statusLabel}</Text></View>
           </View>
           {nextLine !== nextKey && <Text className="mt-3 rounded-lg bg-primary/5 px-3 py-2 text-sm font-medium text-foreground">{nextLine}</Text>}
+          {disputeDeadline && <Text className="mt-2 text-xs text-foreground-secondary">{t('orders.dispute_window_until', { date: disputeDeadline })}</Text>}
           {orderStatus === DELIVERED && o.auto_accept_at ? (
             <Text className="mt-2 text-sm text-foreground-secondary">
               {role === 'msme' ? t('orders.auto_accept_buyer', { when: istDateTime(o.auto_accept_at) }) : t('orders.auto_accept_provider', { when: istDateTime(o.auto_accept_at) })}

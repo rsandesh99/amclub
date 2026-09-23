@@ -18,10 +18,11 @@ Deferred / notes:
 - **Run the new rig criteria.** `verify-phase7.ts` criteria 3b and 3c are written
   and typechecked but not yet run. They need a test database: the disposable-DB
   CI harness (S3.3 prompt H1) or a test project, never production.
-- **H2 and H6 are still open** in ADR-014 (dispute reachability from `accepted` /
-  `requirements_submitted`, a post-completion dispute window, what a review does
-  to dispute rights; the duplicate-RFQ-order refund state). Both must be decided
-  before ADR-011 approval.
+- **H2 landed** (ADR-014 §6): the missing `→ disputed` edges, and a post-completion
+  window (`dispute_window_days`, default 7) shown to the buyer. Rig criteria 3d
+  and 3e are not yet run.
+- **H6 is still open** in ADR-014 (the duplicate-RFQ-order refund state). It must
+  be decided before ADR-011 approval.
 - **Clawback.** A dispute on an already-paid order cannot refund through the
   resolution. The interim path is a manual refund, then release (the platform
   bears it). A Razorpay Route transfer reversal needs its own ADR and a recorded

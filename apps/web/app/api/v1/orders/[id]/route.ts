@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { resolveActor } from '@/lib/orders/actor'
+import { orderDisputeWindowEndsAt } from '@/lib/orders/queries'
 
 /** Order detail for a party (cookie or Bearer auth) — used by web + mobile. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,11 +24,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const isProvider = actor.providerId && order.provider_id === actor.providerId
   if (!isMsme && !isProvider) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { data: events } = await admin
-    .from('order_events')
-    .select('id, event, created_at')
-    .eq('order_id', id)
-    .order('created_at', { ascending: true })
+  const [{ data: events }, disputeWindowEndsAt] = await Promise.all([
+    admin.from('order_events').select('id, event, created_at').eq('order_id', id).order('created_at', { ascending: true }),
+    orderDisputeWindowEndsAt(admin, order),
+  ])
 
-  return NextResponse.json({ order, events: events ?? [], viewerRole: isProvider ? 'provider' : 'msme' })
+  // ADR-014 (H2) — disputeWindowEndsAt: a completed order's last moment to report a problem (null otherwise).
+  return NextResponse.json({ order, events: events ?? [], viewerRole: isProvider ? 'provider' : 'msme', disputeWindowEndsAt })
 }

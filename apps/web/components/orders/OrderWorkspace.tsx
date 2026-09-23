@@ -87,7 +87,7 @@ const PROVIDER_ONLY_EVENTS = new Set(['payout_held', 'payout_scheduled', 'payout
 // Events that represent EXTERNAL (government/portal) time, not provider time.
 const EXTERNAL_EVENTS = new Set(['external_wait', 'external_resume'])
 
-const EMPTY_EXTRAS: ServicesOrderExtras = { requirementsTemplate: [], requirements: null, lastRevisionNote: null, refund: null }
+const EMPTY_EXTRAS: ServicesOrderExtras = { requirementsTemplate: [], requirements: null, lastRevisionNote: null, refund: null, disputeWindowEndsAt: null }
 
 function istDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
@@ -168,7 +168,10 @@ function ServicesOrderWorkspace({
   const deliveryDays = order['delivery_days'] == null ? null : Number(order['delivery_days'])
   const hasDeliverable = documents.some((d) => d.kind === 'deliverable')
 
-  const actions = actionsFor(viewerRole, status, { revisionsLeft })
+  const disputeEndsAt = extras.disputeWindowEndsAt
+  const actions = actionsFor(viewerRole, status, { revisionsLeft, disputeWindowEndsAt: disputeEndsAt })
+  // ADR-014 (H2) — the buyer sees how long they can still report a problem on a completed order.
+  const disputeDeadline = viewerRole === 'msme' && status === ('completed' satisfies OrderStatus) && disputeEndsAt && actions.includes('raise_dispute') ? istDateTime(disputeEndsAt) : null
   const showRequirementsForm = actions.includes('submit_requirements')
   const buttonActions = actions.filter((a) => a !== 'submit_requirements')
   // External/government wait is a DISPLAY sub-state on in_progress (LOCK 5).
@@ -219,7 +222,7 @@ function ServicesOrderWorkspace({
         body: JSON.stringify(body),
       })
       const d = await res.json().catch(() => ({}))
-      if (!res.ok) return typeof d.error === 'string' ? d.error : t('action_failed')
+      if (!res.ok) return d.error === 'dispute_window_closed' ? t('dispute_window_closed') : typeof d.error === 'string' ? d.error : t('action_failed')
       return null
     } catch {
       return t('action_failed')
@@ -349,6 +352,9 @@ function ServicesOrderWorkspace({
         </div>
         {nextLine && (
           <p className="mt-3 rounded-button bg-primary/5 px-3 py-2 text-sm font-medium" data-testid="order-next-step">{nextLine}</p>
+        )}
+        {disputeDeadline && (
+          <p className="mt-2 text-xs text-foreground-secondary" data-testid="order-dispute-deadline">{t('dispute_window_until', { date: disputeDeadline })}</p>
         )}
         {externalWait && (
           <p className="mt-3 rounded-button bg-warning/10 px-3 py-2 text-xs text-warning">
