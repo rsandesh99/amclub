@@ -116,7 +116,21 @@
     "processing_body": "Your order is being confirmed and will appear below in a few seconds.",
     "processing_slow_title": "Your payment is safe",
     "processing_slow_body": "Confirmation is taking longer than usual. Your order will appear here shortly — no need to pay again. If it has not appeared in 15 minutes, contact support@amclub.in.",
-    "gstin_check_hint": "This GSTIN does not pass the checksum — please re-check it. You can still continue; we validate again at payment."
+    "gstin_check_hint": "This GSTIN does not pass the checksum — please re-check it. You can still continue; we validate again at payment.",
+    "coupon_label": "Coupon code",
+    "gstin_prefilled": "Filled in from your business profile — change it if this order should be billed to a different GSTIN.",
+    "err_unauthorized": "Your session has expired. Please sign in again.",
+    "err_profile_incomplete": "Complete your business profile before paying.",
+    "err_package_unavailable": "This package is no longer available.",
+    "err_provider_paused": "This provider has paused new orders for now. Please check back later or choose another provider.",
+    "err_gstin_invalid": "This GSTIN does not look right. Correct it, or clear the field to continue without it.",
+    "err_quote_unavailable": "This quote is no longer available.",
+    "err_rfq_closed": "This request is closed, so its quotes can no longer be accepted.",
+    "err_rfq_checkout_in_progress": "A payment for another quote on this request is already in progress. If you closed it without paying, you can choose a different quote after 30 minutes.",
+    "err_rfq_already_paid": "You have already paid for a quote on this request. You will find the order under My orders.",
+    "err_razorpay_load_failed": "The payment window could not load. Check your connection and try again — you have not been charged.",
+    "err_network": "No connection. Check your internet and try again.",
+    "err_rate_limited": "Too many attempts. Please wait a minute and try again."
   },
   "orders": {
     "nudge_button": "Send a reminder",
@@ -1231,7 +1245,16 @@
     "revise_none_left": "No revisions left — this quote has been revised the maximum number of times.",
     "intake_take_photo": "Take photo",
     "intake_choose_file": "Choose file",
-    "intake_choose_file_hint": "Photo, PDF, STEP or DXF"
+    "intake_choose_file_hint": "Photo, PDF, STEP or DXF",
+    "accept_confirm_title": "Accept this quote and pay?",
+    "accept_confirm_provider": "Provider",
+    "accept_confirm_price": "Quoted price",
+    "accept_confirm_total_goods": "Total for {qty} {unit} incl. GST",
+    "accept_confirm_gst_note": "GST is applied at checkout — the payment screen shows the exact amount before you pay.",
+    "accept_confirm_escrow": "AMClub holds your money and releases it to the provider only after you accept the work.",
+    "accept_confirm_others": "{count, plural, one {The other quote on this request will be closed.} other {The other # quotes on this request will be closed.}}",
+    "accept_confirm_submit": "Continue to payment",
+    "accept_confirm_cancel": "Not now"
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -2446,7 +2469,14 @@
     "view_order": "View order",
     "return_freight_seller": "Return freight is borne by the seller.",
     "return_freight_buyer": "Return freight is borne by the buyer.",
-    "return_freight_split": "Return freight is split equally between buyer and seller."
+    "return_freight_split": "Return freight is split equally between buyer and seller.",
+    "state_placeholder": "Select your state",
+    "pay_blocked_preview": "Fetching the price for your cart…",
+    "pay_blocked_state": "Choose the delivery state to continue — it decides how GST is charged.",
+    "pay_blocked_phone": "Enter a valid 10-digit mobile number.",
+    "pay_blocked_gstin": "Correct the GSTIN, or clear it to continue without a GST invoice.",
+    "pay_blocked_form": "Fill in the delivery details above to continue.",
+    "gstin_check_hint": "This GSTIN does not pass the checksum — please re-check it."
   },
   "admin_mart": {
     "title": "AMC Mart",

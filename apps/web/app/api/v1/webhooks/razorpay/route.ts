@@ -61,7 +61,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (event === 'payment.failed') {
-    // No order is created on failure (§3.8).
+    // No order is created on failure (§3.8). Deliberately NOT written to the
+    // checkout session: Razorpay lets the buyer retry on the SAME order, and
+    // materialize_order only claims a session in status 'created' — marking it
+    // 'failed' here would strand a later successful capture. There is no
+    // separate attempt/failure column to record into, so log it for ops only.
+    console.warn('[razorpay webhook] payment.failed', entity?.['order_id'] ?? null, entity?.['error_code'] ?? null)
     return NextResponse.json({ ok: true, ignored: 'payment.failed' })
   }
 
