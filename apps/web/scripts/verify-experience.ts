@@ -1073,6 +1073,84 @@ async function e10() {
   }
 }
 
+async function e11a() {
+  console.log('\nE11a — provider Today, inbox v2, view counts')
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const { data: gov } = await admin.from('categories').select('id').eq('slug', 'government-licensing').single()
+  const buyer = await mkUser('e11buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E11 Rao Textiles Secret Name', state: 'TS', sector: 'manufacturing', udyam_verified: true }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  const other = await mkUser('e11other')
+  const { data: om } = await admin.from('msme_profiles').insert({ user_id: other.uid, business_name: 'E11 Other', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(om!.id)
+  const prov = await mkUser('e11prov', ['provider'])
+  const slug = `${tag.replace(/_/g, '-')}-e11prov`
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E11 Prov', display_name: 'E11 Prov', slug, state: 'TS', status: 'active', languages: ['en'], next_available_on: new Date(Date.now() + 5 * 86400e3).toISOString().slice(0, 10) }).select('id').single()
+  created.providerIds.push(pp!.id)
+  const { data: pkg } = await admin.from('packages').insert({ provider_id: pp!.id, category_id: tax!.id, slug: `${slug}-pkg`, title_i18n: { en: 'E11 GST filing' }, scope_included: ['x'], deliverables: ['y'], price_paise: 1000_00, delivery_days: 5, status: 'active' }).select('id').single()
+  created.packageIds.push(pkg!.id)
+  const iso = (h: number) => new Date(Date.now() + h * 3600e3).toISOString()
+  const mk = async (title: string, category: string, extra: Record<string, unknown>, msmeId = msme!.id, match = true) => {
+    const { data: r } = await admin.from('rfqs').insert({ msme_id: msmeId, category_id: category, title, details: {}, status: 'open', fanout_at: iso(-2), ...extra }).select('id').single()
+    created.rfqIds.push(r!.id)
+    if (match) await admin.from('rfq_matches').insert({ rfq_id: r!.id, provider_id: pp!.id, notified_at: iso(-1) })
+    return r!.id as string
+  }
+  const r1 = await mk('E11 GST returns FY 25-26', tax!.id, { expires_at: iso(9), budget_min_paise: 400_000, budget_max_paise: 600_000, attachments: [{ url: 'rfq-attachments/x/y.pdf', name: 'gstr.pdf' }] })
+  const r2 = await mk('E11 Factory licence renewal', gov!.id, { expires_at: iso(40) })
+  const r4 = await mk('E11 Unmatched secret request', tax!.id, { expires_at: iso(20) }, om!.id, false)
+  // A paid order with anyone makes the buyer "verified" under D2 (identity verified + ≥ 1 paid order).
+  const { data: paidOrder } = await admin.from('orders').insert({ msme_id: msme!.id, provider_id: pp!.id, source: 'package', package_id: pkg!.id, title: 'E11 earlier order', scope_snapshot: {}, price_paise: 1000_00, gst_paise: 180_00, total_paise: 1180_00, commission_bps: 1000, commission_paise: 100_00, provider_earning_paise: 900_00, delivery_days: 5, status: 'completed', completed_at: iso(-48) }).select('id').single()
+  created.orderIds.push(paidOrder!.id)
+  await admin.from('payouts').insert({ provider_id: pp!.id, order_id: paidOrder!.id, amount_paise: 900_00, status: 'scheduled', scheduled_for: new Date(Date.now() + 2 * 86400e3).toISOString().slice(0, 10) })
+
+  const inbox = async (qs = '') => visible(await (await fetch(`${BASE}/partner/rfqs${qs}`, { headers: { cookie: prov.cookie } })).text())
+  const ids = (html: string) => [r1, r2, r4].filter((id) => html.includes(`data-rfq="${id}"`))
+  try {
+    const all = await inbox()
+    check('FR-11.2: inbox v2 lists my matches as a table', all.includes('data-testid="inbox-v3"') && ids(all).join() === [r1, r2].join(), ids(all).join())
+    const cases: [string, string[]][] = [['?q=gst', [r1]], ['?closing=1', [r1]], ['?files=1', [r1]], ['?budget=5kto10k', [r1]], ['?category=government-licensing', [r2]], ['?q=secret', []], ['?state=TS&sort=closing', [r1, r2]]]
+    const bad: string[] = []
+    for (const [qs, want] of cases) { const got = ids(await inbox(qs)); if (got.join() !== want.join()) bad.push(`${qs} → ${got.length}`) }
+    check('FR-11.2: filters, search and sort narrow my own matches — never an unmatched RFQ', bad.length === 0, bad.join('; '))
+    const noBadge = await inbox('?verified=1')
+    check('FR-11.3: with the D2 badge off, "verified" shows nothing', ids(noBadge).length === 0 && !noBadge.includes('data-verified="1"'))
+    const restore = await setSetting('buyer_verified_badge_enabled', true)
+    try {
+      const badge = await inbox('?verified=1')
+      check('FR-11.3: badge on → the verified buyer’s request, as a boolean only (no buyer name or id)', ids(badge).join() === r1 && badge.includes('data-verified="1"') && !badge.includes('Rao Textiles Secret Name') && !badge.includes(msme!.id))
+    } finally { await restore() }
+
+    // FR-11.1 Today.
+    const { data: q2 } = await admin.from('quotes').insert({ rfq_id: r2, provider_id: pp!.id, price_paise: 5000_00, delivery_days: 5, scope: 'E11 fixture quote scope text' }).select('id').single()
+    const { data: conv } = await admin.from('conversations').insert({ context_type: 'quote', context_id: q2!.id, msme_id: msme!.id, provider_id: pp!.id }).select('id').single()
+    await admin.from('messages').insert({ conversation_id: conv!.id, sender_id: buyer.uid, body: 'Can you also file the annual return?' })
+    const acts = (await (await fetch(`${BASE}/api/v1/me/actions`, { headers: { Authorization: `Bearer ${prov.token}` } })).json()) as { provider?: { items?: { kind: string; objectId: string; href: string }[] } }
+    const kinds = (acts.provider?.items ?? []).map((i) => i.kind)
+    check('FR-11.1: provider rows include new RFQs (closing soonest first) and the buyer’s unanswered message', kinds.includes('rfq_new') && kinds.includes('buyer_message') && (acts.provider?.items ?? []).find((i) => i.kind === 'buyer_message')?.href === `/partner/rfqs/${r2}`, kinds.join(','))
+    const today = visible(await (await fetch(`${BASE}/partner`, { headers: { cookie: prov.cookie } })).text())
+    check('FR-11.1: Today shows what’s due, the funnel, payouts and the next-available date', today.includes('data-testid="partner-today"') && today.includes('data-testid="partner-funnel"') && today.includes('data-testid="partner-payouts"') && today.includes('data-testid="next-available"') && today.includes('₹900'))
+
+    // N29 view beacon: once per visitor per day; never a bot; never the owner.
+    const beacon = (headers: Record<string, string>) => fetch(`${BASE}/api/v1/views`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) E11Rig', ...headers }, body: JSON.stringify({ kind: 'package', id: pkg!.id }) })
+    const b1 = await beacon({})
+    await beacon({})
+    await beacon({ 'User-Agent': 'Googlebot/2.1' })
+    await beacon({ cookie: prov.cookie, 'User-Agent': 'Mozilla/5.0 OwnerBrowser' })
+    const { data: vc } = await admin.from('view_counts_daily').select('views').eq('subject_kind', 'package').eq('subject_id', pkg!.id)
+    check('N29: a view counts once per visitor per day, never for a bot or the owner', b1.status === 204 && (vc ?? []).reduce((a, r) => a + Number(r.views), 0) === 1, JSON.stringify(vc))
+    const funnel = visible(await (await fetch(`${BASE}/partner`, { headers: { cookie: prov.cookie } })).text()).match(/data-funnel="([^"]+)"/)?.[1]
+    check('N29: the funnel reads views → matched → quoted → won', funnel === '1/2/1/0', funnel ?? '')
+  } finally {
+    await admin.from('messages').delete().eq('sender_id', buyer.uid)
+    await admin.from('conversations').delete().eq('provider_id', pp!.id)
+    await admin.from('payouts').delete().eq('provider_id', pp!.id)
+    await admin.from('view_counts_daily').delete().eq('provider_id', pp!.id)
+    for (const id of [r1, r2, r4]) await admin.from('rfq_matches').delete().eq('rfq_id', id)
+    for (const id of [r1, r2, r4]) await admin.from('quotes').delete().eq('rfq_id', id)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1087,6 +1165,7 @@ async function main() {
     await e9()
     await e9b()
     await e10()
+    await e11a()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

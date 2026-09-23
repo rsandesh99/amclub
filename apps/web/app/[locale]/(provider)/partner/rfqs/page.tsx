@@ -5,6 +5,9 @@ import { Link } from '@/i18n/navigation'
 import { getSessionUser, getProviderProfile } from '@/lib/auth/session'
 import { listProviderRfqInbox, PROVIDER_INBOX_TABS, type ProviderInboxTab, type ProviderRfqItem } from '@/lib/rfq/queries'
 import { Badge } from '@/components/ui/badge'
+import { parseInboxQuery } from '@amclub/shared'
+import { isOnFor } from '@/lib/experiments'
+import { InboxV3 } from '@/components/partner-v3/InboxV3'
 
 function parseTab(v: string | undefined): ProviderInboxTab {
   return (PROVIDER_INBOX_TABS as readonly string[]).includes(v ?? '') ? (v as ProviderInboxTab) : 'open'
@@ -23,15 +26,17 @@ const TAB_EMPTY = { open: 'inbox_empty_open', quoted: 'inbox_empty_quoted', clos
  * pages 20 at a time). Closed keeps the history — won (with the order), not
  * selected, declined, withdrawn, expired — so alerts about them land here.
  */
-export default async function PartnerRfqsPage({ searchParams }: { searchParams: Promise<{ tab?: string; page?: string }> }) {
+export default async function PartnerRfqsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams
   const user = await getSessionUser()
   if (!user) redirect('/login?next=/partner/rfqs')
   const profile = await getProviderProfile(user.id)
   if (!profile) redirect('/partner/onboarding')
+  // Experience v3 E11 (flag `partner`): inbox v2 — filters, sort and search in the URL, over my own matches.
+  if (isOnFor('partner', user.id)) return <InboxV3 userId={user.id} query={parseInboxQuery(sp)} />
   const t = await getTranslations('rfq')
-  const tab = parseTab(sp.tab)
-  const inbox = await listProviderRfqInbox(user.id, { tab, page: Number(sp.page ?? '1') })
+  const tab = parseTab(sp['tab'])
+  const inbox = await listProviderRfqInbox(user.id, { tab, page: Number(sp['page'] ?? '1') })
   const total = inbox.counts.open + inbox.counts.quoted + inbox.counts.closed
 
   return (

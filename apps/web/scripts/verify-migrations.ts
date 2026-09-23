@@ -344,6 +344,13 @@ const MANIFEST: Entry[] = [
     triggers: [['provider_onboarding_progress', 'provider_onboarding_progress_set_updated_at']],
     note: 'E10 / N27c: provider_onboarding_progress (last step per applicant) + onboarding_nudges (<= 2, PK idempotent); service role only',
   },
+  {
+    file: '0056_view_counts.sql',
+    tables: ['view_counts_daily'],
+    functions: ['bump_view_count'],
+    triggers: [['view_counts_daily', 'view_counts_daily_set_updated_at']],
+    note: 'E11 / N29: view_counts_daily (provider reads own; written only by bump_view_count(), service role, from the rate-limited beacon)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

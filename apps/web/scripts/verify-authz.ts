@@ -657,6 +657,26 @@ async function main() {
     deniedRows('buyerC INSERTs a forged acceptance', await cClient.from('terms_acceptances').insert({ user_id: buyerC.uid, doc: 'provider_addendum', version: '2026-08-28' }).select('id'))
     eq('after tamper attempts: still exactly 2 rows', ((await admin.from('terms_acceptances').select('id').eq('user_id', buyerC.uid)).data ?? []).length, 2)
     eq('re-accepting is idempotent (written=[])', JSON.stringify((((await (await api(buyerC.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'] })).json()) as { written?: string[] }).written) ?? null), '[]')
+    // ── Experience v3 E11 (N29): view counts are readable only by their provider ──
+    console.log('\nview_counts_daily (E11 N29):')
+    const today = new Date().toISOString().slice(0, 10)
+    await admin.from('view_counts_daily').insert([
+      { subject_kind: 'provider', subject_id: provAId, provider_id: provAId, day: today, views: 7 },
+      { subject_kind: 'provider', subject_id: provBId, provider_id: provBId, day: today, views: 3 },
+    ])
+    try {
+      const asUser = (token: string | null) => createClient(URL_, ANON, { auth: { persistSession: false }, ...(token ? { global: { headers: { Authorization: `Bearer ${token}` } } } : {}) })
+      const { data: seenByB } = await asUser(provB.token).from('view_counts_daily').select('provider_id').in('provider_id', [provAId, provBId])
+      eq('provB reads only its own view counts', (seenByB ?? []).map((r) => r.provider_id).join(), provBId)
+      const { data: seenByBuyer } = await asUser(buyerA.token).from('view_counts_daily').select('provider_id').in('provider_id', [provAId, provBId])
+      eq('a buyer reads no view counts', (seenByBuyer ?? []).length, 0)
+      const { data: seenByAnon } = await asUser(null).from('view_counts_daily').select('provider_id').in('provider_id', [provAId, provBId])
+      eq('anon reads no view counts', (seenByAnon ?? []).length, 0)
+      const ins = await asUser(provB.token).from('view_counts_daily').insert({ subject_kind: 'provider', subject_id: provBId, provider_id: provBId, day: today, views: 999 })
+      eq('a provider cannot write view counts directly', !!ins.error, true)
+    } finally {
+      await admin.from('view_counts_daily').delete().in('provider_id', [provAId, provBId])
+    }
   } finally {
     // Cleanup — children before parents; loud on error.
     const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {

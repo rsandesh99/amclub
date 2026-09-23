@@ -6,6 +6,8 @@ import { listMatchedRfqsForProvider } from '@/lib/rfq/queries'
 import { todayIST } from '@/lib/agent/quote-extract'
 import { isOnFor } from '@/lib/experiments'
 import { isGoodsRow, QUOTE_GOODS_COLS, RFQ_GOODS_LIST_COLS } from '@/lib/mart/staged-columns'
+import { AGENT_ENABLED } from '@/lib/flags'
+import { isMunshiEnabledFor } from '@/lib/agent/munshi'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -106,6 +108,47 @@ async function buyerQuoteFacts(admin: Admin, live: LiveRfq[]): Promise<{ fromPai
 }
 
 /**
+ * E11 FR-11.1 — provider rows beyond orders and new RFQs: a buyer's message on
+ * one of my quotes whose thread's latest word is the buyer's, and Munshi
+ * drafts waiting for my tap (only while Munshi is on for me). Keyed to my own
+ * provider id; titles are the RFQ titles I can already see.
+ */
+async function providerExtraItems(admin: Admin, userId: string, providerId: string): Promise<ActionItem[]> {
+  const out: ActionItem[] = []
+  const { data: convs } = await admin
+    .from('conversations')
+    .select('id, context_id')
+    .eq('provider_id', providerId)
+    .eq('context_type', 'quote')
+    .order('updated_at', { ascending: false, nullsFirst: false })
+    .limit(30)
+  if (convs?.length) {
+    const { data: msgs } = await admin.from('messages').select('conversation_id, sender_id, created_at').in('conversation_id', convs.map((c) => c.id as string)).order('created_at', { ascending: false }).limit(300)
+    const latest = new Map<string, { sender: string; at: string }>()
+    for (const m of msgs ?? []) if (!latest.has(m.conversation_id as string)) latest.set(m.conversation_id as string, { sender: m.sender_id as string, at: m.created_at as string })
+    const waiting = convs.filter((c) => { const l = latest.get(c.id as string); return !!l && l.sender !== userId })
+    if (waiting.length) {
+      const { data: qs } = await admin.from('quotes').select('id, rfq_id, rfq:rfqs(title)').in('id', waiting.map((c) => c.context_id as string))
+      const byQuote = new Map((qs ?? []).map((q) => [q.id as string, q as unknown as { rfq_id: string; rfq: { title: string | null } | { title: string | null }[] | null }]))
+      for (const c of waiting) {
+        const q = byQuote.get(c.context_id as string)
+        if (!q) continue
+        const rfq = Array.isArray(q.rfq) ? q.rfq[0] : q.rfq
+        out.push({ kind: 'buyer_message', objectId: c.id as string, title: rfq?.title ?? '', action: null, count: null, dueAt: null, href: `/partner/rfqs/${q.rfq_id}` })
+      }
+    }
+  }
+  if (AGENT_ENABLED && (await isMunshiEnabledFor(admin, userId).catch(() => false))) {
+    const { data: drafts } = await admin.from('munshi_drafts').select('id, rfq_id, rfq:rfqs(title)').eq('provider_id', providerId).eq('status', 'proposed').order('created_at', { ascending: false }).limit(10)
+    for (const d of (drafts ?? []) as unknown as { id: string; rfq_id: string | null; rfq: { title: string | null } | { title: string | null }[] | null }[]) {
+      const rfq = Array.isArray(d.rfq) ? d.rfq[0] : d.rfq
+      out.push({ kind: 'munshi_draft', objectId: d.id, title: rfq?.title ?? '', action: null, count: null, dueAt: null, href: '/partner/munshi' })
+    }
+  }
+  return out
+}
+
+/**
  * N2 — everything waiting on this user, per role. Party-scoped: every read is
  * keyed to the caller's own profile ids (resolveActor), so the service-role
  * client never returns another user's rows.
@@ -161,9 +204,11 @@ export async function getMyActions(userId: string): Promise<MeActions> {
     const fresh: ActionItem[] = matched
       .filter((m) => m.outcome === 'open' && !m.viewed)
       .map((m) => ({ kind: 'rfq_new', objectId: m.rfqId, title: m.title ?? '', action: null, count: null, dueAt: m.expiresAt ?? null, href: `/partner/rfqs/${m.rfqId}` }))
+    // E11 (FR-11.1, flag `partner`): buyer messages waiting on a reply, and Munshi drafts ready (dark, S2.2).
+    const extra = isOnFor('partner', userId) ? await providerExtraItems(admin, userId, actor.providerId) : []
     provider = {
-      counts: { rfqs: fresh.length, orders: orders.length },
-      items: sortActionItems([...orders, ...fresh]).slice(0, ITEM_CAP),
+      counts: { rfqs: fresh.length + extra.filter((i) => i.kind === 'buyer_message').length, orders: orders.length },
+      items: sortActionItems<ActionItem>([...orders, ...fresh, ...extra]).slice(0, ITEM_CAP),
     }
   }
 

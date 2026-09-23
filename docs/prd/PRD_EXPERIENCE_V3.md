@@ -1944,6 +1944,31 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.9 · I 1 · C 0.8 · E 4 → **0.18**.
 
+**As built (E11a: Today, inbox v2, view counts).** E11 ships as two PRs. E11a is this one. E11b adds the quote form v3 with the server preview, `/partner/insights`, listing performance, and the gated tenders / GeM checklist.
+- **Flag.** `EXP_V3_PARTNER`.
+- **Today** (`/partner`).
+  - **Needs your action** (≤ 5; "See all" → `/partner/actions`):
+    - order rows from `nextAction` (accept, start, deliver, revise, dispute statement);
+    - new matched RFQs, closing soonest first;
+    - `buyer_message`: a quote thread whose latest message is the buyer's;
+    - `munshi_draft`: proposed drafts, only while Munshi is on for the provider.
+  - The PRD's "clarification questions to answer" is `buyer_message`: in S1.3, clarifications are provider → buyer, and buyers write to providers in quote threads.
+  - **Funnel card** (7 / 30 days via `?range=`): views → matched → quoted → won, with rates. Decline reasons show only with n ≥ 3 (shared `buildFunnel`).
+  - **Payouts panel:** scheduled with the next date, on hold with the `payout_held` reasons, and paid in the last 30 days. It reads the ledger only.
+  - **Next available start** (E3's `next_available_on`) and the score card are unchanged. The banners stay.
+- **Inbox v2** (`/partner/rfqs`).
+  - Tabs with filtered counts, and filters for category, state, budget band (overlap), closing < 12 h, buyer verified and has files.
+  - Title search, and sort by newest, closing soon or budget high.
+  - Everything lives in the URL (shared `parseInboxQuery` / `inboxQueryToString`). It runs in memory over the provider's own matched rows (`loadProviderInboxMatches`, the v2 loader), so a parameter can only narrow.
+  - Desktop gets a Compact `DataTable`; phones get cards, with the filters folded.
+- **Buyer verified** (D2, dark behind `buyer_verified_badge_enabled`).
+  - Shown when Udyam or GSTIN is verified and the buyer has at least one order. Every `orders` row exists only after a captured payment.
+  - The inbox carries a boolean only. The rig checks the buyer's business name and id never appear.
+- **View counts** (N29).
+  - Migration 0056 adds `view_counts_daily` (provider reads own; RLS). It is written only by `bump_view_count()` (service role, active subjects only).
+  - The beacon `POST /api/v1/views` fires from the provider and package pages while the `partner` experience is live. It skips bots and the owner, and counts a visitor (IP + UA) once per subject per IST day through the `viewOnce` limiter, with an IP cap.
+- **Privacy checks.** `verify-authz` checks that view counts are readable only by their provider. The inbox privacy checks run in the experience rig: they need a cookie session and the flag.
+
 ---
 
 ### E12: Order-value extensions (the ADR track)
