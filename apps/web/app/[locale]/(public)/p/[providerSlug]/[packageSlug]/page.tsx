@@ -11,7 +11,7 @@ import { getPackageDetail } from '@/lib/catalog/queries'
 import { packageI18nSources } from '@/lib/translations/content'
 import { createPublicClient } from '@/lib/supabase/server'
 import { TranslatedText } from '@/components/catalog/TranslatedText'
-import { isMachineTranslated } from '@amclub/shared'
+import { deliverableLabel, isMachineTranslated } from '@amclub/shared'
 import { getPackageExtras } from '@/lib/catalog/package-groups'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatINR } from '@/lib/format'
@@ -214,7 +214,7 @@ export default async function PackageDetailPage({
                 {pkg.deliverables.map((item, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span>{item}</span>
+                    <span>{deliverableLabel(item, locale)}</span>
                   </li>
                 ))}
               </ul>

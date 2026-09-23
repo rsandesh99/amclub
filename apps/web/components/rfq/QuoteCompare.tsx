@@ -151,7 +151,10 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     if (!v3 || viewed.current || rfq.quotes.length === 0) return
     viewed.current = true
     posthog.capture('compare_viewed', { quotes: rfq.quotes.length, device: 'web' })
-  }, [v3, rfq.quotes.length, posthog])
+    // E15 F1 — which deterministic flags the buyer saw (one event per flag kind per view): the outcome labels' inputs.
+    const kinds = new Set(compare.flatMap((r) => r.flags))
+    for (const flag of kinds) posthog.capture('compare_flag_viewed', { flag, device: 'web' })
+  }, [v3, rfq.quotes.length, posthog, compare])
 
   // Pointers load after mount when enabled and not cached — the table never waits on the model.
   useEffect(() => {

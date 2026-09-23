@@ -751,6 +751,21 @@ async function main() {
     } finally {
       await admin.from('view_counts_daily').delete().in('provider_id', [provAId, provBId])
     }
+    // ── Experience v3 E15 (F10): shadow predictions are service-role only — no client reads or writes any row ──
+    console.log('\nshadow_predictions (E15 F10):')
+    const shadowSubject = crypto.randomUUID()
+    await admin.from('shadow_predictions').insert({ feature: 'provider_fit', model_version: 'authz-probe', subject_kind: 'rfq', subject_id: shadowSubject, predicted: { provider_id: provAId, fit_pct: 80 } })
+    try {
+      const asUser = (token: string | null) => createClient(URL_, ANON, { auth: { persistSession: false }, ...(token ? { global: { headers: { Authorization: `Bearer ${token}` } } } : {}) })
+      for (const [who, token] of [['provA (the subject provider)', provA.token], ['buyerA', buyerA.token], ['anon', null]] as const) {
+        const { data } = await asUser(token).from('shadow_predictions').select('id').eq('subject_id', shadowSubject)
+        eq(`${who} reads no shadow_predictions`, (data ?? []).length, 0)
+      }
+      const w = await asUser(provA.token).from('shadow_predictions').insert({ feature: 'provider_fit', model_version: 'forged', subject_kind: 'rfq', subject_id: shadowSubject, predicted: {} })
+      eq('a client cannot write shadow_predictions', !!w.error, true)
+    } finally {
+      await admin.from('shadow_predictions').delete().eq('subject_id', shadowSubject)
+    }
   } finally {
     // Cleanup — children before parents; loud on error.
     const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {

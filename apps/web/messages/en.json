@@ -1493,7 +1493,8 @@
     "audit": "Audit log",
     "payouts": "Payouts",
     "mart": "Mart",
-    "agents": "Agents"
+    "agents": "Agents",
+    "shadow": "Shadow"
   },
   "admin_agents": {
     "munshi_title": "Digital Munshi (S2.2)",
@@ -3743,5 +3744,17 @@
     "err_source_changed": "Your English changed since this draft — draft again.",
     "err_decide": "Couldn't save that. Try again.",
     "open": "Translate your listings"
+  },
+  "admin_shadow": {
+    "title": "Shadow predictions",
+    "subtitle": "Rules-first predictions logged and checked against what happened. Nobody else sees them; a feature ships only when its error is acceptable.",
+    "feature_cad_price_band": "CAD price band (vs the winning quote)",
+    "feature_provider_fit": "Provider fit % (vs quoted)",
+    "on": "writer on",
+    "off": "writer off",
+    "col_week": "Week from",
+    "col_predicted": "Predicted",
+    "col_resolved": "Resolved",
+    "col_error": "Mean error"
   }
 }

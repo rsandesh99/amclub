@@ -7,6 +7,7 @@ import { addEvent, processRefund } from '@/lib/orders/transitions'
 import { writeAudit } from '@/lib/audit/log'
 import { addQuoteEvent, addQuoteEvents } from './events'
 import { labelLostQuotes } from './loss-labels'
+import { shadowAtAcceptance } from '@/lib/shadow'
 import { notifyText, sameText } from '@/lib/i18n/notify'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -66,7 +67,10 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     const result = await handleDuplicateRfqOrder(admin, orderId, quote.rfq_id as string)
     // E7 (N22) — a replay of the winning order completes loss labels an interrupted pass missed
     // (labelLostQuotes writes only missing rows, checks the winner itself, never throws).
-    if (result === 'noop') await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+    if (result === 'noop') {
+      await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+      await shadowAtAcceptance(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+    }
     return result
   }
 
@@ -113,6 +117,8 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
   )
   // E7 (N22) — one `lost` label per passed-over quote, deltas against the winner. Best-effort, outside the money path.
   await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+  // E15 F10 — resolve the RFQ's shadow predictions (price band vs the winner, fit vs quoted). Best-effort, shown to nobody.
+  await shadowAtAcceptance(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
 
   // Notify the winning provider, and the declined providers.
   const { data: winner } = await admin

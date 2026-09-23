@@ -2347,6 +2347,13 @@ Nothing in this epic is user-visible.
 
 **RICE:** R 1.0 · I 0.5 · C 0.8 · E 3 → **0.13**. It's scored as an enabler: the value arrives in V1.5–V2.
 
+**As built (E15a: typed specs, shadow predictions, the compare flag + triples).**
+- **F3 (FR-15.1).** Migration 0062 `rfqs.cad_features`, written at RFQ create from a confirmed drawing's deterministic parse (shared `cadFeaturesFromDrawing`: format, units, bbox, hole estimate, entity counts — never the product name or prose, never a model). Shared `mfgSpecSchema` (process, material, tolerance, finish, inspection): an optional `details.mfg_spec` block the create route validates (422 otherwise). Shared `packageDeliverableSchema` (`{ label_i18n, format }` or the older prose string) + `deliverableLabel`: web and mobile "What you'll get" render either.
+- **F10 (FR-15.5).** `shadow_predictions` (0062; service role only — no grant, no policy; subject ids only; 24 months). `lib/shadow` `recordShadow` / `resolveShadow` are the only writers. First users, each behind its own switch (`shadow_cad_price_band_enabled`, `shadow_provider_fit_enabled`, default off): the CAD price band (rules v1: size class × holes) predicted at fan-out and resolved against the winning quote's all-in total (0 inside the band, else the distance to the nearest edge / actual); provider fit % (rules v1: must-have languages and credentials, track record, rating, availability) per matched provider, resolved at acceptance (quoted / won). Weekly error report at `/admin/shadow` (admin / ops only).
+- **F1.** `compare_flag_viewed { flag }` (one per flag kind per compare view, v3). `scripts/export-compare-triples.ts`: one JSON line per accepted services request — salted RFQ ref, the quotes as compare showed them (shared `compareQuotes` totals, GST mode, flags), the chosen index; no provider or buyer identity.
+- **Tests.** Shared unit tests (band, fit, weekly report, specs, deliverables); rig `e15a` (a bad mfg_spec 422; cad_features from the drawing; one band + one fit per matched provider at fan-out; the client reads nothing; acceptance resolves the band against ₹5,900 and the fits quoted / won; the admin report renders for admins only); `verify-authz` (no client reads or writes `shadow_predictions`).
+- **E15b.** Search telemetry + attribution (F5), consented corpora + `service_synonyms` (F6), declared vs actual (F4).
+
 ---
 
 ### E16: AMC Mart storefront v2 (gated: Mart Launch Gate)

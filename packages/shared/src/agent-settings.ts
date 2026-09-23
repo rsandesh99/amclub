@@ -187,6 +187,17 @@ export const AGENT_SETTING_DEFS = {
     default: {},
     hint: 'E14 / FR-14.5: the last eval per language, written by `pnpm --filter @amclub/web voice:eval -- --lang <code> --set <file> --record`. Edit only to clear a result; a hand-typed pass does not count unless it carries the current eval version.',
   },
+  // ── Experience v3 E15 — shadow predictions (FR-15.5, F10): each writer has its own switch; nobody but the admin console sees them ──
+  shadow_cad_price_band_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E15 / F10: at fan-out, log a rules-v1 price band for an RFQ with a CAD drawing; resolved against the winning quote on acceptance. Shadow only — shown to nobody; the weekly error is at /admin/shadow.',
+  },
+  shadow_provider_fit_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E15 / F10: at fan-out, log a rules-v1 fit % per matched provider; resolved at acceptance (quoted / won). Shadow only — never ranks, filters or shows anything.',
+  },
   // ── Experience v3 E6 — document suggestions on the requirement form (FR-6.3) ──
   document_suggestions_enabled: {
     schema: z.boolean(),

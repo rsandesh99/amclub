@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
+import { deliverableLabel } from '@amclub/shared'
 import { fetchPackage } from '@/lib/api'
 import { pickI18n } from '@/lib/format'
 import { PriceBlock } from '@/components/PriceBlock'
@@ -82,10 +83,10 @@ export default function PackageScreen() {
         {(pkg.deliverables ?? []).length > 0 && (
           <View>
             <Text className="mb-2 text-base font-bold text-foreground">{t('catalog.deliverables')}</Text>
-            {pkg.deliverables.map((item: string, i: number) => (
+            {(pkg.deliverables as unknown[]).map((item, i) => (
               <View key={i} className="mb-1 flex-row gap-2">
                 <Text className="text-primary">•</Text>
-                <Text className="flex-1 text-sm text-foreground">{item}</Text>
+                <Text className="flex-1 text-sm text-foreground">{deliverableLabel(item, locale) ?? ''}</Text>
               </View>
             ))}
           </View>

@@ -4,6 +4,7 @@ import { createNotificationsBulk } from '@/lib/notifications/create'
 import { RFQ_GOODS_LIST_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { fanoutGoodsRfq } from '@/lib/mart/goods-fanout'
 import { notifyText, sameText } from '@/lib/i18n/notify'
+import { shadowAtFanout } from '@/lib/shadow'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -61,6 +62,8 @@ export async function fanoutRfq(admin: Admin, rfqId: string): Promise<{ matched:
       providers.map((p) => ({ rfq_id: rfqId, provider_id: p.id })),
       { onConflict: 'rfq_id,provider_id', ignoreDuplicates: true },
     )
+  // E15 F10 — shadow predictions (CAD price band, provider fit %): logged, shown to nobody; each behind its own switch.
+  await shadowAtFanout(admin, { rfqId, providerIds: providers.map((p) => p.id) })
 
   await createNotificationsBulk(admin, providers.map((p) => p.user_id), {
     kind: 'rfq_matched',

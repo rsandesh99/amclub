@@ -1609,6 +1609,74 @@ async function e14c() {
   }
 }
 
+async function e15a() {
+  console.log('\nE15a — data foundations: typed CAD features, the shadow price band + fit (shown to nobody)')
+  const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const buyer = await mkUser('e15buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E15 Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const prov = await mkUser('e15prov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E15 Prov', display_name: 'E15 Prov', slug: `${tag.replace(/_/g, '-')}-e15prov`, state: 'TS', status: 'active', languages: ['en', 'te'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: cat!.id })
+  const ops = await mkUser('e15admin', ['admin'])
+  // A confirmed drawing, as document-extract writes it (the deterministic STEP parse; never a model).
+  const summary = { format: 'step', product_name: 'E15 BRACKET', units: 'mm', bbox_mm: [120, 80, 10], counts: { faces: 42 }, hole_estimate: 6, layers: [], summary_english: 'A bracket', spec_rows: [] }
+  const { data: ix } = await admin.from('rfq_intake_extractions').insert({ user_id: buyer.uid, kind: 'drawing', input_refs: { format: 'step' }, proposed: summary, model: null, stub: false, cost_est_paise: 0 }).select('id').single()
+  const restores = [await setSetting('shadow_cad_price_band_enabled', true), await setSetting('shadow_provider_fit_enabled', true)]
+  let rfqId = ''
+  try {
+    const bad = await api(buyer.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'E15 bad spec block', details: { mfg_spec: { process: 'magic' } } })
+    check('FR-15.1: a malformed mfg_spec block is refused (422)', bad.status === 422, String(bad.status))
+    const res = await api(buyer.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'E15 machined bracket', details: { notes: 'Bracket per drawing', mfg_spec: { process: 'cnc_machining', material: 'SS304', tolerance: '±0.05 mm' } }, intake_extraction_ids: [ix!.id] })
+    const rj = (await res.json().catch(() => ({}))) as { rfqId?: string; matched?: number }
+    rfqId = rj.rfqId ?? ''
+    if (rfqId) created.rfqIds.push(rfqId)
+    const { data: r } = await admin.from('rfqs').select('cad_features, details').eq('id', rfqId).maybeSingle()
+    const cad = (r?.cad_features ?? null) as { hole_estimate?: number; bbox_mm?: number[] } | null
+    check('FR-15.1: cad_features from the drawing parse (bbox, holes, counts — no product name, no prose); mfg_spec kept', res.ok && cad?.hole_estimate === 6 && cad.bbox_mm?.[0] === 120 && !JSON.stringify(cad).includes('BRACKET') && (r?.details as { mfg_spec?: { process?: string } } | null)?.mfg_spec?.process === 'cnc_machining', JSON.stringify(cad))
+    const { data: preds } = await admin.from('shadow_predictions').select('feature, predicted, resolved_at').eq('subject_id', rfqId)
+    const bands = (preds ?? []).filter((p) => p.feature === 'cad_price_band')
+    const fits = (preds ?? []).filter((p) => p.feature === 'provider_fit')
+    check('FR-15.5: at fan-out one CAD band + one fit per matched provider, all unresolved', bands.length === 1 && fits.length === (rj.matched ?? -1) && fits.some((f) => (f.predicted as { provider_id?: string }).provider_id === pp!.id) && (preds ?? []).every((p) => !p.resolved_at), `bands ${bands.length}, fits ${fits.length}, matched ${rj.matched}`)
+    const asBuyer = createClient(URL_, ANON, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${buyer.token}` } } })
+    const { data: leak } = await asBuyer.from('shadow_predictions').select('id').eq('subject_id', rfqId)
+    check('FR-15.5: shadow_predictions is service-role only (a signed-in client reads nothing)', !leak || leak.length === 0)
+    // The provider quotes ₹5,000 + GST; the buyer pays → finalize resolves the shadows.
+    const { data: q } = await admin.from('quotes').insert({ rfq_id: rfqId, provider_id: pp!.id, price_paise: 5000_00, delivery_days: 5, scope: 'E15 quote scope for the bracket', gst_included: false }).select('id').single()
+    const co = (await (await api(buyer.token, '/api/v1/checkout', { quoteId: q!.id, idempotencyKey: crypto.randomUUID() })).json().catch(() => ({}))) as { simulated?: boolean; checkoutSessionId?: string }
+    if (co.simulated) await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: co.checkoutSessionId })
+    const { data: after } = await admin.from('shadow_predictions').select('feature, predicted, actual, error, resolved_at').eq('subject_id', rfqId)
+    const band = (after ?? []).find((p) => p.feature === 'cad_price_band')
+    const mine = (after ?? []).find((p) => p.feature === 'provider_fit' && (p.predicted as { provider_id?: string }).provider_id === pp!.id)
+    const others = (after ?? []).filter((p) => p.feature === 'provider_fit' && (p.predicted as { provider_id?: string }).provider_id !== pp!.id)
+    check('FR-15.5: acceptance resolves the band against the winner (₹5,900 all-in) with an error', !!band?.resolved_at && (band.actual as { total_paise?: number })?.total_paise === 5900_00 && band.error !== null, JSON.stringify(band?.actual))
+    check('FR-15.5: the winner\'s fit resolves quoted + won; every other matched provider quoted = false', (mine?.actual as { quoted?: boolean; won?: boolean } | null)?.quoted === true && (mine?.actual as { won?: boolean }).won === true && others.every((p) => (p.actual as { quoted?: boolean } | null)?.quoted === false))
+    const page = visible(await (await fetch(`${BASE}/admin/shadow`, { headers: { cookie: ops.cookie } })).text())
+    check('FR-15.5: the weekly error report is in the admin console (admin only)', page.includes('data-feature="cad_price_band"') && page.includes('data-feature="provider_fit"') && !visible(await (await fetch(`${BASE}/admin/shadow`, { headers: { cookie: buyer.cookie } })).text()).includes('data-testid="admin-shadow"'))
+  } finally {
+    for (const restore of restores.reverse()) await restore()
+    if (rfqId) {
+      await admin.from('shadow_predictions').delete().eq('subject_id', rfqId)
+      const { data: ords } = await admin.from('orders').select('id').eq('msme_id', msme!.id)
+      for (const o of ords ?? []) {
+        await admin.from('payouts').delete().eq('order_id', o.id)
+        const { data: pays } = await admin.from('payments').select('id').eq('order_id', o.id)
+        for (const pay of pays ?? []) await admin.from('refunds').delete().eq('payment_id', pay.id)
+        await admin.from('payments').delete().eq('order_id', o.id)
+        await admin.from('invoices').delete().eq('order_id', o.id)
+        created.orderIds.push(o.id as string)
+      }
+      await admin.from('checkout_sessions').delete().eq('msme_id', msme!.id)
+      await admin.from('conversations').delete().eq('msme_id', msme!.id)
+      await admin.from('quote_events').delete().in('quote_id', ((await admin.from('quotes').select('id').eq('rfq_id', rfqId)).data ?? []).map((x) => x.id as string))
+    }
+    await admin.from('rfq_intake_extractions').delete().eq('user_id', buyer.uid)
+    await admin.from('ai_decisions').delete().eq('decided_by', buyer.uid)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1633,6 +1701,7 @@ async function main() {
     await e14()
     await e14b()
     await e14c()
+    await e15a()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

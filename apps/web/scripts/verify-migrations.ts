@@ -379,6 +379,12 @@ const MANIFEST: Entry[] = [
     note: "E14 / N32b (dark): content_translations (drafts; provider reads own, service role writes); packages.i18n_sources, provider_profiles.about_i18n + i18n_sources; ai_decisions CHECK + 'content_translation'",
   },
   {
+    file: '0062_shadow_predictions_specs.sql',
+    tables: ['shadow_predictions'],
+    triggers: [['shadow_predictions', 'shadow_predictions_set_updated_at']],
+    note: 'E15 / F3 + F10: rfqs.cad_features (deterministic CAD parse); shadow_predictions (service role only; subject ids only; 24-month retention)',
+  },
+  {
     file: '0064_server_written_money.sql',
     tables: [],
     note: 'ADR 018 security hotfix: EXECUTE on materialize_order / claim_quote_slot / release_quote_slot / increment_coupon_usage for service_role only; no client INSERT/UPDATE/DELETE on orders, checkout_sessions, payments, payouts, refunds, invoices, disputes, order_documents, rfqs, quotes, rfq_matches, coupons, coupon_redemptions, provider_bank_accounts, reviews',

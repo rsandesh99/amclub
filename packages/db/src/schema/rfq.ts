@@ -37,6 +37,8 @@ export const rfqs = pgTable('rfqs', {
   qualityDecisionId: uuid('quality_decision_id'), // FK → ai_decisions in SQL
   // Experience v3 E6 (0053) — { credentials, languages, onSite, inStateOnly }; shown to providers, not used by fan-out.
   mustHaves: jsonb('must_haves'),
+  // E15 F3 (0062): typed CAD features from the deterministic STEP / DXF parse — never a model.
+  cadFeatures: jsonb('cad_features'),
   // open | quoted | accepted | expired | cancelled
   status: text('status').default('open').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
