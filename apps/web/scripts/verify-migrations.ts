@@ -325,6 +325,13 @@ const MANIFEST: Entry[] = [
     triggers: [['recent_views', 'recent_views_set_updated_at']],
     note: 'E2b / N8: recent_views (owner-only RLS; last 20 provider/package views per user)',
   },
+  {
+    file: '0053_requirements_v3.sql',
+    tables: ['service_document_requirements', 'quote_sla_stats'],
+    functions: ['refresh_quote_sla_stats'],
+    triggers: [['service_document_requirements', 'service_document_requirements_set_updated_at'], ['quote_sla_stats', 'quote_sla_stats_set_updated_at']],
+    note: 'E6: rfqs.must_haves (display-only), service_document_requirements (unreviewed seed; public read), quote_sla_stats + refresh_quote_sla_stats() (service role)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

@@ -27,6 +27,7 @@ import { AGENT_ENABLED } from '@/lib/flags'
 import { munshiDraftForComposer } from '@/lib/agent/munshi'
 import { getBenchmarkFor } from '@/lib/benchmarks/view'
 import { BenchmarkLine } from '@/components/rfq/BenchmarkLine'
+import { RfqExtrasV3, RFQ_V3_DETAIL_KEYS } from '@/components/rfq/RfqExtrasV3'
 
 export default async function ProviderRfqPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ munshi?: string }> }) {
   const { id } = await params
@@ -62,7 +63,7 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
 
   // S3.2 — the SAME fair price line the buyer sees (services; benchmark_display_enabled; null renders nothing)
   const benchmark = await getBenchmarkFor(await createAdminClient(), { rfqId: rfq.id, kind: rfq.kind, categorySlug: rfq.categorySlug, viewerUserId: user.id, locale: await getLocale() })
-  const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')
+  const details = Object.entries(rfq.details).filter(([k, v]) => v != null && String(v).trim() !== '' && !(RFQ_V3_DETAIL_KEYS as readonly string[]).includes(k))
   // S1.3 — the thread is writable while the RFQ is active and this provider has not declined
   // (a provider who already quoted may still ask); read-only once closed.
   const active = rfqIsActive(rfq.status) && new Date(rfq.expiresAt).getTime() > Date.now()
@@ -116,6 +117,8 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
             )}
           </dl>
         )}
+        {/* Experience v3 E6 — service, must-haves (display only) and the documents the buyer has ready. */}
+        {rfq.kind !== 'goods' && <RfqExtrasV3 rfqId={rfq.id} categorySlug={rfq.categorySlug ?? null} details={rfq.details as Record<string, unknown>} />}
         {/* S3.2 — the fair price range in the summary card (the buyer sees the identical line) */}
         {benchmark && <div className="mt-4 border-t border-border pt-4"><BenchmarkLine view={benchmark} role="provider" /></div>}
         {/* S1.8 — attachments (signed URLs from the loader; the buyer's uploads, photos / PDFs / drawings). */}

@@ -58,7 +58,13 @@ export async function GET(request: NextRequest) {
   // F4 — GSTIN re-check (setting-gated, default off; flags, never suspends).
   const gstin = await recheckGstins(admin).catch(() => ({ enabled: true, checked: 0, flagged: 0, errors: 1 }))
 
-  const result = { providers: rows?.length ?? 0, computed, nulled, failed, minSample: MIN_RESPONSE_SAMPLE, publicStats, gstin }
+  // Experience v3 E6 (FR-6.5, N38): median first-quote time per category × state
+  // for the requirement form's promise line. Never throws (0053 may be pending).
+  const quoteSla = await Promise.resolve(admin.rpc('refresh_quote_sla_stats'))
+    .then(({ data, error: e }) => (e ? { cells: 0, error: e.message } : { cells: Number(data ?? 0) }))
+    .catch(() => ({ cells: 0, error: 'failed' }))
+
+  const result = { providers: rows?.length ?? 0, computed, nulled, failed, minSample: MIN_RESPONSE_SAMPLE, publicStats, gstin, quoteSla }
   await recordHeartbeat(admin, 'provider-stats', result)
   return NextResponse.json(result)
 }

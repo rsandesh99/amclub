@@ -1296,6 +1296,17 @@ Payment success stays a server event from the webhook.
 
 **RICE:** R 0.7 · I 2 · C 0.7 · E 3 → **0.33**.
 
+**As built (E6).**
+- **Strength meter.** `rfqQualityScore` (shared `rfq-v3.ts`) calls `rfqQualityPrecheck` itself, so client and server share one rule set. Each finding costs a fixed number of points; `RFQ_SCORE_PENALTY` sets them. The shared test checks agreement over 40 fixtures.
+- **Service, must-haves and documents.**
+  - The service and the expected documents ride in `rfqs.details` (`service_slug`, `documents_expected`). Must-haves go in `rfqs.must_haves` (migration 0053) and are written only when sent.
+  - Fan-out never reads must-haves (D-PRD6). The check script shows the same match count with and without them.
+  - The provider sees all three on their request page (`RfqExtrasV3`).
+- **Document suggestions.** They come from `service_document_requirements`. The seeded rows are unreviewed. The form shows only rows with `reviewed_at` set, and only while `document_suggestions_enabled` is on. The reviewed date shows under the list.
+- **Quote-time line.** `refresh_quote_sla_stats()` runs inside the existing nightly `cron/provider-stats`. It computes the median first-quote time per category × buyer state over 90 days. The form says "~X h" only when n ≥ 20.
+- **Prefill contract.** `parseRfqPrefill` accepts `q`, `category`, `service`, `from_package`, `from_provider`, `from` and `entry`. The package page links "Need something different?". The header, search, provider and home entry points keep their existing links. Buy again arrives with E9.
+- **Template fields.** Up to 5 options use a SegmentedControl; more use a Picker. The Send button is sticky above the phone tab bar via `--tabbar-h`, set by the v3 shell.
+
 ---
 
 ### E7: Quotes and compare v3

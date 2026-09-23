@@ -60,7 +60,8 @@ export async function AppShell({
     // in the provider group sees the plain shell).
     const role = focused ? null : context === 'msme' ? 'buyer' : context === 'provider' && hasProvider ? 'provider' : null
     return (
-      <div data-ui="v3" data-density={density} className="flex min-h-screen flex-col bg-background text-foreground">
+      // --tabbar-h: sticky action bars (requirement form, …) sit above the phone tab bar.
+      <div data-ui="v3" data-density={density} className={role ? 'flex min-h-screen flex-col bg-background text-foreground [--tabbar-h:3.5rem] lg:[--tabbar-h:0px]' : 'flex min-h-screen flex-col bg-background text-foreground'}>
         <ActionsProvider>
           <ShellTopBar
             brand={

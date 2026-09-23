@@ -677,6 +677,84 @@ async function e5() {
   if (sj.checkoutSessionId) await admin.from('checkout_sessions').delete().eq('id', sj.checkoutSessionId)
 }
 
+async function e6() {
+  console.log('\nE6 — requirements v3')
+  // ≤ 5 required fields in every seeded template.
+  const { data: cats } = await admin.from('categories').select('slug, rfq_template').eq('is_active', true)
+  const over = (cats ?? []).filter((c) => (((c.rfq_template as { fields?: { required?: boolean }[] } | null)?.fields ?? []).filter((f) => f.required).length > 5))
+  check('FR-6.1: every template has ≤ 5 required fields', (cats ?? []).length >= 8 && over.length === 0, over.map((c) => c.slug).join(', '))
+
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const buyer = await mkUser('e6buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E6 Buyer Co', state: 'MZ', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const prov = await mkUser('e6prov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E6 Prov', display_name: 'E6 Prov', slug: `${tag}-e6prov`, state: 'MZ', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: tax!.id })
+  const { data: pkg } = await admin.from('packages').insert({ provider_id: pp!.id, category_id: tax!.id, slug: `${tag}-e6pkg`, title_i18n: { en: 'E6 GST filing' }, scope_included: ['x'], deliverables: ['y'], price_paise: 1500_00, delivery_days: 5, status: 'active', service_slug: 'gst-filing' }).select('id').single()
+  created.packageIds.push(pkg!.id)
+
+  // FR-6.6 (N20) — every entry point resolves its prefill on the server.
+  const page = async (qs: string) => (await (await fetch(`${BASE}/app/rfq/new${qs}`, { headers: { cookie: buyer.cookie } })).text())
+  const attr = (html: string, name: string) => html.match(new RegExp(`${name}="([^"]*)"`))?.[1] ?? null
+  const search = await page('?q=GST%20returns&category=tax-accounting&service=gst-filing&entry=search')
+  check('FR-6.6: search → category + service + entry', attr(search, 'data-prefill-category') === 'tax-accounting' && attr(search, 'data-prefill-service') === 'gst-filing' && attr(search, 'data-entry') === 'search')
+  const fromPkg = await page(`?from_package=${pkg!.id}`)
+  check('FR-6.6: a package page → its category + service', attr(fromPkg, 'data-prefill-category') === 'tax-accounting' && attr(fromPkg, 'data-prefill-service') === 'gst-filing' && attr(fromPkg, 'data-entry') === 'package')
+  const fromProv = await page(`?from_provider=${tag}-e6prov`)
+  check('FR-6.6: a provider profile → the category only', attr(fromProv, 'data-prefill-category') === 'tax-accounting' && attr(fromProv, 'data-prefill-service') === '' && attr(fromProv, 'data-entry') === 'provider')
+  const junk = await page('?category=nope&service=nope&from_package=x')
+  check('FR-6.6: unknown values are dropped', attr(junk, 'data-prefill-category') === '' && attr(junk, 'data-entry') === 'direct')
+  const pkgPage = visible(await (await fetch(`${BASE}/p/${tag}-e6prov/${tag}-e6pkg`)).text())
+  check('FR-6.6: the package page links "Need something different?"', pkgPage.includes(`href="/app/rfq/new?from_package=${pkg!.id}&amp;entry=package"`))
+
+  // FR-6.3 — suggestions only when switched on, and only reviewed rows.
+  check('FR-6.3: no document suggestions while the setting is off', attr(search, 'data-docs') === '')
+  const restore = await setSetting('document_suggestions_enabled', true)
+  const { data: row } = await admin.from('service_document_requirements').select('id, doc_key').eq('category_slug', 'tax-accounting').eq('doc_key', 'gst_login').maybeSingle()
+  try {
+    const before = attr(await page('?category=tax-accounting'), 'data-docs')
+    await admin.from('service_document_requirements').update({ reviewed_at: new Date().toISOString() }).eq('id', row!.id)
+    const after = attr(await page('?category=tax-accounting'), 'data-docs') ?? ''
+    check('FR-6.3: only CA-reviewed rows are suggested', before === '' && after.split(',').includes('gst_login') && !after.split(',').includes('pan'))
+  } finally {
+    await admin.from('service_document_requirements').update({ reviewed_at: null }).eq('id', row!.id)
+    await restore()
+  }
+
+  // FR-6.4 — must-haves are stored and shown, and fan-out is unchanged.
+  const body = { category_slug: 'tax-accounting', title: 'E6 GST returns for FY 25-26', details: { notes: 'Monthly GSTR-1 and 3B', service_slug: 'gst-filing', documents_expected: ['gst_login', 'pan'] } }
+  const plain = await api(buyer.token, '/api/v1/rfq', body)
+  const pj = (await plain.json()) as { rfqId?: string; matched?: number }
+  const withMh = await api(buyer.token, '/api/v1/rfq', { ...body, must_haves: { credentials: ['icai'], languages: ['te'], onSite: true, inStateOnly: true } })
+  const wj = (await withMh.json()) as { rfqId?: string; matched?: number }
+  if (pj.rfqId) created.rfqIds.push(pj.rfqId)
+  if (wj.rfqId) created.rfqIds.push(wj.rfqId)
+  const { data: stored } = await admin.from('rfqs').select('must_haves, details').eq('id', wj.rfqId ?? '').maybeSingle()
+  check('FR-6.4: must-haves are stored', withMh.ok && (stored?.must_haves as { credentials?: string[] } | null)?.credentials?.[0] === 'icai' && ((stored?.details as { documents_expected?: string[] }).documents_expected ?? []).length === 2, `status ${withMh.status}`)
+  check('FR-6.4: fan-out is unchanged by must-haves (display only)', plain.ok && pj.matched === 1 && wj.matched === pj.matched, `plain ${pj.matched}, with ${wj.matched}`)
+  const bad = await api(buyer.token, '/api/v1/rfq', { ...body, must_haves: { credentials: ['pan'] } })
+  check('FR-6.4: a must-have outside the list → 422', bad.status === 422)
+  const provView = visible(await (await fetch(`${BASE}/partner/rfqs/${wj.rfqId}`, { headers: { cookie: prov.cookie } })).text())
+  check('FR-6.4: the provider sees the must-haves and the documents', provView.includes('data-testid="rfq-must-haves-view"') && provView.includes('GST portal login') && !provView.includes('documents expected'))
+
+  // FR-6.5 (N38) — the nightly quote-time stat (fixture truth: 60 and 120 minutes → 90, n 2).
+  const t0 = Date.now() - 10 * 86400e3
+  for (const mins of [60, 120]) {
+    const { data: r } = await admin.from('rfqs').insert({ msme_id: msme!.id, category_id: tax!.id, title: `E6 SLA ${mins}`, details: {}, status: 'quoted', expires_at: new Date(t0 + 3 * 86400e3).toISOString(), created_at: new Date(t0).toISOString(), fanout_at: new Date(t0).toISOString(), quote_count: 1 }).select('id').single()
+    created.rfqIds.push(r!.id)
+    await admin.from('quotes').insert({ rfq_id: r!.id, provider_id: pp!.id, price_paise: 1000_00, delivery_days: 3, scope: 'E6 fixture quote scope text', created_at: new Date(t0 + mins * 60e3).toISOString() })
+  }
+  const cronSecret = process.env['CRON_SECRET']
+  const cron = await fetch(`${BASE}/api/v1/cron/provider-stats`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })
+  const { data: sla } = await admin.from('quote_sla_stats').select('median_minutes, n').eq('category_slug', 'tax-accounting').eq('state', 'MZ').maybeSingle()
+  check('FR-6.5: nightly median first-quote time = fixture truth', cron.ok && sla?.median_minutes === 90 && sla?.n === 2, JSON.stringify(sla))
+  check('FR-6.5: the form gets the stat for the buyer’s state', (attr(await page('?category=tax-accounting'), 'data-sla') ?? '').includes('tax-accounting:90:2'))
+  for (const id of created.rfqIds) await admin.from('quotes').delete().eq('rfq_id', id)
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -687,6 +765,7 @@ async function main() {
     const fx = await e2a()
     await e2b(fx)
     await e5()
+    await e6()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

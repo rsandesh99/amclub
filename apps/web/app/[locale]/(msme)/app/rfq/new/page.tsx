@@ -8,20 +8,24 @@ import { createClient, createPublicClient, createAdminClient } from '@/lib/supab
 import { AGENT_ENABLED } from '@/lib/flags'
 import { isAgentEnabledForUser } from '@/lib/agent/settings'
 import { Button } from '@/components/ui/button'
-import { RfqForm, type RfqCategoryOption, type RfqPrefill } from '@/components/rfq/RfqForm'
+import { RfqForm, type RfqCategoryOption, type RfqFormV3, type RfqPrefill } from '@/components/rfq/RfqForm'
+import { INDIAN_STATES, parseRfqPrefill, SPECIALIZATIONS, type RfqEntryPoint } from '@amclub/shared'
+import { isOnFor } from '@/lib/experiments'
+import { getAgentSetting } from '@/lib/agent/settings'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export default async function NewRfqPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; assistant?: string; category?: string; q?: string }>
+  searchParams: Promise<{ from?: string; assistant?: string; category?: string; q?: string; service?: string; from_package?: string; from_provider?: string; entry?: string }>
 }) {
-  const { from, assistant, category, q } = await searchParams
+  const sp = await searchParams
+  const { from, assistant, category, q } = sp
   const user = await getSessionUser()
   if (!user) {
     // Keep the prefill (?category= / ?q=) through sign-in (E0 / U1).
-    const qs = new URLSearchParams(Object.entries({ category, q }).filter((e): e is [string, string] => !!e[1])).toString()
+    const qs = new URLSearchParams(Object.entries({ category, q, service: sp.service, from_package: sp.from_package, from_provider: sp.from_provider, entry: sp.entry }).filter((e): e is [string, string] => !!e[1])).toString()
     redirect(`/login?next=${encodeURIComponent(`/app/rfq/new${qs ? `?${qs}` : ''}`)}`)
   }
   const t = await getTranslations('rfq')
@@ -116,6 +120,54 @@ export default async function NewRfqPage({
     if (slug || title) prefill = { categorySlug: slug, title, details: {}, budgetMin: '', budgetMax: '' }
   }
 
+  // Experience v3 E6 (flag `requirements`): the prefill contract (N20), the
+  // level-2 services, reviewed document suggestions, and the quote-time stat.
+  let v3: RfqFormV3 | undefined
+  if (isOnFor('requirements', user.id)) {
+    const pre = parseRfqPrefill(sp as Record<string, string | undefined>)
+    const known = (slug: string | undefined) => (slug && categories.some((c) => c.slug === slug) ? slug : '')
+    if (!prefill && pre.from_package) {
+      // "Need something different?" from a package page: its category + service.
+      const { data: pk } = await pub.from('packages').select('category:categories(slug)').eq('id', pre.from_package).eq('status', 'active').maybeSingle()
+      const { data: svc } = await pub.from('packages').select('service_slug').eq('id', pre.from_package).maybeSingle()
+      const slug = known((pk?.category as { slug?: string } | null)?.slug)
+      if (slug) prefill = { categorySlug: slug, title: '', details: {}, budgetMin: '', budgetMax: '', ...(svc?.service_slug ? { service: svc.service_slug as string } : {}) }
+    }
+    if (!prefill && pre.from_provider) {
+      // From a provider profile: their category only (D-UX1).
+      const { data: pp } = await pub.from('provider_profiles').select('id').eq('slug', pre.from_provider).eq('status', 'active').maybeSingle()
+      const { data: pc } = pp ? await pub.from('provider_categories').select('category:categories(slug)').eq('provider_id', pp.id).limit(1) : { data: null }
+      const slug = known(((pc ?? [])[0]?.category as { slug?: string } | null)?.slug)
+      if (slug) prefill = { categorySlug: slug, title: '', details: {}, budgetMin: '', budgetMax: '' }
+    }
+    if (prefill && pre.service && !prefill.service && (SPECIALIZATIONS as Record<string, readonly string[]>)[prefill.categorySlug]?.includes(pre.service)) {
+      prefill = { ...prefill, service: pre.service }
+    }
+    const documents: RfqFormV3['documents'] = {}
+    const admin = await createAdminClient()
+    if ((await getAgentSetting(admin, 'document_suggestions_enabled').catch(() => false)) === true) {
+      const { data: docs } = await pub
+        .from('service_document_requirements')
+        .select('category_slug, service_slug, doc_key, label_i18n, required, reviewed_at, sort_order')
+        .not('reviewed_at', 'is', null)
+        .order('sort_order', { ascending: true })
+      for (const d of (docs ?? []) as { category_slug: string; service_slug: string | null; doc_key: string; label_i18n: Record<string, string>; required: boolean; reviewed_at: string }[]) {
+        ;(documents[d.category_slug] ??= []).push({ key: d.doc_key, label: d.label_i18n[locale] ?? d.label_i18n['en'] ?? d.doc_key, required: d.required, service: d.service_slug, reviewedAt: d.reviewed_at })
+      }
+    }
+    const sla: RfqFormV3['sla'] = {}
+    const { data: slaRows } = await pub.from('quote_sla_stats').select('category_slug, median_minutes, n').eq('state', profile.state)
+    for (const r of (slaRows ?? []) as { category_slug: string; median_minutes: number | null; n: number }[]) sla[r.category_slug] = { medianMinutes: r.median_minutes, n: r.n }
+    const entry: RfqEntryPoint = pre.entry ?? (pre.from ? 'repost' : pre.from_package ? 'package' : pre.from_provider ? 'provider' : pre.q ? 'search' : 'direct')
+    v3 = {
+      services: SPECIALIZATIONS,
+      documents,
+      sla,
+      stateName: INDIAN_STATES.find((st) => st.value === profile.state)?.label ?? profile.state,
+      entry,
+    }
+  }
+
   // S1.8 — document intake button only for cohorted buyers (flag off: no setting is read, nothing renders).
   const documentIntakeEnabled = AGENT_ENABLED ? await isAgentEnabledForUser(await createAdminClient(), 'document_intake', user.id) : false
 
@@ -125,7 +177,21 @@ export default async function NewRfqPage({
         <h1 className="text-xl font-semibold">{t('new_title')}</h1>
         <p className="mt-1 text-sm text-foreground-secondary">{t('new_subtitle')}</p>
       </div>
-      <RfqForm categories={categories} documentIntakeEnabled={documentIntakeEnabled} prefill={prefill} />
+      {v3 ? (
+        // The resolved prefill / entry / suggestions as data (the form applies them on the client).
+        <div
+          data-testid="rfq-new-v3"
+          data-entry={v3.entry}
+          data-prefill-category={prefill?.categorySlug ?? ''}
+          data-prefill-service={prefill?.service ?? ''}
+          data-docs={Object.values(v3.documents).flat().map((d) => d.key).join(',')}
+          data-sla={Object.entries(v3.sla).map(([k, v]) => `${k}:${v.medianMinutes ?? ''}:${v.n}`).join(',')}
+        >
+          <RfqForm categories={categories} documentIntakeEnabled={documentIntakeEnabled} prefill={prefill} v3={v3} />
+        </div>
+      ) : (
+        <RfqForm categories={categories} documentIntakeEnabled={documentIntakeEnabled} prefill={prefill} />
+      )}
     </div>
   )
 }

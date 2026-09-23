@@ -6,6 +6,7 @@ import { delegatedRunId, requireToolScope } from '@/lib/agent/scope'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { fanoutRfq } from '@/lib/rfq/fanout'
+import { isEmptyMustHaves, rfqDocumentsExpectedSchema } from '@amclub/shared'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
 import { getAgentSetting } from '@/lib/agent/settings'
@@ -37,6 +38,11 @@ export async function POST(request: NextRequest) {
   const parsed = rfqSchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   const d = parsed.data
+  // Experience v3 E6 (FR-6.3): the documents the buyer expects to share ride in
+  // details; anything but a short list of keys is dropped, never stored.
+  if (d.details && 'documents_expected' in d.details && !rfqDocumentsExpectedSchema.safeParse(d.details['documents_expected']).success) {
+    delete d.details['documents_expected']
+  }
 
   const admin = await createAdminClient()
   const actor = await resolveActor(admin, userId)
@@ -106,6 +112,9 @@ export async function POST(request: NextRequest) {
       // Phase 8b — transcript + parse when the RFQ began as voice (quality
       // review + training signal). Pure storage; matching is unaffected.
       voice_meta: d.voice_meta ?? null,
+      // Experience v3 E6 (0053): written only when sent and non-empty, so a
+      // database without the column is never asked to store it.
+      ...(d.must_haves && !isEmptyMustHaves(d.must_haves) ? { must_haves: d.must_haves } : {}),
       status: 'open',
       // S0.4: quote cap is config (agent_settings.rfq_max_quotes, 3..7); unset => legacy 7.
       max_quotes: maxQuotes,
