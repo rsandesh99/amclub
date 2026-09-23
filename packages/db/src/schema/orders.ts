@@ -124,6 +124,8 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   attribution: jsonb('attribution'),
   // E12a / ADR 019 (0065): the add-on snapshot, frozen at session creation; NULL = none.
   addons: jsonb('addons'),
+  // E12b / ADR 020 (0066): the quote option the session is frozen on (NULL = Standard); FK → quote_options in SQL.
+  quoteOptionId: uuid('quote_option_id'),
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   razorpayOrderId: text('razorpay_order_id').unique(),
   msmeId: uuid('msme_id').references(() => msmeProfiles.id).notNull(),

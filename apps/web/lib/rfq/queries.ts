@@ -2,10 +2,11 @@ import { signRfqAttachments } from '@/lib/rfq/attachments'
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
-import { effectiveCostAfterItcPaise, goodsQuoteMoney, QUOTE_STATUS, resolveDeclineLocale, rfqIsActive, rfqQualityDeadline, rfqQualityReportSchema, type ClarificationView, type QuoteStatus, type RfqQualityReport, type RfqStatus } from '@amclub/shared'
+import { effectiveCostAfterItcPaise, goodsQuoteMoney, QUOTE_STATUS, resolveDeclineLocale, rfqIsActive, rfqQualityDeadline, rfqQualityReportSchema, type ClarificationView, type QuoteOptionRow, type QuoteStatus, type RfqQualityReport, type RfqStatus } from '@amclub/shared'
 import { RFQ_GOODS_LIST_COLS, QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
 import { countOpenQuestions, listClarifications, rfqsWithMyOpenQuestion } from '@/lib/rfq/clarifications'
 import { getRfqQualityHoldMinutes } from '@/lib/agent/rfq-quality'
+import { loadQuoteOptions } from '@/lib/rfq/quote-options'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -102,6 +103,8 @@ export interface QuoteForBuyer extends QuoteTerms {
   revisedAt: string | null
   /** S1.3 — quote_events.revised history (oldest first) so the buyer sees the movement. */
   revisions: QuoteRevisionRecord[]
+  /** E12b / ADR 020 — Economy / Express at the current revision (Standard is this quote); [] while the switch is off. */
+  options: QuoteOptionRow[]
   provider: {
     id: string; displayName: string; slug: string; avgRating: number; reviewCount: number; completedOrders: number; state: string | null; medianResponseMinutes: number | null; udyamVerified: boolean
     /** S1.2 — the locale a decline message would be written in (languages[] → preferred_locale → en). */
@@ -138,8 +141,11 @@ export async function loadBuyerQuotes(admin: Awaited<ReturnType<typeof createAdm
       history.set(e.quote_id, [...(history.get(e.quote_id) ?? []), rec])
     }
   }
+  // E12b — options only for live services quotes (tolerant; none while the switch is off).
+  const optionsBy = await loadQuoteOptions(admin, rows.filter((q) => q.unit_price_paise == null).map((q) => ({ id: q.id as string, revision: Number(q.revision ?? 1) })))
   return rows.map((q: any) => ({
     id: q.id, status: q.status, goods: mapQuoteGoods(q), pricePaise: Number(q.price_paise), deliveryDays: q.delivery_days,
+    options: optionsBy.get(q.id) ?? [],
     scope: q.scope, message: q.message, createdAt: q.created_at, updatedAt: q.updated_at ?? null, declineReason: q.decline_reason ?? null,
     revision: Number(q.revision ?? 1), revisedAt: q.revised_at ?? null, revisions: history.get(q.id) ?? [],
     ...mapQuoteTerms(q),
@@ -467,7 +473,7 @@ export interface RfqDetailForProvider {
   canQuote: boolean
   /** S0.4: set when this provider declined the match (or the window lapsed). */
   declinedAt: string | null
-  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; message: string | null; status: string; goods: QuoteGoodsTerms | null; declineReason: string | null; declineMessage: string | null; revision: number; revisedAt: string | null } & QuoteTerms) | null
+  myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; message: string | null; status: string; goods: QuoteGoodsTerms | null; declineReason: string | null; declineMessage: string | null; revision: number; revisedAt: string | null; options: QuoteOptionRow[] } & QuoteTerms) | null
   /** S1.3 — the whole thread (every provider's questions); `mine` marks this provider's. Never a provider id. */
   clarifications: ClarificationView[]
   /** Derived per-provider outcome (same rule as the inbox) + the order a won quote became. */
@@ -518,6 +524,8 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
     quoteStatus: myStatus, matchDeclined: !!(match as any).declined_at,
   })
   let orderId: string | null = null
+  // E12b — the provider's own options at the current revision (prefill for a revision; none while the switch is off).
+  const myOptions = myQuote ? (await loadQuoteOptions(admin, [{ id: (myQuote as any).id, revision: Number((myQuote as any).revision ?? 1) }])).get((myQuote as any).id) ?? [] : []
   if (outcome === 'won' && myQuote) {
     const { data: order } = await admin.from('orders').select('id').eq('quote_id', (myQuote as any).id).limit(1).maybeSingle()
     orderId = (order as any)?.id ?? null
@@ -533,7 +541,7 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
     quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at,
     canQuote: active && slotsLeft && notExpired && !myQuote && !match.declined_at,
     declinedAt: (match as any).declined_at ?? null,
-    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, message: (myQuote as any).message ?? null, status: (myQuote as any).status, goods: mapQuoteGoods(myQuote), declineReason: (myQuote as any).decline_reason ?? null, declineMessage: (myQuote as any).decline_message ?? null, revision: Number((myQuote as any).revision ?? 1), revisedAt: (myQuote as any).revised_at ?? null, ...mapQuoteTerms(myQuote) } : null,
+    myQuote: myQuote ? { id: (myQuote as any).id, pricePaise: Number((myQuote as any).price_paise), deliveryDays: (myQuote as any).delivery_days, scope: (myQuote as any).scope, message: (myQuote as any).message ?? null, status: (myQuote as any).status, goods: mapQuoteGoods(myQuote), declineReason: (myQuote as any).decline_reason ?? null, declineMessage: (myQuote as any).decline_message ?? null, revision: Number((myQuote as any).revision ?? 1), revisedAt: (myQuote as any).revised_at ?? null, options: myOptions, ...mapQuoteTerms(myQuote) } : null,
     clarifications,
   }
 }

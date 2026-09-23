@@ -2137,6 +2137,43 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.4 · I 1 · C 0.6 · E 2 → **0.12**.
 
+**As built (E12b: ADR 020, migration 0066; dark behind `quote_options_enabled`).**
+- **Model.**
+  - The quote row IS Standard, so every existing reader is unchanged.
+  - `quote_options` holds Economy / Express per quote **revision**. Rows are immutable, service role only, and unique per (quote, revision, label).
+  - `quotes.selected_option_id` and `checkout_sessions.quote_option_id` are nullable (null = Standard).
+- **Shared.**
+  - `quoteOptionsSchema` (≤ 2 rows, one per label, strict).
+  - `quoteOptionsProblems`: Express strictly faster and never cheaper; Economy strictly slower and never dearer.
+  - `quoteChoices`: each choice's checkout total (ADR-015 per option) and flags (`compareQuotes` with the other quotes at Standard).
+  - `choiceExtremes` (lowest / fastest across every choice); unit tests.
+- **Quote routes.** POST and PATCH take `options`, and a revision restates them. The server checks them before any write:
+  - goods → 422;
+  - switch off → 422 `options_unavailable`;
+  - incoherent → **400 `options_incoherent`**.
+
+  The rows are written under the quote's revision, and the `submitted` / `revised` events carry them.
+- **Provider form.** "Offer faster or cheaper options" is off by default. It appears in both forms, so a revision never drops options, and each row shows the server's "Buyer sees ₹X all-in".
+- **Compare.**
+  - Option chips per quote column (Economy · Standard · Express). The price, total, delivery, flags and confirm sheet follow the picked chip.
+  - A "Lowest: … · Fastest: …" line across every option.
+  - Accept sends `optionId`, and each choice has its own idempotency key.
+- **Checkout.**
+  - The option must be this quote's, at its current revision, with the switch on; otherwise **404 `option_not_found`**, including another quote's option.
+  - Price = the option's price under the quote's GST mode; days = the option's days (the due date).
+  - A live session on another option → 409 `rfq_checkout_in_progress`.
+- **Finalize.** Records `selected_option_id` from the frozen session. N22 loss labels use the winning option's price and days.
+- **Events.** `quote_option_added { label }` (provider form), `quote_option_selected { label }` (compare).
+- **Tests.**
+  - Shared `quote-options` tests.
+  - `verify-rfq` 11:
+    - incoherent → 400; two options stored;
+    - an option from another quote → 404;
+    - Express accepted → order = option price + GST, days = 4, quote records the option;
+    - a signed webhook replay creates nothing;
+    - the loss label is against Express.
+  - `verify-authz` 7a3: clients can't read or insert `quote_options`.
+
 #### E12c: Compliance bundles with milestone escrow (N18, ADR-XC)
 
 **Why:** Vakilsearch Elite (VS-01) and IndiaFilings sell registration + 12 months of filings. It's the strongest 90-day-repeat lever in the survey.

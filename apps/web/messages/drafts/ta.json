@@ -647,7 +647,14 @@
     "accept_confirm_escrow": "AMClub உங்கள் பணத்தை வைத்திருந்து, நீங்கள் வேலையை ஏற்ற பிறகே வழங்குநருக்கு விடுவிக்கும்.",
     "accept_confirm_others": "{count, plural, one {இந்தக் கோரிக்கையின் மற்ற விலைப்புள்ளி மூடப்படும்.} other {இந்தக் கோரிக்கையின் மற்ற # விலைப்புள்ளிகள் மூடப்படும்.}}",
     "accept_confirm_submit": "பணம் செலுத்தத் தொடருங்கள்",
-    "accept_confirm_cancel": "இப்போது வேண்டாம்"
+    "accept_confirm_cancel": "இப்போது வேண்டாம்",
+    "cmp3_options": "விருப்பங்கள்",
+    "cmp3_option_standard_only": "ஸ்டாண்டர்ட் மட்டும்",
+    "cmp3_option_economy": "எகானமி",
+    "cmp3_option_standard": "ஸ்டாண்டர்ட்",
+    "cmp3_option_express": "எக்ஸ்பிரஸ்",
+    "cmp3_options_lowest": "குறைந்தது: {who} {option}, {total}",
+    "cmp3_options_fastest": "வேகமானது: {who} {option}, {days, plural, one {# நாள்} other {# நாட்கள்}}"
   },
   "invoices": {
     "title": "விலைப்பட்டியல்கள்",

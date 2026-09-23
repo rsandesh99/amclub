@@ -1,7 +1,7 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { compareQuotes, comparePointersCacheSchema, sanitizePointers, type CompareQuoteInput, type CompareQuoteResult, type ComparePointersCache, type PointerLocale } from '@amclub/shared'
+import { choiceExtremes, compareQuotes, comparePointersCacheSchema, quoteChoices, sanitizePointers, type CompareQuoteInput, type CompareQuoteResult, type ComparePointersCache, type PointerLocale, type QuoteChoice } from '@amclub/shared'
 import { buildComparePointerParts, stubComparePointers, comparePointersSchema } from '@amclub/agent-core'
 import type { QuoteForBuyer } from './queries'
 import { AGENT_ENABLED } from '@/lib/flags'
@@ -36,6 +36,23 @@ export function toCompareInputs(kind: 'service' | 'goods', quotes: readonly Quot
 /** Flags do not depend on any flag: pure function of the quotes. */
 export function computeCompare(kind: 'service' | 'goods', quotes: readonly QuoteForBuyer[], today = todayIST()): CompareQuoteResult[] {
   return compareQuotes(toCompareInputs(kind, quotes), { today })
+}
+
+/**
+ * E12b / ADR 020 — every choice (Economy · Standard · Express) per quote with its
+ * checkout total and flags, plus the lowest / fastest across all of them. Null
+ * when no quote carries options (the screen is then exactly as before).
+ */
+export interface CompareChoices {
+  byQuote: Record<string, QuoteChoice[]>
+  lowest: { quoteId: string; optionId: string | null } | null
+  fastest: { quoteId: string; optionId: string | null } | null
+}
+export function computeChoices(kind: 'service' | 'goods', quotes: readonly QuoteForBuyer[], today = todayIST()): CompareChoices | null {
+  if (kind !== 'service' || !quotes.some((q) => q.options.length > 0)) return null
+  const inputs = toCompareInputs(kind, quotes).map((c, i) => ({ ...c, options: quotes[i]!.options }))
+  const map = quoteChoices(inputs, { today })
+  return { byQuote: Object.fromEntries(map), ...choiceExtremes(map) }
 }
 
 export function toPointerLocale(locale: string | null | undefined): PointerLocale {

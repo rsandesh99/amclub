@@ -1319,7 +1319,14 @@
     "cmp3_row_col": "किस पर तुलना",
     "cmp3_sort_total": "कुल",
     "cmp3_sort_response": "जवाब",
-    "cmp3_sort_reliability": "भरोसेमंदी"
+    "cmp3_sort_reliability": "भरोसेमंदी",
+    "cmp3_options": "विकल्प",
+    "cmp3_option_standard_only": "केवल स्टैंडर्ड",
+    "cmp3_option_economy": "इकॉनमी",
+    "cmp3_option_standard": "स्टैंडर्ड",
+    "cmp3_option_express": "एक्सप्रेस",
+    "cmp3_options_lowest": "सबसे कम: {who} {option}, {total}",
+    "cmp3_options_fastest": "सबसे तेज़: {who} {option}, {days, plural, one {# दिन} other {# दिन}}"
   },
   "coming_soon": {
     "badge": "जल्द आ रहा है",
@@ -3498,7 +3505,18 @@
     "scaffold": "शामिल:\n- \nशामिल नहीं:\n- \nआपको साझा करना होगा:\n- ",
     "buyer_sees_extra": "ख़रीदार को दिखेगा {price} + {pct} % GST = {total} कुल",
     "buyer_sees_included": "ख़रीदार {total} कुल देगा (GST {gst} शामिल)",
-    "you_receive": "AMClub शुल्क के बाद आपको ≈ {amount} मिलेंगे · ख़रीदार की स्वीकृति के {days} दिन बाद भुगतान"
+    "you_receive": "AMClub शुल्क के बाद आपको ≈ {amount} मिलेंगे · ख़रीदार की स्वीकृति के {days} दिन बाद भुगतान",
+    "options_toggle": "तेज़ या सस्ते विकल्प दें",
+    "options_hint": "ऊपर की कीमत स्टैंडर्ड है। एक्सप्रेस (तेज़, कभी सस्ता नहीं) या इकॉनमी (धीमा, कभी महँगा नहीं) जोड़ें। खरीदार एक चुनता है।",
+    "option_express": "एक्सप्रेस",
+    "option_economy": "इकॉनमी",
+    "option_express_rule": "कम दिन, वही या ज़्यादा कीमत",
+    "option_economy_rule": "ज़्यादा दिन, वही या कम कीमत",
+    "option_price": "कीमत (₹)",
+    "option_days": "डिलीवरी (दिन)",
+    "option_buyer_sees": "खरीदार को कुल {total} दिखेगा",
+    "options_err_incoherent": "एक्सप्रेस आपकी कीमत से तेज़ और सस्ता नहीं होना चाहिए; इकॉनमी धीमा और महँगा नहीं।",
+    "options_err_unavailable": "विकल्प अभी उपलब्ध नहीं हैं। उनके बिना भेजें।"
   },
   "orders_v3": {
     "next_label": "आगे:",

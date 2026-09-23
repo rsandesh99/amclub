@@ -402,6 +402,11 @@ const MANIFEST: Entry[] = [
     triggers: [['package_addons', 'package_addons_limit'], ['checkout_sessions', 'checkout_sessions_copy_addons']],
     note: 'E12a / ADR 019: package_addons (<= 3 active, public reads active of active packages, provider reads own, no client writes); checkout_sessions.addons + orders.addons snapshot, copied by trigger when materialize_order links the session',
   },
+  {
+    file: '0066_quote_options.sql',
+    tables: ['quote_options'],
+    note: 'E12b / ADR 020: quote_options (economy / express per quote revision, immutable, service role only); quotes.selected_option_id; checkout_sessions.quote_option_id',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

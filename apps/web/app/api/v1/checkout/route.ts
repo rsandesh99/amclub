@@ -14,6 +14,7 @@ import { prepareGoodsQuoteCheckout, type GoodsQuotePrep } from '@/lib/mart/goods
 import { searchAttributionSchema } from '@amclub/shared'
 import { storeCheckoutAttribution } from '@/lib/search/attribution'
 import { activeAddonsFor, addonsOn } from '@/lib/addons'
+import { optionForCheckout, quoteOptionsOn } from '@/lib/rfq/quote-options'
 
 const bodySchema = z
   .object({
@@ -33,12 +34,15 @@ const bodySchema = z
     attribution: searchAttributionSchema.optional(),
     // E12a / ADR 019 — the chosen add-ons (ids only; the server prices them).
     addonIds: addonIdsSchema.optional(),
+    // E12b / ADR 020 — the quote option the buyer picked (absent = Standard, the quote itself).
+    optionId: z.string().uuid().optional(),
   })
   // Exactly one source — package (Buy Now) OR quote (accepted RFQ quote).
   .refine((d) => !!d.packageId !== !!d.quoteId, {
     message: 'Provide exactly one of packageId or quoteId',
   })
   .refine((d) => !d.addonIds?.length || !!d.packageId, { message: 'Add-ons apply to packages only' })
+  .refine((d) => !d.optionId || !!d.quoteId, { message: 'Options apply to quotes only' })
 
 /**
  * Stable machine codes on every error body (`{ error, code }`). Clients map the
@@ -61,6 +65,7 @@ type CheckoutErrorCode =
   | 'checkout_failed'
   | 'goods_quote_unavailable'
   | 'addon_changed'
+  | 'option_not_found'
 
 function fail(status: number, code: CheckoutErrorCode, error: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error, code, ...(extra ?? {}) }, { status })
@@ -118,6 +123,8 @@ interface Prep {
   amounts: OrderAmounts
   /** E12a — the frozen add-on snapshot (package branch only; empty = none). */
   addons: AddonSnapshot
+  /** E12b — the quote option the session is frozen on (quote branch; null = Standard). */
+  quoteOptionId?: string | null
 }
 
 export async function POST(request: NextRequest) {
@@ -254,7 +261,7 @@ export async function POST(request: NextRequest) {
     const { data: q } = await supabase
       .from('quotes')
       .select(
-        'id, status, provider_id, price_paise, gst_included, delivery_days, scope' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_COLS + ')',
+        'id, status, provider_id, price_paise, gst_included, delivery_days, scope, revision' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_COLS + ')',
       )
       .eq('id', quoteId!)
       .maybeSingle()
@@ -294,7 +301,16 @@ export async function POST(request: NextRequest) {
         const now = Date.now()
         const live = rows.filter((r) => r.razorpay_order_id && (!r.expires_at || new Date(r.expires_at).getTime() > now))
         const same = live.find((r) => r.quote_id === quote.id)
-        if (same) return resumeResponse(same)
+        if (same) {
+          // E12b — a live session on ANOTHER option of this quote is another payment in flight: the same rule as another quote.
+          if (parsed.data.optionId || (await quoteOptionsOn(admin))) {
+            const { data: so } = await admin.from('checkout_sessions').select('quote_option_id').eq('id', same.id).maybeSingle()
+            if (((so as { quote_option_id?: string | null } | null)?.quote_option_id ?? null) !== (parsed.data.optionId ?? null)) {
+              return fail(409, 'rfq_checkout_in_progress', 'A payment for another option of this quote is in progress', { retryAfter: same.expires_at })
+            }
+          }
+          return resumeResponse(same)
+        }
         const other = live.find((r) => r.quote_id !== quote.id)
         if (other) {
           return fail(409, 'rfq_checkout_in_progress', 'A payment for another quote on this request is in progress', { retryAfter: other.expires_at })
@@ -302,6 +318,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (isGoodsRow(rfq) && parsed.data.optionId) return fail(404, 'option_not_found', 'Goods quotes have no options')
     if (isGoodsRow(rfq)) {
       // AMC Mart M2 — an accepted GOODS quote becomes an ordinary goods order:
       // one line at the quoted unit price, the buyer's delivery snapshot from
@@ -325,6 +342,14 @@ export async function POST(request: NextRequest) {
     } else {
     const { data: cat } = await supabase.from('categories').select('commission_bps').eq('id', rfq.category_id).maybeSingle()
     const commissionBps: number = cat?.commission_bps ?? 1000
+    // E12b / ADR 020 — a picked option must be THIS quote's, at its current revision, with the switch on;
+    // its price and days replace the Standard ones (ADR-015 per option: the quote's gst_included covers all).
+    let option: { id: string; pricePaise: number; deliveryDays: number } | null = null
+    if (parsed.data.optionId) {
+      const admin = await createAdminClient()
+      option = (await quoteOptionsOn(admin)) ? await optionForCheckout(admin, quote.id, parsed.data.optionId, Number(quote.revision ?? 1)) : null
+      if (!option) return fail(404, 'option_not_found', 'That option is not on this quote')
+    }
 
     prep = {
       providerId: quote.provider_id,
@@ -338,13 +363,14 @@ export async function POST(request: NextRequest) {
         rfqDetails: rfq.details ?? null,
         deliverables: [],
       },
-      deliveryDays: quote.delivery_days,
+      deliveryDays: option?.deliveryDays ?? quote.delivery_days,
       revisionMax: null,
+      quoteOptionId: option?.id ?? null,
       // ADR-015 — a price the provider marked "GST included" is what the buyer
       // pays: GST is carved out of it, never added on top. Excluded or unstated
       // (the confirm sheet says GST is applied at checkout) adds it as before.
       // ADR-017 — the ONE shared rule (quoteChargeAmounts); compare and the provider preview use it too.
-      amounts: quoteChargeAmounts({ pricePaise: Number(quote.price_paise), gstIncluded: quote.gst_included ?? null, commissionBps }),
+      amounts: quoteChargeAmounts({ pricePaise: option?.pricePaise ?? Number(quote.price_paise), gstIncluded: quote.gst_included ?? null, commissionBps }),
       addons: [],
     }
     }
@@ -385,6 +411,8 @@ export async function POST(request: NextRequest) {
         ...(goodsPrep ? { kind: 'goods', line_items: goodsPrep.lineItems, delivery_snapshot: goodsPrep.delivery } : {}),
         // E12a — only a session with add-ons names the column (0065), so checkout is unchanged before it.
         ...(prep.addons.length ? { addons: prep.addons } : {}),
+        // E12b — only an option session names the column (0066).
+        ...(prep.quoteOptionId ? { quote_option_id: prep.quoteOptionId } : {}),
         idempotency_key: idempotencyKey,
         status: 'created',
         expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),

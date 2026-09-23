@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { MAX_QUOTE_REVISIONS, editedExtractFields, quoteRevisionSchema, quoteSchema, type QuoteExtraction } from '@amclub/shared'
+import { MAX_QUOTE_REVISIONS, editedExtractFields, quoteOptionsProblems, quoteRevisionSchema, quoteSchema, type QuoteExtraction, type QuoteOptionInput } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { delegatedRunId, requireToolScope } from '@/lib/agent/scope'
 import { createSupabaseLedger } from '@amclub/agent-core'
@@ -17,8 +17,28 @@ import { recordPriceBookEntry } from '@/lib/agent/price-book'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { notifyText, sameText } from '@/lib/i18n/notify'
+import { quoteOptionsOn, writeQuoteOptions } from '@/lib/rfq/quote-options'
 
 const bodySchema = quoteSchema.omit({ rfq_id: true })
+
+/**
+ * E12b / ADR 020 — Economy / Express beside the Standard price: services only,
+ * behind `quote_options_enabled`, coherent against the quote's own price and
+ * days (express faster + never cheaper, economy slower + never dearer).
+ * Checked before any write (and before the slot claim on submit).
+ */
+async function checkOptions(
+  admin: Awaited<ReturnType<typeof createAdminClient>>,
+  options: readonly QuoteOptionInput[],
+  standard: { pricePaise: number; deliveryDays: number; isGoods: boolean },
+): Promise<NextResponse | null> {
+  if (options.length === 0) return null
+  if (standard.isGoods) return NextResponse.json({ error: 'options_not_allowed' }, { status: 422 })
+  if (!(await quoteOptionsOn(admin))) return NextResponse.json({ error: 'options_unavailable' }, { status: 422 })
+  const problems = quoteOptionsProblems(standard, options)
+  if (problems.length) return NextResponse.json({ error: 'options_incoherent', problems }, { status: 400 })
+  return null
+}
 
 /** Provider submits ONE quote on a matched, active RFQ. The N-quote cap (7) is
  *  enforced atomically via claim_quote_slot — the 8th quote is rejected (409).
@@ -81,6 +101,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const resolved = await resolveQuoteTerms(admin, { rfqRow: rfqRow ?? { id: rfqId }, providerId: actor.providerId, body: d })
   if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: resolved.status })
   const { pricePaise, isGoods, goods } = resolved.value
+  const options = d.options ?? []
+  const badOptions = await checkOptions(admin, options, { pricePaise, deliveryDays: d.delivery_days, isGoods })
+  if (badOptions) return badOptions
 
   // Provider must be matched to this RFQ (fan-out wrote the row).
   const { data: match } = await admin
@@ -198,6 +221,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     captureServerEvent(actor.userId, 'munshi_draft_decided', { via: viaRun ? 'run' : 'composer', outcome: viaRun ? 'approved' : 'edited', kind: 'quote' })
   }
 
+  // E12b — the options ride the quote's first revision (immutable rows).
+  const optionsSaved = options.length ? await writeQuoteOptions(admin, quote.id, 1, options) : true
+
   await addQuoteEvent(admin, {
     quoteId: quote.id,
     eventType: 'submitted',
@@ -206,6 +232,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     payload: {
       rfq_id: rfqId,
       ...quoteTermsSnapshot(resolved.value, d),
+      ...(options.length ? { options } : {}),
       ...(extraction ? { extraction_id: extraction.id, edited_fields: editedFields ?? [] } : {}),
     },
   })
@@ -227,7 +254,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
   }
 
-  return NextResponse.json({ quoteId: quote.id, quoteCount: newCount, ...(extraction ? { extraction_id: extraction.id, edited_fields: editedFields ?? [] } : {}) })
+  return NextResponse.json({ quoteId: quote.id, quoteCount: newCount, ...(options.length ? { options: options.length, optionsSaved } : {}), ...(extraction ? { extraction_id: extraction.id, edited_fields: editedFields ?? [] } : {}) })
 }
 
 /**
@@ -281,6 +308,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const rfqRow = await loadRfqRowForQuote(admin, rfqId)
   const resolved = await resolveQuoteTerms(admin, { rfqRow: rfqRow ?? { id: rfqId }, providerId: actor.providerId, body: d })
   if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: resolved.status })
+  // E12b — a revision restates its options too (absent = none from this revision on).
+  const options = d.options ?? []
+  const badOptions = await checkOptions(admin, options, { pricePaise: resolved.value.pricePaise, deliveryDays: d.delivery_days, isGoods: resolved.value.isGoods })
+  if (badOptions) return badOptions
 
   const before = {
     price_paise: Number(q.price_paise),
@@ -291,7 +322,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     advance_percent: q.advance_percent ?? null,
     ...(q.unit_price_paise != null ? { goods: { unit_price_paise: Number(q.unit_price_paise), qty: q.qty, gst_rate_bps: q.gst_rate_bps, hsn_code: q.hsn_code, product_id: q.product_id ?? null } } : {}),
   }
-  const after = quoteTermsSnapshot(resolved.value, d)
+  const after = { ...quoteTermsSnapshot(resolved.value, d), ...(options.length ? { options } : {}) }
   const nextRevision = currentRevision + 1
   const now = new Date().toISOString()
 
@@ -305,6 +336,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .select('id')
   if (updErr) return serverError('[quote revise]', updErr)
   if (!moved || moved.length === 0) return NextResponse.json({ error: 'revision_conflict' }, { status: 409 })
+  // The new revision's options (the old rows stay for any session frozen on them).
+  if (options.length) await writeQuoteOptions(admin, q.id, nextRevision, options)
 
   await addQuoteEvent(admin, {
     quoteId: q.id,

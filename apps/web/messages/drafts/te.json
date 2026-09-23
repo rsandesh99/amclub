@@ -544,7 +544,14 @@
     "accept_confirm_escrow": "AMClub మీ డబ్బును తన వద్ద ఉంచుతుంది, మీరు పనిని అంగీకరించిన తర్వాతే ప్రొవైడర్‌కు విడుదల చేస్తుంది.",
     "accept_confirm_others": "{count, plural, one {ఈ అభ్యర్థనపై ఉన్న మరో కోట్ మూసివేయబడుతుంది.} other {ఈ అభ్యర్థనపై ఉన్న మిగతా # కోట్‌లు మూసివేయబడతాయి.}}",
     "accept_confirm_submit": "చెల్లింపుకు కొనసాగండి",
-    "accept_confirm_cancel": "ఇప్పుడు వద్దు"
+    "accept_confirm_cancel": "ఇప్పుడు వద్దు",
+    "cmp3_options": "ఎంపికలు",
+    "cmp3_option_standard_only": "స్టాండర్డ్ మాత్రమే",
+    "cmp3_option_economy": "ఎకానమీ",
+    "cmp3_option_standard": "స్టాండర్డ్",
+    "cmp3_option_express": "ఎక్స్‌ప్రెస్",
+    "cmp3_options_lowest": "అత్యల్పం: {who} {option}, {total}",
+    "cmp3_options_fastest": "అత్యంత వేగం: {who} {option}, {days, plural, one {# రోజు} other {# రోజులు}}"
   },
   "invoices": {
     "title": "ఇన్వాయిస్‌లు",

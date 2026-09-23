@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { GST_RATE_BPS_OPTIONS, QUOTE_ADVANCE_PRESETS, QUOTE_VALIDITY_PRESETS, validUntilFromPreset, type QuotePreview, type QuoteExtractField, type QuoteExtractResponse } from '@amclub/shared'
+import { GST_RATE_BPS_OPTIONS, QUOTE_ADVANCE_PRESETS, QUOTE_VALIDITY_PRESETS, quoteOptionsProblems, validUntilFromPreset, type QuoteOptionInput, type QuotePreview, type QuoteExtractField, type QuoteExtractResponse } from '@amclub/shared'
 import { VoiceDictation } from '@/components/mart/VoiceDictation'
 import { useAnalytics } from '@/components/providers/posthog'
 import { SegmentedControl } from '@/components/ui-v3/SegmentedControl'
 import { formatINR } from '@/lib/format'
+import { EMPTY_OPTION_DRAFTS, QuoteOptionsFields, type OptionDrafts } from './QuoteOptionsFields'
 
 type Tri = '' | 'yes' | 'no'
 
@@ -42,6 +43,8 @@ export interface QuoteComposerInitial {
   validUntil: string | null
   advancePercent: number | null
   goods?: { unitPricePaise: number; qty: number; gstRateBps: number; hsnCode: string; productId: string | null } | null
+  /** E12b — the current revision's Economy / Express rows (Standard is the quote itself); rupees as the server formats them for the input. */
+  options?: { label: 'economy' | 'express'; rupees: string; deliveryDays: number }[]
 }
 
 export interface QuoteComposerProps {
@@ -61,11 +64,13 @@ export interface QuoteComposerProps {
    * preview ("Buyer sees … all-in" / "You receive ≈ …"). Undefined = the v2 form, unchanged.
    */
   v3?: { todayIst: string; scaffold: string; entry: 'inbox' | 'munshi' | 'revise' } | undefined
+  /** E12b / ADR 020 — `quote_options_enabled` (server-computed; v3 services form only). */
+  optionsEnabled?: boolean
 }
 
 const triFrom = (v: boolean | null | undefined): Tri => (v == null ? '' : v ? 'yes' : 'no')
 
-export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'submit', initial, munshiDraftId = null, onDone, onCancel, v3: v3Prop }: QuoteComposerProps) {
+export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'submit', initial, munshiDraftId = null, onDone, onCancel, v3: v3Prop, optionsEnabled = false }: QuoteComposerProps) {
   const t = useTranslations('rfq')
   const router = useRouter()
   const posthog = useAnalytics()
@@ -100,6 +105,13 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
   const t3 = useTranslations('quote_v3')
   const [advanceCustom, setAdvanceCustom] = useState(initial?.advancePercent != null && !(QUOTE_ADVANCE_PRESETS as readonly number[]).includes(initial.advancePercent))
   const [preview, setPreview] = useState<QuotePreview | null>(null)
+  // E12b — Economy / Express beside the Standard price (prefilled on a revision).
+  const [offerOptions, setOfferOptions] = useState(!!initial?.options?.length)
+  const [optionDrafts, setOptionDrafts] = useState<OptionDrafts>(() => {
+    const d: OptionDrafts = { express: { ...EMPTY_OPTION_DRAFTS.express }, economy: { ...EMPTY_OPTION_DRAFTS.economy } }
+    for (const o of initial?.options ?? []) d[o.label] = { price: o.rupees, days: String(o.deliveryDays) }
+    return d
+  })
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (v3) posthog.capture('quote_form_started', { device: 'web', entry: v3.entry })
@@ -213,6 +225,13 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
     if (v3 && !validUntil) { setError(t3('valid_until') + ': ' + t('required_field')); return }
     const advanceNum = advance.trim() === '' ? undefined : Number(advance)
     if (advanceNum !== undefined && (!Number.isInteger(advanceNum) || advanceNum < 0 || advanceNum > 100)) { setError(t('term_advance') + ': 0–100'); return }
+    // E12b — only filled rows become options; the server re-checks coherence (400 otherwise).
+    const options: QuoteOptionInput[] = optionsEnabled && !goods && offerOptions
+      ? (['express', 'economy'] as const)
+          .filter((l) => Number(optionDrafts[l].price) > 0 && Number(optionDrafts[l].days) > 0)
+          .map((l) => ({ label: l, price_paise: Math.round(Number(optionDrafts[l].price) * 100), delivery_days: Number(optionDrafts[l].days) }))
+      : []
+    if (options.length && quoteOptionsProblems({ pricePaise, deliveryDays }, options).length) { setError(t3('options_err_incoherent')); return }
     setLoading(true)
     try {
       // S1.3 — revise = PATCH in place (same body shape, never an extraction_id); submit = POST.
@@ -230,6 +249,7 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
           ...(goodsTerms ? { goods: goodsTerms } : {}),
           ...(!revise && extractionId ? { extraction_id: extractionId } : {}),
           ...(!revise && munshiDraftId ? { munshi_draft_id: munshiDraftId } : {}),
+          ...(options.length ? { options } : {}),
         }),
       })
       const d = await res.json().catch(() => ({}))
@@ -239,6 +259,8 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
         if (d.error === 'revision_cap') throw new Error(t('revise_err_cap'))
         if (d.error === 'revision_conflict') throw new Error(t('revise_err_conflict'))
         if (d.error === 'quote_not_revisable' || d.error === 'quote_not_found') throw new Error(t('revise_err_not_revisable'))
+        if (d.error === 'options_incoherent') throw new Error(t3('options_err_incoherent'))
+        if (d.error === 'options_unavailable') throw new Error(t3('options_err_unavailable'))
         throw new Error(revise ? t('revise_err_generic') : t('err_quote'))
       }
       if (revise) posthog.capture('quote_revised_client', { rfq_id: rfqId, revision: d.revision, role: 'provider' })
@@ -462,6 +484,18 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
         </div>
         <p className="mt-2 text-xs text-foreground-secondary">{t('terms_help')}</p>
       </details>
+      )}
+
+      {/* E12b — both forms carry the options, so a revision never drops them silently. */}
+      {optionsEnabled && !goods && (
+        <QuoteOptionsFields
+          rfqId={rfqId}
+          gst={gst}
+          on={offerOptions}
+          onToggle={setOfferOptions}
+          drafts={optionDrafts}
+          onChange={(label, next) => setOptionDrafts((d) => ({ ...d, [label]: next }))}
+        />
       )}
 
       <div className="flex flex-col gap-1.5">

@@ -1319,7 +1319,14 @@
     "cmp3_row_col": "Compared on",
     "cmp3_sort_total": "Total",
     "cmp3_sort_response": "Response",
-    "cmp3_sort_reliability": "Reliability"
+    "cmp3_sort_reliability": "Reliability",
+    "cmp3_options": "Options",
+    "cmp3_option_standard_only": "Standard only",
+    "cmp3_option_economy": "Economy",
+    "cmp3_option_standard": "Standard",
+    "cmp3_option_express": "Express",
+    "cmp3_options_lowest": "Lowest: {who} {option}, {total}",
+    "cmp3_options_fastest": "Fastest: {who} {option}, {days, plural, one {# day} other {# days}}"
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -3541,7 +3548,18 @@
     "scaffold": "Included:\n- \nNot included:\n- \nYou’ll need to share:\n- ",
     "buyer_sees_extra": "Buyer sees {price} + {pct} % GST = {total} all-in",
     "buyer_sees_included": "Buyer pays {total} all-in (GST {gst} included)",
-    "you_receive": "You receive ≈ {amount} after AMClub’s fee · paid {days} days after the buyer accepts"
+    "you_receive": "You receive ≈ {amount} after AMClub’s fee · paid {days} days after the buyer accepts",
+    "options_toggle": "Offer faster or cheaper options",
+    "options_hint": "Your price above is Standard. Add Express (faster, never cheaper) or Economy (slower, never dearer). The buyer picks one.",
+    "option_express": "Express",
+    "option_economy": "Economy",
+    "option_express_rule": "fewer days, same or higher price",
+    "option_economy_rule": "more days, same or lower price",
+    "option_price": "Price (₹)",
+    "option_days": "Delivery (days)",
+    "option_buyer_sees": "Buyer sees {total} all-in",
+    "options_err_incoherent": "Express must be faster and not cheaper than your price; Economy slower and not dearer.",
+    "options_err_unavailable": "Options aren't available right now. Submit without them."
   },
   "orders_v3": {
     "next_label": "Next:",

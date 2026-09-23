@@ -102,6 +102,8 @@ export const quotes = pgTable('quotes', {
   revisedAt: timestamp('revised_at', { withTimezone: true }),
   // S2.2 (0040) — the Munshi draft this quote came from; FK → munshi_drafts in SQL (circular import avoided here).
   munshiDraftId: uuid('munshi_draft_id'),
+  // E12b / ADR 020 (0066) — the option the buyer paid for (NULL = Standard); FK → quote_options in SQL.
+  selectedOptionId: uuid('selected_option_id'),
   // submitted | withdrawn | accepted | declined | expired
   status: text('status').default('submitted').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
@@ -180,4 +182,20 @@ export const quoteSlaStats = pgTable('quote_sla_stats', {
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 }, (table) => [
   primaryKey({ columns: [table.categorySlug, table.state] }),
+])
+
+// E12b / ADR 020 (0066) — Economy / Express per quote revision (the quote row is Standard). Immutable rows;
+// service role only.
+export const quoteOptions = pgTable('quote_options', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'cascade' }).notNull(),
+  revision: integer('revision').notNull(),
+  label: text('label').notNull(), // economy | express
+  pricePaise: bigint('price_paise', { mode: 'number' }).notNull(),
+  deliveryDays: integer('delivery_days').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique('quote_options_quote_id_revision_label_key').on(table.quoteId, table.revision, table.label),
+  index('quote_options_quote_idx').on(table.quoteId, table.revision),
 ])

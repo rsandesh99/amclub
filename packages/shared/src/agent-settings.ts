@@ -234,6 +234,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E11c / N30 (D9): /partner/tenders — tender ALERTS matched by category + state for verified government-licensing providers (Save / Not relevant; the official portal link) and the reviewed GeM checklist. No bidding, applying or submitting inside AMClub. Turn on only after D9 and the mini-PRD settle the data source and its licence.',
   },
+  // ── Experience v3 E12b — quote speed options (ADR 020; money) ──
+  quote_options_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E12b / ADR 020: a provider may offer Economy (slower, never dearer) and Express (faster, never cheaper) beside the quoted Standard price; the buyer picks one on compare and checkout charges that option (ADR-015 per option). Off: the quote form hides it, options are refused (422) and checkout refuses an optionId (409). Apply migration 0066 first.',
+  },
   // ── Experience v3 E12a — package add-ons (ADR 019; money) ──
   addons_enabled: {
     schema: z.boolean(),

@@ -617,6 +617,12 @@ async function main() {
       }
     }
 
+    // ── 7a3. E12b / ADR 020 — quote_options are service-role only (the API is the one reader and writer) ──
+    console.log('quote options (E12b / ADR 020):')
+    deniedRows('buyerA direct-reads quote_options', await asUser(buyerA.token).from('quote_options').select('id'))
+    deniedRows('provA direct-reads quote_options', await asUser(provA.token).from('quote_options').select('id'))
+    if (quoteId) deniedRows('provA INSERTs a quote option directly', await asUser(provA.token).from('quote_options').insert({ quote_id: quoteId, revision: 1, label: 'express', price_paise: 1, delivery_days: 1 }).select('id'))
+
     // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
     console.log('users privilege guard (0042, direct PostgREST):')
     eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)

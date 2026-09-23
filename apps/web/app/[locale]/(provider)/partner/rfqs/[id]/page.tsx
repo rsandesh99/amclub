@@ -19,6 +19,7 @@ import { rfqIsActive } from '@amclub/shared'
 import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
 import { NudgeButton } from '@/components/orders/NudgeButton'
 import { ReviseQuote } from '@/components/rfq/ReviseQuote'
+import { quoteOptionsOn } from '@/lib/rfq/quote-options'
 import { QuoteThread } from '@/components/rfq/QuoteThread'
 import { WithdrawQuoteButton } from '@/components/rfq/WithdrawQuoteButton'
 import { Link } from '@/i18n/navigation'
@@ -60,6 +61,8 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
 
   // S1.1 — "Type or speak your quote": AGENT_ENABLED + agents_enabled.quote_extract + cohort, for THIS provider.
   const extractEnabled = await isQuoteExtractEnabledFor(await createAdminClient(), user.id)
+  // E12b / ADR 020 — Economy / Express beside the Standard price (services only; switch quote_options_enabled).
+  const optionsEnabled = !goods && (await quoteOptionsOn(await createAdminClient()))
   // S2.2 — ?munshi=<draftId>: the provider's own open quote draft prefills the composer; the submit carries munshi_draft_id.
   const munshi = AGENT_ENABLED && sp.munshi && /^[0-9a-f-]{36}$/i.test(sp.munshi) ? await munshiDraftForComposer(await createAdminClient(), { providerId: profile.id, draftId: sp.munshi, rfqId: id }) : null
 
@@ -174,7 +177,9 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
                 pricePaise: rfq.myQuote.pricePaise, deliveryDays: rfq.myQuote.deliveryDays, scope: rfq.myQuote.scope, message: rfq.myQuote.message,
                 gstIncluded: rfq.myQuote.gstIncluded, transportIncluded: rfq.myQuote.transportIncluded, validUntil: rfq.myQuote.validUntil, advancePercent: rfq.myQuote.advancePercent,
                 goods: rfq.myQuote.goods ? { unitPricePaise: rfq.myQuote.goods.unitPricePaise, qty: rfq.myQuote.goods.qty, gstRateBps: rfq.myQuote.goods.gstRateBps, hsnCode: rfq.myQuote.goods.hsnCode, productId: rfq.myQuote.goods.productId } : null,
+                options: rfq.myQuote.options.map((o) => ({ label: o.label, rupees: String(o.pricePaise / 100), deliveryDays: o.deliveryDays })),
               }}
+              optionsEnabled={optionsEnabled}
             />
           )}
           {/* Take the quote back (submitted → withdrawn), behind the confirm sheet. */}
@@ -204,6 +209,7 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
             rfqId={rfq.id}
             goods={goods ?? undefined}
             extractEnabled={extractEnabled}
+            optionsEnabled={optionsEnabled}
             {...(munshi ? { initial: { ...munshi.initial, message: null }, munshiDraftId: munshi.draftId } : {})}
             {...(!goods && isOnFor('partner', user.id) ? { v3: { todayIst: todayIST(), scaffold: (await getTranslations('quote_v3'))('scaffold'), entry: munshi ? ('munshi' as const) : ('inbox' as const) } } : {})}
           />

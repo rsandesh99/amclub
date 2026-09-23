@@ -8,6 +8,7 @@ import { writeAudit } from '@/lib/audit/log'
 import { addQuoteEvent, addQuoteEvents } from './events'
 import { labelLostQuotes } from './loss-labels'
 import { shadowAtAcceptance } from '@/lib/shadow'
+import { optionForOrder } from './quote-options'
 import { notifyText, sameText } from '@/lib/i18n/notify'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -68,7 +69,8 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     // E7 (N22) — a replay of the winning order completes loss labels an interrupted pass missed
     // (labelLostQuotes writes only missing rows, checks the winner itself, never throws).
     if (result === 'noop') {
-      await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+      const option = await optionForOrder(admin, orderId)
+      await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id, ...(option ? { winnerTerms: { pricePaise: option.pricePaise, deliveryDays: option.deliveryDays } } : {}) })
       await shadowAtAcceptance(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
     }
     return result
@@ -87,6 +89,13 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
 
   // Accept the winning quote.
   await admin.from('quotes').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', quote.id)
+  // E12b / ADR 020 — the option the buyer paid for (from the frozen session; null = Standard). Best-effort,
+  // a separate write so the acceptance above never names a 0066 column.
+  const option = await optionForOrder(admin, orderId)
+  if (option) {
+    const { error: optErr } = await admin.from('quotes').update({ selected_option_id: option.id }).eq('id', quote.id)
+    if (optErr) console.warn('[finalize] selected_option_id', optErr.message)
+  }
   // S2.2 — mark the winner's price-book row accepted (Munshi prefers accepted rows as its basis). The row exists
   // only while the agent programme is on (recordPriceBookEntry), so this is gated the same way; best-effort.
   if (AGENT_ENABLED) {
@@ -115,8 +124,8 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
       payload: { rfq_id: quote.rfq_id, accepted_quote_id: quote.id, order_id: orderId },
     })),
   )
-  // E7 (N22) — one `lost` label per passed-over quote, deltas against the winner. Best-effort, outside the money path.
-  await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+  // E7 (N22) — one `lost` label per passed-over quote, deltas against the winner (E12b: its winning option). Best-effort, outside the money path.
+  await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id, ...(option ? { winnerTerms: { pricePaise: option.pricePaise, deliveryDays: option.deliveryDays } } : {}) })
   // E15 F10 — resolve the RFQ's shadow predictions (price band vs the winner, fit vs quoted). Best-effort, shown to nobody.
   await shadowAtAcceptance(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
 
