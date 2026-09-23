@@ -19,7 +19,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ packa
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const { data: pkg } = await supabase
     .from('packages')
-    .select('id, title_i18n, price_paise, discount_bps, member_extra_discount_bps, delivery_days, provider:provider_profiles!inner(display_name, status), category:categories(commission_bps)')
+    .select('id, title_i18n, price_paise, discount_bps, member_extra_discount_bps, delivery_days, provider:provider_profiles!inner(display_name, status, capacity_paused), category:categories(commission_bps)')
     .eq('id', packageId)
     .eq('status', 'active')
     .maybeSingle()
@@ -29,6 +29,8 @@ export default async function CheckoutPage({ params }: { params: Promise<{ packa
   const commissionBps = p.category?.commission_bps ?? 1000
   const amounts = computeOrderAmounts({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, commissionBps })
   const title = pickI18n(p.title_i18n, locale)
+  // Prefill the invoice GSTIN from the buyer's profile (RLS: owner read).
+  const { data: msme } = await supabase.from('msme_profiles').select('gstin').eq('user_id', user.id).maybeSingle()
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   return (
@@ -42,6 +44,8 @@ export default async function CheckoutPage({ params }: { params: Promise<{ packa
         deliveryDays={p.delivery_days}
         amounts={amounts}
         couponsEnabled={COUPONS_ENABLED}
+        profileGstin={(msme?.gstin as string | null | undefined) ?? null}
+        providerPaused={!!p.provider?.capacity_paused}
       />
     </div>
   )

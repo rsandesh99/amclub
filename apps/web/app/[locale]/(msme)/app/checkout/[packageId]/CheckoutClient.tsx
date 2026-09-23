@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { isValidGstin, type OrderAmounts } from '@amclub/shared'
@@ -8,12 +8,7 @@ import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void }
-  }
-}
+import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 
 export function CheckoutClient({
   packageId,
@@ -22,6 +17,8 @@ export function CheckoutClient({
   deliveryDays,
   amounts,
   couponsEnabled = false,
+  profileGstin = null,
+  providerPaused = false,
 }: {
   packageId: string
   title: string
@@ -31,6 +28,10 @@ export function CheckoutClient({
   /** Coupons feature flag (default OFF). When false the input is hidden and the
    *  total never includes a coupon discount. */
   couponsEnabled?: boolean
+  /** The buyer's MSME profile GSTIN (prefill; the buyer may bill another). */
+  profileGstin?: string | null
+  /** provider_profiles.capacity_paused — the server refuses too (provider_paused). */
+  providerPaused?: boolean
 }) {
   const t = useTranslations('checkout')
   const tc = useTranslations('coupons')
@@ -39,10 +40,21 @@ export function CheckoutClient({
   const [applied, setApplied] = useState<{ code: string; discountPaise: number } | null>(null)
   const [couponMsg, setCouponMsg] = useState('')
   const [couponBusy, setCouponBusy] = useState(false)
-  const [gstOpen, setGstOpen] = useState(false)
-  const [gstin, setGstin] = useState('')
+  // Only a checksum-valid profile GSTIN is prefilled (a stale one would be refused).
+  const prefillGstin = profileGstin && isValidGstin(profileGstin.trim().toUpperCase()) ? profileGstin.trim().toUpperCase() : ''
+  const [gstOpen, setGstOpen] = useState(!!prefillGstin)
+  const [gstin, setGstin] = useState(prefillGstin)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // One idempotency key per checkout INTENT for this page load: a retry or a
+  // double tap resumes the same session (P0-5); changing what is being paid
+  // for (coupon / GSTIN) starts a new intent, so a frozen session never
+  // carries stale inputs.
+  const intent = useRef<{ sig: string; key: string } | null>(null)
+  function keyFor(sig: string): string {
+    if (!intent.current || intent.current.sig !== sig) intent.current = { sig, key: newIdempotencyKey() }
+    return intent.current.key
+  }
 
   // Live total preview when a coupon is applied. The coupon reduces the pre-GST
   // base; the server re-evaluates + freezes the authoritative amount at checkout.
@@ -77,55 +89,26 @@ export function CheckoutClient({
   async function pay() {
     setLoading(true)
     setError('')
+    const couponCode = coupon.trim()
+    const gst = gstin.trim().toUpperCase()
     try {
-      const res = await fetch('/api/v1/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          packageId,
-          idempotencyKey: crypto.randomUUID(),
-          ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
-          ...(gstin.trim() ? { gstInvoice: { gstin: gstin.trim() } } : {}),
-        }),
+      const data = await startCheckout('/api/v1/checkout', {
+        packageId,
+        idempotencyKey: keyFor(`${couponCode}|${gst}`),
+        ...(couponCode ? { couponCode } : {}),
+        ...(gst ? { gstInvoice: { gstin: gst } } : {}),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : t('failed'))
-
-      if (data.simulated) {
-        // Simulation: complete the captured-payment path server-side.
-        const sim = await fetch('/api/v1/checkout/simulate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ checkoutSessionId: data.checkoutSessionId }),
-        })
-        const simData = await sim.json()
-        if (!sim.ok) throw new Error(simData.error ?? t('failed'))
-        router.push(`/app/orders/${simData.orderId}?first=1`)
-        return
-      }
-
-      // Real Razorpay: open the checkout sheet. The WEBHOOK creates the order.
-      await loadRazorpay()
-      const rzp = new window.Razorpay!({
-        key: data.keyId,
-        order_id: data.razorpayOrderId,
-        amount: data.amountPaise,
-        currency: 'INR',
-        name: 'AMClub',
+      // Simulation completes the captured-payment path server-side; real keys
+      // open the Razorpay sheet and the WEBHOOK creates the order.
+      await payCheckout(data, {
         description: title,
-        handler: () => {
-          // Redirect is cosmetic; the order appears once the webhook fires.
-          router.push('/app/orders?processing=1')
-        },
-        modal: {
-          // Buyer closed the sheet without paying — say so instead of leaving
-          // them staring at an unchanged page (B1). Nothing was charged.
-          ondismiss: () => setError(t('payment_cancelled')),
-        },
+        onPaid: (o) => router.push(o.kind === 'order' ? `/app/orders/${o.orderId}?first=1` : '/app/orders?processing=1'),
+        // Buyer closed the sheet without paying — say so instead of leaving
+        // them staring at an unchanged page (B1). Nothing was charged.
+        onDismiss: () => setError(t('payment_cancelled')),
       })
-      rzp.open()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('failed'))
+      setError(t(checkoutErrorKey(e, CHECKOUT_ERROR_KEYS, 'failed') as 'failed'))
     } finally {
       setLoading(false)
     }
@@ -152,8 +135,11 @@ export function CheckoutClient({
       {/* Coupons are flag-gated (default OFF) — hidden until re-enabled. */}
       {couponsEnabled && (
         <div className="space-y-1.5">
+          <Label htmlFor="coupon">{t('coupon_label')}</Label>
           <div className="flex gap-2">
             <Input
+              id="coupon"
+              autoComplete="off"
               value={coupon}
               onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setApplied(null); setCouponMsg('') }}
               placeholder={t('coupon')}
@@ -172,7 +158,19 @@ export function CheckoutClient({
         {gstOpen && (
           <div className="mt-3 space-y-1.5">
             <Label htmlFor="gstin">{t('gstin')}</Label>
-            <Input id="gstin" value={gstin} onChange={(e) => setGstin(e.target.value)} placeholder="27AAPFU0939F1ZV" />
+            <Input
+              id="gstin"
+              value={gstin}
+              onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/\s/g, '').slice(0, 15))}
+              maxLength={15}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="27AAPFU0939F1ZV"
+            />
+            {prefillGstin && gstin === prefillGstin && (
+              <p className="text-xs text-foreground-secondary">{t('gstin_prefilled')}</p>
+            )}
             {/* Checksum hint only — the server stays the authority (§7 audit M8).
                 Shown once 15 chars are typed so we never nag mid-entry. */}
             {gstin.trim().length >= 15 && !isValidGstin(gstin.trim()) && (
@@ -182,9 +180,10 @@ export function CheckoutClient({
         )}
       </div>
 
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {providerPaused && <p className="text-sm font-medium text-warning" role="status">{t('err_provider_paused')}</p>}
+      {error && <p className="text-sm text-danger" role="alert">{error}</p>}
 
-      <Button onClick={pay} loading={loading} className="w-full" size="lg">
+      <Button onClick={pay} loading={loading} disabled={providerPaused} className="w-full" size="lg">
         {t('pay', { amount: formatINR(dispTotal) })}
       </Button>
       <p className="text-center text-xs text-foreground-secondary">{t('secure_note')}</p>
@@ -199,15 +198,4 @@ function Row({ label, value }: { label: string; value: string }) {
       <dd className="tabular-nums">{value}</dd>
     </div>
   )
-}
-
-function loadRazorpay(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.Razorpay) return resolve()
-    const s = document.createElement('script')
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error('Failed to load Razorpay'))
-    document.body.appendChild(s)
-  })
 }
