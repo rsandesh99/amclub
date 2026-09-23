@@ -62,6 +62,7 @@ jobs:
       EXP_V3_HOME: "on"
       EXP_V3_ONBOARDING: "on"
       EXP_V3_PARTNER: "on"
+      EXP_V3_COMPARE: "on"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -178,7 +179,7 @@ jobs:
         working-directory: apps/web
         run: pnpm exec tsx scripts/verify-phase7.ts
 
-      - name: RFQ (ADR-015 GST-included, ADR-014 §7 duplicate order)
+      - name: RFQ (ADR-015 GST-included, ADR-014 §7 duplicate order, E7 loss labels)
         if: ${{ !cancelled() && steps.app.outcome == 'success' }}
         working-directory: apps/web
         run: pnpm exec tsx scripts/verify-rfq.ts

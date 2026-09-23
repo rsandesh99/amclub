@@ -10,12 +10,14 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { computeOrderAmounts } from '@amclub/shared'
+import { computeOrderAmounts, quoteLossLabel, type LossLabelQuote } from '@amclub/shared'
+import { signWebhookBody } from '../lib/payments/signature'
 
 const URL = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
 const ANON = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!
 const BASE = process.env['BASE_URL'] ?? 'http://localhost:3000'
+const WEBHOOK_URL = process.env['WEBHOOK_URL'] ?? `${BASE}/api/v1/webhooks/razorpay`
 const admin = createClient(URL, SERVICE, { auth: { persistSession: false } })
 
 let pass = 0, fail = 0
@@ -211,6 +213,46 @@ async function main() {
   check('8. quote_events: 7 submitted (by provider) · 1 accepted · 6 auto_declined (system)',
     evCount('submitted') === 7 && evCount('accepted') === 1 && evCount('auto_declined') === 6 && submittedByUser && systemDecisions,
     `submitted=${evCount('submitted')} accepted=${evCount('accepted')} auto_declined=${evCount('auto_declined')} actors-ok=${submittedByUser && systemDecisions}`)
+
+  // ── Criterion 10 (PRD Experience v3 E7 FR-7.3, N22 — the PRD's "verify-rfq criterion 5"): loss labels ──
+  // Accepting ka0 labelled every other open quote 'lost' with its deltas against the winner (shared quoteLossLabel).
+  // A replayed payment.captured webhook for the winning order re-runs finalize: no second label. With one label
+  // dropped first, the replay writes exactly that one back. The losing provider can never read a label.
+  const compareFlag = (process.env['EXP_V3_COMPARE'] ?? 'off').trim().toLowerCase()
+  if (compareFlag !== '' && compareFlag !== 'off' && compareFlag !== '0') {
+    const { data: allQ } = await admin.from('quotes').select('id, provider_id, status, decline_reason, price_paise, gst_included, delivery_days').eq('rfq_id', rfqId)
+    const asL = (q: { price_paise: number; gst_included: boolean | null; delivery_days: number | null }): LossLabelQuote => ({ pricePaise: Number(q.price_paise), gstIncluded: q.gst_included, deliveryDays: q.delivery_days })
+    const winnerQ = (allQ ?? []).find((q) => q.status === 'accepted')
+    const losers = (allQ ?? []).filter((q) => q.id !== winnerQ?.id && q.decline_reason === 'another_quote_accepted')
+    const expected = new Map(losers.map((l) => [l.id as string, winnerQ ? quoteLossLabel(asL(l), { id: winnerQ.id as string, ...asL(winnerQ) }) : null]))
+    const readLabels = async () => ((await admin.from('quote_events').select('quote_id, payload').eq('event_type', 'lost').in('quote_id', (allQ ?? []).map((q) => q.id))).data ?? []) as { quote_id: string; payload: Record<string, unknown> }[]
+    const labelsRight = (rows: { quote_id: string; payload: Record<string, unknown> }[]) =>
+      rows.length === losers.length && new Set(rows.map((r) => r.quote_id)).size === rows.length &&
+      rows.every((r) => { const e = expected.get(r.quote_id); return !!e && r.payload['v'] === e.v && r.payload['accepted_quote_id'] === e.accepted_quote_id && r.payload['price_delta_paise'] === e.price_delta_paise && r.payload['days_delta'] === e.days_delta })
+    const first = await readLabels()
+    // ka1 quoted ₹5,500 GST-included against ka0's ₹5,000 + GST (₹5,900): cheaper by ₹400, a day slower.
+    const ka1 = first.find((r) => r.quote_id === quoteIds[1])
+    const { data: winSess } = await admin.from('checkout_sessions').select('id, razorpay_order_id, total_paise').eq('order_id', orderId).maybeSingle()
+    const body = winSess ? JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: `pay_sim_${winSess.id}`, order_id: winSess.razorpay_order_id, amount: Number(winSess.total_paise), method: 'upi' } } } }) : ''
+    const replay = () => fetch(WEBHOOK_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-razorpay-signature': signWebhookBody(body) }, body })
+    const rp1 = winSess ? await replay() : null
+    const afterReplay = await readLabels()
+    const dropped = first[0]?.quote_id
+    if (dropped) await admin.from('quote_events').delete().eq('quote_id', dropped).eq('event_type', 'lost')
+    const rp2 = winSess ? await replay() : null
+    const afterRepair = await readLabels()
+    check('10. E7 loss labels: accepting one quote labels every other open quote lost, deltas vs the winner; exactly once on replay; a dropped label is restored once',
+      !!winnerQ && losers.length === 6 && labelsRight(first) && ka1?.payload['price_delta_paise'] === -40_000 && ka1?.payload['days_delta'] === 1 &&
+      rp1?.status === 200 && labelsRight(afterReplay) && rp2?.status === 200 && labelsRight(afterRepair) && afterRepair.filter((r) => r.quote_id === dropped).length === 1,
+      `losers=${losers.length} first=${first.length}/${labelsRight(first)} ka1=${JSON.stringify(ka1?.payload ?? null)} replay=${rp1?.status}:${afterReplay.length}/${labelsRight(afterReplay)} repair=${rp2?.status}:${afterRepair.length}/${labelsRight(afterRepair)}`)
+    // 0058: the losing provider still reads its own quote events, never the label (its delta would rebuild the winner's price).
+    const provDb = createClient(URL, ANON, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${matching[2]!.token}` } } })
+    const { data: seen } = await provDb.from('quote_events').select('event_type').eq('quote_id', quoteIds[2]!)
+    const seenTypes = (seen ?? []).map((e) => e.event_type as string)
+    check('10b. the losing provider reads its own quote events but never its loss label', seenTypes.includes('submitted') && !seenTypes.includes('lost'), `seen=${seenTypes.join(',')}`)
+  } else {
+    console.log('  ⏭ 10 loss labels SKIPPED (EXP_V3_COMPARE is off — labels are written only while compare v3 is live)')
+  }
 
   // ── Criterion 6: expiry → RFQ 'expired' + its submitted quotes 'expired' (+ event) ─
   // One provider quotes, then the RFQ is pushed past its window and the REAL

@@ -1382,6 +1382,12 @@ Compare quotes · GST returns FY 25-26                 Shortlisted only ☐     
 
 **RICE:** R 0.5 · I 1 · C 0.8 · E 1.5 → **0.27**.
 
+**As built (E7).**
+- **Compare v3** (flag `compare`): the buyer RFQ page widens and `QuoteCompare` renders grouped rows (Price · Time · Terms · Provider · Flags, then Actions) with a sticky quote header and label column, scrolling inside its own container. Scope is a desktop row (clamped in Compact, "Read all"). Compact is the default density; Comfortable is one tap. Facts from code tag the cells (lowest total, fastest, ends soon, high advance). Below md the cards carry the same groups. Sort is a SegmentedControl (Total, Delivery, Rating, Response; Reliability only when S2.4 sends the reliability order). The benchmark line stays above the table.
+- **Stats (D1).** Not shown: the Provider group carries rating (n), completed orders and response time only, until D1 and its ADR-010 amendment.
+- **Loss labels (N22).** Shared `quote-loss.ts` (`quoteLossLabel`, `quoteNormalizedTotal` = the compare number = the checkout charge). `finalizeQuoteAcceptance` writes one `quote_events` `lost` row per auto-declined quote, `{v, accepted_quote_id, price_delta_paise, days_delta}` (mine − winner), through `labelLostQuotes`: best-effort, never throws, outside the money path; a replay of the winning order writes any missing label, and migration 0058's partial unique index `quote_events_lost_once` makes a second one impossible. 0058 also hides `lost` rows from the losing provider (the delta would rebuild the winner's price); provider insights (E11c) read the labels server-side and still return only n-gated aggregates. Labels are written while `compare` is live (0058 applied first).
+- **Acceptance.** `verify-rfq` criterion 10 (this section's "criterion 5"): six labels with the shared deltas, none added on a signed webhook replay, a dropped label restored exactly once, and the provider cannot read its label. `verify-experience` e7: groups, desktop scope, GST states and totals, fact tags, cards.
+
 ---
 
 ### E8: Order workspace v3

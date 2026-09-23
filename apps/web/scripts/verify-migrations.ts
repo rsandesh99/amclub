@@ -357,6 +357,11 @@ const MANIFEST: Entry[] = [
     triggers: [['tender_alerts', 'tender_alerts_set_updated_at'], ['tender_feedback', 'tender_feedback_set_updated_at'], ['cms_pages', 'cms_pages_set_updated_at']],
     note: 'E11c / N30 (D9, dark): tender_alerts + tender_feedback (service role; alerts only, no bidding), cms_pages (fresh reviewed rows readable; GeM checklist seeded unreviewed)',
   },
+  {
+    file: '0058_quote_loss_labels.sql',
+    tables: [],
+    note: "E7 / N22: quote_events CHECK gains 'lost'; quote_events_lost_once (one label per quote); provider read policy excludes 'lost' rows",
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

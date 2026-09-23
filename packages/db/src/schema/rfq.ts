@@ -1,6 +1,6 @@
 import {
   pgTable, uuid, text, integer, timestamp, jsonb, bigint, date, boolean,
-  index, unique, primaryKey,
+  index, unique, uniqueIndex, primaryKey,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { msmeProfiles, providerProfiles } from './identity'
@@ -113,7 +113,7 @@ export const quotes = pgTable('quotes', {
 export const quoteEvents = pgTable('quote_events', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'cascade' }).notNull(),
-  // submitted | declined | withdrawn | accepted | expired | auto_declined
+  // submitted | declined | withdrawn | accepted | expired | auto_declined | match_declined | revised | lost (0058, one per quote)
   eventType: text('event_type').notNull(),
   // acting user id, or 'system' for cron/payment-driven events
   actor: text('actor').default('system').notNull(),
@@ -123,6 +123,8 @@ export const quoteEvents = pgTable('quote_events', {
 }, (table) => [
   index('quote_events_quote_idx').on(table.quoteId),
   index('quote_events_type_idx').on(table.eventType),
+  // E7 (0058) — one loss label per quote.
+  uniqueIndex('quote_events_lost_once').on(table.quoteId).where(sql`${table.eventType} = 'lost'`),
 ])
 
 // S1.3 (0034) — RFQ clarification threads: a matched provider asks, the buyer

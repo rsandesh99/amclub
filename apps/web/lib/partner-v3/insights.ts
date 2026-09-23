@@ -2,12 +2,15 @@ import 'server-only'
 import {
   buildFunnel,
   lossInsight,
+  lossPairFromLabel,
   QUOTE_STATUS,
   quoteChargeAmounts,
+  quoteLostPayloadSchema,
   rangeDays,
   weeklyBuckets,
   type FunnelRange,
   type LossInsight,
+  type QuoteLostPayload,
   type WeekCounts,
 } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
@@ -28,8 +31,9 @@ const WEEKS = 8
 
 /**
  * E11 FR-11.5 (N29 / N22) — one provider's insights, keyed to their own id.
- * The loss analysis reads the WINNING quote on each RFQ this provider lost
- * (server-side only) and returns deltas: counts always, medians only with
+ * The loss analysis reads the E7 loss labels (or, for RFQs decided before
+ * them, the WINNING quote) on each RFQ this provider lost — server-side only,
+ * never readable by the provider (0058) — and returns deltas: counts always, medians only with
  * n ≥ 5, never another provider's name or price. Decline reasons n ≥ 3.
  * Never the composite AMC Score.
  */
@@ -44,7 +48,7 @@ export async function getPartnerInsights(admin: Admin, providerId: string, range
     admin.from('quotes').select('updated_at').eq('provider_id', providerId).eq('status', QUOTE_STATUS.accepted).gte('updated_at', weeksSince).limit(5000),
     getProviderFunnel(admin, providerId, range),
     // My quotes in the range that did not win (declined by the buyer, or passed over for another).
-    admin.from('quotes').select('rfq_id, price_paise, gst_included, delivery_days, status').eq('provider_id', providerId).neq('status', QUOTE_STATUS.accepted).gte('created_at', since).limit(1000),
+    admin.from('quotes').select('id, rfq_id, price_paise, gst_included, delivery_days, status').eq('provider_id', providerId).neq('status', QUOTE_STATUS.accepted).gte('created_at', since).limit(1000),
     admin.from('packages').select('id, title_i18n').eq('provider_id', providerId).is('deleted_at', null).limit(100),
   ])
   const weeks = weeklyBuckets(now.toISOString(), WEEKS, {
@@ -54,16 +58,30 @@ export async function getPartnerInsights(admin: Admin, providerId: string, range
     won: (won.data ?? []).map((q) => q.updated_at as string),
   })
 
-  // N22 — winners on the RFQs I lost (services quotes; totals by the one shared rule).
-  const lost = (mine.data ?? []) as { rfq_id: string; price_paise: number; gst_included: boolean | null; delivery_days: number | null }[]
+  // N22 — how I compared with the winner on the RFQs I lost (services quotes; totals by the one shared rule).
+  // E7 labels (quote_events 'lost', written at acceptance) first; RFQs decided before the labels existed, or quotes
+  // the buyer declined themselves, fall back to reading the winner here. Either way only the aggregate leaves.
+  const lost = (mine.data ?? []) as { id: string; rfq_id: string; price_paise: number; gst_included: boolean | null; delivery_days: number | null }[]
   let pairs: Parameters<typeof lossInsight>[0] = []
   if (lost.length) {
-    const { data: winners } = await admin.from('quotes').select('rfq_id, price_paise, gst_included, delivery_days').in('rfq_id', lost.map((q) => q.rfq_id)).eq('status', QUOTE_STATUS.accepted).neq('provider_id', providerId)
-    const byRfq = new Map((winners ?? []).map((w) => [w.rfq_id as string, w]))
     const total = (p: number, g: boolean | null) => quoteChargeAmounts({ pricePaise: Number(p), gstIncluded: g, commissionBps: 0 }).totalPaise
+    const { data: labelRows } = await admin.from('quote_events').select('quote_id, payload').eq('event_type', 'lost').in('quote_id', lost.map((q) => q.id))
+    const labels = new Map<string, QuoteLostPayload>()
+    for (const r of labelRows ?? []) {
+      const parsed = quoteLostPayloadSchema.safeParse(r.payload)
+      if (parsed.success) labels.set(r.quote_id as string, parsed.data)
+    }
+    const unlabelled = lost.filter((q) => !labels.has(q.id))
+    const { data: winners } = unlabelled.length
+      ? await admin.from('quotes').select('rfq_id, price_paise, gst_included, delivery_days').in('rfq_id', unlabelled.map((q) => q.rfq_id)).eq('status', QUOTE_STATUS.accepted).neq('provider_id', providerId)
+      : { data: [] as { rfq_id: string; price_paise: number; gst_included: boolean | null; delivery_days: number | null }[] }
+    const byRfq = new Map((winners ?? []).map((w) => [w.rfq_id as string, w]))
     pairs = lost.flatMap((q) => {
+      const myTotal = total(q.price_paise, q.gst_included)
+      const label = labels.get(q.id)
+      if (label) return [lossPairFromLabel({ totalPaise: myTotal, deliveryDays: q.delivery_days }, label)]
       const w = byRfq.get(q.rfq_id)
-      return w ? [{ mine: { totalPaise: total(q.price_paise, q.gst_included), deliveryDays: q.delivery_days }, winner: { totalPaise: total(w.price_paise as number, w.gst_included as boolean | null), deliveryDays: (w.delivery_days as number | null) ?? null } }] : []
+      return w ? [{ mine: { totalPaise: myTotal, deliveryDays: q.delivery_days }, winner: { totalPaise: total(w.price_paise as number, w.gst_included as boolean | null), deliveryDays: (w.delivery_days as number | null) ?? null } }] : []
     })
   }
 

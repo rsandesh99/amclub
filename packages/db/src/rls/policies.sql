@@ -303,9 +303,11 @@ GRANT SELECT (
 -- ─── quote_events (0016) — append-only; read-only for every client role ──────
 
 DROP POLICY IF EXISTS "quote_events: provider read own" ON quote_events;
+-- E7 (0058): never the 'lost' labels — their deltas would rebuild the winner's price.
 CREATE POLICY "quote_events: provider read own" ON quote_events
   FOR SELECT USING (
-    quote_id IN (
+    event_type <> 'lost'
+    AND quote_id IN (
       SELECT id FROM quotes
       WHERE provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
     )

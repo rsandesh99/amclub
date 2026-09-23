@@ -1311,6 +1311,52 @@ async function e11c() {
   }
 }
 
+async function e7() {
+  console.log('\nE7 — compare v3: grouped rows, sticky header, scope on desktop (loss labels: verify-rfq criterion 10)')
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const buyer = await mkUser('e7buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E7 Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const mkProv = async (label: string) => {
+    const u = await mkUser(label, ['provider'])
+    const { data: pp } = await admin.from('provider_profiles').insert({ user_id: u.uid, legal_name: label, display_name: `E7 ${label}`, slug: `${tag.replace(/_/g, '-')}-${label}`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+    created.providerIds.push(pp!.id)
+    return pp!.id as string
+  }
+  const pa = await mkProv('e7pa')
+  const pb = await mkProv('e7pb')
+  const pc = await mkProv('e7pc')
+  const { data: r } = await admin.from('rfqs').insert({ msme_id: msme!.id, category_id: tax!.id, title: 'E7 GST returns FY 25-26', details: {}, status: 'quoted', fanout_at: new Date().toISOString(), expires_at: new Date(Date.now() + 48 * 3600e3).toISOString() }).select('id').single()
+  const rfqId = r!.id as string
+  created.rfqIds.push(rfqId)
+  // The PRD's three quotes: A ₹4,500 + GST, B ₹3,900 unstated, C ₹5,200 incl. GST.
+  const scopeA = 'E7 scope A: twelve monthly returns plus reconciliation'
+  const scopeB = 'E7 scope B: twelve monthly returns only'
+  const scopeC = 'E7 scope C: twelve monthly returns plus ITC matching'
+  const { error: qErr } = await admin.from('quotes').insert([
+    { rfq_id: rfqId, provider_id: pa, price_paise: 4_500_00, delivery_days: 4, scope: scopeA, gst_included: false, advance_percent: 0 },
+    { rfq_id: rfqId, provider_id: pb, price_paise: 3_900_00, delivery_days: 6, scope: scopeB, gst_included: null, advance_percent: 60 },
+    { rfq_id: rfqId, provider_id: pc, price_paise: 5_200_00, delivery_days: 3, scope: scopeC, gst_included: true, advance_percent: 20 },
+  ])
+  if (qErr) throw new Error(`e7 quotes: ${qErr.message}`)
+  try {
+    const html = visible(await (await fetch(`${BASE}/app/rfq/${rfqId}`, { headers: { cookie: buyer.cookie } })).text())
+    const t0 = html.indexOf('data-testid="compare-v3-table"')
+    const t1 = html.indexOf('data-testid="compare-v3-cards"')
+    const table = t0 >= 0 && t1 > t0 ? html.slice(t0, t1) : ''
+    check('FR-7.1: the v3 table renders with its row groups (Price · Time · Terms · Provider · Flags)', ['price', 'time', 'terms', 'provider', 'flags'].every((g) => table.includes(`data-group="${g}"`)), `table=${table.length > 0}`)
+    check('FR-7.1: scope is on the desktop table (every quote)', [scopeA, scopeB, scopeC].every((x) => table.includes(x)))
+    check('FR-7.1: GST state per quote — on top / not stated / included; normalised totals as checkout charges (ADR-017)',
+      table.includes('+ 18 % on top') && table.includes('Not stated') && table.includes('Included in the price') && table.includes('₹5,310') && table.includes('₹4,602') && table.includes('₹5,200'))
+    check('FR-7.1: facts from code — lowest total and fastest tagged, high advance flagged', table.includes('>lowest<') && table.includes('>fastest<') && table.includes('>high<'))
+    check('FR-7.1: below md the same groups as cards', t1 > 0 && html.slice(t1).includes('Terms') && html.slice(t1).includes(scopeA))
+    check('FR-7.4: accept stays one tap + the confirm sheet (no inline pay)', table.includes('Accept') && !html.includes('checkoutSessionId'))
+  } finally {
+    await admin.from('quotes').delete().eq('rfq_id', rfqId)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1328,6 +1374,7 @@ async function main() {
     await e11a()
     await e11b()
     await e11c()
+    await e7()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

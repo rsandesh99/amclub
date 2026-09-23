@@ -6,6 +6,7 @@ import { createNotification, createNotificationsBulk } from '@/lib/notifications
 import { addEvent, processRefund } from '@/lib/orders/transitions'
 import { writeAudit } from '@/lib/audit/log'
 import { addQuoteEvent, addQuoteEvents } from './events'
+import { labelLostQuotes } from './loss-labels'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -60,7 +61,13 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     .neq('status', 'accepted')
     .select('id, msme_id, title')
     .maybeSingle()
-  if (!claimed) return handleDuplicateRfqOrder(admin, orderId, quote.rfq_id as string)
+  if (!claimed) {
+    const result = await handleDuplicateRfqOrder(admin, orderId, quote.rfq_id as string)
+    // E7 (N22) — a replay of the winning order completes loss labels an interrupted pass missed
+    // (labelLostQuotes writes only missing rows, checks the winner itself, never throws).
+    if (result === 'noop') await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+    return result
+  }
 
   // The acceptance is the buyer's paid checkout, recorded via the payment path
   // (no interactive actor here) — attribute to system with the order as proof.
@@ -103,6 +110,8 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
       payload: { rfq_id: quote.rfq_id, accepted_quote_id: quote.id, order_id: orderId },
     })),
   )
+  // E7 (N22) — one `lost` label per passed-over quote, deltas against the winner. Best-effort, outside the money path.
+  await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
 
   // Notify the winning provider, and the declined providers.
   const { data: winner } = await admin
