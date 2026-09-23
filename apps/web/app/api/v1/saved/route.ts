@@ -15,10 +15,11 @@ async function getMsmeId(
 ) {
   const { data } = await supabase
     .from('msme_profiles')
-    .select('id')
+    .select('id, deleted_at')
     .eq('user_id', userId)
     .maybeSingle()
-  return data?.id ?? null
+  // A suspended buyer (P0-8) has no active buyer identity.
+  return data && !data.deleted_at ? data.id : null
 }
 
 // Per-user data — must never be cacheable by shared intermediaries.

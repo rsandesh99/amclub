@@ -41,6 +41,7 @@ type CheckoutErrorCode =
   | 'unauthorized'
   | 'gstin_invalid'
   | 'profile_incomplete'
+  | 'account_suspended'
   | 'package_unavailable'
   | 'provider_paused'
   | 'quote_not_found'
@@ -149,8 +150,9 @@ export async function POST(request: NextRequest) {
   if (existing?.razorpay_order_id) return resumeResponse(existing as SessionRow)
 
   // Buyer's MSME profile (RLS: owner read).
-  const { data: msme } = await supabase.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
+  const { data: msme } = await supabase.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle()
   if (!msme) return fail(403, 'profile_incomplete', 'Complete your business profile first')
+  if (msme.deleted_at) return fail(403, 'account_suspended', 'Your buyer account is suspended')
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   let goodsPrep: GoodsQuotePrep | null = null

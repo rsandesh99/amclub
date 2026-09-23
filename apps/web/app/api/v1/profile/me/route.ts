@@ -23,12 +23,15 @@ export async function GET() {
   // Read via admin (server-side, already authenticated) so it works for a fresh
   // user without a public.users row and for Bearer requests.
   const admin = await createAdminClient()
-  const [{ data: u }, { data: msme }, { data: provider }] = await Promise.all([
+  const [{ data: u }, { data: msmeRow }, { data: provider }] = await Promise.all([
     admin.from('users').select('roles, full_name').eq('id', userId).maybeSingle(),
-    admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle(),
+    admin.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle(),
     admin.from('provider_profiles').select('id, status').eq('user_id', userId).maybeSingle(),
   ])
   const roles: string[] = u?.roles ?? ['msme']
+  // P0-8 — a suspended buyer profile is not an active buyer identity.
+  const msmeSuspended = Boolean(msmeRow?.deleted_at)
+  const msme = msmeRow && !msmeRow.deleted_at ? msmeRow : null
 
   // Phase 3b (ii): mobile shows the same payout-hold banner as web.
   const payoutReadiness = provider ? (await getProviderReadiness(admin, provider.id)).readiness : null
@@ -58,6 +61,7 @@ export async function GET() {
     role: primaryRole,
     roles,
     hasMsmeProfile: !!msme,
+    msmeSuspended,
     hasProviderProfile: !!provider,
     providerStatus: provider?.status ?? null,
     payoutReadiness,

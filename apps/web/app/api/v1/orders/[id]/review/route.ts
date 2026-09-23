@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { maybeFlagAnomalousReview } from '@/lib/reviews/anomaly'
 import { serverError } from '@/lib/api/errors'
+import { accountSuspendedResponse, getMsmeSuspension } from '@/lib/auth/suspension'
 
 const bodySchema = z.object({
   rating: z.number().int().min(1).max(5),
@@ -24,7 +25,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   if (!order) return NextResponse.json({ review: null })
 
   const [{ data: m }, { data: p }] = await Promise.all([
-    admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle(),
+    admin.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle(),
     admin.from('provider_profiles').select('id').eq('user_id', userId).maybeSingle(),
   ])
   const isParty = (m && m.id === order.msme_id) || (p && p.id === order.provider_id)
@@ -37,7 +38,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     .maybeSingle()
   return NextResponse.json({
     review: data ?? null,
-    canReview: !!(m && m.id === order.msme_id) && order.status === 'completed',
+    canReview: !!(m && m.id === order.msme_id && !m.deleted_at) && order.status === 'completed',
     isProvider: !!(p && p.id === order.provider_id),
   })
 }
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
   const { id: orderId } = await params
+  if (await getMsmeSuspension(await createAdminClient(), userId)) return accountSuspendedResponse()
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })

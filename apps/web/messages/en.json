@@ -2662,5 +2662,15 @@
     "not_set": "Not set — the code default applies",
     "block_capture_warning": "block_capture is refused at pool join until docs/mart/PSP_BLOCK_CAPTURE_REPORT.md §5 is signed off. Saving it here does not enable it.",
     "save": "Save"
+  },
+  "suspended": {
+    "title": "Your buyer account is suspended",
+    "body": "You can't post requests, place orders or pay on AMClub while your buyer account is suspended. If you think this is a mistake, contact us and we'll review it.",
+    "money_note": "Any money already held for your orders stays safe with AMClub; our team will contact you about open orders and refunds.",
+    "email_subject": "Buyer account suspended — please review",
+    "cta_email": "Email support",
+    "cta_whatsapp": "Message us on WhatsApp",
+    "whatsapp_text": "Hello, my AMClub buyer account is suspended. Please review it.",
+    "cta_grievance": "Raise a grievance"
   }
 }

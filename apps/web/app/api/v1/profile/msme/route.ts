@@ -7,6 +7,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { upsertUserRow } from '@/lib/auth/session'
 import { serverError } from '@/lib/api/errors'
 import { missingLegalDocs } from '@/lib/legal/acceptance'
+import { accountSuspendedResponse, getMsmeSuspension } from '@/lib/auth/suspension'
 
 const bodySchema = z.object({
   fullName: z.string().min(2),
@@ -38,6 +39,9 @@ export async function POST(request: NextRequest) {
   const { fullName, businessName, sector, state, city, udyamNumber, gstin, preferredLocale } = parsed.data
 
   const admin = await createAdminClient()
+
+  // P0-8 — a suspended buyer can't re-create or edit the suspended profile.
+  if (await getMsmeSuspension(admin, userId)) return accountSuspendedResponse()
 
   // Signup contract (Phase 2): no acceptance at the current Terms + Privacy
   // versions → no profile. Enforced here, not only in the UI.
