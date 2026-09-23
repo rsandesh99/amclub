@@ -1201,14 +1201,19 @@ async function e11b() {
       return j.amountPaise
     }
     const pInc = (await (await api(p1.token, `/api/v1/rfq/${rfqId}/quote/preview`, { price_paise: 11_800_00, gst_included: true })).json()) as { totalPaise?: number }
+    // One open checkout per request (`rfq_checkout_in_progress`): clear each session before the next charge.
+    const clearSessions = async () => { for (const id of sessions.splice(0)) await admin.from('checkout_sessions').delete().eq('id', id) }
     const cInc = await charge(qi!.id as string)
     check('ADR-015/017: GST included — preview = compare = checkout = the quoted price', pInc.totalPaise === 11_800_00 && byId.get(qi!.id as string)?.normalizedTotalPaise === 11_800_00 && cInc === 11_800_00, `${pInc.totalPaise} / ${byId.get(qi!.id as string)?.normalizedTotalPaise} / ${cInc}`)
+    await clearSessions()
     const cNull = await charge(qn!.id as string)
     const unstated = byId.get(qn!.id as string)
     check('ADR-017: GST unstated — compare shows what checkout charges (GST on top), still flagged', unstated?.normalizedTotalPaise === 11_800_00 && cNull === 11_800_00 && (unstated?.flags ?? []).includes('gst_unstated'), `${unstated?.normalizedTotalPaise} / ${cNull}`)
 
-    // The provider page renders the v3 form (required GST, presets) for a services RFQ.
-    await admin.from('quotes').delete().eq('rfq_id', rfqId)
+    // The provider page renders the v3 form (required GST, presets) for a services RFQ (sessions first: they reference the quotes).
+    await clearSessions()
+    const { error: qDelErr } = await admin.from('quotes').delete().eq('rfq_id', rfqId)
+    if (qDelErr) console.error('  ! quote cleanup', qDelErr.message)
     const page = visible(await (await fetch(`${BASE}/partner/rfqs/${rfqId}`, { headers: { cookie: p1.cookie } })).text())
     check('FR-11.4: the quote form v3 renders its terms block', page.includes('data-testid="quote-v3-terms"'))
   } finally {
