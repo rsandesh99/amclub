@@ -180,6 +180,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E6 / N19: "Documents you\'ll likely need" on the requirement form. Only rows a CA / lawyer has stamped (service_document_requirements.reviewed_at) are ever shown; keep off until the content review is done.',
   },
+  // ── Experience v3 E9b — licences, renewal reminders, "What do I need?" (FR-9.5, N45; gated by D-PRD5) ──
+  obligations_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E9b / N45 (D-PRD5): the buyer\'s licences, renewal reminders (60 / 30 / 7 days, once each) and the obligations checklist. Keep off until counsel and the CA answer D-PRD5 and the checklist reaches >= 95 % precision on the CA\'s 50-profile set; only CA-reviewed obligation_rules are ever shown.',
+  },
   // ── S3.2 fair price ranges (benchmarks) — compute and display are separate switches, both OFF; the formula is code ──
   benchmark_compute_enabled: {
     schema: z.boolean(),

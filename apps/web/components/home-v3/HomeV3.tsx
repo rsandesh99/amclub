@@ -5,6 +5,8 @@ import { getMyActions } from '@/lib/me/actions'
 import { listBuyAgainShelf } from '@/lib/home/buy-again'
 import { listSavedProviders } from '@/lib/home/queries'
 import { listMyOrders } from '@/lib/orders/queries'
+import { isObligationsOn, listComingDue } from '@/lib/licences'
+import { createClient } from '@/lib/supabase/server'
 import { formatINR } from '@/lib/format'
 import { BannerSlot } from '@/components/cms/BannerSlot'
 import { ActionList } from '@/components/ui-v3/ActionList'
@@ -43,12 +45,16 @@ export async function HomeV3({
     getTranslations('shell'),
     getTranslations('catalog'),
   ])
-  const [actions, buyAgain, orders, saved] = await Promise.all([
+  const [actions, buyAgain, orders, saved, obligationsOn] = await Promise.all([
     getMyActions(userId),
     listBuyAgainShelf(userId),
     listMyOrders(userId, 'msme'),
     listSavedProviders(userId, 4),
+    isObligationsOn(),
   ])
+  // E9b (FR-9.5, dark behind obligations_enabled): licences expiring within 60 days.
+  const comingDue = obligationsOn ? await listComingDue(await createClient()) : []
+  const tLic = obligationsOn ? await getTranslations('licences_v3') : null
   const items = actions.buyer?.items ?? []
   const recent = orders.slice(0, 3)
 
@@ -66,6 +72,30 @@ export async function HomeV3({
       <PickUpShelf />
 
       <BuyAgainShelf items={buyAgain} />
+
+      {tLic && (
+        <div data-testid="home-coming-due">
+          <GroupedSection
+            header={tLic('coming_due')}
+            action={<Link href="/app/licences" className="t-footnote font-medium text-primary">{t('see_all')}</Link>}
+          >
+            {comingDue.length > 0 ? (
+              comingDue.map((l) => (
+                <GroupedRow
+                  key={l.id}
+                  href={l.renewHref}
+                  title={tLic(`type_${l.licenceType}`)}
+                  subtitle={l.daysLeft !== null && l.daysLeft < 0 ? tLic('expired', { days: -l.daysLeft }) : tLic('expires_in', { days: l.daysLeft ?? 0 })}
+                  trailing={<span className="t-footnote shrink-0 font-medium text-primary">{tLic('renew')}</span>}
+                  chevron={false}
+                />
+              ))
+            ) : (
+              <GroupedRow href="/app/obligations" title={tLic('what_do_i_need')} subtitle={tLic('home_prompt')} />
+            )}
+          </GroupedSection>
+        </div>
+      )}
 
       <BannerSlot slot="hero" className="space-y-3 [&_.mx-auto]:px-0 [&_.mx-auto]:py-0" />
 

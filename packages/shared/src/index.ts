@@ -47,6 +47,7 @@ export * from './packages-v3'
 export * from './search-v2'
 export * from './rfq-v3'
 export * from './home-v3'
+export * from './licences'
 
 // N9 — public measured stats (gated; never the composite score)
 export * from './public-stats'

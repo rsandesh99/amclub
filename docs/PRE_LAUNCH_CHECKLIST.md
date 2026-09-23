@@ -64,6 +64,7 @@ noted; these are what `packages/agent-core/src/whatsapp/templates.ts` sends):
 | munshi_result (S2.2; `{{1}}` outcome line) | `amc_munshi_result_en`, `amc_munshi_result_hi`, `amc_munshi_result_te` |
 | munshi_growth (S2.4; `{{1}}` the weekly nudge line) | `amc_munshi_growth_en`, `amc_munshi_growth_hi`, `amc_munshi_growth_te` |
 | procurement_update (S3.1; `{{1}}` one line of the assistant's message, `{{2}}` the assistant link — out-of-window only; buyer, opt-in gated; needed only when A2 is enabled at the V1.5→V2 gate) | `amc_procurement_update_en`, `amc_procurement_update_hi`, `amc_procurement_update_te` |
+| licence_renewal_due (Experience v3 E9b; `{{1}}` "Your FSSAI licence expires on 14 Nov", `{{2}}` the category link; buyer, opt-in gated; needed only when `obligations_enabled` turns on after D-PRD5) | `amc_licence_renewal_due_en`, `amc_licence_renewal_due_hi`, `amc_licence_renewal_due_te` |
 | support_reply (S2.3, the out-of-window carrier; `{{1}}` title, `{{2}}` body) | `amc_support_reply_en`, `amc_support_reply_hi`, `amc_support_reply_te` |
 | support_escalated (S2.3; `{{1}}` ticket ref) | `amc_support_escalated_en`, `amc_support_escalated_hi`, `amc_support_escalated_te` |
 | support_ticket_opened (S2.3, ops user; `{{1}}` summary) | `amc_support_ticket_opened_en`, `amc_support_ticket_opened_hi` |

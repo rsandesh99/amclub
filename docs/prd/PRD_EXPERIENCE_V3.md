@@ -1617,6 +1617,27 @@ Compare quotes · GST returns FY 25-26                 Shortlisted only ☐     
 - **Order page.** A finished services order shows Buy again, Repeat requirement or Find similar.
 - **Mobile.** `/profile/me.homeV3Enabled` turns on `HomeV3Block`, which shows Needs your action and Buy again from the same two payloads as web.
 
+**As built (E9b: licences, reminders, "What do I need?"; dark, D-PRD5).**
+- **Switch.** Everything is dark behind `agent_settings.obligations_enabled` (registered, default off): the pages, `/api/v1/me/licences*`, `/api/v1/me/obligations`, `/api/v1/orders/[id]/licence-facts` and the cron. Turn it on only after D-PRD5 and the CA's ≥ 95 % precision check.
+- **Tables (migration 0054).**
+  - `buyer_licences`: owner-only RLS; soft delete (no DELETE grant); one licence per order.
+  - `order_licence_facts`: service role only.
+  - `licence_reminders`: its primary key `(licence_id, threshold_days)` is the idempotency key `licence_id:threshold`.
+  - `obligation_rules`: anyone reads *reviewed* rows; writes are service-role. The seed is unreviewed.
+- **Licence types.** The 11 types in shared `LICENCE_TYPES` each route "Renew" to the category (and service) that provides them. A shared test checks that the migration's three CHECK lists match the code.
+- **Reminders.**
+  - `cron/licence-reminders` runs daily at 02:30 UTC (08:00 IST). It claims the ONE due threshold (`dueReminderThreshold`): a licence added with 5 days left gets only the 7-day reminder, and a lapsed one gets none.
+  - It notifies in-app plus WhatsApp template `licence_renewal_due` (opt-in gated; listed in PRE_LAUNCH_CHECKLIST).
+  - A second run sends nothing. The admin heartbeat is `licence-reminders`.
+- **From an order.** The order's provider records the certificate (type, number, dates, authority) from the work stage on. The buyer confirms it into a licence (`source = 'order'`) on the finished order page. There is no auto-creation.
+- **Certificate.** Stored in the private bucket `licence-certificates` (5 MB; images / PDF). The owner gets a 15-minute signed link; anyone else gets a 404.
+- **"What do I need?"**
+  - `/app/obligations` shows the business facts (activity, state, size band) back for confirmation, with an Edit link.
+  - It lists the CA-reviewed rules that match (null = any; the most specific rule wins; an unknown fact never matches a rule that sets it). Each rule shows its source, reviewer and date, "You have this" or "Find a provider", and the disclaimer.
+  - No model; the agent slot stays dark.
+- **Home.** With the switch on, a "Coming due" section lists licences expiring within 60 days (Renew). With none, it offers "What do I need?".
+- **Not in this PR.** There is no admin editor for `obligation_rules`: ops stamp `reviewed_by` / `reviewed_at` after the CA review, as with 0053's document list. Mobile screens for licences are not included.
+
 ---
 
 ### E10: Provider onboarding v3

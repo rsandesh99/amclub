@@ -893,6 +893,110 @@ async function e9() {
   for (const id of created.rfqIds) await admin.from('quotes').delete().eq('rfq_id', id)
 }
 
+async function e9b() {
+  console.log('\nE9b — licences, reminders, "What do I need?" (dark, D-PRD5)')
+  const cronSecret = process.env['CRON_SECRET']
+  const cron = async () => (await (await fetch(`${BASE}/api/v1/cron/licence-reminders`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })).json()) as { enabled?: boolean; sent?: number }
+  const buyer = await mkUser('e9bbuyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E9b Foods', state: 'TS', sector: 'manufacturing', employee_band: '1-9' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  const bearer = { Authorization: `Bearer ${buyer.token}` }
+
+  check('dark: /me/licences → 404 while obligations_enabled is off', (await fetch(`${BASE}/api/v1/me/licences`, { headers: bearer })).status === 404)
+  check('dark: the reminder cron sends nothing while off', (await cron()).enabled === false)
+
+  const restore = await setSetting('obligations_enabled', true)
+  const istDate = (ms: number) => new Date(ms + 5.5 * 3600e3).toISOString().slice(0, 10)
+  const plus = (days: number) => istDate(Date.now() + days * 86400e3)
+  const reviewed: string[] = []
+  let certPath: string | null = null
+  const other = await mkUser('e9bother')
+  const { data: om } = await admin.from('msme_profiles').insert({ user_id: other.uid, business_name: 'E9b Other', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(om!.id)
+  const prov = await mkUser('e9bprov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E9b Prov', display_name: 'E9b Prov', slug: `${tag}-e9bprov`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  try {
+    const add = async (body: unknown) => {
+      const r = await api(buyer.token, '/api/v1/me/licences', body)
+      return { status: r.status, j: (await r.json().catch(() => ({}))) as { licence?: { id: string; daysLeft: number | null; source: string } } }
+    }
+    const fssai = await add({ licenceType: 'fssai', number: '10019022003456', expiresOn: plus(30), authority: 'FSSAI' })
+    const factory = await add({ licenceType: 'factory_licence', expiresOn: plus(5) })
+    const lapsed = await add({ licenceType: 'trade_licence', expiresOn: plus(-3) })
+    const udyam = await add({ licenceType: 'udyam', number: 'UDYAM-TS-00-0000001' })
+    check('FR-9.5: a buyer adds licences by hand (type, number, expiry, authority)', fssai.status === 201 && fssai.j.licence?.daysLeft === 30 && factory.status === 201 && lapsed.status === 201 && udyam.j.licence?.daysLeft === null)
+    check('FR-9.5: an unknown licence type → 422', (await add({ licenceType: 'passport' })).status === 422)
+    const otherList = (await (await fetch(`${BASE}/api/v1/me/licences`, { headers: { Authorization: `Bearer ${other.token}` } })).json()) as { licences?: unknown[] }
+    const direct = await createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${other.token}` } }, auth: { persistSession: false } }).from('buyer_licences').select('id').eq('msme_id', msme!.id)
+    check('RLS: another buyer sees none of them (API and direct)', otherList.licences?.length === 0 && (direct.data ?? []).length === 0)
+
+    // Reminders: 60 / 30 / 7, once each — the 30-day licence gets the 30, the 5-day one only the 7, the lapsed none.
+    const first = await cron()
+    const second = await cron()
+    const { data: rem } = await admin.from('licence_reminders').select('licence_id, threshold_days').in('licence_id', [fssai.j.licence!.id, factory.j.licence!.id, lapsed.j.licence!.id])
+    const { data: notes } = await admin.from('notifications').select('kind, link').eq('user_id', buyer.uid).eq('kind', 'licence_renewal_due')
+    const remKeys = (rem ?? []).map((r) => `${r.licence_id === fssai.j.licence!.id ? 'fssai' : r.licence_id === factory.j.licence!.id ? 'factory' : 'lapsed'}:${r.threshold_days}`).sort()
+    check('FR-9.5: one reminder per due threshold (fssai@30, factory@7, lapsed none)', JSON.stringify(remKeys) === JSON.stringify(['factory:7', 'fssai:30']), remKeys.join(','))
+    check('FR-9.5: exactly once — the second cron run sends nothing', (first.sent ?? 0) >= 2 && second.sent === 0 && (notes ?? []).length === 2, `first ${first.sent}, second ${second.sent}, notes ${(notes ?? []).length}`)
+    check('FR-9.5: the reminder links to the category that renews it', (notes ?? []).some((n) => n.link === '/services/company-registrations/fssai-license'))
+
+    // Coming due on the home; soft delete.
+    const home = visible(await (await fetch(`${BASE}/app`, { headers: { cookie: buyer.cookie } })).text())
+    check('FR-9.5: the home shows "Coming due" with Renew', home.includes('data-testid="home-coming-due"') && home.includes('href="/services/company-registrations/fssai-license"'))
+    const del = await fetch(`${BASE}/api/v1/me/licences/${factory.j.licence!.id}`, { method: 'DELETE', headers: bearer })
+    const { data: gone } = await admin.from('buyer_licences').select('deleted_at').eq('id', factory.j.licence!.id).single()
+    const list = (await (await fetch(`${BASE}/api/v1/me/licences`, { headers: bearer })).json()) as { licences?: { id: string }[] }
+    check('rule 4: removing a licence is a soft delete', del.ok && !!gone?.deleted_at && !(list.licences ?? []).some((l) => l.id === factory.j.licence!.id))
+
+    // Certificate: private, owner-only.
+    const fd = new FormData()
+    fd.append('file', new Blob([Buffer.from('%PDF-1.4\n%e9b\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')], { type: 'application/pdf' }), 'fssai.pdf')
+    const up = await fetch(`${BASE}/api/v1/me/licences/${fssai.j.licence!.id}/certificate`, { method: 'POST', headers: bearer, body: fd })
+    const { data: withCert } = await admin.from('buyer_licences').select('certificate_path').eq('id', fssai.j.licence!.id).single()
+    certPath = (withCert?.certificate_path as string | null) ?? null
+    const mine = await fetch(`${BASE}/api/v1/me/licences/${fssai.j.licence!.id}/certificate`, { headers: bearer, redirect: 'manual' })
+    const theirs = await fetch(`${BASE}/api/v1/me/licences/${fssai.j.licence!.id}/certificate`, { headers: { Authorization: `Bearer ${other.token}` }, redirect: 'manual' })
+    check('FR-9.5: the certificate uploads to the private bucket; only the owner gets a signed link', up.status === 201 && !!certPath && [302, 307].includes(mine.status) && (mine.headers.get('location') ?? '').includes('/storage/v1/object/sign/') && theirs.status === 404, `up ${up.status}, mine ${mine.status}, theirs ${theirs.status}`)
+
+    // From a finished registration order: the provider records, the buyer confirms.
+    const { data: o } = await admin.from('orders').insert({ msme_id: msme!.id, provider_id: pp!.id, source: 'package', title: 'E9b FSSAI registration', scope_snapshot: {}, price_paise: 1000_00, gst_paise: 180_00, total_paise: 1180_00, commission_bps: 1000, commission_paise: 100_00, provider_earning_paise: 900_00, delivery_days: 5, status: 'completed', completed_at: new Date().toISOString() }).select('id').single()
+    created.orderIds.push(o!.id)
+    const rec = await api(prov.token, `/api/v1/orders/${o!.id}/licence-facts`, { licenceType: 'pollution_consent', number: 'TSPCB-CTO-123', expiresOn: plus(365) })
+    const recByBuyer = await api(buyer.token, `/api/v1/orders/${o!.id}/licence-facts`, { licenceType: 'pollution_consent', number: 'X' })
+    const conf = await add({ fromOrderId: o!.id })
+    const again = await add({ fromOrderId: o!.id })
+    check('FR-9.5: the provider records the certificate; only the provider may', rec.ok && recByBuyer.status === 403)
+    check('FR-9.5: the buyer confirms it into a licence once (source order)', conf.status === 201 && conf.j.licence?.source === 'order' && again.status === 409)
+    const orderPage = visible(await (await fetch(`${BASE}/app/orders/${o!.id}`, { headers: { cookie: buyer.cookie } })).text())
+    check('FR-9.5: the order page says it is in the licences', orderPage.includes('data-testid="order-licence-facts"'))
+
+    // "What do I need?" — only CA-reviewed rules, matched to the business, with the disclaimer.
+    const obl0 = (await (await fetch(`${BASE}/api/v1/me/obligations`, { headers: bearer })).json()) as { rules?: unknown[] }
+    check('FR-9.5: unreviewed rules are never shown', obl0.rules?.length === 0)
+    const { data: seed } = await admin.from('obligation_rules').select('id, activity, licence_type').is('state', null).is('size_band', null).in('licence_type', ['udyam', 'factory_licence', 'trade_licence'])
+    for (const r of seed ?? []) {
+      reviewed.push(r.id as string)
+      await admin.from('obligation_rules').update({ reviewed_by: 'E9b CA', reviewed_at: new Date().toISOString() }).eq('id', r.id)
+    }
+    const obl = (await (await fetch(`${BASE}/api/v1/me/obligations`, { headers: bearer })).json()) as { facts?: { activity?: string }; rules?: { licenceType: string; held: boolean; reviewedBy: string }[] }
+    const got = (obl.rules ?? []).map((r) => `${r.licenceType}:${r.held}`).sort()
+    check('FR-9.5: a manufacturer gets the national + manufacturing rules, marked held or not', obl.facts?.activity === 'manufacturing' && JSON.stringify(got) === JSON.stringify(['factory_licence:false', 'udyam:true']), got.join(','))
+    const page = visible(await (await fetch(`${BASE}/app/obligations`, { headers: { cookie: buyer.cookie } })).text())
+    check('FR-9.5: the checklist shows the business facts, the review stamp and the disclaimer', page.includes('data-testid="obligations-facts"') && page.includes('Reviewed by E9b CA') && page.includes('This is a checklist, not legal advice'))
+  } finally {
+    for (const id of reviewed) await admin.from('obligation_rules').update({ reviewed_by: null, reviewed_at: null }).eq('id', id)
+    if (certPath) await admin.storage.from('licence-certificates').remove([certPath])
+    const { data: lics } = await admin.from('buyer_licences').select('id').in('msme_id', [msme!.id, om!.id])
+    const ids = (lics ?? []).map((l) => l.id as string)
+    if (ids.length) await admin.from('licence_reminders').delete().in('licence_id', ids)
+    await admin.from('buyer_licences').delete().in('msme_id', [msme!.id, om!.id])
+    for (const id of created.orderIds) await admin.from('order_licence_facts').delete().eq('order_id', id)
+    await admin.from('notifications').delete().eq('user_id', buyer.uid)
+    await restore()
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -905,6 +1009,7 @@ async function main() {
     await e5()
     await e6()
     await e9()
+    await e9b()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }
