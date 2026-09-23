@@ -1,0 +1,45 @@
+# H1 — the DISPOSABLE Supabase stack the money-rigs workflow starts on every PR
+# (`supabase start --workdir .github/supabase-ci`). Local containers only, dropped
+# with the runner: never production, never a shared project. Schema comes from
+# this commit's migrations via `db:bootstrap`, not from supabase/migrations.
+project_id = "amclub-ci"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+enable_signup = true
+
+# The rigs create and sign in dozens of throwaway users within minutes.
+[auth.rate_limit]
+email_sent = 1000
+sms_sent = 1000
+token_refresh = 1000
+sign_in_sign_ups = 1000
+token_verifications = 1000
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[studio]
+enabled = false
+
+[realtime]
+enabled = false
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = false

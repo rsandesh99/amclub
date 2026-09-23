@@ -1,0 +1,159 @@
+# H1 (S3.3 prompt; ADR-014 / ADR-015) — the money and authz rigs run on every PR
+# against a DISPOSABLE Supabase stack started on the runner (`supabase start`),
+# built from this commit's schema (db:bootstrap = every migration + RLS) plus the
+# seed, with the app in simulate-payment mode (no Razorpay keys). Nothing here
+# ever touches production. The CI database is a superset of production (it
+# carries the staged Mart migrations); staged-column leaks are caught offline by
+# `mart:static` in the main CI job.
+name: Money rigs
+
+on:
+  pull_request:
+    branches: [master, main, develop]
+  push:
+    branches: [master, main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: money-rigs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rigs:
+    name: Money rigs · disposable Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Rate limiting is part of what verify-authz proves (the admin limiter must
+    # engage), so the app gets a real Redis behind an Upstash-compatible REST front.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+      upstash:
+        image: hiett/serverless-redis-http:latest
+        ports: ['8079:80']
+        env:
+          SRH_MODE: env
+          SRH_TOKEN: ci-upstash-token-disposable
+          SRH_CONNECTION_STRING: redis://redis:6379
+    env:
+      BASE_URL: http://localhost:3000
+      WEBHOOK_URL: http://localhost:3000/api/v1/webhooks/razorpay
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      # Throwaway values for the disposable stack only — not secrets.
+      CRON_SECRET: ci-cron-secret-disposable
+      RAZORPAY_WEBHOOK_SECRET: ci-webhook-secret-disposable
+      COLUMN_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      UPSTASH_REDIS_REST_URL: http://localhost:8079
+      UPSTASH_REDIS_REST_TOKEN: ci-upstash-token-disposable
+      SENTRY_AUTH_TOKEN: ""
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start the disposable Supabase stack
+        run: supabase start --workdir .github/supabase-ci -x studio,imgproxy,realtime,edge-runtime,logflare,vector
+
+      - name: Export the local stack's URL and keys
+        run: |
+          supabase status --workdir .github/supabase-ci -o env > "$RUNNER_TEMP/sb.env"
+          set -a; . "$RUNNER_TEMP/sb.env"; set +a
+          for v in API_URL ANON_KEY SERVICE_ROLE_KEY DB_URL; do
+            if [ -z "${!v:-}" ]; then echo "supabase status did not report $v"; sed 's/=.*/=…/' "$RUNNER_TEMP/sb.env"; exit 1; fi
+          done
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=${API_URL}"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${ANON_KEY}"
+            echo "SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}"
+            echo "DATABASE_URL=${DB_URL}"
+          } >> "$GITHUB_ENV"
+
+      - name: Schema (every migration + RLS) and seed
+        run: |
+          pnpm --filter @amclub/db db:bootstrap -- --url "$DATABASE_URL"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f .github/supabase-ci/buckets.sql
+          pnpm --filter @amclub/db db:seed
+          # Production keeps the demo providers suspended; match it so the rigs'
+          # exact fan-out counts only see the providers they create.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "update provider_profiles set status = 'suspended'"
+
+      - name: Upstash-compatible REST front answers
+        run: |
+          # The same protocol @upstash/redis speaks: POST / with a JSON command array.
+          for i in $(seq 1 30); do
+            if curl -sf -X POST -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" -H "Content-Type: application/json" \
+                 -d '["PING"]' "$UPSTASH_REDIS_REST_URL/" | grep -q PONG; then echo "upstash ok"; exit 0; fi
+            sleep 2
+          done
+          echo "the Upstash REST front did not answer"
+          curl -s -X POST -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" -d '["PING"]' "$UPSTASH_REDIS_REST_URL/" || true
+          docker ps
+          docker logs "$(docker ps -q --filter ancestor=hiett/serverless-redis-http:latest)" 2>&1 | tail -40 || true
+          exit 1
+
+      - name: Build and start the app (simulate payments)
+        id: app
+        run: |
+          pnpm turbo run build --filter=@amclub/web
+          cd apps/web
+          nohup pnpm start > "$RUNNER_TEMP/next.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://localhost:3000/en; then echo "app up"; exit 0; fi
+            sleep 2
+          done
+          tail -100 "$RUNNER_TEMP/next.log"
+          exit 1
+
+      - name: Authz (cross-tenant + admin boundary)
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/verify-authz.ts
+
+      - name: Money loop (package order → payout, cancel refund, crons)
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/verify-money-loop.ts
+
+      - name: Webhook replay never double-creates
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/killtest-webhook-replay.ts
+
+      - name: Dropped webhook is recovered by reconcile
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/killtest-dropped-webhook.ts
+
+      - name: Disputes (ADR-014 — paid-payout, earlier refund, reachability, window)
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/verify-phase7.ts
+
+      - name: RFQ (ADR-015 GST-included, ADR-014 §7 duplicate order)
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/verify-rfq.ts
+
+      - name: App log (on failure)
+        if: failure()
+        run: tail -300 "$RUNNER_TEMP/next.log" || true
