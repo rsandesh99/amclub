@@ -3208,5 +3208,23 @@
     "hero_empty": "No provider lists {service} as a package yet. Post a requirement and verified providers will quote.",
     "compare_heading": "Providers at a glance",
     "col_from": "From"
+  },
+  "checkout_v3": {
+    "gst_line": "GST {pct} %",
+    "itc_line": "Claim {amount} as input tax credit (GSTIN {gstin})",
+    "change": "Change",
+    "next_title": "What happens next",
+    "next_accept": "{provider} accepts within {hours} h — or you're refunded in full.",
+    "next_share": "You share: {items}.",
+    "next_share_none": "You share the details they need, right after paying.",
+    "next_release": "Money is released only when you accept the work.",
+    "auth_title": "Continue with your phone",
+    "auth_body": "Pay without leaving this page — verify your number and we'll set up your account as you go.",
+    "profile_title": "Almost there — your details for the invoice",
+    "full_name": "Your name",
+    "business_name": "Business name",
+    "continue_to_pay": "Continue to payment",
+    "err_details": "Enter your name and business name.",
+    "err_save": "Couldn't save your details. Please try again."
   }
 }

@@ -11,7 +11,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts } from '@amclub/shared'
+import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin } from '@amclub/shared'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -58,11 +58,12 @@ async function e0() {
   console.log('E0 — fix first')
   const fakePkg = '00000000-0000-4000-8000-000000000001'
 
-  // U1: the auth wall keeps the whole intent, query included.
-  const wall = await fetch(`${BASE}/app/checkout/${fakePkg}?tier=standard`, { redirect: 'manual' })
+  // U1: the auth wall keeps the whole intent, query included. (Checkout itself
+  // is open to guests once EXP_V3_CHECKOUT is on — E5 — so a still-walled path.)
+  const wall = await fetch(`${BASE}/app/rfq/new?category=tax-accounting`, { redirect: 'manual' })
   const loc = wall.headers.get('location') ?? ''
   const nextParam = loc ? new URL(loc, BASE).searchParams.get('next') : null
-  check('U1: logged-out checkout → /login?next= keeps path + query', [302, 303, 307].includes(wall.status) && nextParam === `/app/checkout/${fakePkg}?tier=standard`, `status ${wall.status}, next=${nextParam}`)
+  check('U1: logged-out → /login?next= keeps path + query', [302, 303, 307].includes(wall.status) && nextParam === '/app/rfq/new?category=tax-accounting', `status ${wall.status}, next=${nextParam}`)
 
   // U1: the signup wizard receives the intent and carries it on (login link).
   const newbie = await mkUser('newbie')
@@ -620,6 +621,62 @@ async function e2b(fx: { word: string; A: string; B: string; C: string; D: strin
   check('FR-2.5: results after a voice search show "You said"', visible(await (await fetch(`${BASE}/services?query=${word}&voice=1`)).text()).includes('data-testid="you-said"'))
 }
 
+async function e5() {
+  console.log('\nE5 — checkout v3')
+  const { data: cat } = await admin.from('categories').select('id, commission_bps').eq('slug', 'tax-accounting').single()
+  const prov = await mkUser('e5prov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E5 Prov', display_name: 'E5 Sharma & Co', slug: `${tag}-e5prov`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  const { data: pkg } = await admin.from('packages').insert({
+    provider_id: pp!.id, category_id: cat!.id, slug: `${tag}-e5pkg`, title_i18n: { en: 'E5 GST registration' },
+    scope_included: ['GSTIN'], deliverables: ['Certificate'], price_paise: 2999_00, delivery_days: 2, status: 'active',
+    requirements_template: { fields: [{ name: 'pan', type: 'text', label_en: 'PAN', required: true }, { name: 'addr', type: 'file', label_en: 'Address proof', required: true }] },
+  }).select('id').single()
+  created.packageIds.push(pkg!.id)
+  const url = `${BASE}/app/checkout/${pkg!.id}`
+  const expected = computeOrderAmounts({ pricePaise: 2999_00, discountBps: 0, commissionBps: cat!.commission_bps ?? 1000 })
+
+  // FR-5.1 — a guest stays on the checkout page and signs up inline.
+  const guest = await fetch(url, { redirect: 'manual' })
+  const gh = visible(await guest.text())
+  check('FR-5.1: a signed-out visitor stays on /app/checkout/[id] (no redirect)', guest.status === 200 && gh.includes('data-mode="guest"') && gh.includes('data-testid="inline-auth"'), `status ${guest.status}`)
+  check('FR-5.2: the total is the money loop’s amount (₹3,538.82)', expected.totalPaise === 353882 && gh.includes('₹3,538.82') && gh.includes('₹539.82'))
+  check('FR-5.3: what happens next — provider, 24 h, the requirement labels', gh.includes('E5 Sharma &amp; Co accepts within 24 h') && gh.includes('You share: PAN, Address proof.') && gh.includes('Money is released only when you accept the work.'))
+  check('FR-5.4: the refund line', gh.includes('Full refund before work starts'))
+  check('FR-5.1: an unknown package → 404 for a guest', (await fetch(`${BASE}/app/checkout/00000000-0000-4000-8000-000000000001`, { redirect: 'manual' })).status === 404)
+  check('FR-5.1: any other /app path still needs sign-in', [302, 303, 307].includes((await fetch(`${BASE}/app/orders`, { redirect: 'manual' })).status))
+
+  // FR-5.1 — signed in without a buyer profile: the last step inline, then pay.
+  const fresh = await mkUser('e5fresh')
+  const ph = visible(await (await fetch(url, { headers: { cookie: fresh.cookie }, redirect: 'manual' })).text())
+  check('FR-5.1: signed in without a buyer profile → the inline details step', ph.includes('data-mode="profile"') && ph.includes('data-testid="inline-profile"'))
+  const legal = await api(fresh.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const prof = await api(fresh.token, '/api/v1/profile/msme', { fullName: 'E5 Buyer', businessName: 'E5 Buyer Co', preferredLocale: 'en' })
+  const { data: acc } = await admin.from('terms_acceptances').select('doc').eq('user_id', fresh.uid)
+  const { data: fm } = await admin.from('msme_profiles').select('id').eq('user_id', fresh.uid).maybeSingle()
+  if (fm) created.msmeIds.push(fm.id)
+  check('FR-5.1: inline signup writes the legal acceptance rows as signup does', legal.ok && prof.ok && ['terms', 'privacy'].every((d) => (acc ?? []).some((a) => a.doc === d)))
+  const payHtml = visible(await (await fetch(url, { headers: { cookie: fresh.cookie } })).text())
+  check('FR-5.1: then the same page shows Pay', payHtml.includes('data-mode="pay"') && payHtml.includes('data-testid="checkout-pay"'))
+  check('FR-5.2: no ITC line without a GSTIN', !payHtml.includes('data-testid="checkout-itc"'))
+
+  // FR-5.2 — ITC only with a checksum-valid GSTIN (shown masked).
+  const good = '27AAPFU0939F1ZV'
+  const badSum = '27AAPFU0939F1ZX'
+  check('fixture: GSTIN checksums', isValidGstin(good) && !isValidGstin(badSum))
+  await admin.from('msme_profiles').update({ gstin: badSum }).eq('id', fm!.id)
+  check('FR-5.2: a bad-checksum GSTIN → no ITC line', !visible(await (await fetch(url, { headers: { cookie: fresh.cookie } })).text()).includes('data-testid="checkout-itc"'))
+  await admin.from('msme_profiles').update({ gstin: good }).eq('id', fm!.id)
+  const itcHtml = visible(await (await fetch(url, { headers: { cookie: fresh.cookie } })).text())
+  check('FR-5.2: ITC line with a valid GSTIN, masked', itcHtml.includes('Claim ₹539.82 as input tax credit (GSTIN 27AA…ZV)') && !itcHtml.includes(good))
+
+  // The server charges exactly what the page showed.
+  const start = await api(fresh.token, '/api/v1/checkout', { packageId: pkg!.id, idempotencyKey: crypto.randomUUID() })
+  const sj = (await start.json()) as { amountPaise?: number; checkoutSessionId?: string }
+  check('FR-5.2: checkout charges the displayed total', start.ok && sj.amountPaise === expected.totalPaise, `status ${start.status}, amount ${sj.amountPaise}`)
+  if (sj.checkoutSessionId) await admin.from('checkout_sessions').delete().eq('id', sj.checkoutSessionId)
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -629,6 +686,7 @@ async function main() {
     await e4()
     const fx = await e2a()
     await e2b(fx)
+    await e5()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

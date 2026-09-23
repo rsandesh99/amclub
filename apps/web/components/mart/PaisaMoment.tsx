@@ -25,7 +25,7 @@ const REDUCED_MS = 900
 const COUNT_DELAY_MS = 420
 const COUNT_MS = 600
 
-export function PaisaMoment({ kind, amountPaise, onDone }: { kind: 'paid' | 'payout'; amountPaise: number; onDone: () => void }) {
+export function PaisaMoment({ kind, amountPaise, onDone, totalMs = TOTAL_MS }: { kind: 'paid' | 'payout'; amountPaise: number; onDone: () => void; /** Experience v3 checkout caps it at 900 ms (FR-5.5); Mart keeps 1.4 s. */ totalMs?: number }) {
   const t = useTranslations('mart')
   // Initial state is the final amount: the numeral is invisible until its
   // 440ms rise (opacity 0 via `both` fill), by which time the effect has
@@ -47,7 +47,7 @@ export function PaisaMoment({ kind, amountPaise, onDone }: { kind: 'paid' | 'pay
   useEffect(() => {
     if (prefersReducedMotion()) {
       setShown(amountPaise)
-      const id = window.setTimeout(finish, REDUCED_MS)
+      const id = window.setTimeout(finish, Math.min(totalMs, REDUCED_MS))
       return () => window.clearTimeout(id)
     }
     setShown(0)
@@ -63,13 +63,13 @@ export function PaisaMoment({ kind, amountPaise, onDone }: { kind: 'paid' | 'pay
     const countTimer = window.setTimeout(() => {
       raf = requestAnimationFrame(step)
     }, COUNT_DELAY_MS)
-    const endTimer = window.setTimeout(finish, TOTAL_MS)
+    const endTimer = window.setTimeout(finish, Math.min(totalMs, TOTAL_MS))
     return () => {
       window.clearTimeout(countTimer)
       window.clearTimeout(endTimer)
       cancelAnimationFrame(raf)
     }
-  }, [amountPaise, finish])
+  }, [amountPaise, finish, totalMs])
 
   // Any keypress skips (tap is handled by the overlay's onClick).
   useEffect(() => {

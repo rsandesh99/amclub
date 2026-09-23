@@ -28,6 +28,7 @@ export async function AppShell({
   userId,
   hasMsmeProfile,
   hasProviderProfile,
+  focused = false,
   children,
 }: {
   context: ShellContext
@@ -39,6 +40,8 @@ export async function AppShell({
    *  'msme' role, so role flags overstate what surfaces actually exist. */
   hasMsmeProfile?: boolean
   hasProviderProfile?: boolean
+  /** A focused task (checkout): the v3 top bar only — no rail, no tab bar. */
+  focused?: boolean
   children: React.ReactNode
 }) {
   const hasMsme = hasMsmeProfile ?? roles.includes('msme')
@@ -55,7 +58,7 @@ export async function AppShell({
     const density = resolveDensity(await getUiDensity(userId), surface)
     // Rail + tab bar only where the role's surfaces exist (a buyer mid-onboarding
     // in the provider group sees the plain shell).
-    const role = context === 'msme' ? 'buyer' : context === 'provider' && hasProvider ? 'provider' : null
+    const role = focused ? null : context === 'msme' ? 'buyer' : context === 'provider' && hasProvider ? 'provider' : null
     return (
       <div data-ui="v3" data-density={density} className="flex min-h-screen flex-col bg-background text-foreground">
         <ActionsProvider>

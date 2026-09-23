@@ -17,4 +17,9 @@ describe('priceDisplay (N16)', () => {
     expect(priceDisplay({ pricePaise: 149900, discountBps: 0 }).itcPaise).toBeNull()
     expect(priceDisplay({ pricePaise: 149900, discountBps: 0, buyerHasGstin: true }).itcPaise).toBe(26982)
   })
+  it('applies a coupon the way checkout does (after the package discount, before GST)', () => {
+    const d = priceDisplay({ pricePaise: 100000, discountBps: 1000, extraDiscountPaise: 5000 })
+    const a = computeOrderAmounts({ pricePaise: 100000, discountBps: 1000, commissionBps: 0, extraDiscountPaise: 5000 })
+    expect(d).toMatchObject({ discountPaise: a.discountPaise, taxablePaise: a.taxablePaise, gstPaise: a.gstPaise, totalPaise: a.totalPaise })
+  })
 })

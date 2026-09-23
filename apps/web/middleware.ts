@@ -14,6 +14,16 @@ const LOCALE_RE = new RegExp(`^/(${LOCALE_PREFIX_PATTERN})(/|$)`)
 // (provider)/(admin) layouts enforce roles server-side instead.
 const PROTECTED_PREFIXES = ['/app', '/partner/onboarding', '/partner/earnings', '/partner/listings', '/partner/rfqs', '/partner/orders', '/partner/profile', '/admin']
 
+// Experience v3 E5 (FR-5.1): with EXP_V3_CHECKOUT=on a signed-out visitor may
+// open ONE path — a package checkout — and sign up inline on it. Read here
+// with the same "on" rule as parseExperienceSetting (the edge bundle stays
+// free of the shared package); percentages cannot apply without a user.
+const GUEST_CHECKOUT_RE = /^\/app\/checkout\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function guestCheckoutOn(): boolean {
+  const v = (process.env['EXP_V3_CHECKOUT'] ?? '').trim().toLowerCase()
+  return v === 'on' || v === 'true' || v === '100'
+}
+
 function stripLocale(pathname: string): string {
   return pathname.replace(LOCALE_RE, '/').replace(/\/$/, '') || '/'
 }
@@ -111,6 +121,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (!user) {
+    if (GUEST_CHECKOUT_RE.test(path) && guestCheckoutOn()) return response
     const loginUrl = new URL(`${localePrefix}/login`, request.url)
     // Locale-STRIPPED path: the login page pushes `next` through the next-intl
     // router, which re-prefixes the active locale — a raw /hi/... here would

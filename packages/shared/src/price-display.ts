@@ -34,9 +34,17 @@ export function priceDisplay(input: {
   memberExtraDiscountBps?: number
   gstBps?: number
   buyerHasGstin?: boolean
+  /** A coupon (flat paise off the pre-GST price), exactly as checkout applies it. */
+  extraDiscountPaise?: number
 }): PriceDisplay {
   const gstBps = input.gstBps ?? DEFAULT_GST_BPS
-  const a = computeOrderAmounts({ pricePaise: input.pricePaise, discountBps: input.discountBps, commissionBps: 0, gstBps })
+  const a = computeOrderAmounts({
+    pricePaise: input.pricePaise,
+    discountBps: input.discountBps,
+    commissionBps: 0,
+    gstBps,
+    ...(input.extraDiscountPaise ? { extraDiscountPaise: input.extraDiscountPaise } : {}),
+  })
   const memberBps = input.memberExtraDiscountBps ?? 0
   return {
     listPaise: a.pricePaise,
