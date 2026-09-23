@@ -307,6 +307,6 @@ heartbeat panel covers agent crons, handled 500s reach Sentry.
 - Search over own records, pagination on buyer/provider lists, exports (scope PDF, CSV).
 - `DISPUTABLE_STATUSES` lists accepted/requirements_submitted but `ORDER_TRANSITIONS` has no edge to
   `disputed` from them (§3.7 says "any-pre-completed → disputed") — reconcile via ADR.
-- GST on "GST-included" services quotes: checkout adds 18 % on top — money decision, ADR.
+- ~~GST on "GST-included" services quotes: checkout adds 18 % on top — money decision, ADR.~~ **Fixed 2026-09-23 (ADR-015):** an included quote is charged exactly its price; excluded and unstated are unchanged.
 - Automatic refund of a duplicate RFQ order needs a dedicated state (ADR) — today it is flagged for ops.
 - Suspended buyers currently also lose READ access to past orders/invoices (fails safe; decide if they keep it).

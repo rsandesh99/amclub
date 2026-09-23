@@ -1253,6 +1253,8 @@
     "accept_confirm_price": "कोट की गई कीमत",
     "accept_confirm_total_goods": "{qty} {unit} का कुल, जीएसटी सहित",
     "accept_confirm_gst_note": "जीएसटी चेकआउट पर जोड़ा जाता है — भुगतान स्क्रीन पर भुगतान से पहले सटीक राशि दिखेगी।",
+    "accept_confirm_price_incl_gst": "कोट की गई कीमत (GST सहित)",
+    "accept_confirm_gst_included_note": "प्रदाता ने यह कीमत GST सहित बताई है, इसलिए आप ठीक यही राशि चुकाएँगे।",
     "accept_confirm_escrow": "AMClub आपका पैसा सुरक्षित रखता है और काम स्वीकार करने के बाद ही प्रदाता को देता है।",
     "accept_confirm_others": "{count, plural, one {इस अनुरोध का दूसरा कोटेशन बंद कर दिया जाएगा।} other {इस अनुरोध के बाकी # कोटेशन बंद कर दिए जाएंगे।}}",
     "accept_confirm_submit": "भुगतान पर जाएं",

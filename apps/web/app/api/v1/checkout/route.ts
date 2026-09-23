@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { computeOrderAmounts, isValidGstin } from '@amclub/shared'
+import { computeGstInclusiveOrderAmounts, computeOrderAmounts, isValidGstin } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
     const { data: q } = await supabase
       .from('quotes')
       .select(
-        'id, status, provider_id, price_paise, delivery_days, scope' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_COLS + ')',
+        'id, status, provider_id, price_paise, gst_included, delivery_days, scope' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_COLS + ')',
       )
       .eq('id', quoteId!)
       .maybeSingle()
@@ -299,11 +299,13 @@ export async function POST(request: NextRequest) {
       },
       deliveryDays: quote.delivery_days,
       revisionMax: null,
-      amounts: computeOrderAmounts({
-        pricePaise: Number(quote.price_paise),
-        discountBps: 0,
-        commissionBps,
-      }),
+      // ADR-015 — a price the provider marked "GST included" is what the buyer
+      // pays: GST is carved out of it, never added on top. Excluded or unstated
+      // (the confirm sheet says GST is applied at checkout) adds it as before.
+      amounts:
+        quote.gst_included === true
+          ? computeGstInclusiveOrderAmounts({ grossPaise: Number(quote.price_paise), commissionBps })
+          : computeOrderAmounts({ pricePaise: Number(quote.price_paise), discountBps: 0, commissionBps }),
     }
     }
   }

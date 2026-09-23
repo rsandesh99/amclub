@@ -1253,6 +1253,8 @@
     "accept_confirm_price": "Quoted price",
     "accept_confirm_total_goods": "Total for {qty} {unit} incl. GST",
     "accept_confirm_gst_note": "GST is applied at checkout — the payment screen shows the exact amount before you pay.",
+    "accept_confirm_price_incl_gst": "Quoted price (incl. GST)",
+    "accept_confirm_gst_included_note": "The provider quoted this price including GST, so this is exactly what you pay.",
     "accept_confirm_escrow": "AMClub holds your money and releases it to the provider only after you accept the work.",
     "accept_confirm_others": "{count, plural, one {The other quote on this request will be closed.} other {The other # quotes on this request will be closed.}}",
     "accept_confirm_submit": "Continue to payment",

@@ -437,13 +437,13 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
                   </div>
                 ) : (
                   <div className="flex justify-between gap-3">
-                    <dt className="text-foreground-secondary">{t('accept_confirm_price')}</dt>
+                    <dt className="text-foreground-secondary">{t(q.gstIncluded === true ? 'accept_confirm_price_incl_gst' : 'accept_confirm_price')}</dt>
                     <dd className="text-right font-display text-base font-bold text-primary tabular-nums">{formatINRExact(q.pricePaise)}</dd>
                   </div>
                 )}
                 <div className="flex justify-between gap-3"><dt className="text-foreground-secondary">{t('compare_delivery')}</dt><dd className="text-right">{t('delivery_days', { days: q.deliveryDays })}</dd></div>
               </dl>
-              {!(goods && q.goods) && <p className="text-xs text-foreground-secondary">{t('accept_confirm_gst_note')}</p>}
+              {!(goods && q.goods) && <p className="text-xs text-foreground-secondary">{t(q.gstIncluded === true ? 'accept_confirm_gst_included_note' : 'accept_confirm_gst_note')}</p>}
               <p className="flex items-start gap-1.5 text-foreground"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-trust" aria-hidden />{t('accept_confirm_escrow')}</p>
               {others > 0 && <p className="text-foreground-secondary">{t('accept_confirm_others', { count: others })}</p>}
             </div>

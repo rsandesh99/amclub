@@ -108,6 +108,23 @@ async function main() {
   const masked = !/9876543210/.test(msg.body) && !/test@example\.com/.test(msg.body) && msg.redacted === true
   check('5. Contact info masked in quote messages', masked, `stored="${msg.body}" redacted=${msg.redacted}`)
 
+  // ── Criterion 3c (ADR-015): a quote marked "GST included" is charged exactly its price ──
+  // Provider ka1 quoted WITH gst_included=true. Open its checkout, read the frozen
+  // session, then delete that unpaid session so criterion 3 accepts ka0 as before.
+  const inclRes = await api(buyer.token, '/api/v1/checkout', { quoteId: quoteIds[1], idempotencyKey: crypto.randomUUID() })
+  const inclD = await inclRes.json()
+  const { data: inclQuote } = await admin.from('quotes').select('price_paise').eq('id', quoteIds[1]!).single()
+  const { data: inclSess } = inclD.checkoutSessionId
+    ? await admin.from('checkout_sessions').select('price_paise, gst_paise, total_paise, commission_paise, provider_earning_paise').eq('id', inclD.checkoutSessionId).maybeSingle()
+    : { data: null }
+  if (inclD.checkoutSessionId) await admin.from('checkout_sessions').delete().eq('id', inclD.checkoutSessionId).eq('status', 'created')
+  const inclGross = Number(inclQuote!.price_paise)
+  check('3c. GST-included quote: buyer pays exactly the quoted price (GST carved out, not added)',
+    inclRes.ok && !!inclSess && Number(inclSess.total_paise) === inclGross && Number(inclD.amountPaise) === inclGross &&
+    Number(inclSess.price_paise) + Number(inclSess.gst_paise) === inclGross &&
+    Number(inclSess.commission_paise) + Number(inclSess.provider_earning_paise) === Number(inclSess.price_paise),
+    `http=${inclRes.status} quoted=${inclGross} total=${inclSess?.total_paise} charged=${inclD.amountPaise} taxable=${inclSess?.price_paise} gst=${inclSess?.gst_paise}`)
+
   // ── Criterion 3: accept → PAID order identical in shape to a package order ──
   const co = await api(buyer.token, '/api/v1/checkout', { quoteId: quoteIds[0], idempotencyKey: crypto.randomUUID() })
   const cod = await co.json()
