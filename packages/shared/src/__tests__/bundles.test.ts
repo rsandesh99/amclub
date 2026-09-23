@@ -39,7 +39,7 @@ describe('bundles (ADR 021)', () => {
   })
 
   it('milestones: 2–6, shares sum to 10,000, offsets strictly increase, ≤ 92 days', () => {
-    const input = ms.map(({ seq: _s, ...m }) => m)
+    const input = ms.map((m) => ({ label_i18n: m.label_i18n, due_offset_days: m.due_offset_days, share_bps: m.share_bps }))
     expect(bundleMilestonesSchema.safeParse(input).success).toBe(true)
     expect(bundleProblems([{ due_offset_days: 10, share_bps: 5000 }, { due_offset_days: 10, share_bps: 4000 }])).toEqual(['shares_not_10000', 'offsets_not_increasing'])
     expect(bundleMilestonesSchema.safeParse([input[0]]).success).toBe(false)

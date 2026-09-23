@@ -65,7 +65,11 @@ export function quoteChoices(
   quotes: readonly (CompareQuoteInput & { options?: readonly QuoteOptionRow[] })[],
   opts: CompareOptions,
 ): Map<string, QuoteChoice[]> {
-  const base = quotes.map(({ options: _o, ...q }) => q)
+  const base = quotes.map((q) => {
+    const rest: CompareQuoteInput & { options?: unknown } = { ...q }
+    delete rest.options
+    return rest as CompareQuoteInput
+  })
   const standard = compareQuotes(base, opts)
   const out = new Map<string, QuoteChoice[]>()
   quotes.forEach((q, i) => {
