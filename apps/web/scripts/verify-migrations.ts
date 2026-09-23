@@ -332,6 +332,12 @@ const MANIFEST: Entry[] = [
     triggers: [['service_document_requirements', 'service_document_requirements_set_updated_at'], ['quote_sla_stats', 'quote_sla_stats_set_updated_at']],
     note: 'E6: rfqs.must_haves (display-only), service_document_requirements (unreviewed seed; public read), quote_sla_stats + refresh_quote_sla_stats() (service role)',
   },
+  {
+    file: '0054_licences_obligations.sql',
+    tables: ['buyer_licences', 'order_licence_facts', 'licence_reminders', 'obligation_rules'],
+    triggers: [['buyer_licences', 'buyer_licences_set_updated_at'], ['order_licence_facts', 'order_licence_facts_set_updated_at'], ['obligation_rules', 'obligation_rules_set_updated_at']],
+    note: 'E9b / N45 (D-PRD5, dark): buyer_licences (owner RLS, soft delete), order_licence_facts + licence_reminders (service role), obligation_rules (unreviewed seed; reviewed rows public)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

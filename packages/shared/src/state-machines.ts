@@ -91,6 +91,9 @@ export const ORDER_UNCHOSEN_STATUSES: readonly OrderStatus[] = ['auto_cancelled'
 /** E9 (FR-9.3) — a finished order the buyer can buy again / repeat: completed, with or without a review. */
 export const ORDER_REPEATABLE_STATUSES: readonly OrderStatus[] = ['completed', 'reviewed']
 
+/** E9b (FR-9.5) — a provider may record the certificate issued on a registration order from the work stage on. */
+export const ORDER_LICENCE_RECORDABLE_STATUSES: readonly OrderStatus[] = ['in_progress', 'delivered', 'revision_requested', 'completed', 'reviewed']
+
 /** Statuses from which a payout is permitted (§3.7). */
 export const PAYOUT_RELEASE_STATUSES: readonly OrderStatus[] = [
   'completed',

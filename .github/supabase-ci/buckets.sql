@@ -6,6 +6,7 @@ insert into storage.buckets (id, name, public) values
   ('invoices',        'invoices',        false),
   ('kyc-documents',   'kyc-documents',   false),
   ('rfq-attachments', 'rfq-attachments', false),
+  ('licence-certificates', 'licence-certificates', false),
   ('wa-media',        'wa-media',        false),
   ('public-assets',   'public-assets',   true)
 on conflict (id) do nothing;

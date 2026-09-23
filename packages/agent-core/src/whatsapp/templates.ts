@@ -73,6 +73,9 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   onboarding_resume: { names: { en: 'amc_onboarding_resume_en', hi: 'amc_onboarding_resume_hi', te: 'amc_onboarding_resume_te' }, params: (n) => [n.title] },
   onboarding_draft_ready: { names: { en: 'amc_onboarding_draft_ready_en', hi: 'amc_onboarding_draft_ready_hi', te: 'amc_onboarding_draft_ready_te' }, params: (n) => [n.title] },
   onboarding_expired: { names: { en: 'amc_onboarding_expired_en', hi: 'amc_onboarding_expired_hi', te: 'amc_onboarding_expired_te' }, params: (n) => [n.link ?? ''] },
+  // Experience v3 E9b — licence renewal reminder (buyer; opt-in gated; dark behind obligations_enabled):
+  // [title "Your FSSAI licence expires on 14 Nov", the category link]. en/hi/te.
+  licence_renewal_due: { names: { en: 'amc_licence_renewal_due_en', hi: 'amc_licence_renewal_due_hi', te: 'amc_licence_renewal_due_te' }, params: (n) => [n.title, n.link ?? ''] },
   // System templates used by the inbound job (opt-in / opt-out / holding reply).
   wa_opt_in_confirmed: { names: { en: 'amc_wa_opt_in_en', hi: 'amc_wa_opt_in_hi' }, params: () => [] },
   wa_opt_out_confirmed: { names: { en: 'amc_wa_opt_out_en', hi: 'amc_wa_opt_out_hi' }, params: () => [] },

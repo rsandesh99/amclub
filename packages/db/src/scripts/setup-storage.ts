@@ -29,6 +29,9 @@ const BUCKETS: { name: string; public: boolean; fileSizeLimit?: number; allowedM
     fileSizeLimit: 10 * 1024 * 1024,
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'application/step', 'model/step', 'application/dxf', 'image/vnd.dxf', 'application/octet-stream'],
   },
+  // Licence certificates (Experience v3 E9b, dark) — private; the buyer uploads through
+  // /api/v1/me/licences/[id]/certificate, and only the owner gets a signed read. 5 MB; images and PDFs.
+  { name: 'licence-certificates', public: false, fileSizeLimit: 5 * 1024 * 1024, allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] },
 ]
 
 async function main() {
