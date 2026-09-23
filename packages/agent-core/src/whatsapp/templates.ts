@@ -79,6 +79,8 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   // Experience v3 E9b — licence renewal reminder (buyer; opt-in gated; dark behind obligations_enabled):
   // [title "Your FSSAI licence expires on 14 Nov", the category link]. en/hi/te.
   licence_renewal_due: { names: { en: 'amc_licence_renewal_due_en', hi: 'amc_licence_renewal_due_hi', te: 'amc_licence_renewal_due_te' }, params: (n) => [n.title, n.link ?? ''] },
+  // E8b — a new message on an order: [title "New message on order #A1B2"] only — NEVER the message text. en/hi/te.
+  order_message: { names: { en: 'amc_order_message_en', hi: 'amc_order_message_hi', te: 'amc_order_message_te' }, params: (n) => [n.title] },
   // System templates used by the inbound job (opt-in / opt-out / holding reply).
   wa_opt_in_confirmed: { names: { en: 'amc_wa_opt_in_en', hi: 'amc_wa_opt_in_hi' }, params: () => [] },
   wa_opt_out_confirmed: { names: { en: 'amc_wa_opt_out_en', hi: 'amc_wa_opt_out_hi' }, params: () => [] },
@@ -89,7 +91,7 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
 export const WA_ALWAYS_ALLOWED_KINDS: ReadonlySet<string> = new Set([
   'order_placed', 'order_accepted', 'requirements_submitted', 'order_in_progress', 'order_delivered',
   'order_completed', 'order_cancelled', 'order_auto_cancelled', 'order_disputed', 'revision_requested',
-  'milestone_added', 'payout_paid',
+  'milestone_added', 'payout_paid', 'order_message',
 ])
 
 /** Every approved template name, for the checklist and the eval. */

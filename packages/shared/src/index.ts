@@ -54,6 +54,7 @@ export * from './quote-v3'
 export * from './insights-v3'
 export * from './quote-loss'
 export * from './order-workspace-v3'
+export * from './order-messages'
 
 // N9 — public measured stats (gated; never the composite score)
 export * from './public-stats'

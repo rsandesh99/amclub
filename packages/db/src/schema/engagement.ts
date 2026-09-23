@@ -25,7 +25,7 @@ export const reviews = pgTable('reviews', {
 
 export const conversations = pgTable('conversations', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  // order | quote
+  // order | quote — order threads (E8b, 0059) and pre-payment quote threads share one writer model
   contextType: text('context_type').notNull(),
   contextId: uuid('context_id').notNull(),
   msmeId: uuid('msme_id').references(() => msmeProfiles.id).notNull(),
@@ -46,7 +46,10 @@ export const messages = pgTable('messages', {
   redacted: boolean('redacted').default(false).notNull(),
   readAt: timestamp('read_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
-})
+}, (table) => [
+  // E8b (0059) — thread reads and the unread count.
+  index('messages_conversation_created_idx').on(table.conversationId, table.createdAt),
+])
 
 export const savedProviders = pgTable('saved_providers', {
   msmeId: uuid('msme_id').references(() => msmeProfiles.id, { onDelete: 'cascade' }).notNull(),

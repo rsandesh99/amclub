@@ -3554,6 +3554,16 @@
     "money_held": "Payout on hold: {reasons}",
     "money_failed": "Payout delayed — we’re retrying",
     "buyer_paid_held": "{amount} paid · held by AMClub until you accept",
-    "buyer_paid": "{amount} paid"
+    "buyer_paid": "{amount} paid",
+    "msg_masked_note": "Keep it on AMClub: phone numbers and emails are hidden in messages, so your payment protection stays in place.",
+    "msg_empty": "No messages yet. Ask a question or share an update.",
+    "msg_read_only": "This conversation is closed. It stays here to read; for anything new, use Report a problem or Help.",
+    "msg_failed": "Couldn’t send. Try again.",
+    "msg_masked_notice": "We hid a phone number or email in your message.",
+    "msg_masked_tag": "contact hidden",
+    "msg_label": "Your message",
+    "msg_placeholder": "Write a message…",
+    "msg_attach": "Attach order documents (up to {max})",
+    "msg_send": "Send"
   }
 }

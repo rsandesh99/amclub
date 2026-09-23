@@ -362,6 +362,11 @@ const MANIFEST: Entry[] = [
     tables: [],
     note: "E7 / N22: quote_events CHECK gains 'lost'; quote_events_lost_once (one label per quote); provider read policy excludes 'lost' rows",
   },
+  {
+    file: '0059_order_messages.sql',
+    tables: [],
+    note: "E8b / N24: order threads reuse conversations (context_type 'order'); conversations parties read-only + writes revoked; admin read on conversations + messages; messages_conversation_created_idx",
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

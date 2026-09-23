@@ -23,6 +23,11 @@ import { NextStepBar, type BarAction } from '@/components/orders-v3/NextStepBar'
 import { SectionTabs } from '@/components/orders-v3/SectionTabs'
 import { GoldThread } from '@/components/orders-v3/GoldThread'
 import { BuyerMoneyLine, ProviderMoneyLineView } from '@/components/orders-v3/MoneyLine'
+import { OrderMessages } from '@/components/orders-v3/OrderMessages'
+
+/** E8b — order messaging for this viewer (server-decided: `orders` experience + order_messaging_enabled) and the unread count. */
+export interface OrderMessagingProp { on: boolean; unread: number }
+const MESSAGING_OFF: OrderMessagingProp = { on: false, unread: 0 }
 
 interface OrderEvent {
   id: string
@@ -110,11 +115,14 @@ export function OrderWorkspace({
   extras,
   v3,
   initialTab,
+  messaging,
 }: {
   order: Record<string, unknown>
   events: OrderEvent[]
   viewerRole: 'msme' | 'provider'
   documents: DocItem[]
+  /** E8b — order messaging (only with v3). */
+  messaging?: OrderMessagingProp | undefined
   /** AMC Mart only — extra facts for goods orders (undefined for services). */
   goods?: GoodsOrderExtras | undefined
   firstView?: boolean | undefined
@@ -141,6 +149,7 @@ export function OrderWorkspace({
       extras={extras ?? EMPTY_EXTRAS}
       v3={v3 ?? false}
       initialTab={initialTab}
+      messaging={v3 ? (messaging ?? MESSAGING_OFF) : MESSAGING_OFF}
     />
   )
 }
@@ -154,6 +163,7 @@ function ServicesOrderWorkspace({
   extras,
   v3,
   initialTab,
+  messaging,
 }: {
   order: Record<string, unknown>
   events: OrderEvent[]
@@ -163,13 +173,15 @@ function ServicesOrderWorkspace({
   extras: ServicesOrderExtras
   v3: boolean
   initialTab: string | undefined
+  messaging: OrderMessagingProp
 }) {
   const t = useTranslations('orders')
   const to = useTranslations('orders_v3')
   const posthog = useAnalytics()
-  // E8 — the tab lives in the URL (?tab=), so a link or a refresh opens the same section. Messaging (E8b) is off here.
-  const messagesOn = false
+  // E8 — the tab lives in the URL (?tab=), so a link or a refresh opens the same section.
+  const messagesOn = messaging.on
   const [tab, setTab] = useState<OrderTab>(parseOrderTab(initialTab, { messagesOn }))
+  const [unread, setUnread] = useState(messaging.unread)
   const viewedRef = useRef(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -570,7 +582,7 @@ function ServicesOrderWorkspace({
         {error && <p role="alert" className="pt-2 text-sm text-danger">{error}</p>}
 
         <div className="pt-3">
-          <SectionTabs idPrefix="order" label={to('sections_label')} value={tab} onChange={selectTab} tabs={tabs.map((v) => ({ value: v, label: to(`tab_${v}`) }))} />
+          <SectionTabs idPrefix="order" label={to('sections_label')} value={tab} onChange={selectTab} tabs={tabs.map((v) => ({ value: v, label: to(`tab_${v}`), ...(v === 'messages' && unread > 0 ? { badge: unread } : {}) }))} />
         </div>
 
         {panel('overview', (
@@ -632,6 +644,9 @@ function ServicesOrderWorkspace({
             )}
             {milestonesBlock}
           </>
+        ))}
+        {messagesOn && panel('messages', (
+          <OrderMessages orderId={id} active={tab === 'messages'} documents={documents.map((d) => ({ id: d.id, file_name: d.file_name }))} onUnreadChange={setUnread} />
         ))}
         {panel('documents', documentsBlock)}
         {panel('timeline', (

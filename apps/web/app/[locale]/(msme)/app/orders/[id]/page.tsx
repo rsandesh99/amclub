@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getGoodsOrderExtras } from '@/lib/mart/order-extras'
 import { ORDER_REPEATABLE_STATUSES } from '@amclub/shared'
 import { isOnFor } from '@/lib/experiments'
+import { isOrderMessagingOn, unreadOrderMessages } from '@/lib/orders/messages'
 import { getBuyAgainForOrder } from '@/lib/home/buy-again'
 import { BuyAgainLink } from '@/components/home-v3/BuyAgainShelf'
 import { getOrderLicenceFacts, isObligationsOn } from '@/lib/licences'
@@ -33,6 +34,11 @@ export default async function MsmeOrderPage({ params, searchParams }: { params: 
     repeatable ? getBuyAgainForOrder(user.id, id) : Promise.resolve(null),
   ])
 
+  // E8 (flag `orders`) and E8b order messaging (+ order_messaging_enabled); services orders only.
+  const v3 = isOnFor('orders', user.id)
+  const msgAdmin = v3 && detail.order['kind'] !== 'goods' ? await createAdminClient() : null
+  const messaging = msgAdmin && (await isOrderMessagingOn(msgAdmin, user.id)) ? { on: true, unread: await unreadOrderMessages(msgAdmin, id, user.id) } : { on: false, unread: 0 }
+
   return (
     <div className="min-h-screen bg-background">
       {again?.ok && (
@@ -46,7 +52,7 @@ export default async function MsmeOrderPage({ params, searchParams }: { params: 
           {licenceFacts.added ? <span className="t-footnote font-medium text-success">{tLic('added')}</span> : <AddFromOrderButton orderId={id} />}
         </div>
       )}
-      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} firstView={sp['first'] === '1'} extras={detail.extras} v3={isOnFor('orders', user.id)} initialTab={sp['tab']} />
+      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} firstView={sp['first'] === '1'} extras={detail.extras} v3={v3} initialTab={sp['tab']} messaging={messaging} />
     </div>
   )
 }
