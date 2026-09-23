@@ -18,6 +18,7 @@ import { NudgeButton } from '@/components/orders/NudgeButton'
 import { compareOrderingFor } from '@/lib/score/ordering'
 import { verifyChooseDecision } from '@/lib/agent/procurement'
 import { AGENT_ENABLED } from '@/lib/flags'
+import { getBenchmarkFor } from '@/lib/benchmarks/view'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
@@ -45,6 +46,8 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
   // S2.4 — the server's order (price, or reliability-adjusted above the threshold); never a score
   const ordering = await compareOrderingFor(admin, { kind: rfq.kind, quotes: rfq.quotes, results: compare, userId: user.id, rfqId: rfq.id })
   const pointersEnabled = await isComparePointersEnabledFor(admin, user.id)
+  // S3.2 — the fair price range (services; benchmark_display_enabled; null renders nothing)
+  const benchmark = await getBenchmarkFor(admin, { rfqId: rfq.id, kind: rfq.kind, categorySlug: rfq.categorySlug, viewerUserId: user.id, locale })
   const pointerOutcome = pointersEnabled
     ? await getComparePointers(admin, { rfqId: rfq.id, kind: rfq.kind, quotes: rfq.quotes, results: compare, userId: user.id, locale: toPointerLocale(locale), allowModel: false })
     : null
@@ -134,7 +137,7 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
           {/* S1.3 — questions from providers, above the compare table; answers are visible to every matched provider. */}
           <ClarificationsCard rfqId={rfq.id} role="buyer" initial={rfq.clarifications} canWrite={active} closed={!active} />
 
-          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} payQuoteId={payQuoteId} />
+          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} payQuoteId={payQuoteId} benchmark={benchmark} />
         </>
       )}
     </div>
