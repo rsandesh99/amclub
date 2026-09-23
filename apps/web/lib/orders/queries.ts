@@ -1,8 +1,10 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
-import { disputeWindowEndsAt, type PayoutStatus } from '@amclub/shared'
+import { disputeWindowEndsAt, PAYOUT_STATUS, type OrderPayoutFacts, type PayoutStatus } from '@amclub/shared'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { resolveActor } from './actor'
+
+const PAYOUT_HELD = PAYOUT_STATUS.held
 
 /** One requirement field from the package's frozen `scope_snapshot.requirementsTemplate`. */
 export interface RequirementTemplateField {
@@ -28,6 +30,8 @@ export interface ServicesOrderExtras {
   refund: { amountPaise: number; status: string; createdAt: string } | null
   /** ADR-014 (H2) — a completed order's last moment to report a problem (ISO); null otherwise. */
   disputeWindowEndsAt: string | null
+  /** E8 FR-8.5 (N37) — the order's payout, for the PROVIDER's money line only (null for the buyer or before one exists). */
+  payout: OrderPayoutFacts | null
 }
 
 /** ADR-014 (H2) — the post-completion dispute deadline for a services order, or null. */
@@ -97,7 +101,7 @@ export async function getOrderDetail(userId: string, orderId: string): Promise<O
   const isProvider = actor.providerId && order.provider_id === actor.providerId
   if (!isMsme && !isProvider) return null
 
-  const [{ data: events }, { data: payment }, disputeEndsAt] = await Promise.all([
+  const [{ data: events }, { data: payment }, disputeEndsAt, { data: payoutRow }] = await Promise.all([
     admin
       .from('order_events')
       .select('id, event, payload, created_at, actor_id')
@@ -105,6 +109,9 @@ export async function getOrderDetail(userId: string, orderId: string): Promise<O
       .order('created_at', { ascending: true }),
     admin.from('payments').select('id').eq('order_id', orderId).maybeSingle(),
     orderDisputeWindowEndsAt(admin, order),
+    isProvider
+      ? admin.from('payouts').select('status, scheduled_for, paid_at').eq('order_id', orderId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
   const { data: refund } = payment
     ? await admin.from('refunds').select('amount_paise, status, created_at').eq('payment_id', payment.id).maybeSingle()
@@ -114,6 +121,15 @@ export async function getOrderDetail(userId: string, orderId: string): Promise<O
   const latest = (name: string) => [...all].reverse().find((e) => e.event === name)
   const template = readTemplate(order.scope_snapshot)
   const revisionEv = latest('request_revision')
+  const heldReasons = (latest('payout_held')?.payload as { reasons?: unknown } | null)?.reasons
+  const payout: OrderPayoutFacts | null = payoutRow
+    ? {
+        status: payoutRow.status as PayoutStatus,
+        scheduledFor: (payoutRow.scheduled_for as string | null) ?? null,
+        paidAt: (payoutRow.paid_at as string | null) ?? null,
+        holdReasons: payoutRow.status === PAYOUT_HELD && Array.isArray(heldReasons) ? heldReasons.filter((r): r is string => typeof r === 'string') : [],
+      }
+    : null
 
   return {
     order,
@@ -127,6 +143,7 @@ export async function getOrderDetail(userId: string, orderId: string): Promise<O
         ? { amountPaise: Number(refund.amount_paise), status: String(refund.status), createdAt: String(refund.created_at) }
         : null,
       disputeWindowEndsAt: disputeEndsAt,
+      payout,
     },
   }
 }
@@ -159,8 +176,6 @@ export interface ProviderPayout {
   /** Why a held payout is held (latest `payout_held` event's payload.reasons). Empty unless held. */
   holdReasons: string[]
 }
-
-const PAYOUT_HELD = 'held' satisfies PayoutStatus
 
 /** List the provider's payouts (newest first), joined to their order. */
 export async function listMyPayouts(userId: string): Promise<ProviderPayout[]> {

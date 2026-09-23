@@ -7,9 +7,10 @@ import { getGoodsOrderExtras } from '@/lib/mart/order-extras'
 import { ORDER_LICENCE_RECORDABLE_STATUSES } from '@amclub/shared'
 import { getOrderLicenceFacts, isObligationsOn } from '@/lib/licences'
 import { RecordFactsForm } from '@/components/licences-v3/LicenceForm'
+import { isOnFor } from '@/lib/experiments'
 
-export default async function PartnerOrderPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export default async function PartnerOrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
+  const [{ id }, sp] = await Promise.all([params, searchParams])
   const user = await getSessionUser()
   if (!user) redirect(`/login?next=/partner/orders/${id}`)
 
@@ -33,7 +34,7 @@ export default async function PartnerOrderPage({ params }: { params: Promise<{ i
           <RecordFactsForm orderId={id} initial={facts ? { licenceType: facts.licenceType, number: facts.number, issuedOn: facts.issuedOn, expiresOn: facts.expiresOn, authority: facts.authority } : null} />
         </div>
       )}
-      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} extras={detail.extras} />
+      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} extras={detail.extras} v3={isOnFor('orders', user.id)} initialTab={sp['tab']} />
     </div>
   )
 }

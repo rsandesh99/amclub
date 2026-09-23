@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, type ReactNode } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
-import { orderIsActive, REFUND_POLICY_BPS, type OrderStatus } from '@amclub/shared'
+import { nextAction, nextStepTarget, orderIsActive, parseOrderTab, providerMoneyLine, REFUND_POLICY_BPS, visibleOrderTabs, type OrderStatus, type OrderTab } from '@amclub/shared'
 import { NudgeButton } from '@/components/orders/NudgeButton'
 import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
@@ -18,6 +18,11 @@ import { actionsFor, CONFIRM_ACTIONS, REASON_ACTIONS, REASON_MIN, REASON_MAX, ty
 import { GoodsOrderWorkspace } from '@/components/mart/GoodsOrderWorkspace'
 import type { GoodsOrderExtras } from '@/lib/mart/order-extras'
 import type { ServicesOrderExtras } from '@/lib/orders/queries'
+import { useAnalytics } from '@/components/providers/posthog'
+import { NextStepBar, type BarAction } from '@/components/orders-v3/NextStepBar'
+import { SectionTabs } from '@/components/orders-v3/SectionTabs'
+import { GoldThread } from '@/components/orders-v3/GoldThread'
+import { BuyerMoneyLine, ProviderMoneyLineView } from '@/components/orders-v3/MoneyLine'
 
 interface OrderEvent {
   id: string
@@ -89,7 +94,7 @@ const PROVIDER_ONLY_EVENTS = new Set(['payout_held', 'payout_scheduled', 'payout
 // Events that represent EXTERNAL (government/portal) time, not provider time.
 const EXTERNAL_EVENTS = new Set(['external_wait', 'external_resume'])
 
-const EMPTY_EXTRAS: ServicesOrderExtras = { requirementsTemplate: [], requirements: null, lastRevisionNote: null, refund: null, disputeWindowEndsAt: null }
+const EMPTY_EXTRAS: ServicesOrderExtras = { requirementsTemplate: [], requirements: null, lastRevisionNote: null, refund: null, disputeWindowEndsAt: null, payout: null }
 
 function istDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
@@ -103,6 +108,8 @@ export function OrderWorkspace({
   goods,
   firstView,
   extras,
+  v3,
+  initialTab,
 }: {
   order: Record<string, unknown>
   events: OrderEvent[]
@@ -113,6 +120,10 @@ export function OrderWorkspace({
   firstView?: boolean | undefined
   /** Services only — requirements, revision note, refund (server-derived). */
   extras?: ServicesOrderExtras | undefined
+  /** PRD Experience v3 E8 (flag `orders`) — NextStepBar + section tabs. Services only. */
+  v3?: boolean | undefined
+  /** `?tab=` from the URL (E8). */
+  initialTab?: string | undefined
 }) {
   // AMC Mart: goods orders render their own workspace (kind-parameterised
   // shared page, FRONTEND.md §8). Services orders (kind='service') never
@@ -128,6 +139,8 @@ export function OrderWorkspace({
       documents={documents}
       firstView={firstView ?? false}
       extras={extras ?? EMPTY_EXTRAS}
+      v3={v3 ?? false}
+      initialTab={initialTab}
     />
   )
 }
@@ -139,6 +152,8 @@ function ServicesOrderWorkspace({
   documents,
   firstView,
   extras,
+  v3,
+  initialTab,
 }: {
   order: Record<string, unknown>
   events: OrderEvent[]
@@ -146,8 +161,16 @@ function ServicesOrderWorkspace({
   documents: DocItem[]
   firstView: boolean
   extras: ServicesOrderExtras
+  v3: boolean
+  initialTab: string | undefined
 }) {
   const t = useTranslations('orders')
+  const to = useTranslations('orders_v3')
+  const posthog = useAnalytics()
+  // E8 — the tab lives in the URL (?tab=), so a link or a refresh opens the same section. Messaging (E8b) is off here.
+  const messagesOn = false
+  const [tab, setTab] = useState<OrderTab>(parseOrderTab(initialTab, { messagesOn }))
+  const viewedRef = useRef(false)
   const router = useRouter()
   const { toast } = useToast()
   const [busy, setBusy] = useState<string | null>(null)
@@ -160,6 +183,11 @@ function ServicesOrderWorkspace({
 
   const id = order['id'] as string
   const status = order['status'] as string
+  useEffect(() => {
+    if (!v3 || viewedRef.current) return
+    viewedRef.current = true
+    posthog.capture('order_viewed', { status, role: viewerRole, device: 'web' })
+  }, [v3, status, viewerRole, posthog])
   const totalPaise = Number(order['total_paise'])
   const earningPaise = Number(order['provider_earning_paise'])
   const revisionUsed = Number(order['revision_used'] ?? 0)
@@ -324,8 +352,8 @@ function ServicesOrderWorkspace({
     }
   }
 
-  return (
-    <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
+  // ── Blocks shared by the v2 page and the v3 tabs (E8); v2 renders them in its original order. ──
+  const welcomeBlock = (<>
       {/* First view after payment (?first=1) — the "money is safe" moment. */}
       {showWelcome && (
         <div role="status" className="flex items-start justify-between gap-3 rounded-card border border-success/30 bg-success/10 p-4 text-sm">
@@ -342,6 +370,287 @@ function ServicesOrderWorkspace({
           </button>
         </div>
       )}
+    </>)
+  const refundBlock = (<>
+      {/* Refund (buyer) — server paise from the refunds row. */}
+      {viewerRole === 'msme' && extras.refund && (
+        <div className="rounded-card border border-border bg-surface p-5 shadow-card text-sm">
+          <h2 className="text-sm font-semibold">{t('refund_title')}</h2>
+          <p className="mt-2">
+            <span className="font-medium">{formatINR(extras.refund.amountPaise)}</span>
+            {' · '}
+            {t.has(`refund_status_${extras.refund.status}` as 'refund_status_pending')
+              ? t(`refund_status_${extras.refund.status}` as 'refund_status_pending')
+              : t('refund_status_pending')}
+          </p>
+          <p className="mt-1 text-xs text-foreground-secondary">{t('refund_note')}</p>
+        </div>
+      )}
+    </>)
+  const revisionNoteBlock = (<>
+      {/* Latest revision note (both parties see what was asked). */}
+      {extras.lastRevisionNote && revisionUsed > 0 && (
+        <div className="rounded-card border border-warning/30 bg-warning/5 p-5 text-sm">
+          <h2 className="text-sm font-semibold">{t('revision_note_title')}</h2>
+          <p className="mt-1 whitespace-pre-wrap">{extras.lastRevisionNote}</p>
+        </div>
+      )}
+    </>)
+  const requirementsCardBlock = (<>
+      {/* Submitted requirements — both parties (the "Next:" line tells the provider when they're still awaited). */}
+      {extras.requirements && <RequirementsCard requirements={extras.requirements} />}
+    </>)
+  const disputeBlock = (<>
+      {/* S1.7 — party statements while the dispute is open (spine; one per party; editable until a triage exists) */}
+      {isDisputed && <DisputeStatementCard orderId={id} documents={documents.map((d) => ({ id: d.id, file_name: d.file_name }))} />}
+    </>)
+  const milestonesBlock = (<>
+      {/* Services evidence engine (S0.3): staged milestones with photo proof. */}
+      <MilestonesCard orderId={id} role={viewerRole} orderStatus={status} />
+    </>)
+  const reviewBlock = (<>
+      {/* Reviews — prompt/form for the buyer on completion; reply box for the provider */}
+      {(status === ('completed' satisfies OrderStatus) || status === ('reviewed' satisfies OrderStatus)) && <ReviewSection orderId={id} />}
+    </>)
+  const documentsBlock = (<>
+      {/* Documents */}
+      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
+        <h2 className="mb-3 text-sm font-semibold">{t('documents')}</h2>
+        {documents.length === 0 ? (
+          <p className="text-sm text-foreground-secondary">{t('no_documents')}</p>
+        ) : (
+          <ul className="space-y-2">
+            {documents.map((d) => (
+              <li key={d.id} className="flex items-center justify-between text-sm">
+                <span>📎 {d.file_name} <span className="text-xs text-foreground-secondary">({t.has(`doc_kind_${d.kind}` as 'doc_kind_other') ? t(`doc_kind_${d.kind}` as 'doc_kind_other') : t('doc_kind_other')})</span></span>
+                {d.signedUrl && <a href={d.signedUrl} target="_blank" rel="noopener noreferrer" className="text-trust underline">{t('download')}</a>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>)
+  const timelineBlock = (<>
+      {/* Timeline */}
+      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
+        <h2 className="mb-3 text-sm font-semibold">{t('timeline')}</h2>
+        <ol className="space-y-3">
+          {visibleEvents.map((e) => {
+            const isExternal = EXTERNAL_EVENTS.has(e.event)
+            const key = EVENT_LABEL[e.event]
+            return (
+              <li key={e.id} className="flex gap-3 text-sm">
+                <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${isExternal ? 'bg-warning' : 'bg-primary'}`} />
+                <div>
+                  <p className="font-medium">
+                    {key ? t(key as 'status_placed') : t('event_other')}
+                    {isExternal && (
+                      <span className="ml-2 rounded-chip bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
+                        {t('external_time_tag')}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-foreground-secondary">
+                    {new Date(e.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+                  </p>
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+      </div>
+    </>)
+  const confirmBlock = (<>
+      {/* D2 — confirm + consequence for every irreversible / money-moving action. */}
+      {sheet && pending && (
+        <ConfirmSheet
+          open
+          title={sheet.title}
+          description={sheet.description}
+          confirmLabel={sheet.confirm}
+          cancelLabel={t('confirm_back')}
+          onConfirm={confirmPending}
+          onClose={() => { if (!busy) setPending(null) }}
+          busy={busy === pending}
+          error={sheetError}
+          variant={sheet.danger ? 'danger' : 'primary'}
+          confirmDisabled={REASON_ACTIONS.has(pending) && reason.trim().length < REASON_MIN}
+        >
+          {REASON_ACTIONS.has(pending) && (
+            <div>
+              <label htmlFor="order-action-reason" className="block text-sm font-medium">
+                {pending === 'raise_dispute' ? t('dispute_reason_label') : t('revision_reason_label')}
+              </label>
+              <textarea
+                id="order-action-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value.slice(0, REASON_MAX))}
+                rows={4}
+                className="mt-1 w-full rounded-button border border-border bg-background p-3 text-sm"
+              />
+              <p className="mt-1 text-xs text-foreground-secondary">{t('reason_hint', { min: REASON_MIN, max: REASON_MAX, n: reason.trim().length })}</p>
+            </div>
+          )}
+          {pending === 'deliver' && !hasDeliverable && (
+            <p className="rounded-button bg-warning/10 px-3 py-2 text-sm text-warning">{t('confirm_deliver_no_file')}</p>
+          )}
+        </ConfirmSheet>
+      )}
+    </>)
+
+  // ── E8 v3: NextStepBar + section tabs (flag `orders`). Same actions, same routes, same confirm sheets. ──
+  function renderV3() {
+    const role = viewerRole === 'msme' ? 'buyer' : 'provider'
+    const next = nextAction(status, role, {
+      createdAt: String(order['created_at'] ?? ''),
+      dueAt: typeof order['due_at'] === 'string' ? (order['due_at'] as string) : null,
+      autoAcceptAt,
+      externalWaitSince: typeof order['external_wait_since'] === 'string' ? (order['external_wait_since'] as string) : null,
+      kind: 'service',
+    })
+    const target = next && next.actor === 'self' ? nextStepTarget(next.action) : null
+    const tabs = visibleOrderTabs({ messagesOn })
+    const selectTab = (v: OrderTab) => {
+      setTab(v)
+      posthog.capture('order_tab_viewed', { tab: v, device: 'web' })
+      try {
+        const u = new URL(window.location.href)
+        if (v === 'overview') u.searchParams.delete('tab')
+        else u.searchParams.set('tab', v)
+        window.history.replaceState(null, '', u.toString())
+      } catch { /* history unavailable — the tab still switches */ }
+    }
+    const clicked = (action: string) => posthog.capture('order_next_action_clicked', { action, device: 'web' })
+
+    let primary: BarAction | null = null
+    if (next && target?.kind === 'action' && actions.includes(target.action)) {
+      const a = target.action
+      primary = { key: a, label: t(`action_${a}` as 'action_accept'), loading: busy === a, onSelect: () => { clicked(next.action); void doAction(a) } }
+    } else if (next && target?.kind === 'tab') {
+      const tabTarget = target.tab
+      primary = { key: `tab_${tabTarget}`, label: to(`go_${next.action}` as 'go_share_requirements'), onSelect: () => { clicked(next.action); selectTab(tabTarget) } }
+    }
+    const secondary: BarAction[] = buttonActions
+      .filter((a) => a !== primary?.key)
+      .map((a) => ({
+        key: a,
+        label: a === 'raise_dispute' ? to('report_problem') : t(`action_${a}` as 'action_accept'),
+        danger: a === 'cancel',
+        onSelect: () => { void doAction(a) },
+      }))
+    if (viewerRole === 'provider' && isInProgress) {
+      secondary.push({ key: 'external_wait', label: externalWait ? t('action_resume_external') : t('action_mark_external_wait'), onSelect: () => { void toggleExternalWait(!externalWait) } })
+    }
+
+    const moneyLine = viewerRole === 'provider'
+      ? <ProviderMoneyLineView line={providerMoneyLine({ status, totalPaise, payout: extras.payout })} />
+      : <BuyerMoneyLine totalPaise={totalPaise} active={orderIsActive(status)} />
+    const panel = (v: OrderTab, children: ReactNode) => (
+      <div role="tabpanel" id={`order-panel-${v}`} aria-labelledby={`order-tab-${v}`} hidden={tab !== v} className="space-y-4 pt-4" data-panel={v}>
+        {children}
+      </div>
+    )
+    const deliverables = documents.filter((d) => d.kind === 'deliverable')
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6" data-testid="order-v3">
+        {welcomeBlock}
+        <div className="pb-3 pt-2">
+          <p className="text-xs text-foreground-secondary">{String(order['order_number'])}</p>
+          <h1 className="font-display text-xl font-bold">{String(order['title'])}</h1>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <Badge variant={statusVariant}>{statusLabel}</Badge>
+            {typeof order['due_at'] === 'string' && orderIsActive(status) && (
+              <span className="t-footnote text-foreground-secondary">{to('due_on', { when: istDateTime(order['due_at'] as string) })}</span>
+            )}
+          </div>
+        </div>
+
+        <NextStepBar next={next} primary={primary} secondary={secondary} />
+        {error && <p role="alert" className="pt-2 text-sm text-danger">{error}</p>}
+
+        <div className="pt-3">
+          <SectionTabs idPrefix="order" label={to('sections_label')} value={tab} onChange={selectTab} tabs={tabs.map((v) => ({ value: v, label: to(`tab_${v}`) }))} />
+        </div>
+
+        {panel('overview', (
+          <>
+            <div className="space-y-3 rounded-card bg-surface p-5 shadow-card" data-testid="order-overview">
+              {moneyLine}
+              {externalWait && <p className="rounded-button bg-warning/10 px-3 py-2 text-xs text-warning">{t('external_wait_banner')}</p>}
+              {isDelivered && autoAcceptAt && (
+                <p className="text-sm text-foreground-secondary">
+                  {viewerRole === 'msme' ? t('auto_accept_buyer', { when: istDateTime(autoAcceptAt) }) : t('auto_accept_provider', { when: istDateTime(autoAcceptAt) })}
+                </p>
+              )}
+              <dl className="grid grid-cols-2 gap-2 border-t border-border pt-3 text-sm">
+                <div><dt className="text-foreground-secondary">{t('total')}</dt><dd className="font-medium tabular-nums">{formatINR(totalPaise)}</dd></div>
+                {viewerRole === 'provider' && <div><dt className="text-foreground-secondary">{t('you_earn')}</dt><dd className="font-medium tabular-nums">{formatINR(earningPaise)}</dd></div>}
+                {revisionMax != null && <div><dt className="text-foreground-secondary">{t('revisions')}</dt><dd className="font-medium">{t('revisions_used', { used: revisionUsed, max: revisionMax })}</dd></div>}
+              </dl>
+              {disputeDeadline && <p className="text-xs text-foreground-secondary" data-testid="order-dispute-deadline">{t('dispute_window_until', { date: disputeDeadline })}</p>}
+              {orderIsActive(status) && <div><NudgeButton subjectKind="order" subjectId={id} /></div>}
+            </div>
+            {refundBlock}
+            {revisionNoteBlock}
+            {disputeBlock}
+            {reviewBlock}
+          </>
+        ))}
+        {panel('requirements', (
+          <>
+            {showRequirementsForm && (
+              <div className="rounded-card bg-surface p-5 shadow-card"><RequirementsForm orderId={id} template={extras.requirementsTemplate} /></div>
+            )}
+            {requirementsCardBlock}
+            {!showRequirementsForm && !extras.requirements && <p className="text-sm text-foreground-secondary">{to('requirements_none')}</p>}
+          </>
+        ))}
+        {panel('work', (
+          <>
+            {viewerRole === 'provider' && isInProgress && (
+              <div className="space-y-3 rounded-card bg-surface p-5 shadow-card">
+                <input ref={fileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadDoc('deliverable', f) }} />
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => fileRef.current?.click()} loading={busy === 'upload'}>{t('attach_deliverable')}</Button>
+                  {actions.includes('deliver') && <Button onClick={() => { void doAction('deliver') }} loading={busy === 'deliver'}>{t('action_deliver')}</Button>}
+                </div>
+              </div>
+            )}
+            {deliverables.length > 0 && (
+              <div className="rounded-card bg-surface p-5 shadow-card">
+                <h2 className="mb-2 text-sm font-semibold">{to('deliverables')}</h2>
+                <ul className="space-y-2">
+                  {deliverables.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between text-sm">
+                      <span>📎 {d.file_name}</span>
+                      {d.signedUrl && <a href={d.signedUrl} target="_blank" rel="noopener noreferrer" className="text-trust underline">{t('download')}</a>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {milestonesBlock}
+          </>
+        ))}
+        {panel('documents', documentsBlock)}
+        {panel('timeline', (
+          <>
+            <div className="rounded-card bg-surface p-5 shadow-card"><GoldThread status={status} eventNames={events.map((e) => e.event)} /></div>
+            {timelineBlock}
+          </>
+        ))}
+
+        {confirmBlock}
+      </div>
+    )
+  }
+
+  if (v3) return renderV3()
+
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
+      {welcomeBlock}
 
       {/* Header */}
       <div className="rounded-card border border-border bg-surface p-5 shadow-card">
@@ -382,28 +691,9 @@ function ServicesOrderWorkspace({
         </dl>
       </div>
 
-      {/* Refund (buyer) — server paise from the refunds row. */}
-      {viewerRole === 'msme' && extras.refund && (
-        <div className="rounded-card border border-border bg-surface p-5 shadow-card text-sm">
-          <h2 className="text-sm font-semibold">{t('refund_title')}</h2>
-          <p className="mt-2">
-            <span className="font-medium">{formatINR(extras.refund.amountPaise)}</span>
-            {' · '}
-            {t.has(`refund_status_${extras.refund.status}` as 'refund_status_pending')
-              ? t(`refund_status_${extras.refund.status}` as 'refund_status_pending')
-              : t('refund_status_pending')}
-          </p>
-          <p className="mt-1 text-xs text-foreground-secondary">{t('refund_note')}</p>
-        </div>
-      )}
+      {refundBlock}
 
-      {/* Latest revision note (both parties see what was asked). */}
-      {extras.lastRevisionNote && revisionUsed > 0 && (
-        <div className="rounded-card border border-warning/30 bg-warning/5 p-5 text-sm">
-          <h2 className="text-sm font-semibold">{t('revision_note_title')}</h2>
-          <p className="mt-1 whitespace-pre-wrap">{extras.lastRevisionNote}</p>
-        </div>
-      )}
+      {revisionNoteBlock}
 
       {/* Actions */}
       {(actions.length > 0 || (viewerRole === 'provider' && isInProgress)) && (
@@ -450,99 +740,19 @@ function ServicesOrderWorkspace({
         </div>
       )}
 
-      {/* Submitted requirements — both parties (the "Next:" line tells the provider when they're still awaited). */}
-      {extras.requirements && <RequirementsCard requirements={extras.requirements} />}
+      {requirementsCardBlock}
 
-      {/* S1.7 — party statements while the dispute is open (spine; one per party; editable until a triage exists) */}
-      {isDisputed && <DisputeStatementCard orderId={id} documents={documents.map((d) => ({ id: d.id, file_name: d.file_name }))} />}
+      {disputeBlock}
 
-      {/* Services evidence engine (S0.3): staged milestones with photo proof. */}
-      <MilestonesCard orderId={id} role={viewerRole} orderStatus={status} />
+      {milestonesBlock}
 
-      {/* Reviews — prompt/form for the buyer on completion; reply box for the provider */}
-      {(status === ('completed' satisfies OrderStatus) || status === ('reviewed' satisfies OrderStatus)) && <ReviewSection orderId={id} />}
+      {reviewBlock}
 
-      {/* Documents */}
-      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-        <h2 className="mb-3 text-sm font-semibold">{t('documents')}</h2>
-        {documents.length === 0 ? (
-          <p className="text-sm text-foreground-secondary">{t('no_documents')}</p>
-        ) : (
-          <ul className="space-y-2">
-            {documents.map((d) => (
-              <li key={d.id} className="flex items-center justify-between text-sm">
-                <span>📎 {d.file_name} <span className="text-xs text-foreground-secondary">({t.has(`doc_kind_${d.kind}` as 'doc_kind_other') ? t(`doc_kind_${d.kind}` as 'doc_kind_other') : t('doc_kind_other')})</span></span>
-                {d.signedUrl && <a href={d.signedUrl} target="_blank" rel="noopener noreferrer" className="text-trust underline">{t('download')}</a>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {documentsBlock}
 
-      {/* Timeline */}
-      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-        <h2 className="mb-3 text-sm font-semibold">{t('timeline')}</h2>
-        <ol className="space-y-3">
-          {visibleEvents.map((e) => {
-            const isExternal = EXTERNAL_EVENTS.has(e.event)
-            const key = EVENT_LABEL[e.event]
-            return (
-              <li key={e.id} className="flex gap-3 text-sm">
-                <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${isExternal ? 'bg-warning' : 'bg-primary'}`} />
-                <div>
-                  <p className="font-medium">
-                    {key ? t(key as 'status_placed') : t('event_other')}
-                    {isExternal && (
-                      <span className="ml-2 rounded-chip bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
-                        {t('external_time_tag')}
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-foreground-secondary">
-                    {new Date(e.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
-                  </p>
-                </div>
-              </li>
-            )
-          })}
-        </ol>
-      </div>
+      {timelineBlock}
 
-      {/* D2 — confirm + consequence for every irreversible / money-moving action. */}
-      {sheet && pending && (
-        <ConfirmSheet
-          open
-          title={sheet.title}
-          description={sheet.description}
-          confirmLabel={sheet.confirm}
-          cancelLabel={t('confirm_back')}
-          onConfirm={confirmPending}
-          onClose={() => { if (!busy) setPending(null) }}
-          busy={busy === pending}
-          error={sheetError}
-          variant={sheet.danger ? 'danger' : 'primary'}
-          confirmDisabled={REASON_ACTIONS.has(pending) && reason.trim().length < REASON_MIN}
-        >
-          {REASON_ACTIONS.has(pending) && (
-            <div>
-              <label htmlFor="order-action-reason" className="block text-sm font-medium">
-                {pending === 'raise_dispute' ? t('dispute_reason_label') : t('revision_reason_label')}
-              </label>
-              <textarea
-                id="order-action-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value.slice(0, REASON_MAX))}
-                rows={4}
-                className="mt-1 w-full rounded-button border border-border bg-background p-3 text-sm"
-              />
-              <p className="mt-1 text-xs text-foreground-secondary">{t('reason_hint', { min: REASON_MIN, max: REASON_MAX, n: reason.trim().length })}</p>
-            </div>
-          )}
-          {pending === 'deliver' && !hasDeliverable && (
-            <p className="rounded-button bg-warning/10 px-3 py-2 text-sm text-warning">{t('confirm_deliver_no_file')}</p>
-          )}
-        </ConfirmSheet>
-      )}
+      {confirmBlock}
     </div>
   )
 }

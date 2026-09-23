@@ -1480,6 +1480,13 @@ Compare quotes · GST returns FY 25-26                 Shortlisted only ☐     
 
 **RICE:** R 0.6 · I 2 · C 0.7 · E 4 → **0.21**.
 
+**As built (E8a: next step, tabs, money line; messaging is E8b).**
+- **Shared `order-workspace-v3.ts`.** `ORDER_TABS` / `parseOrderTab` (messages only while messaging is on), `nextStepTarget` (every self step maps to a workspace action or the tab that holds it; waits have no button), `goldThread` (the furthest step from status and events, plus the off-path branch), `providerMoneyLine` (N37). Typed maps over `ORDER_STATUSES` / `PAYOUT_STATUSES` (rule 8); tests cover every status.
+- **`OrderWorkspace` v3** (flag `orders`, services orders): title + status + due date, the sticky `NextStepBar` (the shared `nextAction` label, deadline and consequence; the primary action only when `actionsFor` offers it; revision, "Report a problem", cancel and the government-wait toggle in the overflow), `SectionTabs` (Overview · Requirements · Work · Documents · Timeline; `?tab=` in the URL; every panel stays in the page, hidden). Overview: the money line, auto-accept, totals, revisions, the dispute-window deadline (ADR-014 §6), remind, refund, the revision note, dispute statements, review. Work: upload + deliver, deliverables, milestones. Timeline: the Gold Thread + the events. The v2 page renders the same blocks in its original order.
+- **Money line.** Provider: "Payment secured ✓ ₹X held by AMClub" while active; then the payout row speaks (scheduled for, on its way, paid, on hold with the existing hold reasons, delayed). Buyer: "₹X paid · held by AMClub until you accept". Server paise only; `getOrderDetail` reads the payout for the provider only.
+- **Not in E8a.** Mobile order screens (E14 parity), order messaging (E8b).
+- **Acceptance.** `verify-experience` e8: the bar per role and status, five tabs with every panel present, `?tab=`, the Gold Thread, secured / scheduled / held lines, the buyer never sees the provider line. CI runs with `EXP_V3_ORDERS=on`.
+
 ---
 
 ### E9: Homes and retention
