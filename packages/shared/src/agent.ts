@@ -47,6 +47,7 @@ export const AGENT_TASK_CLASSES = [
   'clarification_answer', // S3.1: draft a buyer's answer to a provider question from the buyer's own earlier words
   'provider_message',  // S3.1: draft the buyer's scope / timing / terms question to one provider (clamped: no price, no counter-offer)
   'benchmark_explain', // fair-price range explanation (S3.2)
+  'content_translate', // E14 N32b: a provider's own catalogue copy → hi / te / ta (the provider approves each language)
   'translation',       // UI-adjacent short translation
   'embedding',         // retrieval vectors
 ] as const
@@ -79,6 +80,7 @@ export const TASK_CLASS_TIER: Record<AgentTaskClass, AgentTier> = {
   clarification_answer: 'routine',
   provider_message: 'routine',
   benchmark_explain: 'frontier',
+  content_translate: 'routine',
   translation: 'routine',
   embedding: 'routine',
 }
@@ -122,6 +124,7 @@ export const TASK_CLASS_RESIDENCY: Record<AgentTaskClass, AgentResidency> = {
   clarification_answer: 'in', // a provider's question + the buyer's earlier words
   provider_message: 'in',     // the buyer's question for a provider
   benchmark_explain: 'any',   // aggregate, anonymised price ranges only
+  content_translate: 'in',    // a provider's own words (package copy, About)
   translation: 'any',         // platform / public catalogue copy only (e.g. the Mart pool pitch); translating a user's words must use an 'in' class
   embedding: 'in',            // vectors may be computed over user content
 }

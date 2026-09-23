@@ -373,6 +373,12 @@ const MANIFEST: Entry[] = [
     note: 'E14 / FR-14.2: te + ta slots merged into categories.name_i18n / description_i18n (data only)',
   },
   {
+    file: '0061_content_translations.sql',
+    tables: ['content_translations'],
+    triggers: [['content_translations', 'content_translations_set_updated_at']],
+    note: "E14 / N32b (dark): content_translations (drafts; provider reads own, service role writes); packages.i18n_sources, provider_profiles.about_i18n + i18n_sources; ai_decisions CHECK + 'content_translation'",
+  },
+  {
     file: '0064_server_written_money.sql',
     tables: [],
     note: 'ADR 018 security hotfix: EXECUTE on materialize_order / claim_quote_slot / release_quote_slot / increment_coupon_usage for service_role only; no client INSERT/UPDATE/DELETE on orders, checkout_sessions, payments, payouts, refunds, invoices, disputes, order_documents, rfqs, quotes, rfq_matches, coupons, coupon_redemptions, provider_bank_accounts, reviews',

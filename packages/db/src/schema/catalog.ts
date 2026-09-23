@@ -82,6 +82,8 @@ export const packages = pgTable('packages', {
   govtDependentOverride: boolean('govt_dependent_override'),
   // Experience v3 E2 (0051): the level-2 service (shared SPECIALIZATIONS slug).
   serviceSlug: text('service_slug'),
+  // E14 N32b (0061): which i18n slots are approved machine translations ({ title: { te: 'machine_approved' } }).
+  i18nSources: jsonb('i18n_sources'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

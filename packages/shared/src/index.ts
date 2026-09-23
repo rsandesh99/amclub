@@ -89,6 +89,7 @@ export * from './profile'
 export * from './locales'
 export * from './i18n-text'
 export * from './voice-languages'
+export * from './content-translation'
 
 // Agentic assistant contract: task classes → tiers, personas, tool allowlists,
 // confirm gates, event kinds (H0 groundwork, DESIGN.md §8.6 / ADR-008)

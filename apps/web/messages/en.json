@@ -403,7 +403,10 @@
     "repeat_buyer": "Repeat buyer",
     "price_equation": "{price} + {pct} % GST = {total}",
     "itc_claim": " · claim {amount} as ITC",
-    "new": "New"
+    "new": "New",
+    "translated": "Translated",
+    "view_original": "View original",
+    "view_translation": "View translation"
   },
   "landing": {
     "hero_title": "Every service your business needs. Verified. Transparent.",
@@ -3714,5 +3717,31 @@
       "title": "We sent your request",
       "body": "We sent your request to {matched} providers; you can still answer questions from them."
     }
+  },
+  "content_translate": {
+    "title": "Translate your listings",
+    "subtitle": "Show buyers your packages and About in Hindi, Telugu and Tamil. We draft; you check, edit and approve each one — nothing changes until you approve.",
+    "language": "Language",
+    "rules": "Numbers stay exactly as in your English. Phone numbers, links and payment details are never translated.",
+    "empty": "Add a package or an About first — then you can translate them here.",
+    "profile_about": "Your About",
+    "draft": "Draft in {lang}",
+    "drafting": "Drafting…",
+    "field_title": "Title",
+    "field_ideal_for": "Choose this if…",
+    "field_about": "About",
+    "translated_badge": "Translated",
+    "none_yet": "Not translated yet — buyers see your English.",
+    "draft_label": "Draft translation of {field}",
+    "draft_note": "A draft — buyers don't see it until you approve.",
+    "approve": "Approve",
+    "discard": "Discard",
+    "skipped": "{n, plural, one {# field could not be drafted} other {# fields could not be drafted}} (numbers, links or contact details). Edit the English, then try again.",
+    "err_rate": "Too many drafts in a minute — try again shortly.",
+    "err_draft": "Couldn't draft this now. Try again.",
+    "err_rejected": "This text can't be approved: keep every number as in the English, and leave out phone numbers, links and payment details.",
+    "err_source_changed": "Your English changed since this draft — draft again.",
+    "err_decide": "Couldn't save that. Try again.",
+    "open": "Translate your listings"
   }
 }

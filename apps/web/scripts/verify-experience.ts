@@ -1572,6 +1572,43 @@ async function e14b() {
   }
 }
 
+async function e14c() {
+  console.log('\nE14c — provider content translation (dark): a draft never renders; an approved slot is labelled')
+  const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const prov = await mkUser('e14cprov', ['provider'])
+  const slug = `${tag.replace(/_/g, '-')}-e14cprov`
+  const about = 'We file GST returns for 12 months.'
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E14c Prov', display_name: 'E14c Prov', slug, state: 'TS', status: 'active', languages: ['en'], about }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: cat!.id })
+  const pkgSlug = `${tag.replace(/_/g, '-')}-e14cpkg`
+  // An APPROVED te title (as the approve route writes it: the slot + its source) …
+  const { data: pk } = await admin.from('packages').insert({
+    provider_id: pp!.id, category_id: cat!.id, slug: pkgSlug, title_i18n: { en: 'E14c GST filing 12 months', te: 'E14c 12 నెలల GST ఫైలింగ్' }, i18n_sources: { title: { te: 'machine_approved' } },
+    scope_included: ['x'], deliverables: ['y'], price_paise: 1000_00, delivery_days: 5, status: 'active',
+  }).select('id').single()
+  created.packageIds.push(pk!.id)
+  // … and open DRAFTS for ta and for the About (never rendered).
+  await admin.from('content_translations').insert([
+    { provider_id: pp!.id, subject_kind: 'package', subject_id: pk!.id, field: 'title', lang: 'ta', source_text: 'E14c GST filing 12 months', draft_text: 'E14c DRAFT-TA 12' },
+    { provider_id: pp!.id, subject_kind: 'profile', subject_id: pp!.id, field: 'about', lang: 'te', source_text: about, draft_text: 'E14c DRAFT-ABOUT 12' },
+  ])
+  try {
+    const list = await api(prov.token, '/api/v1/partner/translations', undefined, 'GET')
+    const draft = await api(prov.token, '/api/v1/partner/translations/draft', { subjectKind: 'profile', lang: 'te' })
+    const approve = await api(prov.token, `/api/v1/partner/translations/${crypto.randomUUID()}/approve`, {})
+    check('FR-14.3: the translation surface is dark (AGENT_ENABLED + agents_enabled.content_translate + cohort) — 404', list.status === 404 && draft.status === 404 && approve.status === 404, `${list.status}/${draft.status}/${approve.status}`)
+    const te = visible(await (await fetch(`${BASE}/te/p/${slug}/${pkgSlug}`)).text())
+    check('FR-14.3: an approved machine translation renders in te, labelled "Translated · View original"', te.includes('E14c 12 నెలల GST ఫైలింగ్') && te.includes('data-translated="translation"'))
+    const ta = visible(await (await fetch(`${BASE}/ta/p/${slug}/${pkgSlug}`)).text())
+    check('FR-14.3: a draft never renders — ta shows the English title, unlabelled', ta.includes('E14c GST filing 12 months') && !ta.includes('DRAFT-TA') && !ta.includes('data-translated'))
+    const prof = visible(await (await fetch(`${BASE}/te/p/${slug}`)).text())
+    check('FR-14.3: the About draft never renders either', prof.includes(about) && !prof.includes('DRAFT-ABOUT'))
+  } finally {
+    await admin.from('content_translations').delete().eq('provider_id', pp!.id)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1595,6 +1632,7 @@ async function main() {
     await e13c()
     await e14()
     await e14b()
+    await e14c()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

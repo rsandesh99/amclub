@@ -1,9 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
-import { Plus, PackageOpen, Layers } from 'lucide-react'
+import { Plus, PackageOpen, Layers, Languages } from 'lucide-react'
 import { priceDisplay } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { isContentTranslateEnabledFor } from '@/lib/agent/content-translate'
 import { getSessionUser } from '@/lib/auth/session'
 import { Badge } from '@/components/ui/badge'
 import { PriceBlock } from '@/components/catalog/PriceBlock'
@@ -48,6 +49,9 @@ export default async function ListingsPage() {
     if (slug) catCounts.set(slug, (catCounts.get(slug) ?? 0) + 1)
   }
   const canOfferTiers = isOnFor('packages', user.id) && [...catCounts.values()].some((n) => n >= 2)
+  // E14 FR-14.3 (N32b, dark) — the translate page, only where the agent is on for this provider.
+  const canTranslate = list.length > 0 && (await isContentTranslateEnabledFor(await createAdminClient(), user.id))
+  const tc = canTranslate ? await getTranslations('content_translate') : null
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -75,6 +79,13 @@ export default async function ListingsPage() {
             <span className="block font-semibold text-foreground">{t('offer_tiers_title')}</span>
             <span className="block text-foreground-secondary">{t('offer_tiers_body')}</span>
           </span>
+        </Link>
+      )}
+
+      {tc && (
+        <Link href="/partner/translations" className="mb-6 flex items-center gap-3 rounded-card border border-border bg-surface p-4 text-sm hover:border-primary/40" data-testid="open-translations">
+          <Languages className="h-5 w-5 shrink-0 text-primary" />
+          <span className="font-semibold text-foreground">{tc('open')}</span>
         </Link>
       )}
 

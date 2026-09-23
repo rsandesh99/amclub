@@ -1049,6 +1049,14 @@ GRANT SELECT (
   median_response_minutes, capacity_paused, top_rated,
   created_at, updated_at, deleted_at
 ) ON provider_profiles TO anon, authenticated;
+-- E14 (0061): the About in hi / te / ta and which slots are approved machine translations — public like `about`.
+DO $e14$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'provider_profiles' AND column_name = 'about_i18n') THEN
+    GRANT SELECT (about_i18n, i18n_sources) ON provider_profiles TO anon, authenticated;
+  END IF;
+END
+$e14$;
 
 -- ═══ AMC Mart (0022) — mirrors migration 0022 §7 verbatim ═══════════════════
 -- Guarded: bootstrap applies migrations first, so these tables exist; on a

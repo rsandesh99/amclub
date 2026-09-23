@@ -8,6 +8,10 @@ import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
 import { getPackageDetail } from '@/lib/catalog/queries'
+import { packageI18nSources } from '@/lib/translations/content'
+import { createPublicClient } from '@/lib/supabase/server'
+import { TranslatedText } from '@/components/catalog/TranslatedText'
+import { isMachineTranslated } from '@amclub/shared'
 import { getPackageExtras } from '@/lib/catalog/package-groups'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatINR } from '@/lib/format'
@@ -65,6 +69,11 @@ export default async function PackageDetailPage({
   // price equation, refund + government lines. Off → the page as before.
   const v3 = isOnForEveryone('packages')
   const extras = v3 ? await getPackageExtras(pkg) : null
+  // E14 FR-14.3 — which slots are approved machine translations (a tolerant read; nothing when the columns are absent).
+  const trSources = locale === 'hi' || locale === 'te' || locale === 'ta'
+    ? await packageI18nSources(createPublicClient(), [pkg.id, ...(extras?.tiers?.tiers.map((o) => o.packageId) ?? [])])
+    : new Map()
+  const titleTranslated = isMachineTranslated(trSources.get(pkg.id), 'title', locale)
 
   const reqFields: RequirementField[] =
     (pkg.requirementsTemplate as { fields?: RequirementField[] } | null)?.fields ?? []
@@ -101,6 +110,7 @@ export default async function PackageDetailPage({
         tier: o.tier,
         title: pickI18n(o.titleI18n, locale),
         idealFor: o.idealForI18n ? pickI18n(o.idealForI18n, locale) : null,
+        idealForOriginal: o.idealForI18n && isMachineTranslated(trSources.get(o.packageId), 'ideal_for', locale) ? o.idealForI18n.en : null,
         compareValues: o.compareValues,
         deliveryDays: o.deliveryDays,
         revisionCount: o.revisionCount,
@@ -147,7 +157,9 @@ export default async function PackageDetailPage({
         {/* Main */}
         <div className="space-y-8 lg:col-span-2">
           <div>
-            <h1 className="font-display text-2xl font-bold leading-tight">{title}</h1>
+            {titleTranslated
+              ? <TranslatedText as="h1" className="font-display text-2xl font-bold leading-tight" text={title} original={pkg.titleI18n.en} lang={locale} />
+              : <h1 className="font-display text-2xl font-bold leading-tight">{title}</h1>}
             <Link
               href={`/p/${provider.slug}`}
               className="mt-3 inline-flex items-center gap-2 text-sm text-foreground-secondary hover:text-primary"

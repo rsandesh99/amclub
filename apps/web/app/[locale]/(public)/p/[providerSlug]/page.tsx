@@ -20,6 +20,10 @@ import { getProviderTrust } from '@/lib/trust/provider-trust'
 import { reviewExtras } from '@/lib/trust/reviews'
 import { ReviewHistogram } from '@/components/trust/ReviewHistogram'
 import { getProviderBySlug, getPackagesForProvider, getReviews } from '@/lib/catalog/queries'
+import { readProfileI18n } from '@/lib/translations/content'
+import { createPublicClient } from '@/lib/supabase/server'
+import { TranslatedText } from '@/components/catalog/TranslatedText'
+import { isMachineTranslated } from '@amclub/shared'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatResponseTime, formatINR } from '@/lib/format'
 import { INDIAN_STATES } from '@/lib/constants/india'
@@ -75,6 +79,11 @@ export default async function ProviderProfilePage({
     MART_ENABLED ? listPublicProducts({ sellerSlug: providerSlug, limit: 6 }) : Promise.resolve(null),
     MART_ENABLED ? getTranslations('mart') : Promise.resolve(null),
   ])
+
+  // E14 FR-14.3 — the About in the reader's language when the provider has one (approved machine translations are labelled).
+  const aboutI18n = provider.about && (locale === 'hi' || locale === 'te' || locale === 'ta') ? await readProfileI18n(createPublicClient(), provider.id) : null
+  const aboutLocal = (aboutI18n?.aboutI18n as Record<string, string | undefined> | null | undefined)?.[locale]?.trim() || null
+  const aboutMachine = !!aboutLocal && isMachineTranslated(aboutI18n?.sources, 'about', locale)
 
   const stateLabel = STATE_LABEL.get(provider.state) ?? provider.state
   const primaryCategory = provider.categories[0] ?? null
@@ -231,9 +240,13 @@ export default async function ProviderProfilePage({
       {provider.about && (
         <section id="about" className="mt-6 scroll-mt-24">
           <h2 className="font-display text-lg font-bold">{t('about')}</h2>
-          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground-secondary">
-            {provider.about}
-          </p>
+          {aboutMachine && aboutLocal
+            ? <div className="mt-2"><TranslatedText as="p" className="whitespace-pre-line text-sm leading-relaxed text-foreground-secondary" text={aboutLocal} original={provider.about} lang={locale} /></div>
+            : (
+              <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground-secondary" {...(aboutLocal ? { lang: locale } : {})}>
+                {aboutLocal ?? provider.about}
+              </p>
+            )}
         </section>
       )}
 

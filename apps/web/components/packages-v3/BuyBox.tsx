@@ -1,6 +1,6 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Clock, RefreshCw, Landmark, RotateCcw } from 'lucide-react'
 import { totalBucket } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
@@ -10,6 +10,7 @@ import { useAnalytics } from '@/components/providers/posthog'
 import { formatINR, formatINRExact } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTierState } from './TierContext'
+import { TranslatedText } from '@/components/catalog/TranslatedText'
 
 const buyHref = (packageId: string) => `/app/checkout/${packageId}`
 
@@ -76,6 +77,7 @@ export function BuyBox({ buyNote }: { buyNote: string }) {
   const tv = useTranslations('packages_v3')
   const analytics = useAnalytics()
   const { options, selected, mostChosen } = useTierState()
+  const locale = useLocale()
 
   return (
     <div className="sticky top-20 rounded-card border border-border bg-surface p-5 shadow-card" data-testid="buy-box">
@@ -100,7 +102,8 @@ export function BuyBox({ buyNote }: { buyNote: string }) {
       </dl>
       {selected.idealFor && (
         <p className="mt-3 text-sm" data-testid="ideal-for">
-          <span className="font-semibold">{tv('ideal_for_label')}</span> {selected.idealFor}
+          <span className="font-semibold">{tv('ideal_for_label')}</span>{' '}
+          {selected.idealForOriginal ? <TranslatedText key={selected.packageId} text={selected.idealFor} original={selected.idealForOriginal} lang={locale} /> : selected.idealFor}
         </p>
       )}
       <Link

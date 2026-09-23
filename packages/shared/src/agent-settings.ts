@@ -32,6 +32,7 @@ export const AGENT_NAMES = [
   'procurement',    // S3.1
   'benchmark',      // S3.2
   'review_summary', // Experience v3 E3 (FR-3.9) — cited summary of verified reviews; dark slot, built when the agent programme resumes
+  'content_translate', // Experience v3 E14 (FR-14.3, N32b) — provider content translation drafts; the provider approves each language
 ] as const
 export type AgentName = (typeof AGENT_NAMES)[number]
 

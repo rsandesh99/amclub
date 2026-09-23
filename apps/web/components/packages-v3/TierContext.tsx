@@ -15,6 +15,8 @@ export interface BuyOption {
   tier: PackageTier | null
   title: string
   idealFor: string | null
+  /** E14 — the English when `idealFor` is an approved machine translation (shows "Translated · View original"). */
+  idealForOriginal?: string | null
   compareValues: Record<string, CompareValue>
   deliveryDays: number
   revisionCount: number

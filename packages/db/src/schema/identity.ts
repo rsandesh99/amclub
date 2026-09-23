@@ -47,6 +47,9 @@ export const providerProfiles = pgTable('provider_profiles', {
   displayName: text('display_name').notNull(),
   slug: text('slug').unique().notNull(),
   about: text('about'),
+  // E14 N32b (0061): the About in hi / te / ta, and which i18n slots are approved machine translations.
+  aboutI18n: jsonb('about_i18n'),
+  i18nSources: jsonb('i18n_sources'),
   logoUrl: text('logo_url'),
   gstin: text('gstin'),
   pan: text('pan'),

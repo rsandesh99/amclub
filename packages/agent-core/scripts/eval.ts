@@ -68,6 +68,8 @@ import { driveMunshiDraft, munshiDriveProblems } from '../src/munshi/harness'
 import { munshiDraftSchema } from '../src/prompts/quote_draft/schema'
 import { approvalIntentSchema } from '../src/prompts/approval_intent/schema'
 import { threadReplyDraftSchema } from '../src/prompts/thread_reply/schema'
+import { contentTranslateSchema } from '../src/prompts/provider_content_translate/schema'
+import { buildContentTranslateParts, contentTranslationProblems, type ContentTranslateInput } from '../src/content-translate/parts'
 // S2.3 — Support agent
 import { toSupportLocale, type SupportIntent, type SupportIntentOutput, type SupportLocale, type SupportOrderView, type SupportRfqView, type SupportTicketSummary } from '@amclub/shared'
 import { buildSupportIntentParts, buildTicketSummaryParts } from '../src/support/parts'
@@ -994,6 +996,38 @@ function keysOf(v: unknown, out: string[] = []): string[] {
   return out
 }
 
+type ContentTranslateCase = { id: string; lang: 'hi' | 'te' | 'ta'; field: 'title' | 'ideal_for' | 'about'; source: string; stub: string; expect: 'pass' | 'reject'; adversarial?: boolean }
+
+/** E14 FR-14.3 — provider_content_translate@v1: stub plants each case's output (a 'reject' must be refused); live translates the source (every output must pass). */
+async function runContentTranslate(gateway: Gateway, live: boolean): Promise<SetResult> {
+  const cases = readJson<{ cases: ContentTranslateCase[] }>('../golden/content_translate.json').cases
+  const prompt = getPrompt('provider_content_translate', 'v1')
+  let agree = 0
+  let violations = 0
+  let advTotal = 0
+  let advPass = 0
+  for (const c of cases) {
+    const input: ContentTranslateInput = { subjectId: `ct-${c.id}`, field: c.field, lang: c.lang, source: c.source }
+    let problems: string[] = []
+    try {
+      const res = await gateway.chatJson({ taskClass: prompt.taskClass, prompt, schema: contentTranslateSchema, parts: buildContentTranslateParts(input), temperature: 0.2, stub: () => ({ text: c.stub }) })
+      problems = contentTranslationProblems(input, res.data, { stub: false })
+    } catch (e) {
+      problems = [(e as Error).message.split('\n')[0] ?? 'error']
+    }
+    const expectPass = live || c.expect === 'pass'
+    const ok = expectPass ? problems.length === 0 : problems.length > 0
+    if (live && problems.length) violations++
+    if (ok) agree++
+    if (c.adversarial) { advTotal++; if (ok) advPass++ }
+    console.log(`  ${ok ? '✓' : '·'} ${live ? 'live' : 'stub'}  ${c.id.padEnd(28)}${c.adversarial ? ' [adversarial]' : ''}${ok ? '' : `  expected ${expectPass ? 'pass' : 'reject'}: ${problems.join('; ') || 'passed'}`}`)
+  }
+  const total = cases.length
+  const pct = total ? Math.round((agree / total) * 100) : 0
+  console.log(`  agreement ${agree}/${total} (${pct} %); planted bad outputs refused ${advPass}/${advTotal}${live ? `; violations ${violations} (must be 0) — live threshold 90 %` : ''}`)
+  return { name: 'provider_content_translate@v1', pass: agree, fail: total - agree, ok: live ? violations === 0 && pct >= 90 : agree === total }
+}
+
 async function runInjection(gateway: Gateway, live: boolean): Promise<SetResult> {
   const file = readJson<{ cases: InjCase[] }>('../golden/injection.json')
   const categories = CATEGORY_LIST.map((c) => ({ slug: c.slug, description: c.description_i18n.en }))
@@ -1095,6 +1129,13 @@ async function runInjection(gateway: Gateway, live: boolean): Promise<SetResult>
       }
       // S3.2 — benchmark_explain has NO untrusted slot either: the case text never reaches it. The pair runs the prompt on a
       // neutral trusted row and applies every output check plus the row rule (only the row's numbers, no advice).
+      // E14 N32b — the provider's own copy in the translator's untrusted slot: the output must stay a clean translation
+      // (the contract drops contact / payment / links; no marker survives). Stub: a neutral translation in the case's script.
+      case 'provider_content_translate': {
+        const lang = c.locale === 'hi' || c.locale === 'ta' ? c.locale : 'te'
+        const neutral = { hi: 'GST फाइलिंग सेवा', te: 'GST ఫైలింగ్ సేవ', ta: 'GST தாக்கல் சேவை' }[lang]
+        return { parts: buildContentTranslateParts({ subjectId: id, field: 'about', lang, source: c.text }), schema: contentTranslateSchema, stub: () => ({ text: neutral }) }
+      }
       case 'benchmark_explain': {
         const input = benchmarkInputOf({ locale: c.locale, scope: 'state', state: 'TS', p: [1_800_000, 2_200_000, 2_600_000], days: [5, 7, 9], n: 34, providers: 11 })
         return {
@@ -1264,6 +1305,7 @@ async function main() {
     procurement_turn: runProcurementTurn,
     clarification_answer: runClarificationAnswer,
     provider_message: runProviderMessage,
+    provider_content_translate: runContentTranslate,
   }
   const names = set === 'all' ? Object.keys(SETS) : SETS[set] ? [set] : []
   if (names.length === 0) {
