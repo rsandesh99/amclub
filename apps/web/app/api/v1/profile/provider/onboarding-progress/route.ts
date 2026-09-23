@@ -1,7 +1,8 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { onboardingProgressSchema } from '@amclub/shared'
-import { getSessionUser } from '@/lib/auth/session'
+import { getRequestUser } from '@/lib/auth/request'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { isOnFor } from '@/lib/experiments'
 import { recordOnboardingProgress } from '@/lib/onboarding-v3'
 
@@ -15,8 +16,11 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  const user = await getSessionUser()
+  const user = await getRequestUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // E13 — Bearer is now accepted (the native wizard); a delegated agent token never is (S1.6: the agent never verifies or writes the profile).
+  const delegated = await requireNotDelegated('profile/provider/onboarding-progress')
+  if (delegated) return delegated
   if (!isOnFor('onboarding', user.id)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const parsed = onboardingProgressSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body', code: 'invalid_body' }, { status: 422 })

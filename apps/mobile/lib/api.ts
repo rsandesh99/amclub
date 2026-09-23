@@ -1084,3 +1084,48 @@ export async function uploadOrderDocument(orderId: string, kind: string, file: {
     return { ok: false, error: 'upload_failed' }
   }
 }
+
+// ── E13c — native provider onboarding (D-PRD3): the same routes and schemas as the web wizard (E10) ──
+
+async function postJson<T>(path: string, body: unknown): Promise<{ ok: boolean; status: number; data: T | null }> {
+  try {
+    const res = await fetch(`${API_URL}${path}`, { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    return { ok: res.ok, status: res.status, data: ((await res.json().catch(() => null)) as T | null) }
+  } catch {
+    return { ok: false, status: 0, data: null }
+  }
+}
+
+export function verifyGstinForOnboarding(gstin: string) {
+  return postJson<{ verified?: boolean; autofill?: import('@amclub/shared').GstinAutofill }>('/api/v1/profile/provider/kyc/verify-gstin', { gstin })
+}
+
+export function verifyBankForOnboarding(input: { accountNumber: string; ifsc: string; holderName: string }) {
+  return postJson<{ verified?: boolean; stub?: boolean; accountHolderName?: string }>('/api/v1/profile/provider/kyc/verify-bank', input)
+}
+
+export function saveOnboardingStep(step: string, categorySlug?: string) {
+  return postJson<unknown>('/api/v1/profile/provider/onboarding-progress', { step, ...(categorySlug ? { categorySlug } : {}) })
+}
+
+export function acceptLegalDocsMobile(docs: readonly string[], locale: string) {
+  return postJson<{ required?: string[] }>('/api/v1/legal/accept', { docs, surface: 'mobile', locale })
+}
+
+export function submitProviderProfile(body: Record<string, unknown>) {
+  return postJson<{ error?: unknown }>('/api/v1/profile/provider', body)
+}
+
+/** A credential document (camera photo or picked file) → the private credential bucket; returns its stored reference. */
+export async function uploadCredentialDocument(category: string, file: { uri: string; name: string; mimeType: string }): Promise<{ ok: boolean; url: string | null }> {
+  try {
+    const fd = new FormData()
+    fd.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob)
+    fd.append('category', category)
+    const res = await fetch(`${API_URL}/api/v1/profile/provider/credential-upload`, { method: 'POST', headers: await authHeaders(), body: fd })
+    const d = (await res.json().catch(() => ({}))) as { url?: string }
+    return { ok: res.ok && !!d.url, url: d.url ?? null }
+  } catch {
+    return { ok: false, url: null }
+  }
+}

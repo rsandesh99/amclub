@@ -61,6 +61,8 @@ describe('E13 FR-13.6 — notifications open the exact screen', () => {
     expect(mobileRouteFor('/partner/earnings', v3)).toBe('/partner-earnings')
     expect(mobileRouteFor('/app/invoices', v3)).toBe('/invoices')
     expect(mobileRouteFor('/partner/reviews', v3)).toBe('/partner-reviews')
+    expect(mobileRouteFor('/partner/onboarding?step=business', v3)).toBe('/partner-onboarding?step=business')
+    expect(mobileRouteFor('/partner/onboarding?step=business', { v3: false })).toBeNull()
   })
   it('without v3 the old mapping stands; admin / unknown / empty links stay put', () => {
     expect(mobileRouteFor('/partner/earnings', { v3: false })).toBe('/partner')

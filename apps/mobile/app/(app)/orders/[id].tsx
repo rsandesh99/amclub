@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, ActivityIndicator, TouchableOpacity, Alert, TextInput } from 'react-native'
+import { ScrollView, Text, View, ActivityIndicator, TouchableOpacity, Alert, TextInput, Modal } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useState, useEffect, useCallback } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -9,6 +9,7 @@ import { fetchOrder, transitionOrder, uploadOrderDocument, fetchOrderReview, sub
 import { formatINR } from '@/lib/format'
 import { confirmHaptic } from '@/lib/haptics'
 import * as DocumentPicker from 'expo-document-picker'
+import { GoldStamp } from '@/components/motion/GoldStamp'
 import { currentMobileRole } from '@/lib/role'
 import { track } from '@/lib/analytics'
 
@@ -91,6 +92,7 @@ export default function OrderScreen() {
   // E13 FR-13.2 — deliver with upload (the web's documents route, kind 'deliverable'); only while `mobile` is on.
   const [uploading, setUploading] = useState(false)
   const [uploaded, setUploaded] = useState<string | null>(null)
+  const [stamped, setStamped] = useState(false)
 
   const load = useCallback(async () => {
     const d = await fetchOrder(id)
@@ -109,6 +111,8 @@ export default function OrderScreen() {
     setBusy(false)
     if (!ok) { Alert.alert(t('common.error'), res.error === 'dispute_window_closed' ? t('orders.dispute_window_closed') : typeof res.error === 'string' ? res.error : t('order_actions.failed')); return }
     setCompose(null); setText('')
+    // E13 FR-13.5 — the buyer's confirm lands with the Gold Stamp (≤ 700 ms) while `mobile` is on.
+    if (action === 'accept_delivery' && currentMobileRole() !== null) setStamped(true)
     load()
   }
 
@@ -214,6 +218,13 @@ export default function OrderScreen() {
         <Text className="flex-1 text-lg font-bold text-foreground" numberOfLines={1}>{o.title}</Text>
       </View>
 
+      <Modal visible={stamped} transparent animationType="fade" onRequestClose={() => setStamped(false)}>
+        <View className="flex-1 items-center justify-center bg-black/30">
+          <View className="rounded-2xl bg-surface px-10 py-8">
+            <GoldStamp label={t('orders_v3.stamp_accepted')} onDone={() => setTimeout(() => setStamped(false), 600)} />
+          </View>
+        </View>
+      </Modal>
       <ScrollView contentContainerClassName="px-4 py-4 gap-4">
         <View className="rounded-xl border border-gray-200 bg-surface p-4">
           <Text className="text-xs text-foreground-secondary">{o.order_number}</Text>

@@ -1466,6 +1466,37 @@ async function e13() {
   }
 }
 
+async function e13c() {
+  console.log('\nE13c — native provider onboarding: the E10 routes answer the app\'s Bearer session')
+  const gstin = [...'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map((c) => `36AABCM${String(Date.now()).slice(-4)}F1Z${c}`).find((g) => isValidGstin(g))!
+  const app = await mkUser('e13capp')
+  let providerId: string | null = null
+  try {
+    const prog = await api(app.token, '/api/v1/profile/provider/onboarding-progress', { step: 'business', categorySlug: 'digital-marketing' })
+    const { data: row } = await admin.from('provider_onboarding_progress').select('step').eq('user_id', app.uid).maybeSingle()
+    check('FR-13.4: the phone saves its step on the server (the row the stall nudge reads)', prog.ok && row?.step === 'business', String(prog.status))
+    const v = await api(app.token, '/api/v1/profile/provider/kyc/verify-gstin', { gstin })
+    const a = ((await v.json().catch(() => ({}))) as { autofill?: GstinAutofill }).autofill
+    check('FR-13.4: GSTIN autofill over Bearer (the same stub registry as the web)', v.ok && !!a && autofilledFields(a).length === 4)
+    await api(app.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy', 'provider_addendum'], surface: 'mobile', locale: 'en' })
+    const b = await api(app.token, '/api/v1/profile/provider/kyc/verify-bank', { accountNumber: '123456789012', ifsc: 'HDFC0000001', holderName: a?.legalName ?? 'E13c' })
+    check('FR-13.4: bank verification over Bearer', b.ok, String(b.status))
+    const sub = await api(app.token, '/api/v1/profile/provider', { fullName: 'E13c Applicant', legalName: a?.legalName, displayName: a?.tradeName, gstin, categorySlugs: ['digital-marketing'], state: a?.state, city: 'Hyderabad', languages: ['en'], bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: a?.legalName, bankVerified: true })
+    providerId = ((await sub.json().catch(() => ({}))) as { providerId?: string }).providerId ?? null
+    if (providerId) created.providerIds.push(providerId)
+    const { data: pp } = await admin.from('provider_profiles').select('status, user_id').eq('id', providerId ?? '').maybeSingle()
+    const { data: after } = await admin.from('provider_onboarding_progress').select('submitted_at').eq('user_id', app.uid).single()
+    check('FR-13.4: the phone submits the same profile the web does (under review, draft stamped done)', sub.ok && pp?.user_id === app.uid && pp?.status === 'under_review' && !!after?.submitted_at, `status ${sub.status} ${pp?.status}`)
+    const anon = await fetch(`${BASE}/api/v1/profile/provider/onboarding-progress`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step: 'contact' }) })
+    const bogus = await api('not-a-jwt', '/api/v1/profile/provider/kyc/verify-gstin', { gstin })
+    check('FR-13.4: no session / a bad Bearer → 401', anon.status === 401 && bogus.status === 401, `${anon.status}/${bogus.status}`)
+  } finally {
+    if (providerId) await admin.from('provider_bank_accounts').delete().eq('provider_id', providerId)
+    await admin.from('gstin_verifications').delete().eq('user_id', app.uid)
+    await admin.from('bank_account_verifications').delete().eq('user_id', app.uid)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1486,6 +1517,7 @@ async function main() {
     await e7()
     await e8()
     await e13()
+    await e13c()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

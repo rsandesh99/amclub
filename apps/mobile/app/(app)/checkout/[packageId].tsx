@@ -7,6 +7,8 @@ import { useI18n } from '@/lib/i18n'
 import { fetchPackage, createCheckout, simulatePay } from '@/lib/api'
 import { pickI18n, formatINR, formatINRExact } from '@/lib/format'
 import { confirmHaptic } from '@/lib/haptics'
+import { currentMobileRole } from '@/lib/role'
+import { PaisaMoment } from '@/components/motion/PaisaMoment'
 
  
 export default function CheckoutScreen() {
@@ -15,6 +17,7 @@ export default function CheckoutScreen() {
   const [pkg, setPkg] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [paying, setPaying] = useState(false)
+  const [paid, setPaid] = useState<{ orderId: string; amountText: string } | null>(null)
 
   useEffect(() => {
     // Resolve the package: prefer provider/slug fetch, else nothing to show.
@@ -35,6 +38,11 @@ export default function CheckoutScreen() {
       if (data.simulated) {
         const sim = await simulatePay(data.checkoutSessionId)
         if (!sim.ok) throw new Error(sim.data.error ?? 'Payment failed')
+        // E13 FR-13.5 — the Paisa Moment (the server's amount, ≤ 900 ms, tap to skip) while `mobile` is on.
+        if (currentMobileRole() !== null && typeof data.amountPaise === 'number') {
+          setPaid({ orderId: sim.data.orderId as string, amountText: formatINRExact(data.amountPaise) })
+          return
+        }
         router.replace(`/orders/${sim.data.orderId}` as never)
         return
       }
@@ -83,6 +91,7 @@ export default function CheckoutScreen() {
           <Text className="text-base font-semibold text-white">{paying ? t('common.loading') : t('catalog.buy_now')}</Text>
         </TouchableOpacity>
       </ScrollView>
+      {paid && <PaisaMoment visible title={t('checkout.paid_title')} amountText={paid.amountText} onDone={() => router.replace(`/orders/${paid.orderId}` as never)} />}
     </SafeAreaView>
   )
 }

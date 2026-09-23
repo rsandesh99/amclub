@@ -10,7 +10,9 @@ import {
   type CredentialOption,
 } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSessionUser, upsertUserRow } from '@/lib/auth/session'
+import { upsertUserRow } from '@/lib/auth/session'
+import { getRequestUser } from '@/lib/auth/request'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { credentialDocumentRef } from '@/lib/auth/kyc-documents'
 import { encryptColumn, fingerprintColumn } from '@/lib/crypto'
 import { serverError } from '@/lib/api/errors'
@@ -66,10 +68,13 @@ function slugify(input: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getSessionUser()
+  const user = await getRequestUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // E13 — Bearer is now accepted (the native wizard); a delegated agent token never is (S1.6: the agent never verifies or writes the profile).
+  const delegated = await requireNotDelegated('profile/provider')
+  if (delegated) return delegated
 
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)

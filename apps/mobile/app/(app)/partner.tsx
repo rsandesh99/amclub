@@ -200,7 +200,7 @@ export default function PartnerScreen() {
               {t('partner_home.not_applied_title')}
             </Text>
             <TouchableOpacity
-              onPress={() => router.push('/(auth)/partner-signup')}
+              onPress={() => router.push((mobileV3 ? '/partner-onboarding' : '/(auth)/partner-signup') as never)}
               className="rounded-xl bg-primary px-6 py-3"
             >
               <Text className="text-sm font-semibold text-white">

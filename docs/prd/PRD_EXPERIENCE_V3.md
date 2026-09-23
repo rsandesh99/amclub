@@ -2196,6 +2196,13 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 - **Component tests.** `apps/mobile` now runs jest-expo + React Native Testing Library (`pnpm --filter @amclub/mobile test`, a CI step): Listings, Earnings, Invoices, Profile sheet, Reviews, Insights, Profile & availability. The Jest babel env drops the NativeWind JSX transform.
 - **E13c.** Native provider onboarding (D-PRD3), sheets with detents, and the native Gold Stamp / Paisa Moment.
 
+**As built (E13c: native provider onboarding, detent sheets, signature motion).**
+- **FR-13.4 (D-PRD3).** `/partner-onboarding` is the E10 wizard as native screens: "What you'll need", then contact → business (GSTIN autofill from the same stub/registry route; the legal name locks once filled; the state picker is a detent Sheet) → credentials & bank (camera via expo-image-picker or a file for each category that needs a credential; bank verified before submit) → review → done. It uses the shared E10 Zod rules (`isValidGstin`, `categoriesRequiringCredential`, `ONBOARDING_V3_STEPS`, `autofilledFields`) and the web's own routes: `onboarding-progress`, `kyc/verify-gstin`, `kyc/verify-bank`, `credential-upload`, `legal/accept` (surface `mobile`), `POST /profile/provider`. These five profile routes now accept the app's Bearer session through `getRequestUser()` (the `getSessionUser` shape; cookie behaviour unchanged) and refuse a delegated agent token (`requireNotDelegated`). Partner → Apply opens it while `mobile` is on; the E10 stall nudge (`/partner/onboarding?step=…`) deep-links to the same step (`mobileRouteFor`).
+- **The draft.** Like the web, the field draft stays on the device (SecureStore, 7-day TTL; the bank account number and the registry payload are never stored). What web and phone share is the server progress row the stall nudge reads, so a nudge resumes the step on either.
+- **FR-13.5.** `Sheet` (`components/ui/Sheet.tsx`): medium ≈ 50 % / large ≈ 90 % detents, drag the handle to expand, shrink or dismiss; native driver. `GoldStamp` (on the buyer's accept-delivery) and `PaisaMoment` (after the checkout payment lands; the amount is the server's paise formatted, never computed) run on the native driver inside shared budgets: `MOTION_BUDGET_MS` in `packages/shared/src/motion.ts` (700 ms / 900 ms), whose phase tables are unit-tested to sum within them. Reduced motion jumps to the final frame.
+- **Tests.** Component tests for the wizard (needs → contact → business with autofill), GoldStamp, PaisaMoment and Sheet; rig `e13c` drives progress → GSTIN → bank → submit with a Bearer token and checks the 401s.
+- **Events.** The E10 onboarding events, with `platform: 'android'`.
+
 ---
 
 ### E14: Language

@@ -1,7 +1,8 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSessionUser } from '@/lib/auth/session'
+import { getRequestUser } from '@/lib/auth/request'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { getKycClient } from '@/lib/kyc'
 import { createAdminClient } from '@/lib/supabase/server'
 import { fingerprintColumn } from '@/lib/crypto'
@@ -14,10 +15,13 @@ const bodySchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const user = await getSessionUser()
+  const user = await getRequestUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // E13 — Bearer is now accepted (the native wizard); a delegated agent token never is (S1.6: the agent never verifies or writes the profile).
+  const delegated = await requireNotDelegated('profile/provider/kyc/verify-bank')
+  if (delegated) return delegated
 
   // Paid external API — strict per-user cap to prevent bill-drain.
   const rl = await enforce(limiters.kyc, `kyc:bank:${user.id}`)

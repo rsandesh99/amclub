@@ -92,6 +92,7 @@ export function mobileRouteFor(link: string | null | undefined, opts: { v3: bool
     if (a === 'partner' && b === 'insights') return '/partner-insights'
     if (a === 'partner' && b === 'profile') return '/partner-profile'
     if (a === 'app' && b === 'invoices') return '/invoices'
+    if (a === 'partner' && b === 'onboarding') return `/partner-onboarding${q}`
   }
   if (a === 'partner' && (b === undefined || b === 'actions')) return '/partner'
   if (a === 'app' && (b === undefined || b === 'actions')) return '/home'

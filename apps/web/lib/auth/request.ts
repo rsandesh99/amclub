@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import { createClient as createTokenClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { touchLastSeen } from '@/lib/trust/last-seen'
+import type { SessionUser } from './session'
 
 /**
  * Returns a Supabase client authenticated as the requesting user, working for
@@ -38,4 +39,35 @@ export async function getAuthedSupabase(): Promise<{
   const { data } = await supabase.auth.getUser()
   if (data.user?.id) touchLastSeen(data.user.id)
   return { supabase, userId: data.user?.id ?? null }
+}
+
+/**
+ * getSessionUser() for routes the mobile app also calls (E13 native provider
+ * onboarding): the same SessionUser shape and the same "no users row yet"
+ * fallback, authenticated by the web cookie OR a mobile Bearer token.
+ */
+export async function getRequestUser(): Promise<SessionUser | null> {
+  const { supabase, userId } = await getAuthedSupabase()
+  if (!userId) return null
+  const { data } = await supabase.from('users').select('id, phone, email, full_name, roles, preferred_locale').eq('id', userId).maybeSingle()
+  if (!data) {
+    const { data: auth } = await supabase.auth.getUser()
+    const u = auth.user
+    return {
+      id: userId,
+      phone: u?.phone ?? null,
+      email: u?.email ?? null,
+      fullName: (u?.user_metadata?.['full_name'] as string | undefined) ?? null,
+      roles: ['msme'],
+      preferredLocale: 'en',
+    }
+  }
+  return {
+    id: data.id as string,
+    phone: (data.phone as string | null) ?? null,
+    email: (data.email as string | null) ?? null,
+    fullName: (data.full_name as string | null) ?? null,
+    roles: (data.roles as string[] | null) ?? ['msme'],
+    preferredLocale: (data.preferred_locale as string | null) ?? 'en',
+  }
 }
