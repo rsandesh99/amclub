@@ -23,6 +23,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
       context="provider"
       name={user.fullName}
       roles={user.roles}
+      userId={user.id}
       hasMsmeProfile={Boolean(msme)}
       hasProviderProfile={Boolean(provider)}
     >

@@ -1160,6 +1160,82 @@
     "page_of": "పేజీ {page} / {pages}"
   },
   "shell": {
-    "search": "సేవలను వెతకండి"
+    "search": "సేవలను వెతకండి",
+    "compact_view": "కాంపాక్ట్ వీక్షణ",
+    "on": "ఆన్",
+    "off": "ఆఫ్"
+  },
+  "ui": {
+    "close": "మూసివేయండి",
+    "back": "వెనుకకు",
+    "search_placeholder": "వెతకండి",
+    "any": "ఏదైనా",
+    "no_matches": "సరిపోలికలు లేవు"
+  },
+  "nav_v3": {
+    "aria_main": "ప్రధాన",
+    "badge_label": "{count} మీ చర్య అవసరం",
+    "home": "హోమ్",
+    "search": "వెతకండి",
+    "requirements": "అవసరాలు",
+    "orders": "ఆర్డర్లు",
+    "saved": "సేవ్ చేసినవి",
+    "mart": "మార్ట్",
+    "invoices": "ఇన్వాయిస్‌లు",
+    "profile": "ప్రొఫైల్",
+    "today": "ఈరోజు",
+    "rfqs": "RFQలు",
+    "listings": "జాబితాలు",
+    "earnings": "ఆదాయం",
+    "reviews": "సమీక్షలు"
+  },
+  "search_v3": {
+    "title": "AMClubలో వెతకండి",
+    "placeholder": "సేవలు, ప్రొవైడర్లు, మీ ఆర్డర్లు…",
+    "trigger": "సేవలు, ప్రొవైడర్లు, ఆర్డర్లు వెతకండి",
+    "clear": "తుడిచివేయండి",
+    "recent": "ఇటీవలివి",
+    "no_results": "“{q}” కోసం ఏమీ దొరకలేదు",
+    "group_mine_orders": "మీ ఆర్డర్లు",
+    "group_mine_requirements": "మీ అవసరాలు",
+    "group_mine_invoices": "మీ ఇన్వాయిస్‌లు",
+    "group_services": "సేవలు",
+    "group_providers": "ప్రొవైడర్లు",
+    "group_categories": "వర్గాలు",
+    "price_plus_gst": "{price} + జీఎస్టీ"
+  },
+  "next_action": {
+    "accept_order": "ఈ ఆర్డర్‌ను అంగీకరించండి",
+    "share_requirements": "మీ అవసరాలు పంచుకోండి",
+    "start_work": "పనిని ప్రారంభించండి",
+    "deliver_work": "పనిని అందించండి",
+    "review_delivery": "డెలివరీని సమీక్షించండి",
+    "resume_work": "సవరణపై పని చేయండి",
+    "leave_review": "సమీక్ష ఇవ్వండి",
+    "dispute_statement": "వివాదంలో మీ వైపు తెలపండి",
+    "wait_provider_accept": "ప్రొవైడర్ అంగీకారం కోసం వేచి ఉంది",
+    "wait_requirements": "కొనుగోలుదారు అవసరాల కోసం వేచి ఉంది",
+    "wait_start": "పని మొదలయ్యే వరకు వేచి ఉంది",
+    "wait_delivery": "పని జరుగుతోంది",
+    "wait_acceptance": "కొనుగోలుదారు అంగీకారం కోసం వేచి ఉంది",
+    "wait_revision": "సవరణ జరుగుతోంది",
+    "wait_government": "ప్రభుత్వ పోర్టల్ కోసం వేచి ఉంది",
+    "wait_dispute": "వివాదం సమీక్షలో ఉంది",
+    "quotes_waiting": "“{title}”పై {count, plural, =1 {1 కోట్} other {# కోట్‌లు}}",
+    "clarification_question": "“{title}”పై {count, plural, =1 {ఒక ప్రొవైడర్ ప్రశ్న అడిగారు} other {ప్రొవైడర్ల నుండి # ప్రశ్నలు}}",
+    "rfq_new": "కొత్త అభ్యర్థన: “{title}”",
+    "due": "{when} లోపు",
+    "consequence_auto_cancel_refund": "లేకపోతే పూర్తి రీఫండ్‌తో ఆటోమేటిక్‌గా రద్దవుతుంది",
+    "consequence_auto_accept": "ఆ తర్వాత మీ తరఫున అంగీకరించబడుతుంది",
+    "needs_your_action": "మీ చర్య అవసరం",
+    "see_all": "అన్నీ చూడండి"
+  },
+  "public_nav": {
+    "services": "సేవలు",
+    "all_services": "అన్ని సేవలు →",
+    "for_providers": "ప్రొవైడర్ల కోసం",
+    "search": "సేవలు, ప్రొవైడర్లను వెతకండి",
+    "post_requirement": "అవసరాన్ని పోస్ట్ చేయండి",
+    "menu": "మెనూ"
   }
 }

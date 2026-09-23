@@ -22,6 +22,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       context="admin"
       name={user.fullName}
       roles={user.roles}
+      userId={user.id}
       hasMsmeProfile={Boolean(msme)}
       hasProviderProfile={Boolean(provider)}
     >

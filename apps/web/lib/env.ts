@@ -110,6 +110,23 @@ const serverEnvSchema = z.object({
   // Feature flags. 'true' enables; anything else (incl. unset) = OFF.
   // COUPONS_ENABLED gates the entire Phase-6 coupon path (see lib/flags.ts).
   COUPONS_ENABLED: z.string().optional(),
+  // Experience v3 rollout flags (PRD §7.9; registry in @amclub/shared
+  // experiments.ts): 'off' (default) | 'on' | a 0–100 percentage.
+  EXP_V3_SHELL: z.string().optional(),
+  EXP_V3_SEARCH: z.string().optional(),
+  EXP_V3_TRUST: z.string().optional(),
+  EXP_V3_PACKAGES: z.string().optional(),
+  EXP_V3_CHECKOUT: z.string().optional(),
+  EXP_V3_REQUIREMENTS: z.string().optional(),
+  EXP_V3_COMPARE: z.string().optional(),
+  EXP_V3_ORDERS: z.string().optional(),
+  EXP_V3_HOME: z.string().optional(),
+  EXP_V3_ONBOARDING: z.string().optional(),
+  EXP_V3_PARTNER: z.string().optional(),
+  EXP_V3_MOBILE: z.string().optional(),
+  EXP_V3_LOCALES: z.string().optional(),
+  // Comma-separated user ids who see every Experience v3 flag (internal testing on prod).
+  EXP_V3_COHORT: z.string().optional(),
 })
 
 function parseEnv() {

@@ -1,4 +1,50 @@
-# AMC — FRONTEND.md (v2 — Emerald & Gold direction)
+# AMC — FRONTEND.md (v3 — "Precision", on top of v2 Emerald & Brass)
+
+> **v3 is the current direction** (founder-approved 2026-09-23; DESIGN.md §8.7).
+> The full spec is `docs/prd/PRD_EXPERIENCE_V3.md` §3 (tokens, type ramp,
+> density, motion, components, content rules) and §7 (cross-cutting rules). v2
+> below still holds for the identity, the contrast law, the signature motions
+> (Gold Stamp ≤ 700 ms, Paisa Moment ≤ 900 ms, Gold Thread) and the QoL
+> standards. Where v2 and v3 differ, **v3 wins**: neutrals do 90 % of the work,
+> gold appears on ≤ 1 element per screen, no shimmer sweeps, Molten Fill or
+> Lathe Spinner (skeletons replace spinners), no native `<select>` for ≤ 5 options.
+
+## v3 in the code (E1)
+- **Tokens:** `app/globals.css` holds every colour as channels (`--c-*`, "R G B").
+  Tailwind reads them (`rgb(var(--c-x) / <alpha>)`, so `bg-primary/10` works).
+  `[data-ui="v3"]` re-points the channels to the v3 palette; nothing else in a
+  component changes. New tokens: `sunken`, `separator` / `separator-strong`
+  (brass at 35 % / 100 %), `foreground-tertiary` (captions only, never money),
+  `numeric` (all money and stats). Radii and shadows are variables too (v3:
+  cards 10, sheets 14, modals 20; shadows at 70 %). Dark tokens are defined, not
+  rendered (D-PRD1).
+- **Type ramp:** `.t-large-title … .t-footnote`, `.t-money-l/-m`, `.t-numeric-s`
+  (mobile first, desktop from `lg`; Indic: +12 % leading, no negative tracking).
+- **Materials:** `.material` (72 % + blur on v3; solid under reduced
+  transparency, on `data-lowmem` devices, or without `backdrop-filter`).
+  Hairlines: `.hairline-t/-b` (0.5 px on 2× displays).
+- **Density:** `data-density="compact"` (Compact rows 44 / data rows 36) vs the
+  Comfortable default (56 / 48). The user's choice is `users.ui_density` (N33),
+  toggled in the account menu; `resolveDensity()` gives the role default.
+- **Components:** `components/ui-v3/` — SegmentedControl, Picker, Sheet (detents,
+  focus trap, drag to dismiss), GroupedSection/GroupedRow, PageHeader (large
+  title → translucent bar), StickyActionBar, StatTile/StatChip, DataTable,
+  EmptyState/Skeleton/Banner/CountBadge, Stepper, ActionList. The shell lives in
+  `components/shell-v3/` (SideRail, TabBar, ShellTopBar, CommandSearch ⌘K,
+  ActionsProvider for `/api/v1/me/actions`). Gallery: `/admin/dev/ui` (admin
+  only, noindex; switch locale in the URL).
+- **Flags:** `EXP_V3_<AREA>` = off | on | 0–100 (% of signed-in users), plus the
+  `EXP_V3_COHORT` allowlist — registry in `@amclub/shared` `experiments.ts`,
+  evaluated in `lib/experiments.ts`. Static public pages can only honour `on`.
+- **Fonts:** self-hosted variable Noto (latin + Devanagari / Telugu / Tamil) in
+  `app/fonts` via `next/font/local` — builds never fetch Google Fonts.
+- **Lint:** `no-restricted-syntax` blocks new native `<select>` / `<Select>`;
+  the baseline list in `apps/web/.eslintrc.json` shrinks as each epic converts
+  its surfaces. Remove a file from the list when you convert it.
+
+---
+
+# v2 — Emerald & Gold direction (still binding where v3 is silent)
 UI/UX design system + rebuild guidance for the AMC services app and the Mart mode.
 Companion to DESIGN.md and RULES.md. Audience: Claude Code + the developer.
 Founder-set direction (binding): green + gold identity, flashy custom animations, inventive

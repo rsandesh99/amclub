@@ -148,3 +148,16 @@ export async function upsertUserRow(params: {
     )
   return { error }
 }
+
+/**
+ * N33 — the user's density preference. A SEPARATE, error-tolerant read: the
+ * column arrives with migration 0048, and naming it inside getSessionUser's
+ * select would fail every session read on a database that lacks it.
+ */
+export async function getUiDensity(userId: string): Promise<'comfortable' | 'compact' | null> {
+  const admin = await createAdminClient()
+  const { data, error } = await admin.from('users').select('ui_density').eq('id', userId).maybeSingle()
+  if (error || !data) return null
+  const v = (data as { ui_density?: unknown }).ui_density
+  return v === 'comfortable' || v === 'compact' ? v : null
+}

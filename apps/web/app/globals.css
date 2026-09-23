@@ -4,54 +4,179 @@
 
 @layer base {
   :root {
-    /* ── Semantic colour tokens — palette LOCKED, one colour one job (§4.2).
-       Mirrors tailwind.config.ts; both resolve to the same hex (synced after
-       the contrast fixes — keep them in lockstep). ── */
+    /* ── Semantic colour tokens — one colour, one job (§4.2). Channels
+       (`--c-*`, "R G B") feed Tailwind (`rgb(var(--c-x) / <alpha>)`, so
+       `bg-primary/10` keeps working); `--x` is the ready-to-use colour.
+       Experience v3 re-points the channels under [data-ui="v3"] below —
+       components never change. ── */
     /* Declared so Android/Chrome force-dark never inverts the light palette. */
     color-scheme: light;
-    --background: #fafaf7;
-    --surface: #ffffff;
-    --foreground: #1a1d1a;
-    --foreground-secondary: #4a514a; /* ≈7.8:1 on background (7:1 floor) */
-    --primary: #1b4d3e;
-    --primary-strong: #143f33; /* hover/pressed deepen */
-    --primary-foreground: #ffffff;
-    --accent: #f4a300; /* discounts + rating stars ONLY */
-    --accent-foreground: #1a1d1a; /* AA text on marigold */
-    --trust: #155c9e;
-    --verified: #155c9e; /* verification badges/ticks ONLY */
-    --danger: #c73e3e;
-    --danger-foreground: #ffffff;
-    --destructive: #c73e3e;
-    --warning: #92400e;
-    --success: #14724a;
-    --border: #e6e7e3;
-    --muted: #f3f4f1;
-    --ring: #1b4d3e;
-
-    /* ── Soft tint fills — pre-mixed, for badges/icon-chips/section washes,
-       so we never hand-roll rgba() per component. ── */
-    --primary-soft: #e8eeeb;
-    --accent-soft: #fdefd2;
-    --verified-soft: #e6eff8;
-    --success-soft: #e5f2ec;
-    --warning-soft: #f5ebdd;
-    --danger-soft: #f8e8e8;
+    --c-background: 250 250 247;
+    --c-surface: 255 255 255;
+    --c-foreground: 26 29 26;
+    --c-foreground-secondary: 74 81 74;
+    --c-foreground-tertiary: 92 100 92;
+    --c-primary: 27 77 62;
+    --c-primary-strong: 20 63 51;
+    --c-primary-foreground: 255 255 255;
+    --c-accent: 244 163 0;
+    --c-accent-foreground: 26 29 26;
+    --c-trust: 21 92 158;
+    --c-verified: 21 92 158;
+    --c-danger: 199 62 62;
+    --c-danger-foreground: 255 255 255;
+    --c-destructive: 199 62 62;
+    --c-warning: 146 64 14;
+    --c-warning-foreground: 255 255 255;
+    --c-success: 20 114 74;
+    --c-border: 230 231 227;
+    --c-muted: 243 244 241;
+    --c-sunken: 243 244 241;
+    --c-ring: 27 77 62;
+    --c-primary-soft: 232 238 235;
+    --c-accent-soft: 253 239 210;
+    --c-verified-soft: 230 239 248;
+    --c-success-soft: 229 242 236;
+    --c-warning-soft: 245 235 221;
+    --c-danger-soft: 248 232 232;
+    --c-numeric: 26 29 26;
+    --background: rgb(var(--c-background));
+    --surface: rgb(var(--c-surface));
+    --foreground: rgb(var(--c-foreground));
+    --foreground-secondary: rgb(var(--c-foreground-secondary));
+    --foreground-tertiary: rgb(var(--c-foreground-tertiary));
+    --primary: rgb(var(--c-primary));
+    --primary-strong: rgb(var(--c-primary-strong));
+    --primary-foreground: rgb(var(--c-primary-foreground));
+    --accent: rgb(var(--c-accent));
+    --accent-foreground: rgb(var(--c-accent-foreground));
+    --trust: rgb(var(--c-trust));
+    --verified: rgb(var(--c-verified));
+    --danger: rgb(var(--c-danger));
+    --danger-foreground: rgb(var(--c-danger-foreground));
+    --destructive: rgb(var(--c-destructive));
+    --warning: rgb(var(--c-warning));
+    --warning-foreground: rgb(var(--c-warning-foreground));
+    --success: rgb(var(--c-success));
+    --border: rgb(var(--c-border));
+    --muted: rgb(var(--c-muted));
+    --sunken: rgb(var(--c-sunken));
+    --ring: rgb(var(--c-ring));
+    --primary-soft: rgb(var(--c-primary-soft));
+    --accent-soft: rgb(var(--c-accent-soft));
+    --verified-soft: rgb(var(--c-verified-soft));
+    --success-soft: rgb(var(--c-success-soft));
+    --warning-soft: rgb(var(--c-warning-soft));
+    --danger-soft: rgb(var(--c-danger-soft));
+    --numeric: rgb(var(--c-numeric));
+    /* Hairline separators — v2: the border colour; v3: brass at 35 %. */
+    --separator: rgb(var(--c-border));
+    --separator-strong: rgb(var(--c-border));
+    /* Translucent bars (material) — v2 solid; v3 72 % + blur. */
+    --material-bg: rgb(var(--c-surface));
+    --material-filter: none;
 
     /* ── Radii ── */
     --radius-card: 12px;
     --radius-button: 10px;
     --radius-input: 10px;
     --radius-chip: 999px;
+    --radius-sheet: 16px;
+    --radius-modal: 20px;
 
-    /* ── Motion — quiet + quick, no bounce (gated by prefers-reduced-motion) ── */
+    /* ── Elevation (v3 renders these at 70 % strength) ── */
+    --shadow-xs: 0 1px 2px 0 rgb(16 30 24 / 0.05);
+    --shadow-resting: 0 1px 2px 0 rgb(16 30 24 / 0.04), 0 1px 3px 0 rgb(16 30 24 / 0.08);
+    --shadow-hover: 0 6px 16px -4px rgb(16 30 24 / 0.12), 0 2px 6px -2px rgb(16 30 24 / 0.07);
+    --shadow-lg: 0 16px 40px -8px rgb(16 30 24 / 0.16), 0 4px 12px -4px rgb(16 30 24 / 0.08);
+    --shadow-sheet: 0 1px 2px rgba(10, 46, 34, 0.06), 0 8px 24px rgba(10, 46, 34, 0.10);
+    --shadow-modal: 0 2px 6px rgba(10, 46, 34, 0.08), 0 24px 64px rgba(10, 46, 34, 0.18);
+
+    /* ── Motion — quiet + quick (gated by prefers-reduced-motion) ── */
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    /* Spring approximations (PRD §3.4.4): sheets/navigation k=380 c=32 (~300 ms
+       settle), chips/toggles k=600 c=40. linear() where supported. */
+    --spring-sheet: cubic-bezier(0.2, 0.9, 0.25, 1);
+    --spring-chip: cubic-bezier(0.3, 1.2, 0.4, 1);
     --duration-fast: 150ms;
     --duration-base: 200ms;
+    --duration-sheet: 300ms;
+
+    /* ── Density (§3.5): Comfortable rows 56, Compact 40 (data views 36). ── */
+    --row-h: 56px;
+    --row-h-data: 48px;
+    --row-pad-y: 14px;
 
     /* Minimum tap target (§4.4) */
     --tap-min: 44px;
   }
+
+  /* ═══ Experience v3 "Precision" (PRD_EXPERIENCE_V3 §3.4) ═══════════════════
+     Any element with data-ui="v3" (the <html> when EXP_V3_SHELL=on, or a
+     logged-in shell wrapper for a cohort) re-points the channels. Neutrals do
+     90 % of the work; emerald = action + selection; gold stays "earned". */
+  [data-ui='v3'] {
+  --c-background: 252 250 243;
+  --c-surface: 255 255 255;
+  --c-foreground: 10 46 34;
+  --c-foreground-secondary: 56 82 74;
+  --c-foreground-tertiary: 95 113 105;
+  --c-primary: 14 107 79;
+  --c-primary-strong: 10 85 64;
+  --c-primary-foreground: 255 255 255;
+  --c-danger: 166 58 43;
+  --c-destructive: 166 58 43;
+  --c-warning: 138 90 0;
+  --c-success: 31 122 77;
+  --c-border: 231 223 202;
+  --c-muted: 244 241 232;
+  --c-sunken: 244 241 232;
+  --c-ring: 14 107 79;
+  --c-primary-soft: 231 240 236;
+  --c-warning-soft: 255 244 219;
+  --c-success-soft: 230 242 235;
+  --c-danger-soft: 246 231 228;
+  --c-numeric: 20 22 26;
+    --separator: rgba(176, 141, 42, 0.35);
+    --separator-strong: #b08d2a;
+    --material-bg: rgb(var(--c-background) / 0.72);
+    --material-filter: blur(20px) saturate(180%);
+    --radius-card: 10px;
+    --radius-input: 8px;
+    --radius-sheet: 14px;
+    --shadow-xs: 0 1px 2px 0 rgb(10 46 34 / 0.035);
+    --shadow-resting: 0 1px 2px 0 rgb(10 46 34 / 0.03), 0 1px 3px 0 rgb(10 46 34 / 0.055);
+    --shadow-hover: 0 6px 16px -4px rgb(10 46 34 / 0.085), 0 2px 6px -2px rgb(10 46 34 / 0.05);
+    --shadow-lg: 0 16px 40px -8px rgb(10 46 34 / 0.11), 0 4px 12px -4px rgb(10 46 34 / 0.055);
+  }
+  /* Dark tokens are DEFINED, not rendered (D-PRD1: light is the default for
+     shop-floor sunlight). Nothing sets data-theme="dark" yet. */
+  [data-ui='v3'][data-theme='dark'] {
+    color-scheme: dark;
+    --c-background: 11 20 17;
+    --c-surface: 18 29 24;
+    --c-sunken: 14 24 20;
+    --c-muted: 14 24 20;
+    --c-foreground: 237 235 227;
+    --c-foreground-secondary: 190 199 193;
+    --c-foreground-tertiary: 150 163 156;
+    --c-numeric: 237 235 227;
+    --c-primary: 47 163 124;
+    --c-primary-strong: 38 138 105;
+    --c-border: 42 56 49;
+    --separator: rgba(176, 141, 42, 0.3);
+  }
+  /* Compact density (N33) — spacing only; text never drops below Footnote. */
+  [data-density='compact'] {
+    --row-h: 44px;
+    --row-h-data: 36px;
+    --row-pad-y: 8px;
+  }
+  /* Materials fall back to solid when transparency is unwanted or costly. */
+  @media (prefers-reduced-transparency: reduce) {
+    [data-ui='v3'] { --material-bg: rgb(var(--c-background) / 0.96); --material-filter: none; }
+  }
+  [data-ui='v3'][data-lowmem] { --material-bg: rgb(var(--c-background) / 0.96); --material-filter: none; }
 
   * {
     @apply border-border;
@@ -142,6 +267,81 @@
       transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
       focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Experience v3 "Precision" — type ramp, materials, hairlines (PRD §3.4).
+   Used by components/ui-v3/*. Tokens only; every motion collapses under
+   prefers-reduced-motion. Classes are theme-agnostic (they read the tokens,
+   so they also render sensibly under v2).
+   ═══════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  /* Type ramp — mobile first, desktop from lg. Two weights per component. */
+  .t-display { font-size: 44px; line-height: 48px; font-weight: 700; letter-spacing: -0.022em; }
+  .t-large-title { font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.02em; }
+  .t-title-1 { font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.018em; }
+  .t-title-2 { font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -0.012em; }
+  .t-title-3 { font-size: 19px; line-height: 24px; font-weight: 600; letter-spacing: -0.008em; }
+  .t-headline { font-size: 17px; line-height: 22px; font-weight: 600; }
+  .t-body { font-size: 17px; line-height: 26px; font-weight: 400; }
+  .t-callout { font-size: 16px; line-height: 22px; font-weight: 500; }
+  .t-subhead { font-size: 15px; line-height: 20px; font-weight: 400; }
+  .t-footnote { font-size: 13px; line-height: 18px; font-weight: 400; }
+  .t-money-l { font-size: 30px; line-height: 34px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .t-money-m { font-size: 20px; line-height: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .t-numeric-s { font-size: 15px; line-height: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  @media (min-width: 1024px) {
+    .t-large-title { font-size: 36px; line-height: 42px; }
+    .t-title-1 { font-size: 28px; line-height: 34px; }
+    .t-title-3 { font-size: 20px; line-height: 26px; }
+    .t-headline { font-size: 16px; line-height: 22px; }
+    .t-body { font-size: 15px; line-height: 22px; }
+    .t-callout { font-size: 14px; line-height: 20px; }
+    .t-subhead { font-size: 13px; line-height: 18px; }
+    .t-footnote { font-size: 12px; line-height: 16px; }
+    .t-money-l { font-size: 32px; line-height: 36px; }
+    .t-money-m { font-size: 18px; line-height: 22px; }
+    .t-numeric-s { font-size: 13px; line-height: 18px; }
+  }
+
+  /* Material — translucent bars that let content scroll beneath (v3), solid
+     under v2 / reduced transparency / low memory (tokens decide). */
+  .material {
+    background-color: var(--material-bg);
+    -webkit-backdrop-filter: var(--material-filter);
+    backdrop-filter: var(--material-filter);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .material { background-color: rgb(var(--c-background) / 0.96); }
+  }
+
+  /* Hairlines: 1 px, 0.5 px on ≥2× displays. */
+  .hairline-b { box-shadow: inset 0 -1px 0 var(--separator); }
+  .hairline-t { box-shadow: inset 0 1px 0 var(--separator); }
+  @media (min-resolution: 2dppx) {
+    .hairline-b { box-shadow: inset 0 -0.5px 0 var(--separator); }
+    .hairline-t { box-shadow: inset 0 0.5px 0 var(--separator); }
+  }
+
+  /* Inset grouped list (Apple): raised rounded group, hairline between rows. */
+  .grouped { @apply overflow-hidden bg-surface; border-radius: var(--radius-sheet); box-shadow: var(--shadow-xs); }
+  .grouped-row { min-height: var(--row-h); padding-top: var(--row-pad-y); padding-bottom: var(--row-pad-y); }
+  .grouped > * + * { box-shadow: inset 0 1px 0 var(--separator); }
+  @media (min-resolution: 2dppx) { .grouped > * + * { box-shadow: inset 0 0.5px 0 var(--separator); } }
+
+  /* Sheet transitions (spring approximation). */
+  .sheet-panel { transition: transform var(--duration-sheet) var(--spring-sheet), opacity var(--duration-base) ease-out; }
+  .sheet-backdrop { transition: opacity var(--duration-base) ease-out; }
+  .segment-thumb { transition: transform 220ms var(--spring-chip), width 220ms var(--spring-chip); }
+  @media (prefers-reduced-motion: reduce) {
+    .sheet-panel, .sheet-backdrop, .segment-thumb { transition: none !important; }
+  }
+}
+
+/* Indic scripts on the v3 ramp: same sizes, +12 % leading, no negative tracking. */
+:is(:lang(hi), :lang(te), :lang(ta)) :is(.t-display, .t-large-title, .t-title-1, .t-title-2, .t-title-3, .t-headline, .t-callout, .t-subhead, .t-footnote) {
+  letter-spacing: 0;
+  line-height: 1.34;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

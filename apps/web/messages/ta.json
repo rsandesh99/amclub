@@ -523,6 +523,82 @@
     "page_of": "பக்கம் {page} / {pages}"
   },
   "shell": {
-    "search": "சேவைகளைத் தேடுங்கள்"
+    "search": "சேவைகளைத் தேடுங்கள்",
+    "compact_view": "சுருக்கமான காட்சி",
+    "on": "இயக்கம்",
+    "off": "நிறுத்தம்"
+  },
+  "ui": {
+    "close": "மூடு",
+    "back": "பின்செல்",
+    "search_placeholder": "தேடு",
+    "any": "ஏதேனும்",
+    "no_matches": "பொருத்தம் இல்லை"
+  },
+  "nav_v3": {
+    "aria_main": "முதன்மை",
+    "badge_label": "{count} உங்கள் நடவடிக்கை தேவை",
+    "home": "முகப்பு",
+    "search": "தேடல்",
+    "requirements": "தேவைகள்",
+    "orders": "ஆர்டர்கள்",
+    "saved": "சேமித்தவை",
+    "mart": "மார்ட்",
+    "invoices": "விலைப்பட்டியல்கள்",
+    "profile": "சுயவிவரம்",
+    "today": "இன்று",
+    "rfqs": "RFQகள்",
+    "listings": "பட்டியல்கள்",
+    "earnings": "வருமானம்",
+    "reviews": "மதிப்புரைகள்"
+  },
+  "search_v3": {
+    "title": "AMClub இல் தேடுங்கள்",
+    "placeholder": "சேவைகள், வழங்குநர்கள், உங்கள் ஆர்டர்கள்…",
+    "trigger": "சேவைகள், வழங்குநர்கள், ஆர்டர்களைத் தேடுங்கள்",
+    "clear": "அழி",
+    "recent": "சமீபத்தியவை",
+    "no_results": "“{q}” க்கு எதுவும் கிடைக்கவில்லை",
+    "group_mine_orders": "உங்கள் ஆர்டர்கள்",
+    "group_mine_requirements": "உங்கள் தேவைகள்",
+    "group_mine_invoices": "உங்கள் விலைப்பட்டியல்கள்",
+    "group_services": "சேவைகள்",
+    "group_providers": "வழங்குநர்கள்",
+    "group_categories": "வகைகள்",
+    "price_plus_gst": "{price} + ஜிஎஸ்டி"
+  },
+  "next_action": {
+    "accept_order": "இந்த ஆர்டரை ஏற்கவும்",
+    "share_requirements": "உங்கள் தேவைகளைப் பகிரவும்",
+    "start_work": "பணியைத் தொடங்கவும்",
+    "deliver_work": "பணியை ஒப்படைக்கவும்",
+    "review_delivery": "ஒப்படைப்பைச் சரிபார்க்கவும்",
+    "resume_work": "திருத்தத்தில் பணியாற்றவும்",
+    "leave_review": "மதிப்புரை வழங்கவும்",
+    "dispute_statement": "தகராறில் உங்கள் பக்கத்தைச் சேர்க்கவும்",
+    "wait_provider_accept": "வழங்குநர் ஏற்கக் காத்திருக்கிறது",
+    "wait_requirements": "வாங்குபவரின் தேவைகளுக்காகக் காத்திருக்கிறது",
+    "wait_start": "பணி தொடங்கக் காத்திருக்கிறது",
+    "wait_delivery": "பணி நடந்து வருகிறது",
+    "wait_acceptance": "வாங்குபவர் ஏற்கக் காத்திருக்கிறது",
+    "wait_revision": "திருத்தம் நடந்து வருகிறது",
+    "wait_government": "அரசு இணையதளத்திற்காகக் காத்திருக்கிறது",
+    "wait_dispute": "தகராறு மறுஆய்வில் உள்ளது",
+    "quotes_waiting": "“{title}” இல் {count, plural, =1 {1 விலைப்புள்ளி} other {# விலைப்புள்ளிகள்}}",
+    "clarification_question": "“{title}” இல் {count, plural, =1 {ஒரு வழங்குநர் கேள்வி கேட்டார்} other {வழங்குநர்களிடமிருந்து # கேள்விகள்}}",
+    "rfq_new": "புதிய கோரிக்கை: “{title}”",
+    "due": "{when} க்குள்",
+    "consequence_auto_cancel_refund": "இல்லையெனில் முழுப் பணத்திருப்பத்துடன் தானாக ரத்தாகும்",
+    "consequence_auto_accept": "அதன் பிறகு உங்கள் சார்பில் ஏற்கப்படும்",
+    "needs_your_action": "உங்கள் நடவடிக்கை தேவை",
+    "see_all": "அனைத்தையும் காண்க"
+  },
+  "public_nav": {
+    "services": "சேவைகள்",
+    "all_services": "அனைத்து சேவைகள் →",
+    "for_providers": "வழங்குநர்களுக்கு",
+    "search": "சேவைகள், வழங்குநர்களைத் தேடுங்கள்",
+    "post_requirement": "தேவையைப் பதிவிடுங்கள்",
+    "menu": "பட்டியல்"
   }
 }

@@ -28,6 +28,7 @@ export default async function MsmeLayout({ children }: { children: React.ReactNo
       context="msme"
       name={user.fullName}
       roles={user.roles}
+      userId={user.id}
       hasMsmeProfile={Boolean(msme)}
       hasProviderProfile={Boolean(provider)}
     >
