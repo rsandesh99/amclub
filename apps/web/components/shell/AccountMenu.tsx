@@ -42,6 +42,10 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: Ac
     const { createClient } = await import('@/lib/supabase/client')
     const supabase = createClient()
     await supabase.auth.signOut()
+    // Shared-device hygiene (P0-6): no cached page or API response from this
+    // session may survive for the next person on the device.
+    const { purgeOfflineCaches } = await import('@/components/pwa/purge-caches')
+    await purgeOfflineCaches()
     // Sign-out means session over: clear the gateway's saved mid-choreography
     // position and wizard drafts, so `/` restarts at the two doors instead of
     // resuming a stale half-finished application — and no PII (legal name,
