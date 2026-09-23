@@ -115,7 +115,8 @@ CREATE OR REPLACE FUNCTION refresh_quote_sla_stats() RETURNS integer
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE written integer;
 BEGIN
-  DELETE FROM quote_sla_stats;
+  -- A WHERE clause: Supabase's safeupdate rejects an unqualified DELETE over PostgREST (the cron calls this by RPC).
+  DELETE FROM quote_sla_stats WHERE true;
   INSERT INTO quote_sla_stats (category_slug, state, median_minutes, n, computed_at)
   SELECT c.slug, m.state,
          round(percentile_cont(0.5) WITHIN GROUP (ORDER BY fq.minutes))::integer,

@@ -134,9 +134,11 @@ export default async function NewRfqPage({
       if (slug) prefill = { categorySlug: slug, title: '', details: {}, budgetMin: '', budgetMax: '', ...(svc?.service_slug ? { service: svc.service_slug as string } : {}) }
     }
     if (!prefill && pre.from_provider) {
-      // From a provider profile: their category only (D-UX1).
-      const { data: pp } = await pub.from('provider_profiles').select('id').eq('slug', pre.from_provider).eq('status', 'active').maybeSingle()
-      const { data: pc } = pp ? await pub.from('provider_categories').select('category:categories(slug)').eq('provider_id', pp.id).limit(1) : { data: null }
+      // From a provider profile: their category only (D-UX1). provider_profiles is not anon-readable (the public
+      // view is), so this server-side lookup of an ACTIVE provider's first category uses the service role.
+      const adminRead = await createAdminClient()
+      const { data: pp } = await adminRead.from('provider_profiles').select('id').eq('slug', pre.from_provider).eq('status', 'active').is('deleted_at', null).maybeSingle()
+      const { data: pc } = pp ? await adminRead.from('provider_categories').select('category:categories(slug)').eq('provider_id', pp.id).limit(1) : { data: null }
       const slug = known(((pc ?? [])[0]?.category as { slug?: string } | null)?.slug)
       if (slug) prefill = { categorySlug: slug, title: '', details: {}, budgetMin: '', budgetMax: '' }
     }

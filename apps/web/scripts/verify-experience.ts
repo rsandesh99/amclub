@@ -749,8 +749,9 @@ async function e6() {
   }
   const cronSecret = process.env['CRON_SECRET']
   const cron = await fetch(`${BASE}/api/v1/cron/provider-stats`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })
+  const cronBody = (await cron.json().catch(() => ({}))) as { quoteSla?: unknown }
   const { data: sla } = await admin.from('quote_sla_stats').select('median_minutes, n').eq('category_slug', 'tax-accounting').eq('state', 'MZ').maybeSingle()
-  check('FR-6.5: nightly median first-quote time = fixture truth', cron.ok && sla?.median_minutes === 90 && sla?.n === 2, JSON.stringify(sla))
+  check('FR-6.5: nightly median first-quote time = fixture truth', cron.ok && sla?.median_minutes === 90 && sla?.n === 2, `${JSON.stringify(sla)} · cron ${cron.status} ${JSON.stringify(cronBody.quoteSla)}`)
   check('FR-6.5: the form gets the stat for the buyer’s state', (attr(await page('?category=tax-accounting'), 'data-sla') ?? '').includes('tax-accounting:90:2'))
   for (const id of created.rfqIds) await admin.from('quotes').delete().eq('rfq_id', id)
 }
