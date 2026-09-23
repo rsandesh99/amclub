@@ -19,8 +19,14 @@ Deferred / notes:
   `.github/supabase-ci/buckets.sql`; a from-zero rebuild (`db:bootstrap`,
   RUNBOOK_RESTORE) would come up without them. Move the inserts into a
   migration (idempotent `on conflict do nothing`).
-- **Make it a required check.** In branch protection, mark "Money rigs ·
-  disposable Supabase" as required (repository owner).
+- **Required checks are not enforced.** GitHub refuses to enforce rulesets or
+  branch protection on this private repository on the current plan (checked
+  2026-09-23; no rule exists for `master`). Options: a paid plan that covers
+  private-repo protection (GitHub Pro on the personal account, if offered, or a
+  Team organization), then require "Money rigs · disposable Supabase",
+  "Lint · Typecheck · Test · Build" and "Accessibility (axe — public surfaces)".
+  Making the repository public is not recommended. Until then the rule is soft
+  (CLAUDE.md): never merge while either of the first two is red or running.
 - The CI database carries the staged Mart migrations, so it is a superset of
   production; staged-column leaks are still caught by `mart:static`.
 - Rigs run in ~2 s on the local stack, so a probe that spends a user's
