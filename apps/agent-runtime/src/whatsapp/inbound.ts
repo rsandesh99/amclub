@@ -166,7 +166,7 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
   const db = admin()
   const { data: msg } = await db.from('wa_messages').select('id, conversation_id, kind, body, payload').eq('id', messageId).maybeSingle()
   if (!msg) return
-  const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at, active_session_id, support_ticket_id, procurement_session_id').eq('id', msg.conversation_id).maybeSingle()
+  const { data: conv } = await db.from('wa_conversations').select('id, phone_e164, user_id, locale, last_holding_reply_at, active_session_id, support_ticket_id').eq('id', msg.conversation_id).maybeSingle()
   if (!conv) return
   const locale = (conv.locale === 'hi' || conv.locale === 'te' ? conv.locale : 'en') as WaLocale
   // S2.3 — a button tap is classified by its PAYLOAD id, never its visible title: the nudge offer's "No" / "नहीं"
@@ -199,7 +199,10 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
   // words, so a buyer's typed yes to a draft must reach the session first. A pr: button of this user, or any message
   // while the conversation's procurement session is active (the S2.3 ticket halt applies inside the turn).
   if (RUNTIME_ENV.AGENT_ENABLED && conv.user_id && hooks.enqueueProcurementTurn) {
-    const routed = await routeProcurementInbound(db, { messageId, conversationId: conv.id as string, userId: conv.user_id as string, row: { kind: msg.kind as string, body: msg.body as string | null, payload: (msg.payload as Record<string, unknown> | null) ?? null }, procurementSessionId: (conv.procurement_session_id as string | null) ?? null }, hooks)
+    // the session pointer is read HERE, not in the conversation select above: a missing column (0045 not applied yet)
+    // then costs this branch only, never the rest of the dispatcher (the S2.4 staged-column lesson)
+    const { data: ps } = await db.from('wa_conversations').select('procurement_session_id').eq('id', conv.id as string).maybeSingle()
+    const routed = await routeProcurementInbound(db, { messageId, conversationId: conv.id as string, userId: conv.user_id as string, row: { kind: msg.kind as string, body: msg.body as string | null, payload: (msg.payload as Record<string, unknown> | null) ?? null }, procurementSessionId: ((ps as { procurement_session_id?: string | null } | null)?.procurement_session_id as string | null) ?? null }, hooks)
     if (routed) return
   }
   if (intent === 'opt_in') {

@@ -604,15 +604,19 @@ async function http() {
     else await admin.from('agent_settings').delete().eq('key', 'budget_run_paise_by_agent')
 
     // ── STOP → WhatsApp stops, the web mirror continues ──
-    const qD = await quoteOf(p1, 2_450_000, 6, true)
-    void qD
     await waSay(convB, { kind: 'text', body: 'STOP' })
     const waBefore = (await outbound(convB)).length
-    // a new quote set on B's session → the watch sends the summary to the mirror only
+    const turnsBefore = (await agentTurns(s1?.id ?? NIL)).length
+    // a NEW quote set on B's session after STOP (a fourth provider, matched by hand) → the watch writes the summary to the
+    // web mirror only
+    const p4 = await mkProvider('p4')
+    await admin.from('rfq_matches').insert({ rfq_id: rfqId, provider_id: p4.providerId, notified_at: new Date().toISOString() })
+    const qD = await quoteOf(p4, 2_450_000, 6, true)
     await pr.runProcurementWatch(deps, { sessionIds: [s1?.id ?? NIL] })
     const { data: gB } = await admin.from('agent_grants').select('channel').eq('user_id', b.uid).eq('persona', 'buyer').is('revoked_at', null)
     const sStop = await sessionOf(s1?.id ?? NIL)
-    check('STOP → the WhatsApp grant revoked (the web grant stays) → the watch keeps the session and writes to the web mirror only: no new WhatsApp message', ((gB ?? []) as any[]).every((g) => g.channel !== 'whatsapp') && ((gB ?? []) as any[]).some((g) => g.channel === 'web') && (await outbound(convB)).length === waBefore && !['failed', 'expired'].includes(sStop?.state), JSON.stringify({ grants: gB, state: sStop?.state }))
+    const afterTurns = await agentTurns(s1?.id ?? NIL)
+    check('STOP → the WhatsApp grant revoked (the web grant stays) → a new quote after STOP: the watch writes the summary to the web mirror, and NO new WhatsApp message', !!qD && ((gB ?? []) as any[]).every((g) => g.channel !== 'whatsapp') && ((gB ?? []) as any[]).some((g) => g.channel === 'web') && (await outbound(convB)).length === waBefore && afterTurns.length > turnsBefore && afterTurns.at(-1)?.proposal?.key === 'quotes_summary' && !['failed', 'expired'].includes(sStop?.state), JSON.stringify({ qD, grants: gB, state: sStop?.state, turns: [turnsBefore, afterTurns.length] }))
 
     // ── revoke mid-flow → the next watch closes the session and sends nothing ──
     const r0 = (await agentTurns(s1?.id ?? NIL)).length
