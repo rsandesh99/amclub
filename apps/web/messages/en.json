@@ -3863,5 +3863,16 @@
     "cancel_confirm": "Cancel and refund",
     "cancel_keep": "Keep my plan",
     "cancel_error": "Couldn't cancel. Please try again."
+  },
+  "consent": {
+    "aria": "Analytics choice",
+    "notice": "We'd like to measure how AMClub is used so we can improve it. Nothing is measured unless you accept.",
+    "learn_more": "Privacy policy",
+    "accept": "Accept",
+    "decline": "Decline",
+    "choices_title": "Privacy choices",
+    "state_granted": "Usage measurement: on. You can turn it off any time.",
+    "state_denied": "Usage measurement: off. Nothing is measured.",
+    "state_unset": "You haven't chosen yet. Nothing is measured until you accept."
   }
 }

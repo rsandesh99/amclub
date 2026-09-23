@@ -8,6 +8,8 @@ import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { CorpusConsentSection } from '@/components/profile/CorpusConsentSection'
 import { corpusConsentOffered } from '@/lib/corpus'
+import { PrivacyChoices } from '@/components/consent/PrivacyChoices'
+import { ANALYTICS_CONSENT_REQUIRED } from '@/lib/public-flags'
 
 export default async function MsmeProfilePage() {
   const t = await getTranslations('profile')
@@ -69,6 +71,8 @@ export default async function MsmeProfilePage() {
       <MsmeProfileForm initial={initial} />
 
       {(offered || consented) && <CorpusConsentSection initialOn={consented} />}
+      {/* E17 (gated D-UX2) — "Privacy choices": the analytics choice, changeable any time. */}
+      {ANALYTICS_CONSENT_REQUIRED && <PrivacyChoices />}
 
       {AGENT_ENABLED && <AgentGrantsSection persona="buyer" />}
       {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}

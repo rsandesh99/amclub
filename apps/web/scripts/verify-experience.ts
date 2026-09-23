@@ -1677,6 +1677,26 @@ async function e15a() {
   }
 }
 
+async function e17() {
+  console.log('\nE17 — analytics consent (gated D-UX2): dark unless NEXT_PUBLIC_ANALYTICS_CONSENT_REQUIRED is on')
+  const on = (process.env['NEXT_PUBLIC_ANALYTICS_CONSENT_REQUIRED'] ?? '') === 'true'
+  const buyer = await mkUser('e17buyer')
+  const get = () => fetch(`${BASE}/api/v1/me/analytics-consent`, { headers: { cookie: buyer.cookie } })
+  if (!on) {
+    const home = visible(await (await fetch(`${BASE}/`)).text())
+    const r = await get()
+    check('E17 off: the consent route is 404 and no notice renders (PostHog loads as before)', r.status === 404 && !home.includes('data-testid="analytics-consent"'), String(r.status))
+    return
+  }
+  const first = (await (await get()).json().catch(() => ({}))) as { choice?: string | null }
+  const accept = await api(buyer.token, '/api/v1/me/analytics-consent', { choice: 'granted' })
+  const afterAccept = (await (await get()).json().catch(() => ({}))) as { choice?: string | null }
+  const decline = await api(buyer.token, '/api/v1/me/analytics-consent', { choice: 'denied' })
+  const afterDecline = (await (await get()).json().catch(() => ({}))) as { choice?: string | null }
+  const bad = await api(buyer.token, '/api/v1/me/analytics-consent', { choice: 'maybe' })
+  check('E17 on: not asked yet → null; accept / decline stored for the current version; anything else 422', first.choice == null && accept.ok && afterAccept.choice === 'granted' && decline.ok && afterDecline.choice === 'denied' && bad.status === 422)
+}
+
 async function e15b() {
   console.log('\nE15b — data foundations: search telemetry + attribution, declared vs actual, consented corpora, synonyms')
   const cronSecret = process.env['CRON_SECRET']
@@ -1813,6 +1833,7 @@ async function main() {
     await e14c()
     await e15a()
     await e15b()
+    await e17()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

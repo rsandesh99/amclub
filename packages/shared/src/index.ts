@@ -99,6 +99,8 @@ export * from './addons'
 export * from './quote-options'
 // Experience v3 E12c (ADR 021) — compliance bundles: milestones, the exact per-child split, the frozen plan
 export * from './bundles'
+// Experience v3 E17 (N36, gated D-UX2) — analytics consent: versioned notice, cookie + stored record, consent rate
+export * from './analytics-consent'
 
 // Agentic assistant contract: task classes → tiers, personas, tool allowlists,
 // confirm gates, event kinds (H0 groundwork, DESIGN.md §8.6 / ADR-008)

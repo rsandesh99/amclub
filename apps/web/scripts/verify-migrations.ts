@@ -414,6 +414,11 @@ const MANIFEST: Entry[] = [
     triggers: [['checkout_sessions', 'checkout_sessions_materialize_bundle']],
     note: 'E12c / ADR 021: bundle_milestones + bundle_purchases (no client writes); orders.bundle_purchase_id / bundle_seq / available_at; checkout_sessions.bundle_plan; trigger turns the materialised order into child 1 and inserts children 2..N from the frozen plan',
   },
+  {
+    file: '0068_analytics_consent.sql',
+    tables: [],
+    note: 'E17 / N36 (gated D-UX2): users.analytics_consent (service role writes via /api/v1/me/analytics-consent)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

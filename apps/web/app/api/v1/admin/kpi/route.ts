@@ -4,6 +4,8 @@ import { PAYOUT_RELEASE_STATUSES, type OrderStatus } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
 import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
+import { consentRate } from '@amclub/shared'
+import { ANALYTICS_CONSENT_REQUIRED } from '@/lib/public-flags'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -99,8 +101,17 @@ export async function GET(request: NextRequest) {
     .map(([slug, count]) => ({ slug, name: catById.get(cats.find((c) => c.slug === slug)?.id)?.name_i18n?.en ?? slug, count }))
   const topStates = Object.entries(byState).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([state, count]) => ({ state, count }))
 
+  // E17 (N36) — the consent rate is its own metric, counted from stored choices (never from analytics).
+  // Only while consent is required; a tolerant read (the column arrives with 0068).
+  let analyticsConsent: { granted: number; denied: number; rate: number | null } | null = null
+  if (ANALYTICS_CONSENT_REQUIRED) {
+    const { data: rows, error } = await admin.from('users').select('analytics_consent').not('analytics_consent', 'is', null).limit(50000)
+    if (!error) analyticsConsent = consentRate((rows ?? []).map((r) => (r as { analytics_consent: unknown }).analytics_consent))
+  }
+
   return NextResponse.json({
     range: { from, to },
+    ...(analyticsConsent ? { analyticsConsent } : {}),
     financial: { gmvPaise, commissionPaise, takeRateBps, completedOrders, totalOrders },
     funnel: { checkoutSessions: sessions, ordersPlaced: totalOrders, conversionPct },
     rfq: { rfqsCreated, rfqsQuoted, rfqsAccepted, quoteResponseRatePct },

@@ -9,3 +9,13 @@
  * hidden. The column stays untouched for when memberships ship.
  */
 export const MEMBER_PRICING_ENABLED = process.env['NEXT_PUBLIC_MEMBER_PRICING_ENABLED'] === 'true'
+
+/**
+ * ANALYTICS_CONSENT_REQUIRED — E17 (N36), gated on counsel's D-UX2 answer
+ * (does first-party pseudonymous product analytics need consent under the
+ * DPDP Act?). Default OFF = today: PostHog loads after idle. ON: PostHog does
+ * not load until the person accepts the one-line notice (equal Accept /
+ * Decline); declining sends no analytics events. Build-time, like the notice
+ * itself, so the first paint already knows.
+ */
+export const ANALYTICS_CONSENT_REQUIRED = process.env['NEXT_PUBLIC_ANALYTICS_CONSENT_REQUIRED'] === 'true'

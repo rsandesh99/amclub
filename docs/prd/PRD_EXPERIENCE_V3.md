@@ -2536,6 +2536,22 @@ Nothing in this epic is user-visible.
 
 **RICE:** not ranked; this is compliance. **E 0.5.**
 
+**As built (E17, dark: build flag `NEXT_PUBLIC_ANALYTICS_CONSENT_REQUIRED`, default off; migration 0068; the "consent needed" branch, ready for D-UX2).**
+- **Off (today).** Nothing changes: PostHog loads after idle, no notice, and `/api/v1/me/analytics-consent` is 404.
+- **On.**
+  - PostHog does not load, capture or buffer anything until the person accepts. Declining sends nothing and opts out a loaded client.
+  - The notice is one line at the bottom with **equal Accept and Decline** (same variant, size and weight; nothing pre-ticked). It links to the privacy policy.
+- **Storage.**
+  - A first-party cookie `amc_analytics_consent=<choice>.<version>` (one year).
+  - For signed-in people, also `users.analytics_consent { choice, version, at }`, written only by `POST /api/v1/me/analytics-consent` (service role; own session, never a delegated token). A signed-in person on a new device gets their stored choice applied without being asked again.
+- **Versioning.** Shared `ANALYTICS_NOTICE_VERSION`. A choice for another version counts as not asked (`currentConsentFromCookie` / `currentConsentFromRecord`).
+- **Managing it.** A "Privacy choices" row on the buyer profile shows the current choice and changes it.
+- **Metrics.**
+  - The consent rate is its own metric (`analyticsConsent` in the admin KPI), counted from stored choices by shared `consentRate`, never from analytics.
+  - Server-side operational events keep flowing, pending counsel's confirmation that they aren't analytics.
+- **If counsel says consent isn't needed:** leave the flag off and add the privacy-policy paragraph. No code changes.
+- **Tests.** Shared unit tests (cookie / record versioning, consent rate) and rig `e17` (off: route 404, no notice; on: store / read / 422).
+
 ---
 
 ## 7. Cross-cutting requirements

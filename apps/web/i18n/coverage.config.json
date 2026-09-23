@@ -7,6 +7,6 @@
     "rfq", "rfq_v3", "voice", "compare_v3",
     "orders", "orders_v3", "order", "next_action", "reviews", "evidence", "invoices", "notifications",
     "common", "errors", "shell", "nav_v3", "public_nav", "locale", "ui", "not_found", "error_boundary",
-    "notify"
+    "notify", "consent"
   ]
 }

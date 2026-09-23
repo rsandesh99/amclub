@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo } from 'react'
 import type { PostHog } from 'posthog-js'
+import { ANALYTICS_CONSENT_COOKIE, ANALYTICS_CONSENT_MAX_AGE_S, currentConsentFromCookie, encodeConsentCookie, type AnalyticsConsentChoice } from '@amclub/shared'
+import { ANALYTICS_CONSENT_REQUIRED } from '@/lib/public-flags'
 
 /**
  * Deferred analytics. posthog-js is ~68 KB gzipped — a third of the JS on a
@@ -22,8 +24,32 @@ let client: PostHog | null = null
 let loading: Promise<PostHog | null> | null = null
 const buffer: Array<[string, Props | undefined]> = []
 
+/** E17 — the first-party consent cookie's raw value (null on the server or when absent). */
+export function readConsentCookie(): string | null {
+  if (typeof document === 'undefined') return null
+  const m = document.cookie.match(new RegExp(`(?:^|; )${ANALYTICS_CONSENT_COOKIE}=([^;]*)`))
+  return m ? decodeURIComponent(m[1]!) : null
+}
+
+/** E17 — while consent is required, analytics runs only after an Accept for the current notice version. */
+function consented(): boolean {
+  if (!ANALYTICS_CONSENT_REQUIRED) return true
+  return currentConsentFromCookie(readConsentCookie()) === 'granted'
+}
+
+/** E17 — record the choice (first-party cookie) and apply it now: Accept loads analytics, Decline stops it. */
+export function setAnalyticsConsent(choice: AnalyticsConsentChoice): void {
+  if (typeof document === 'undefined') return
+  document.cookie = `${ANALYTICS_CONSENT_COOKIE}=${encodeURIComponent(encodeConsentCookie(choice))}; Max-Age=${ANALYTICS_CONSENT_MAX_AGE_S}; Path=/; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`
+  if (choice === 'granted') void load()
+  else {
+    buffer.splice(0)
+    client?.opt_out_capturing()
+  }
+}
+
 function load(): Promise<PostHog | null> {
-  if (!KEY || typeof window === 'undefined') return Promise.resolve(null)
+  if (!KEY || typeof window === 'undefined' || !consented()) return Promise.resolve(null)
   if (loading) return loading
   loading = import('posthog-js')
     .then(({ default: posthog }) => {
@@ -34,6 +60,8 @@ function load(): Promise<PostHog | null> {
         person_profiles: 'identified_only',
       })
       client = posthog
+      // A re-accept after a Decline in this browser opts back in.
+      if (ANALYTICS_CONSENT_REQUIRED && posthog.has_opted_out_capturing()) posthog.opt_in_capturing()
       for (const [event, props] of buffer.splice(0)) posthog.capture(event, props)
       return posthog
     })
@@ -44,6 +72,8 @@ function load(): Promise<PostHog | null> {
 /** Fire-and-forget event capture; safe before the SDK has loaded. */
 export function capture(event: string, props?: Props): void {
   if (!KEY) return
+  // E17 — before an Accept nothing is captured or buffered (a Decline sends nothing at all).
+  if (!consented()) return
   if (client) {
     client.capture(event, props)
     return
