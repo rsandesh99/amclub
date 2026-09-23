@@ -5,7 +5,9 @@ import { agentSettingDefault } from '@amclub/shared'
  * user-day, per month — checked BEFORE each model call and incremented AFTER it
  * with a TTL. A breach fails the run cleanly. Caps come from agent_settings
  * (loaded once per run) with env fallback. When no Redis is configured the
- * budget is a no-op that allows (dev only) — prod must set Upstash.
+ * budget is a no-op that allows (dev only). In production with AGENT_ENABLED=true
+ * and no Upstash the budget FAILS CLOSED (breach 'store_unavailable'): an agent
+ * call is refused rather than allowed unlimited spend (budgetWithoutStore()).
  */
 
 export interface BudgetCaps {
@@ -14,7 +16,8 @@ export interface BudgetCaps {
   monthPaise: number
 }
 
-export type BudgetBreach = 'run_cap' | 'user_day_cap' | 'month_cap'
+/** 'store_unavailable' = production agent call with no budget store (fail closed). */
+export type BudgetBreach = 'run_cap' | 'user_day_cap' | 'month_cap' | 'store_unavailable'
 
 export interface BudgetStatus {
   ok: boolean
@@ -129,4 +132,44 @@ export function createNoopBudget(): Budget {
       /* no-op */
     },
   }
+}
+
+/**
+ * Fail-closed budget: every check is a breach ('store_unavailable'), so the
+ * runner / bounded helper refuse the call BEFORE the gateway is touched.
+ */
+export function createFailClosedBudget(): Budget {
+  return {
+    async check() {
+      return { ok: false, breach: 'store_unavailable', spent: { run: 0, userDay: 0, month: 0 } }
+    },
+    async add() {
+      /* nothing is ever spent */
+    },
+  }
+}
+
+/** Production = NODE_ENV=production or VERCEL_ENV=production. */
+export function isProductionEnv(env: Record<string, string | undefined> = process.env): boolean {
+  return env['NODE_ENV'] === 'production' || env['VERCEL_ENV'] === 'production'
+}
+
+/**
+ * True when agent calls MUST have a budget store: production with AGENT_ENABLED=true.
+ * (Dark build: AGENT_ENABLED unset ⇒ false ⇒ the dev no-op keeps today's behaviour.)
+ */
+export function budgetStoreRequired(env: Record<string, string | undefined> = process.env): boolean {
+  return isProductionEnv(env) && env['AGENT_ENABLED'] === 'true'
+}
+
+/**
+ * The budget to use when no Redis/Upstash client is configured: fail closed in
+ * production with agents enabled (logged), the dev no-op otherwise.
+ */
+export function budgetWithoutStore(env: Record<string, string | undefined> = process.env): Budget {
+  if (budgetStoreRequired(env)) {
+    console.error('[agent-core budget] UPSTASH_REDIS_REST_URL/TOKEN missing in production with AGENT_ENABLED=true — refusing agent model calls (budget_store_unavailable)')
+    return createFailClosedBudget()
+  }
+  return createNoopBudget()
 }
