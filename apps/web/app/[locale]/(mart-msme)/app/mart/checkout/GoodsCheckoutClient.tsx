@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { useCart, groupBySeller } from '@/lib/mart/cart-store'
+import { useCart, groupBySeller, type CartLine } from '@/lib/mart/cart-store'
 import { SheetCard, EmeraldCard, GoldNumeral } from '@/components/mart/primitives'
 import { LineFlags } from '@/components/mart/LineFlags'
 import type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
@@ -35,6 +35,7 @@ function deliveryDate(days: number): string {
 
 const ERR_KEYS: Record<string, string> = {
   product_unavailable: 'item_unavailable', below_min_qty: 'below_min_qty', category_blocked: 'category_blocked', multiple_sellers: 'multiple_sellers', no_tier: 'below_min_qty',
+  no_sample: 'item_unavailable', sample_one_unit: 'item_unavailable',
 }
 
 /**
@@ -54,7 +55,7 @@ function normalizeIndianPhone(raw: string): string {
  * services CheckoutClient flow (simulate in test mode; the WEBHOOK creates the
  * order with real keys). No motion while money is uncertain (FRONTEND.md §3.2).
  */
-export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: string | null; states: { value: string; label: string }[]; defaults: DeliveryDefaults | null }) {
+export function GoodsCheckoutClient({ sellerId, states, defaults, sample }: { sellerId: string | null; states: { value: string; label: string }[]; defaults: DeliveryDefaults | null; sample?: Omit<CartLine, 'qty' | 'minOrderQty'> | undefined }) {
   const t = useTranslations('mart')
   const tc = useTranslations('checkout')
   const router = useRouter()
@@ -62,7 +63,12 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
   const removeMany = useCart((s) => s.remove)
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => setHydrated(true), [])
-  const group = useMemo(() => groupBySeller(lines).find((g) => (sellerId ? g.sellerId === sellerId : true)) ?? null, [lines, sellerId])
+  // E16 N42 — a sample is one unit of one listing, outside the cart (the cart is left as it is).
+  const group = useMemo(
+    () => (sample ? { sellerId: sample.sellerId, sellerName: sample.sellerName, lines: [{ ...sample, qty: 1, minOrderQty: 1 }] } : groupBySeller(lines).find((g) => (sellerId ? g.sellerId === sellerId : true)) ?? null),
+    [lines, sellerId, sample],
+  )
+  const sampleFlag = sample ? { sample: true } : {}
 
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewErr, setPreviewErr] = useState('')
@@ -89,7 +95,7 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
     setPreviewErr('')
     fetch('/api/v1/mart/cart/preview', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: group.lines.map((l) => ({ product_id: l.productId, qty: l.qty })), ...(form.state ? { state: form.state } : {}) }),
+      body: JSON.stringify({ items: group.lines.map((l) => ({ product_id: l.productId, qty: l.qty })), ...sampleFlag, ...(form.state ? { state: form.state } : {}) }),
     })
       .then(async (r) => {
         const d = await r.json().catch(() => null)
@@ -122,9 +128,10 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
         items: group!.lines.map((l) => ({ product_id: l.productId, qty: l.qty })),
         delivery: { ...form, contact_phone: phone10 },
         idempotencyKey: newIdempotencyKey(),
+        ...sampleFlag,
         ...(gstinTyped ? { gstInvoice: { gstin: gstinTyped } } : {}),
       })
-      const clearLines = () => group!.lines.forEach((l) => removeMany(l.productId))
+      const clearLines = () => { if (!sample) group!.lines.forEach((l) => removeMany(l.productId)) }
       await payCheckout(data, {
         description: preview?.sellerName ?? group!.sellerName,
         onPaid: (o) => {

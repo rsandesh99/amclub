@@ -20,6 +20,14 @@
  *       not be available" on the product page; the cart preview claims no ITC
  *       for the line (after-ITC = total) and flags it; a quality return → 409
  *       not_returnable while a damaged claim opens.
+ *  N42  samples + customise: the product page offers both; a sample is one
+ *       unit at the sample price with the MOQ waived (preview + a real
+ *       ordinary goods order flagged `sample`); qty 2 → 422, no sample price →
+ *       409; Customise links the goods RFQ prefilled from the listing.
+ *  N44  reorder library: past completed lines with today's price beside the
+ *       old one (price change flagged); the reminder uses the usual interval,
+ *       refuses a never-bought listing (404), and the hourly cron sends a due
+ *       reminder once and moves it on.
  *
  * Run: BASE_URL=http://localhost:3000 pnpm --filter @amclub/web exec tsx scripts/verify-mart-storefront.ts
  * Creates only kill-test rows; removes everything in `finally` (zero residue).
@@ -206,6 +214,54 @@ async function main() {
     const damaged = await json(await api(buyer.token, `/api/v1/mart/orders/${nr}/transition`, { action: 'open_return', return: { reason: 'damaged' } }))
     ok('damaged claim still opens → disputed', damaged.status === 200, JSON.stringify(damaged.body))
 
+    // ── N42 samples + customise ────────────────────────────────────────────
+    console.log('N42. Samples + customise:')
+    const cs = await json(await api(seller.token, '/api/v1/mart/seller/products', { ...body(`${tag} sample bolt`, { material: 'MS' }), min_order_qty: 10, sample_price_paise: 900 }))
+    const ps = cs.body.id as string
+    created.productIds.push(ps)
+    await api(seller.token, `/api/v1/mart/seller/products/${ps}`, { action: 'submit' })
+    await api(ops.token, `/api/v1/mart/admin/products/${ps}`, { action: 'approve' })
+    const psHtml = await html(`/mart/p/${ps}`)
+    ok('product page offers "Request a sample" and "Customise"', psHtml.includes('data-testid="request-sample"') && psHtml.includes(`/app/mart/rfq/new?product_id=${ps}&amp;customise=1`))
+    const sp = await json(await api(buyer.token, '/api/v1/mart/cart/preview', { items: [{ product_id: ps, qty: 1 }], sample: true }))
+    ok('sample preview: one unit at the sample price, MOQ waived', sp.status === 200 && sp.body.lineItems?.[0]?.tier_unit_price_paise === 900 && sp.body.lineItems?.[0]?.qty === 1 && sp.body.lineItems?.[0]?.sample === true, JSON.stringify(sp.body.lineItems ?? sp.body))
+    ok('without sample: qty 1 is below the MOQ → 422', (await api(buyer.token, '/api/v1/mart/cart/preview', { items: [{ product_id: ps, qty: 1 }] })).status === 422)
+    ok('sample of 2 → 422 sample_one_unit', (await json(await api(buyer.token, '/api/v1/mart/cart/preview', { items: [{ product_id: ps, qty: 2 }], sample: true }))).body.error?.code === 'sample_one_unit')
+    ok('no sample price → 409 no_sample', (await json(await api(buyer.token, '/api/v1/mart/cart/preview', { items: [{ product_id: p1, qty: 1 }], sample: true }))).status === 409)
+    const sco = await json(await api(buyer.token, '/api/v1/mart/checkout', { items: [{ product_id: ps, qty: 1 }], delivery, idempotencyKey: randomUUID(), sample: true }))
+    const ssim = await json(await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: sco.body.checkoutSessionId }))
+    if (ssim.body.orderId) created.orderIds.push(ssim.body.orderId)
+    const { data: so } = await admin.from('orders').select('kind, total_paise, line_items, title').eq('id', ssim.body.orderId ?? '00000000-0000-0000-0000-000000000000').maybeSingle()
+    ok('sample = an ordinary goods order of one unit at the sample price', so?.kind === 'goods' && Number(so.total_paise) === sp.body.amounts?.totalPaise && (so.line_items as { sample?: boolean; qty: number }[])?.[0]?.sample === true && (so.line_items as { qty: number }[])[0]!.qty === 1, JSON.stringify(so))
+
+    // ── N44 reorder library ────────────────────────────────────────────────
+    console.log('N44. Reorder library + reminder:')
+    const { orderId: r1 } = await buy(p1, 10)
+    const { orderId: r2 } = await buy(p1, 20)
+    const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString()
+    await admin.from('orders').update({ status: 'completed', created_at: daysAgo(30) }).eq('id', r1)
+    await admin.from('orders').update({ status: 'completed', created_at: daysAgo(16) }).eq('id', r2)
+    await admin.from('price_tiers').update({ unit_price_paise: 500 }).eq('product_id', p1).eq('min_qty', 1)
+    const lib = await json(await api(buyer.token, '/api/v1/mart/reorder'))
+    const item = (lib.body.items ?? []).find((i: { productId: string }) => i.productId === p1)
+    ok('the bought listing is in the library with the last quantity', item?.lastQty === 20 && item?.orders === 2, JSON.stringify(item))
+    ok('then ₹4.50 vs today ₹5.00, flagged as changed', item?.then?.unit_price_paise === 450 && item?.today?.unit_price_paise === 500 && item?.priceChanged === true)
+    ok('samples are not in the library', !(lib.body.items ?? []).some((i: { productId: string }) => i.productId === ps))
+    ok('reminder for a never-bought listing → 404', (await api(buyer.token, '/api/v1/mart/reorder/reminders', { productId: pp, on: true })).status === 404)
+    const rem = await json(await api(buyer.token, '/api/v1/mart/reorder/reminders', { productId: p1, on: true }))
+    const tomorrow = Date.now() + 86_400_000
+    ok('reminder on at the usual 14-day interval; overdue → tomorrow', rem.status === 200 && rem.body.reminder?.intervalDays === 14 && Math.abs(Date.parse(rem.body.reminder.nextAt) - tomorrow) < 3_600_000, JSON.stringify(rem.body))
+    await admin.from('mart_reorder_reminders').update({ next_at: daysAgo(1) }).eq('user_id', buyer.uid).eq('product_id', p1)
+    await cron()
+    const notes = async () => ((await admin.from('notifications').select('id').eq('user_id', buyer.uid).eq('kind', 'mart_reorder_reminder')).data ?? []).length
+    ok('a due reminder is sent', (await notes()) === 1)
+    const { data: moved } = await admin.from('mart_reorder_reminders').select('next_at').eq('user_id', buyer.uid).eq('product_id', p1).single()
+    ok('and moved on by its interval', Math.abs(Date.parse(moved!.next_at) - (Date.now() + 14 * 86_400_000)) < 3_600_000)
+    await cron()
+    ok('a second run sends nothing', (await notes()) === 1)
+    const off = await json(await api(buyer.token, '/api/v1/mart/reorder/reminders', { productId: p1, on: false }))
+    ok('reminder off', off.status === 200 && off.body.reminder?.active === false)
+
     console.log(`\n${fail === 0 ? '✅' : '❌'} verify-mart-storefront: ${pass} passed, ${fail} failed\n`)
   } catch (e) {
     fail++
@@ -232,6 +288,7 @@ async function main() {
     for (const u of created.users) await admin.from('gstin_verifications').delete().eq('user_id', u)
     for (const p of created.providerIds) await admin.from('provider_profiles').delete().eq('id', p)
     for (const m of created.msmeIds) await admin.from('msme_profiles').delete().eq('id', m)
+    for (const u of created.users) await admin.from('mart_reorder_reminders').delete().eq('user_id', u)
     for (const u of created.users) {
       await admin.from('audit_logs').delete().eq('actor_id', u)
       await admin.from('notifications').delete().eq('user_id', u)

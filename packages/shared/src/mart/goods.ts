@@ -30,6 +30,8 @@ export const goodsLineItemSchema = z.object({
   line_gst_paise: z.number().int().nonnegative(),
   /** Mart category of the line — set for listing-less lines so the release gate can find its return window. */
   category_slug: z.string().max(60).optional(),
+  /** E16 N42 — a sample: qty 1 at the listing's sample price (an ordinary goods order otherwise). */
+  sample: z.boolean().optional(),
 })
 export type GoodsLineItem = z.infer<typeof goodsLineItemSchema>
 
@@ -52,6 +54,8 @@ export const goodsCheckoutSchema = z.object({
   gstInvoice: z
     .object({ gstin: z.string().optional(), businessName: z.string().optional(), address: z.string().optional() })
     .optional(),
+  /** E16 N42 — one listing, qty 1, at its sample price (the route refuses anything else). */
+  sample: z.boolean().optional(),
   idempotencyKey: z.string().uuid(),
 })
 export type GoodsCheckoutInput = z.infer<typeof goodsCheckoutSchema>

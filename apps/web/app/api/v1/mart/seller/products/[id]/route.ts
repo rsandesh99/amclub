@@ -69,6 +69,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     gst_rate_bps: c.product.gstRateBps, unit: c.product.unit, images: c.product.images, min_order_qty: c.product.minOrderQty,
     country_of_origin: c.product.countryOfOrigin, brand: c.product.brand, specs: c.product.specs, availability: c.product.availability,
     lead_time_days: c.product.leadTimeDays, attributes: c.product.attributes, promises: c.product.promises,
+    sample_price_paise: c.product.samplePricePaise,
   }
   const after = {
     category_slug: d.category_slug, name: d.name, description: d.description ?? null, hsn_code: d.hsn_code, gst_rate_bps: d.gst_rate_bps,
@@ -76,6 +77,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     specs: d.specs, availability: d.availability, lead_time_days: d.availability === 'lead_time' ? (d.lead_time_days ?? null) : null,
     attributes: attrs.value,
     promises: d.promises,
+    sample_price_paise: d.sample_price_paise,
   }
   const { error } = await c.admin
     .from('products')

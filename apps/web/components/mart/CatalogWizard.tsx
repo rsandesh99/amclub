@@ -34,12 +34,14 @@ export interface ListingDraft {
   attributes: Record<string, string>
   /** E16 N41 — seller opt-in promises (measured; repeated breaches remove the badge). */
   promises: MartPromise[]
+  /** E16 N42 — sample price in rupees as typed ('' = no samples); sent as paise. */
+  sampleRupees: string
 }
 
 const EMPTY: ListingDraft = {
   name: '', description: '', categorySlug: '', hsnCode: '', gstRateBps: '', unit: 'pcs', minOrderQty: '1', countryOfOrigin: 'IN',
   brand: '', specs: [], availability: 'in_stock', leadTimeDays: '',
-  images: [], tiers: [{ minQty: '1', rupees: '' }], attributes: {}, promises: [],
+  images: [], tiers: [{ minQty: '1', rupees: '' }], attributes: {}, promises: [], sampleRupees: '',
 }
 
 const MAX_SPECS = 20
@@ -166,6 +168,7 @@ export function CatalogWizard({
       const tiers = draft.tiers.map((x) => ({ min_qty: Number(x.minQty), unit_price_paise: Math.round(Number(x.rupees) * 100) }))
       if (tiers.some((x) => !Number.isInteger(x.min_qty) || x.min_qty <= 0 || !Number.isFinite(x.unit_price_paise) || x.unit_price_paise <= 0)) return t('err_price')
       if (tiers[0]?.min_qty !== 1) return t('err_tiers')
+      if (draft.sampleRupees.trim() && !(Number(draft.sampleRupees) > 0)) return t('err_sample_price')
       for (let i = 1; i < tiers.length; i++) {
         if (tiers[i]!.min_qty <= tiers[i - 1]!.min_qty || tiers[i]!.unit_price_paise >= tiers[i - 1]!.unit_price_paise) return t('err_tiers')
       }
@@ -182,6 +185,7 @@ export function CatalogWizard({
       specs: cleanSpecs(),
       attributes: cleanAttributes(),
       promises: draft.promises,
+      sample_price_paise: draft.sampleRupees.trim() ? Math.round(Number(draft.sampleRupees) * 100) : null,
       availability: draft.availability,
       ...(draft.availability === 'lead_time' ? { lead_time_days: leadDays() } : {}),
       hsn_code: draft.hsnCode.trim(),
@@ -456,6 +460,12 @@ export function CatalogWizard({
             </div>
           ))}
           {draft.tiers.length < 8 && <Button variant="outline" size="sm" onClick={() => set({ tiers: [...draft.tiers, { minQty: '', rupees: '' }] })}>{t('add_tier')}</Button>}
+          {/* E16 N42 — optional sample: buyers order one unit at this price before a bulk order. */}
+          <div className="border-t border-brass/20 pt-3" data-testid="sample-price">
+            <Label htmlFor="sample-price">{t('sample_price_rupees')}</Label>
+            <Input id="sample-price" inputMode="decimal" placeholder={t('sample_price_none')} value={draft.sampleRupees} onChange={(e) => set({ sampleRupees: e.target.value.replace(/[^0-9.]/g, '') })} />
+            <p className="mt-1 text-xs text-foreground-secondary">{t('sample_price_hint')}</p>
+          </div>
           {error && <p className="text-sm text-stamp" role="alert">{error}</p>}
           <div className="flex justify-between">
             <Button variant="ghost" onClick={() => setStepIdx(1)}>{t('back')}</Button>
@@ -475,6 +485,7 @@ export function CatalogWizard({
             <div><dt>{t('field_unit')}</dt><dd className="text-emerald-ink">{draft.unit}</dd></div>
             {draft.brand.trim() && <div><dt>{t('field_brand')}</dt><dd className="text-emerald-ink">{draft.brand.trim()}</dd></div>}
             <div><dt>{t('availability')}</dt><dd className="text-emerald-ink">{draft.availability === 'lead_time' ? t('lead_time_note', { days: leadDays() }) : t('in_stock')}</dd></div>
+            {draft.sampleRupees.trim() && <div><dt>{t('sample_price_rupees')}</dt><dd className="text-emerald-ink">₹{draft.sampleRupees.trim()}</dd></div>}
             {draft.promises.length > 0 && <div className="col-span-2"><dt>{t('promises_title')}</dt><dd className="text-emerald-ink">{draft.promises.map((p) => t(`promise_${p}` as 'promise_ships_48h')).join(' · ')}</dd></div>}
           </dl>
           {Object.keys(cleanAttributes()).length > 0 && (

@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
       specs: d.specs,
       attributes: attrs.value,
       promises: d.promises,
+      sample_price_paise: d.sample_price_paise,
       availability: d.availability,
       lead_time_days: d.availability === 'lead_time' ? (d.lead_time_days ?? null) : null,
       list_price_paise: d.tiers[0]?.unit_price_paise ?? null,

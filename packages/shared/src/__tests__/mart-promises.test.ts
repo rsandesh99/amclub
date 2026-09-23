@@ -3,11 +3,14 @@ import {
   activePromiseBadges,
   effectiveReturnFreightPayer,
   goodsItcSplit,
+  groupPastGoodsLines,
   martPromisesSchema,
   measurePromiseBreaches,
+  nextReorderReminderAt,
   parseMartSetting,
   productInputSchema,
   returnAllowed,
+  usualReorderIntervalDays,
 } from '../index'
 
 const H = 3_600_000
@@ -66,5 +69,33 @@ describe('non-returnable + ITC (E16 N43)', () => {
     expect(goodsItcSplit([{ gstPaise: 1800, itcEligible: true }, { gstPaise: 1400, itcEligible: true }], 18_200)).toEqual({ itcPaise: 3200, afterItcPaise: 15_000 })
     expect(goodsItcSplit([{ gstPaise: 1800, itcEligible: true }, { gstPaise: 1400, itcEligible: false }], 18_200)).toEqual({ itcPaise: 1800, afterItcPaise: 16_400 })
     expect(goodsItcSplit([{ gstPaise: 1800, itcEligible: false }], 11_800)).toEqual({ itcPaise: 0, afterItcPaise: 11_800 })
+  })
+})
+
+describe('samples + reorder (E16 N42 / N44)', () => {
+  it('product input carries an optional sample price (default null)', () => {
+    const base = { category_slug: 'fasteners', name: 'Hex bolt M12', hsn_code: '7318', gst_rate_bps: 1800, unit: 'pcs', tiers: [{ min_qty: 1, unit_price_paise: 1000 }] }
+    expect(productInputSchema.parse(base).sample_price_paise).toBeNull()
+    expect(productInputSchema.safeParse({ ...base, sample_price_paise: 0 }).success).toBe(false)
+    expect(productInputSchema.parse({ ...base, sample_price_paise: 2500 }).sample_price_paise).toBe(2500)
+  })
+
+  it('usual interval = median gap, clamped; next reminder never in the past', () => {
+    const d = (iso: string) => `${iso}T10:00:00.000Z`
+    expect(usualReorderIntervalDays([d('2026-06-01')])).toBe(30)
+    expect(usualReorderIntervalDays([d('2026-06-01'), d('2026-06-15'), d('2026-07-15'), d('2026-07-29')])).toBe(14)
+    expect(usualReorderIntervalDays([d('2026-06-01'), d('2026-06-03')])).toBe(7)
+    expect(usualReorderIntervalDays([d('2025-01-01'), d('2026-06-01')])).toBe(365)
+    const now = new Date('2026-09-23T00:00:00.000Z')
+    expect(nextReorderReminderAt('2026-09-10T00:00:00.000Z', 30, now)).toBe('2026-10-10T00:00:00.000Z')
+    expect(nextReorderReminderAt('2026-01-10T00:00:00.000Z', 30, now)).toBe('2026-09-24T00:00:00.000Z')
+  })
+
+  it('groups past lines by listing, newest first; skips samples and quoted lines', () => {
+    const lines = groupPastGoodsLines([
+      { created_at: '2026-08-01T00:00:00Z', line_items: [{ product_id: 'a', name: 'Bolt', unit: 'pcs', qty: 100, tier_unit_price_paise: 400 }, { product_id: 'b', name: 'Sample', unit: 'pcs', qty: 1, tier_unit_price_paise: 900, sample: true }] },
+      { created_at: '2026-09-01T00:00:00Z', line_items: [{ product_id: 'a', name: 'Bolt', unit: 'pcs', qty: 200, tier_unit_price_paise: 380, gst_rate_bps: 1800 }, { product_id: null, name: 'Custom', unit: 'pcs', qty: 5, tier_unit_price_paise: 5000 }] },
+    ])
+    expect(lines).toEqual([{ productId: 'a', name: 'Bolt', unit: 'pcs', lastQty: 200, lastUnitPricePaise: 380, gstRateBps: 1800, lastOrderedAt: '2026-09-01T00:00:00Z', orderedAt: ['2026-09-01T00:00:00Z', '2026-08-01T00:00:00Z'] }])
   })
 })

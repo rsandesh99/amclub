@@ -180,6 +180,8 @@ export const productInputSchema = z.object({
   attributes: productAttributesSchema,
   /** E16 N41 — seller opt-in promises (badges are removed automatically after repeated breaches). */
   promises: martPromisesSchema,
+  /** E16 N42 — a sample is an ordinary goods order of qty 1 at this price (paise, pre-GST); null = no samples. */
+  sample_price_paise: z.number().int().positive().max(100_000_000).nullable().default(null),
 })
 export type ProductInput = z.infer<typeof productInputSchema>
 

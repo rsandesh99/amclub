@@ -2541,6 +2541,20 @@ Nothing in this epic is user-visible.
   - **ITC.** "ITC may not be available on this item" replaces the ITC hint, and the after-ITC column and card line disappear. The server computes the credit per line (shared `goodsItcSplit`): cart preview, checkout and pool checkout return `itcPaise` (eligible lines' GST) and `afterItcPaise` = total − credit. With every line eligible this equals the taxable value, as before.
 - **Acceptance.** `verify-mart-storefront` adds N41 (stored promises, badges, a breach recorded once by the cron with no money or status moved, the badge dropping at the limit while the other stays) and N43 (flags on the product page, a zero-credit preview, 409 on a quality return, a damaged claim opening).
 
+**As built (E16c: samples, customise and the reorder library; same staged 0069).**
+- **N42 samples.**
+  - The seller may set a sample price on the listing's pricing step (`products.sample_price_paise`, pre-GST; empty = no samples).
+  - "Request a sample · ₹X + GST" opens `/app/mart/checkout?sample=<id>`: one unit, outside the cart (the cart is untouched).
+  - The one goods preparation (`prepareGoodsCheckout(…, { sample: true })`) prices it at the sample price with the MOQ waived and marks the frozen line `sample: true`. Cart preview and checkout accept `sample` only for exactly one listing at qty 1 (else 422 `sample_one_unit`); a listing without a sample price → 409 `no_sample`.
+  - The money is the same `computeGoodsOrderAmounts` → session → webhook → order path: a sample is an ordinary goods order.
+- **N42 customise.** "Customise" opens the goods RFQ (`?product_id=…&customise=1`) with the spec rows prefilled from the listing's typed attributes, then its free-form specs. The buyer edits them, and sellers quote as with any goods RFQ (D4: provider-priced).
+- **N44 reorder library.**
+  - `/app/mart/reorder` (and `GET /api/v1/mart/reorder` for mobile) groups the lines of the buyer's completed goods orders by listing (shared `groupPastGoodsLines`; samples and quoted lines left out). Each shows what they paid beside today's server price for the same quantity, flagged when it changed (the N26 rule). "Reorder" puts it in the cart at that quantity; a listing no longer live shows "No longer listed".
+  - **Reminder, opt-in.** `POST /api/v1/mart/reorder/reminders` (only for a listing they bought; service role after the buyer's session) stores `mart_reorder_reminders` at their usual interval: shared `usualReorderIntervalDays`, the median gap clamped to 7–365, 30 for a single order. The first reminder comes that long after the last order, or tomorrow if that has passed.
+  - The hourly Mart cron sends each due reminder once (in-app, linking the list) and moves it on, guarded on the `next_at` it read.
+  - The cart links "Your usual orders".
+- **Acceptance.** `verify-mart-storefront` adds N42 (the page offers both; the sample preview and a real sample order at one unit; 422 / 409 refusals) and N44 (the library with then vs today and the change flag; samples excluded; reminder 404 / 14-day interval / overdue → tomorrow; the cron sends once and moves on). `verify-mart-inert` covers `/app/mart/reorder` and both reorder routes.
+
 ---
 
 ### E17: Analytics consent (N36, gated: D-UX2)

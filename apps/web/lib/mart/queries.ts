@@ -48,6 +48,9 @@ export interface ProductSummary {
   /** E16 N43 — the category's flags ("Not returnable", "ITC may not be available"). */
   returnable: boolean
   itcEligible: boolean
+  /** E16 N42 — the seller's sample price (paise, pre-GST) and its server display; null = no samples. */
+  samplePricePaise: number | null
+  sample: TierDisplay | null
   availability: 'in_stock' | 'lead_time'
   leadTimeDays: number | null
   status: string
@@ -82,7 +85,7 @@ export function tierDisplay(t: TierRow, gstRateBps: number, itcEligible = true):
 }
 
 const SELECT =
-  'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, brand, specs, attributes, promises, availability, lead_time_days, list_price_paise, status, created_at, ' +
+  'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, brand, specs, attributes, promises, sample_price_paise, availability, lead_time_days, list_price_paise, status, created_at, ' +
   'category:mart_categories(returnable, itc_eligible), ' +
   'seller:provider_profiles!inner(id, display_name, slug, city, state, avg_rating, review_count, completed_orders, top_rated), tiers:price_tiers(min_qty, unit_price_paise)'
 
@@ -113,6 +116,8 @@ export function mapProduct(r: any): ProductSummary {
     promises: Array.isArray(r.promises) ? (r.promises as string[]) : [],
     returnable: category?.returnable !== false,
     itcEligible,
+    samplePricePaise: r.sample_price_paise == null ? null : Number(r.sample_price_paise),
+    sample: r.sample_price_paise == null ? null : tierDisplay({ min_qty: 1, unit_price_paise: Number(r.sample_price_paise) }, gst, itcEligible),
     availability: r.availability === 'lead_time' ? 'lead_time' : 'in_stock',
     leadTimeDays: r.lead_time_days == null ? null : Number(r.lead_time_days),
     status: r.status,
@@ -213,6 +218,13 @@ export async function getPublicProduct(id: string): Promise<ProductSummary | nul
   if (!data) return null
   const [product] = await withActiveBadges(await createAdminClient(), [mapProduct(data)])
   return product ?? null
+}
+
+/** E16 N44 — several public listings by id (anon client → only the ones still live), as displayed today. */
+export async function getPublicProductsByIds(ids: string[]): Promise<ProductSummary[]> {
+  if (!ids.length) return []
+  const { data } = await createPublicClient().from('products').select(SELECT).in('id', ids.slice(0, 200)).eq('status', 'active').is('deleted_at', null)
+  return (data ?? []).map(mapProduct)
 }
 
 /** Seller's own catalog (service role; caller has verified ownership of sellerId). */

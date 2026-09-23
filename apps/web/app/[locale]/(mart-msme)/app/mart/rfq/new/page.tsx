@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
 import { ClipboardList } from 'lucide-react'
-import { pickLocale } from '@amclub/shared'
+import { formatAttributeValue, pickLocale } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { martPageGate } from '@/lib/mart/gate'
 import { getSessionUser } from '@/lib/auth/session'
@@ -9,6 +9,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { listMartCategories } from '@/lib/mart/config'
 import { deliveryDefaults } from '@/lib/mart/delivery-defaults'
 import { getPublicProduct } from '@/lib/mart/queries'
+import { publicCategoryAttributes } from '@/lib/mart/attributes'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { Button } from '@/components/ui/button'
 import { GoodsRfqForm, type GoodsRfqPrefill } from '@/components/mart/GoodsRfqForm'
@@ -20,14 +21,15 @@ export const dynamic = 'force-dynamic'
 /**
  * AMC Mart M2 — "Ask for a bulk quote". Same profile gate as the services RFQ
  * (fan-out needs the buyer's state); delivery prefilled from the last goods
- * order or the profile; `?product_id=` prefills item/unit/category from a listing.
+ * order or the profile; `?product_id=` prefills item/unit/category from a listing,
+ * and `&customise=1` (E16 N42) also starts the spec from the listing's attributes + specs.
  */
 export default async function NewGoodsRfqPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   martPageGate()
   const user = await getSessionUser()
   if (!user) redirect('/login?next=/app/mart/rfq/new')
   const sp = await searchParams
-  const [t, locale, admin] = await Promise.all([getTranslations('rfq'), getLocale(), createAdminClient()])
+  const [t, tm, locale, admin] = await Promise.all([getTranslations('rfq'), getTranslations('mart'), getLocale(), createAdminClient()])
 
   const { data: profile } = await admin.from('msme_profiles').select('state, sector').eq('user_id', user.id).maybeSingle()
   if (!profile?.state || !profile?.sector) {
@@ -50,8 +52,17 @@ export default async function NewGoodsRfqPage({ searchParams }: { searchParams: 
     productId ? getPublicProduct(productId) : Promise.resolve(null),
   ])
   const categories = cats.filter((c) => !c.bis_blocked).map((c) => ({ slug: c.slug, name: pickLocale(c.name_i18n, locale) }))
+  // E16 N42 — "Customise" starts the spec from the listing (typed attributes first, then its free-form specs).
+  const customise = sp['customise'] === '1' && product
+  const attrDefs = customise && Object.keys(product.attributes).length ? await publicCategoryAttributes(product.categorySlug) : []
+  const customSpec = customise
+    ? [
+        ...attrDefs.filter((d) => product.attributes[d.key] !== undefined).map((d) => ({ k: pickLocale(d.label_i18n, locale), v: formatAttributeValue(d, product.attributes[d.key], { yes: tm('attr_yes'), no: tm('attr_no') }) })),
+        ...product.specs,
+      ].slice(0, 20)
+    : []
   const prefill: GoodsRfqPrefill | null = product
-    ? { productId: product.id, item: product.name, unit: product.unit, categorySlug: product.categorySlug, productName: product.name }
+    ? { productId: product.id, item: product.name, unit: product.unit, categorySlug: product.categorySlug, productName: product.name, ...(customSpec.length ? { spec: customSpec } : {}) }
     : sp['item']
       ? { productId: null, item: sp['item'].slice(0, 140), unit: 'pcs', categorySlug: sp['category'] ?? '', productName: null }
       : null

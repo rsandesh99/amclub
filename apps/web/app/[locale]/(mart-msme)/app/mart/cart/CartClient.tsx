@@ -72,6 +72,8 @@ export function CartClient() {
           <h1 className="text-lg font-semibold text-emerald-ink">{t('cart_empty_title')}</h1>
           <p className="mt-1 text-sm text-foreground-secondary">{t('cart_empty_body')}</p>
           <Link href={'/mart' as '/services'}><Button className="mt-5 bg-emerald hover:bg-emerald-ink">{t('browse_cta')}</Button></Link>
+          {/* E16 N44 — the buyer's usual orders at today's prices. */}
+          <p className="mt-3"><Link href={'/app/mart/reorder' as '/app'} className="inline-flex min-h-11 items-center text-meta font-medium text-emerald underline underline-offset-2">{t('reorder_link')}</Link></p>
         </div>
       </div>
     )
@@ -85,7 +87,10 @@ export function CartClient() {
 
   return (
     <div className="mart-enter mx-auto max-w-lg space-y-5 px-4 py-6">
-      <h1 className="font-display text-2xl font-bold text-emerald-ink">{t('cart_title')}</h1>
+      <div className="flex items-baseline justify-between gap-2">
+        <h1 className="font-display text-2xl font-bold text-emerald-ink">{t('cart_title')}</h1>
+        <Link href={'/app/mart/reorder' as '/app'} className="inline-flex min-h-11 items-center text-meta font-medium text-emerald underline underline-offset-2">{t('reorder_link')}</Link>
+      </div>
       {groups.length > 1 && <p className="text-xs text-foreground-secondary">{t('one_seller_note')}</p>}
       {groups.map((g, gi) => {
         const pv = previews[g.sellerId]

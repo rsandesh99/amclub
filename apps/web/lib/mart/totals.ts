@@ -42,11 +42,14 @@ export type GoodsPrepError =
   | { code: 'below_min_qty'; productId: string; minOrderQty: number }
   | { code: 'category_blocked'; productId: string }
   | { code: 'no_tier'; productId: string }
+  | { code: 'no_sample'; productId: string }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function prepareGoodsCheckout(
   admin: Admin,
   items: { product_id: string; qty: number }[],
+  /** E16 N42 — a sample: the route has checked it is one listing at qty 1; priced at its sample price, MOQ waived. */
+  opts: { sample?: boolean } = {},
 ): Promise<{ ok: true; prep: GoodsPrep } | { ok: false; status: number; error: GoodsPrepError }> {
   // Merge duplicate lines.
   const qtyById = new Map<string, number>()
@@ -56,7 +59,7 @@ export async function prepareGoodsCheckout(
   const { data: rows } = await admin
     .from('products')
     .select(
-      'id, seller_id, category_slug, name, hsn_code, gst_rate_bps, unit, min_order_qty, status, deleted_at, ' +
+      'id, seller_id, category_slug, name, hsn_code, gst_rate_bps, unit, min_order_qty, sample_price_paise, status, deleted_at, ' +
         'seller:provider_profiles!inner(id, display_name, status, sells_goods, deleted_at), tiers:price_tiers(min_qty, unit_price_paise)',
     )
     .in('id', ids)
@@ -83,7 +86,7 @@ export async function prepareGoodsCheckout(
     if (sellerId && sellerId !== p.seller_id) return { ok: false, status: 422, error: { code: 'multiple_sellers' } }
     sellerId = p.seller_id
     sellerName = seller.display_name
-    if (qty < Number(p.min_order_qty ?? 1)) {
+    if (!opts.sample && qty < Number(p.min_order_qty ?? 1)) {
       return { ok: false, status: 422, error: { code: 'below_min_qty', productId: id, minOrderQty: Number(p.min_order_qty ?? 1) } }
     }
     let cat = categoryCache.get(p.category_slug)
@@ -96,7 +99,9 @@ export async function prepareGoodsCheckout(
       min_qty: Number(t.min_qty),
       unit_price_paise: Number(t.unit_price_paise),
     }))
-    const tier = resolveTier(tiers, qty)
+    if (opts.sample && p.sample_price_paise == null) return { ok: false, status: 409, error: { code: 'no_sample', productId: id } }
+    // A sample is one unit at the seller's sample price — the same line shape and money math as any goods line.
+    const tier = opts.sample ? { min_qty: 1, unit_price_paise: Number(p.sample_price_paise) } : resolveTier(tiers, qty)
     if (!tier) return { ok: false, status: 422, error: { code: 'no_tier', productId: id } }
 
     const gstRateBps = Number(p.gst_rate_bps)
@@ -112,6 +117,7 @@ export async function prepareGoodsCheckout(
       gst_rate_bps: gstRateBps as GoodsLineItem['gst_rate_bps'],
       line_taxable_paise: taxable,
       line_gst_paise: Math.round((taxable * gstRateBps) / 10000),
+      ...(opts.sample ? { sample: true } : {}),
     })
     lineInputs.push({ qty, unitPricePaise: tier.unit_price_paise, gstRateBps, commissionBps: cat.commission_bps })
     if (cat.returnable !== false) returnWindowHours = Math.max(returnWindowHours, cat.return_window_hours)
@@ -133,7 +139,7 @@ export async function prepareGoodsCheckout(
   }
 
   const first = lineItems[0]!
-  const title = lineItems.length === 1 ? `${first.qty} ${first.unit} ${first.name}` : `${first.name} + ${lineItems.length - 1} more`
+  const title = opts.sample ? `Sample: ${first.name}` : lineItems.length === 1 ? `${first.qty} ${first.unit} ${first.name}` : `${first.name} + ${lineItems.length - 1} more`
   const itc = goodsItcSplit(
     amounts.lines.map((l, i) => ({ gstPaise: l.gstPaise, itcEligible: lineItcEligible[i]! })),
     amounts.totalPaise,

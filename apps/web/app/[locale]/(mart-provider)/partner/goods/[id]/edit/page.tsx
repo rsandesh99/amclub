@@ -42,6 +42,7 @@ export default async function EditGoodsListingPage({ params }: { params: Promise
         images: product.images.map((k) => ({ key: k, url: publicAssetUrl(k) })),
         tiers: product.tiers.map((t) => ({ minQty: String(t.min_qty), rupees: (t.unit_price_paise / 100).toString() })),
         attributes: Object.fromEntries(Object.entries(product.attributes).map(([k, v]) => [k, String(v)])),
+        sampleRupees: product.samplePricePaise != null ? (product.samplePricePaise / 100).toString() : '',
         promises: product.promises.filter((p): p is MartPromise => (MART_PROMISES as readonly string[]).includes(p)),
       }}
     />

@@ -169,6 +169,17 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
           </Link>
           <span className="text-xs text-foreground-secondary">{tr('goods_ask_hint')}</span>
         </div>
+        {/* E16 N42 — try one before buying in bulk (an ordinary goods order of one unit), or have it made your way (a goods RFQ prefilled from this listing). */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {product.sample && (
+            <Link href={`/app/mart/checkout?sample=${product.id}` as '/app'} data-testid="request-sample" className="inline-flex min-h-11 items-center rounded-button border border-emerald px-3 text-meta font-semibold text-emerald hover:bg-emerald/10">
+              {t('request_sample', { price: formatINRExact(product.sample.unit_price_paise) })}
+            </Link>
+          )}
+          <Link href={`/app/mart/rfq/new?product_id=${product.id}&customise=1` as '/app'} data-testid="customise" className="inline-flex min-h-11 items-center rounded-button border border-brass/60 px-3 text-meta font-semibold text-emerald-ink hover:bg-emerald/10">
+            {t('customise')}
+          </Link>
+        </div>
       </SheetCard>
 
       {(attrRows.length > 0 || product.specs.length > 0) && (
