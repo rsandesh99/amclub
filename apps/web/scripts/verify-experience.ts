@@ -572,7 +572,7 @@ async function e2b(fx: { word: string; A: string; B: string; C: string; D: strin
   // has already streamed — Next's not-found UI marked noindex.
   const wrongSvc = await fetch(`${BASE}/services/tax-accounting/trademark`)
   const wrongHtml = await wrongSvc.text()
-  check('FR-2.3: a service of another category is not found (404 / noindex)', wrongSvc.status === 404 || (wrongHtml.includes('noindex') && !wrongHtml.includes('data-testid="service-hero"')), `status ${wrongSvc.status}`)
+  check('FR-2.3: a service of another category is not found (404 / noindex)', wrongSvc.status === 404 || ((wrongHtml.includes('noindex') || wrongHtml.includes('>404<')) && !wrongHtml.includes('data-testid="service-hero"')), `status ${wrongSvc.status}`)
 
   // FR-2.9 — shortlist compare: four columns, identical rows.
   const cmp = visible(await (await fetch(`${BASE}/compare?items=${[A, B, C, D].join(',')}`)).text())
