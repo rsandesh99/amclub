@@ -10,6 +10,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
+import { computeOrderAmounts } from '@amclub/shared'
 
 const URL = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -145,6 +146,34 @@ async function main() {
   check('4. Other quotes auto-declined; RFQ accepted', accepted === 1 && declined === 6 && rfqFinal!.status === 'accepted',
     `accepted=${accepted} declined=${declined} rfq=${rfqFinal!.status}`)
 
+  // ── Criterion 4b (ADR-014 §7, H6): a duplicate paid order is cancelled + refunded at once ──
+  // Two checkouts racing past the route guard cannot be timed from a script, so the rig
+  // writes the second unpaid session the race leaves behind (for quote ka2), then pays it.
+  const { data: winSess } = await admin.from('checkout_sessions').select('msme_id, title, scope_snapshot, commission_bps, delivery_days').eq('order_id', orderId).maybeSingle()
+  const { data: q2 } = await admin.from('quotes').select('id, provider_id, price_paise').eq('id', quoteIds[2]!).single()
+  const dupAmounts = computeOrderAmounts({ pricePaise: Number(q2!.price_paise), discountBps: 0, commissionBps: Number(winSess?.commission_bps ?? 1000) })
+  const { data: dupSess, error: dupErr } = winSess
+    ? await admin.from('checkout_sessions').insert({
+        razorpay_order_id: `order_sim_dup_${crypto.randomUUID()}`, msme_id: winSess.msme_id, provider_id: q2!.provider_id, source: 'quote', quote_id: q2!.id,
+        title: winSess.title, scope_snapshot: winSess.scope_snapshot, price_paise: dupAmounts.pricePaise, discount_paise: dupAmounts.discountPaise, gst_paise: dupAmounts.gstPaise,
+        total_paise: dupAmounts.totalPaise, commission_bps: dupAmounts.commissionBps, commission_paise: dupAmounts.commissionPaise, provider_earning_paise: dupAmounts.providerEarningPaise,
+        delivery_days: winSess.delivery_days, idempotency_key: crypto.randomUUID(), status: 'created', expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+      }).select('id').single()
+    : { data: null, error: { message: 'winning session not found' } }
+  const dupRes = dupSess ? await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: dupSess.id }) : null
+  const dupOrderId = dupRes ? ((await dupRes.json()).orderId as string | undefined) : undefined
+  const { data: dupOrder } = dupOrderId ? await admin.from('orders').select('status, total_paise').eq('id', dupOrderId).maybeSingle() : { data: null }
+  const { data: dupPay } = dupOrderId ? await admin.from('payments').select('id').eq('order_id', dupOrderId).maybeSingle() : { data: null }
+  const { data: dupRefunds } = dupPay ? await admin.from('refunds').select('amount_paise').eq('payment_id', dupPay.id) : { data: [] as { amount_paise: number }[] }
+  const { data: dupEvents } = dupOrderId ? await admin.from('order_events').select('event').eq('order_id', dupOrderId) : { data: [] as { event: string }[] }
+  const dupEv = new Set((dupEvents ?? []).map((e) => e.event))
+  const { data: winAfter } = await admin.from('orders').select('status').eq('id', orderId).single()
+  check('4b. Duplicate paid order on the accepted RFQ → cancelled_duplicate → refunded in full; the winning order stands',
+    !dupErr && !!dupOrderId && dupOrder?.status === 'refunded' &&
+    (dupRefunds ?? []).length === 1 && Number(dupRefunds![0]!.amount_paise) === Number(dupOrder!.total_paise) &&
+    dupEv.has('duplicate_rfq_order') && dupEv.has('cancelled_duplicate') && dupEv.has('refunded') && winAfter!.status === 'placed',
+    `insert=${dupErr?.message ?? 'ok'} order=${dupOrder?.status} refunds=${(dupRefunds ?? []).map((r) => r.amount_paise).join(',')} total=${dupOrder?.total_paise} events=${[...dupEv].join(',')} winner=${winAfter!.status}`)
+
   // ── Criterion 9 (Phase 4): optional quote terms — stored, in the event, rendered ─
   // Provider ka1 quoted WITH terms above (see loop); ka0 quoted without.
   const { data: termed } = await admin.from('quotes').select('id, gst_included, transport_included, valid_until, advance_percent').eq('id', quoteIds[1]!).single()
@@ -235,6 +264,9 @@ async function main() {
     const { data: orders } = await admin.from('orders').select('id').eq('msme_id', mid)
     for (const o of orders ?? []) {
       await t(admin.from('payouts').delete().eq('order_id', o.id))
+      // refunds.payment_id → payments (4b refunds a duplicate) — drop refunds first.
+      const { data: pays } = await admin.from('payments').select('id').eq('order_id', o.id)
+      for (const pay of pays ?? []) await t(admin.from('refunds').delete().eq('payment_id', pay.id))
       await t(admin.from('payments').delete().eq('order_id', o.id))
       await t(admin.from('invoices').delete().eq('order_id', o.id))
       await t(admin.from('reviews').delete().eq('order_id', o.id))

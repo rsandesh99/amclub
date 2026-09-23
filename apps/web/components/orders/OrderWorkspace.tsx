@@ -31,6 +31,7 @@ const STATUS_VARIANT: Partial<Record<OrderStatus, 'default' | 'success' | 'warni
   delivered: 'warning', revision_requested: 'warning', completed: 'success', reviewed: 'success',
   disputed: 'danger', refunded: 'default', auto_cancelled: 'default', cancelled_by_buyer: 'default',
   resolved_refund: 'default', resolved_release: 'success', resolved_partial: 'default',
+  cancelled_duplicate: 'default',
 }
 
 const ACTION_VARIANT: Partial<Record<OrderActionKey, 'primary' | 'danger' | 'outline'>> = {
@@ -58,6 +59,7 @@ const EVENT_LABEL: Record<string, string> = {
   resume: 'status_in_progress',
   cancel: 'status_cancelled_by_buyer',
   auto_cancelled: 'status_auto_cancelled',
+  cancelled_duplicate: 'status_cancelled_duplicate',
   refunded: 'status_refunded',
   manual_refund: 'event_manual_refund',
   raise_dispute: 'status_disputed',

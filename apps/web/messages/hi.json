@@ -177,6 +177,7 @@
     "dispute_statement_min": "कम से कम 20 अक्षर।",
     "status_refunded": "वापस किया गया",
     "status_auto_cancelled": "स्वतः रद्द",
+    "status_cancelled_duplicate": "रद्द (दोहरा भुगतान)",
     "status_cancelled_by_buyer": "रद्द किया गया",
     "action_accept": "ऑर्डर स्वीकारें",
     "action_start": "काम शुरू करें",

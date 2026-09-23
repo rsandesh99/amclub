@@ -68,9 +68,9 @@ export async function materializeFromCapture(
     }
     // One-time placed side effects (coupon redemption + notifications). The
     // webhook can replay, so gate on an order_events marker — these run once.
-    // A duplicate RFQ order finalize flagged for an ops refund (P0-5) gets the
-    // marker but no "new order" notice / coupon redemption — the provider must
-    // never be told to start work on it.
+    // A duplicate RFQ order (P0-5; finalize cancels and refunds it, ADR-014 §7)
+    // gets the marker but no "new order" notice / coupon redemption — the
+    // provider must never be told to start work on it.
     const { data: already } = await admin
       .from('order_events')
       .select('id')

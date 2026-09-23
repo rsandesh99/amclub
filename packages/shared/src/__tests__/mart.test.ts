@@ -263,6 +263,7 @@ describe('services order machine is byte-untouched by Mart (inertness)', () => {
       'placed', 'accepted', 'requirements_submitted', 'in_progress', 'delivered', 'revision_requested',
       'completed', 'disputed', 'resolved_refund', 'resolved_release', 'resolved_partial',
       'auto_cancelled', 'cancelled_by_buyer', 'refunded', 'reviewed',
+      'cancelled_duplicate', // ADR-014 §7 (H6) — a services decision, not Mart
     ])
     // ADR-014 (H2) added the §3.7 "any-pre-completed → disputed" edges on purpose
     // (a services decision, not Mart); the pin stays exact.

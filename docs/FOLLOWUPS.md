@@ -21,8 +21,12 @@ Deferred / notes:
 - **H2 landed** (ADR-014 §6): the missing `→ disputed` edges, and a post-completion
   window (`dispute_window_days`, default 7) shown to the buyer. Rig criteria 3d
   and 3e are not yet run.
-- **H6 is still open** in ADR-014 (the duplicate-RFQ-order refund state). It must
-  be decided before ADR-011 approval.
+- **H6 landed** (ADR-014 §7): `placed → cancelled_duplicate → refunded`, settled at
+  detection. Rig criterion 4b is not yet run. Note: the benchmark inputs
+  (0046 `benchmark_inputs`) exclude `refunded` but not `cancelled_duplicate`; this
+  only matters if a duplicate's refund fails and the order stays
+  `cancelled_duplicate`. Add it to that exclusion list with the next benchmarks
+  migration.
 - **Clawback.** A dispute on an already-paid order cannot refund through the
   resolution. The interim path is a manual refund, then release (the platform
   bears it). A Razorpay Route transfer reversal needs its own ADR and a recorded
