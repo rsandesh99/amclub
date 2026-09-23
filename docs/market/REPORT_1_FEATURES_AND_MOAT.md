@@ -63,7 +63,7 @@ Competitor marks come from short sessions and public pages, so treat a ○ as "n
 |---|---|---|---|---|---|---|---|---|---|
 | **Discovery** | | | | | | | | | |
 | Category browse | Live | ● | ● | ● | ● | ● | ● | ● | ● |
-| Text search + filters | Live (7 filters, 4 sorts) | ● (city chips, advanced) | ● | ◐ (autocomplete) | ◐ | ● | ● (5 menus + 2 toggles) | ? | ? |
+| Text search + filters | Live (5 filter selects/chips + 4 sorts; no category filter) | ● (city chips, advanced) | ● | ◐ (autocomplete) | ◐ | ● | ● (5 menus + 2 toggles) | ? | ? |
 | Voice search | No (voice in RFQ only) | ● (9 languages) | ◐ (mic) | ○ | ○ | ? | ○ | ○ | ○ |
 | Image search | No | ● | ? | ○ | ○ | ? | ○ | ○ | ○ |
 | AI conversational search | No | ○ | ◐ (~30 s, ignores MOQ) | ✕ ("AI" label on autocomplete) | ◐ (claims) | ? | ○ | ● (Uma shortlist) | ? |
