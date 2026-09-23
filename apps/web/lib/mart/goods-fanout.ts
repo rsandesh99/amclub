@@ -45,7 +45,7 @@ export async function fanoutGoodsRfq(admin: Admin, rfq: { id: string; msme_id: s
     kind: 'rfq_matched',
     titleI18n: { en: 'New goods request for you', hi: 'आपके लिए नया माल अनुरोध' },
     bodyI18n: { en: rfq.title, hi: rfq.title },
-    link: '/partner/rfqs',
+    link: `/partner/rfqs/${rfq.id}`,
     channels: ['sms', 'whatsapp'],
   })
   return { matched: chosen.length }

@@ -6,7 +6,7 @@ import { recordHeartbeat } from '@/lib/jobs/heartbeat'
 import { addQuoteEvents } from '@/lib/rfq/events'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { quoteWindowLapsed } from '@amclub/shared'
-import { notifyQuoteWindowLapsed } from '@/lib/notifications/events'
+import { notifyQuotesExpired, notifyQuoteWindowLapsed, notifyRfqExpired } from '@/lib/notifications/events'
 import { createNotification } from '@/lib/notifications/create'
 import { releaseDeferredRfq } from '@/lib/rfq/release'
 import { getRfqQualityHoldMinutes } from '@/lib/agent/rfq-quality'
@@ -28,10 +28,22 @@ export async function GET(request: NextRequest) {
     .update({ status: 'expired', updated_at: nowIso })
     .in('status', ['open', 'quoted'])
     .lte('expires_at', nowIso)
-    .select('id')
+    .select('id, title, msme_id')
   if (error) {
     console.error('[cron/rfq-expire]', error)
     return NextResponse.json({ error: 'failed' }, { status: 500 })
+  }
+
+  // Tell each buyer once: only the rows THIS run moved to 'expired' are in `data`
+  // (a re-run finds them already expired and moves nothing), so no duplicates.
+  let buyersExpiredNotified = 0
+  for (const r of (data ?? []) as { id: string; title: string | null; msme_id: string }[]) {
+    try {
+      await notifyRfqExpired(admin, r)
+      buyersExpiredNotified++
+    } catch (e) {
+      console.error('[cron/rfq-expire] notify buyer', r.id, e)
+    }
   }
 
   // S1.5 — hold guard: DEFERRED RFQs (fanout_at NULL, still open) older than
@@ -80,7 +92,7 @@ export async function GET(request: NextRequest) {
   // still 'submitted' move, and the event is written for exactly those.
   const { data: stale, error: staleErr } = await admin
     .from('quotes')
-    .select('id, rfq_id, rfq:rfqs!inner(id, status)')
+    .select('id, rfq_id, provider_id, rfq:rfqs!inner(id, status, title)')
     .eq('status', 'submitted')
     .in('rfq.status', ['expired', 'cancelled'])
     .limit(500)
@@ -89,6 +101,7 @@ export async function GET(request: NextRequest) {
   let quotesExpired = 0
   if (stale && stale.length > 0) {
     const rfqOf = new Map(stale.map((q) => [q.id, q.rfq_id]))
+    const staleById = new Map((stale as unknown as { id: string; rfq_id: string; provider_id: string; rfq: { title: string | null } | null }[]).map((q) => [q.id, q]))
     const { data: moved, error: moveErr } = await admin
       .from('quotes')
       .update({ status: 'expired', updated_at: nowIso })
@@ -107,6 +120,18 @@ export async function GET(request: NextRequest) {
       })),
     )
     quotesExpired = movedIds.length
+    // Only the quotes this run actually moved (guarded on 'submitted') — each provider told once.
+    try {
+      await notifyQuotesExpired(
+        admin,
+        movedIds.flatMap((id) => {
+          const q = staleById.get(id)
+          return q ? [{ providerId: q.provider_id, rfqId: q.rfq_id, rfqTitle: q.rfq?.title ?? null }] : []
+        }),
+      )
+    } catch (e) {
+      console.error('[cron/rfq-expire] notify providers', e)
+    }
   }
 
   // S0.4 quote-or-decline window: matches on still-open RFQs older than
@@ -164,7 +189,7 @@ export async function GET(request: NextRequest) {
     console.error('[cron/rfq-expire] quote-window sweep', e)
   }
 
-  const result = { expired: data?.length ?? 0, quotesExpired, matchesLapsed, buyersNotified, qualityReleased }
+  const result = { expired: data?.length ?? 0, buyersExpiredNotified, quotesExpired, matchesLapsed, buyersNotified, qualityReleased }
   await recordHeartbeat(admin, 'rfq-expire', result)
   return NextResponse.json(result)
 }
