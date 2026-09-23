@@ -782,10 +782,15 @@ async function e9() {
   }
   // One fixture per kind (FR-9.1).
   const rfqA = await mkRfq('E9 GST returns FY 25-26', 'quoted', { quote_count: 2, expires_at: iso(now + 60 * 3600e3) })
-  const { data: qa } = await admin.from('quotes').insert([
-    { rfq_id: rfqA, provider_id: pp!.id, price_paise: 4500_00, delivery_days: 3, scope: 'E9 fixture quote scope one', gst_included: false, valid_until: istDate(now + 10 * 86400e3) },
+  // One quote per provider per RFQ (unique): the second quote comes from a second provider.
+  const prov2 = await mkUser('e9prov2', ['provider'])
+  const { data: pp2 } = await admin.from('provider_profiles').insert({ user_id: prov2.uid, legal_name: 'E9 Second Firm', display_name: 'E9 Second Firm', slug: `${tag.replace(/_/g, '-')}-e9prov2`, state: 'MZ', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp2!.id)
+  const { data: qa, error: qaErr } = await admin.from('quotes').insert([
+    { rfq_id: rfqA, provider_id: pp2!.id, price_paise: 4500_00, delivery_days: 3, scope: 'E9 fixture quote scope one', gst_included: false, valid_until: istDate(now + 10 * 86400e3) },
     { rfq_id: rfqA, provider_id: pp!.id, price_paise: 6000_00, delivery_days: 3, scope: 'E9 fixture quote scope two', gst_included: true, valid_until: istDate(now + 24 * 3600e3) },
   ]).select('id, price_paise')
+  if (qaErr) throw new Error(`E9 quotes fixture: ${qaErr.message}`)
   const expiringQuote = (qa ?? []).find((q) => Number(q.price_paise) === 6000_00)?.id
   const rfqB = await mkRfq('E9 Factory licence', 'open')
   await admin.from('rfq_clarifications').insert({ rfq_id: rfqB, provider_id: pp!.id, question: 'Which district is the factory in?' })
