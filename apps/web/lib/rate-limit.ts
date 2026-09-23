@@ -92,6 +92,8 @@ export const limiters = {
   // Experience v3 E11 — the view beacon: one count per visitor (IP + UA) per subject per day, and an IP cap.
   viewOnce: build(1, '1 d', 'rl:view-once'),
   viewIp: build(120, '1 m', 'rl:view-ip'),
+  // E11 FR-11.4 — the quote preview (pure computation; typed per keystroke-ish, debounced on the client).
+  quotePreview: build(60, '1 m', 'rl:quote-preview'),
 } as const
 
 export interface RateLimitResult {

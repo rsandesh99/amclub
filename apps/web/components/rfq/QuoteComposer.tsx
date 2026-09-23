@@ -1,15 +1,17 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { GST_RATE_BPS_OPTIONS, type QuoteExtractField, type QuoteExtractResponse } from '@amclub/shared'
+import { GST_RATE_BPS_OPTIONS, QUOTE_ADVANCE_PRESETS, QUOTE_VALIDITY_PRESETS, validUntilFromPreset, type QuotePreview, type QuoteExtractField, type QuoteExtractResponse } from '@amclub/shared'
 import { VoiceDictation } from '@/components/mart/VoiceDictation'
 import { useAnalytics } from '@/components/providers/posthog'
+import { SegmentedControl } from '@/components/ui-v3/SegmentedControl'
+import { formatINR } from '@/lib/format'
 
 type Tri = '' | 'yes' | 'no'
 
@@ -53,11 +55,17 @@ export interface QuoteComposerProps {
   munshiDraftId?: string | null
   onDone?: (() => void) | undefined
   onCancel?: (() => void) | undefined
+  /**
+   * Experience v3 E11 FR-11.4 (flag `partner`, services only): required marks, GST / transport as
+   * segmented controls, validity + advance presets, the "What's included" scaffold and the server
+   * preview ("Buyer sees … all-in" / "You receive ≈ …"). Undefined = the v2 form, unchanged.
+   */
+  v3?: { todayIst: string; scaffold: string; entry: 'inbox' | 'munshi' | 'revise' } | undefined
 }
 
 const triFrom = (v: boolean | null | undefined): Tri => (v == null ? '' : v ? 'yes' : 'no')
 
-export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'submit', initial, munshiDraftId = null, onDone, onCancel }: QuoteComposerProps) {
+export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'submit', initial, munshiDraftId = null, onDone, onCancel, v3: v3Prop }: QuoteComposerProps) {
   const t = useTranslations('rfq')
   const router = useRouter()
   const posthog = useAnalytics()
@@ -87,6 +95,34 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
   const [uncertain, setUncertain] = useState<Set<QuoteExtractField>>(new Set())
   const [stubPreview, setStubPreview] = useState(false)
   const [extractMsg, setExtractMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  // ── Experience v3 E11 FR-11.4 ───────────────────────────────────────────────
+  const v3 = goods ? undefined : v3Prop
+  const t3 = useTranslations('quote_v3')
+  const [advanceCustom, setAdvanceCustom] = useState(initial?.advancePercent != null && !(QUOTE_ADVANCE_PRESETS as readonly number[]).includes(initial.advancePercent))
+  const [preview, setPreview] = useState<QuotePreview | null>(null)
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (v3) posthog.capture('quote_form_started', { device: 'web', entry: v3.entry })
+    if (v3 && !scope.trim() && v3.scaffold) setScope(v3.scaffold)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per form
+  }, [])
+  // The server preview: the SAME shared rule as compare and checkout (ADR-017). Clients never compute money.
+  useEffect(() => {
+    if (!v3) return
+    if (previewTimer.current) clearTimeout(previewTimer.current)
+    const rupees = Number(price)
+    if (!(rupees > 0) || !gst) { setPreview(null); return }
+    previewTimer.current = setTimeout(async () => {
+      const res = await fetch(`/api/v1/rfq/${rfqId}/quote/preview`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price_paise: Math.round(rupees * 100), gst_included: gst === 'yes' }),
+      }).catch(() => null)
+      const d = res?.ok ? ((await res.json().catch(() => null)) as QuotePreview | null) : null
+      setPreview(d)
+      if (d) posthog.capture('quote_preview_shown', { device: 'web', gst_mode: d.gstMode })
+    }, 350)
+    return () => { if (previewTimer.current) clearTimeout(previewTimer.current) }
+  }, [v3, price, gst, rfqId, posthog])
 
   /** A hand edit after a fill clears that field's "please check" ring (the edit itself is captured in edited_fields). */
   const settle = useCallback((field: QuoteExtractField) => {
@@ -172,6 +208,9 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
     if (!pricePaise || pricePaise <= 0) { setError(t('quote_price_label') + ': ' + t('required_field')); return }
     if (!deliveryDays || deliveryDays <= 0) { setError(t('quote_delivery_label') + ': ' + t('required_field')); return }
     if (scope.trim().length < 20) { setError(t('quote_scope_label') + ': ' + t('required_field')); return }
+    // v3 — GST and validity are required statements (a quote never leaves GST unsaid; ADR-017).
+    if (v3 && !gst) { setError(t3('gst') + ': ' + t('required_field')); return }
+    if (v3 && !validUntil) { setError(t3('valid_until') + ': ' + t('required_field')); return }
     const advanceNum = advance.trim() === '' ? undefined : Number(advance)
     if (advanceNum !== undefined && (!Number.isInteger(advanceNum) || advanceNum < 0 || advanceNum > 100)) { setError(t('term_advance') + ': 0–100'); return }
     setLoading(true)
@@ -203,6 +242,7 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
         throw new Error(revise ? t('revise_err_generic') : t('err_quote'))
       }
       if (revise) posthog.capture('quote_revised_client', { rfq_id: rfqId, revision: d.revision, role: 'provider' })
+      else if (v3) posthog.capture('quote_submitted', { device: 'web', from_draft: !!munshiDraftId || !!extractionId })
       onDone?.()
       router.refresh()
     } catch (e: unknown) {
@@ -341,24 +381,67 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
         <>
           <div className="flex gap-3">
             <div className="flex-1 flex flex-col gap-1.5">
-              <Label htmlFor="q-price">{t('quote_price_label')}</Label>
+              <Label htmlFor="q-price">{t('quote_price_label')}{v3 && <span className="text-danger"> *</span>}</Label>
               <Input id="q-price" type="number" inputMode="numeric" value={price} onChange={(e) => { setPrice(e.target.value); settle('price') }} className={ring('price')} />
               {hint('price')}
             </div>
             <div className="flex-1 flex flex-col gap-1.5">
-              <Label htmlFor="q-days">{t('quote_delivery_label')}</Label>
+              <Label htmlFor="q-days">{t('quote_delivery_label')}{v3 && <span className="text-danger"> *</span>}</Label>
               <Input id="q-days" type="number" inputMode="numeric" value={days} onChange={(e) => { setDays(e.target.value); settle('delivery_days') }} className={ring('delivery_days')} />
               {hint('delivery_days')}
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="q-scope">{t('quote_scope_label')}</Label>
+            <Label htmlFor="q-scope">{v3 ? t3('included') : t('quote_scope_label')}{v3 && <span className="text-danger"> *</span>}</Label>
             <Textarea id="q-scope" value={scope} onChange={(e) => setScope(e.target.value)} placeholder={t('quote_scope_placeholder')} rows={4} />
           </div>
         </>
       )}
 
-      {/* Phase 4b — optional terms. Skipping them submits exactly as before. */}
+      {v3 ? (
+        <div className="space-y-4" data-testid="quote-v3-terms">
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">{t3('gst')} <span className="text-danger">*</span></p>
+            <SegmentedControl<'no' | 'yes'> ariaLabel={t3('gst')} value={gst === '' ? null : gst} onChange={(v) => { setGst(v); settle('gst_included') }} options={[{ value: 'no', label: t3('gst_extra') }, { value: 'yes', label: t3('gst_included') }]} />
+            <p className="t-caption text-foreground-secondary">{t3('gst_na_note')}</p>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">{t3('transport')} <span className="text-danger">*</span></p>
+            <SegmentedControl<'no' | 'yes' | 'na'> ariaLabel={t3('transport')} value={transport === '' ? 'na' : transport} onChange={(v) => { setTransport(v === 'na' ? '' : v); settle('transport_included') }} options={[{ value: 'no', label: t3('transport_extra') }, { value: 'yes', label: t3('transport_included') }, { value: 'na', label: t3('transport_na') }]} />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">{t3('valid_until')} <span className="text-danger">*</span></p>
+            <div className="flex flex-wrap items-center gap-2">
+              {QUOTE_VALIDITY_PRESETS.map((d) => {
+                const date = validUntilFromPreset(v3.todayIst, d)
+                return <button key={d} type="button" aria-pressed={validUntil === date} onClick={() => { setValidUntil(date); settle('valid_until') }} className={`rounded-chip border px-3 py-1 text-sm ${validUntil === date ? 'border-primary bg-primary/10 text-primary' : 'border-border'}`}>{t3('days', { n: d })}</button>
+              })}
+              <Input id="q-valid" type="date" aria-label={t3('valid_until')} value={validUntil} onChange={(e) => { setValidUntil(e.target.value); settle('valid_until') }} className={`h-9 w-auto ${ring('valid_until')}`} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">{t3('advance')}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {QUOTE_ADVANCE_PRESETS.map((p) => (
+                <button key={p} type="button" aria-pressed={!advanceCustom && advance === String(p)} onClick={() => { setAdvanceCustom(false); setAdvance(String(p)); settle('advance_percent') }} className={`rounded-chip border px-3 py-1 text-sm ${!advanceCustom && advance === String(p) ? 'border-primary bg-primary/10 text-primary' : 'border-border'}`}>{p} %</button>
+              ))}
+              <button type="button" aria-pressed={advanceCustom} onClick={() => setAdvanceCustom(true)} className={`rounded-chip border px-3 py-1 text-sm ${advanceCustom ? 'border-primary bg-primary/10 text-primary' : 'border-border'}`}>{t3('custom')}</button>
+              {advanceCustom && <Input id="q-advance" type="number" inputMode="numeric" min={0} max={100} aria-label={t3('advance')} value={advance} onChange={(e) => { setAdvance(e.target.value); settle('advance_percent') }} className="h-9 w-24" />}
+            </div>
+          </div>
+          {preview && (
+            <div className="space-y-0.5 rounded-card bg-sunken px-3 py-2 text-sm tabular-nums" data-testid="quote-preview" data-total={preview.totalPaise} data-earning={preview.earningPaise}>
+              <p>
+                {preview.gstMode === 'included'
+                  ? t3('buyer_sees_included', { total: formatINR(preview.totalPaise), gst: formatINR(preview.gstPaise) })
+                  : t3('buyer_sees_extra', { price: formatINR(preview.taxablePaise), pct: preview.gstBps / 100, total: formatINR(preview.totalPaise) })}
+              </p>
+              <p className="text-foreground-secondary">{t3('you_receive', { amount: formatINR(preview.earningPaise), days: preview.payoutDaysAfterAcceptance })}</p>
+            </div>
+          )}
+        </div>
+      ) : (
+      /* Phase 4b — optional terms. Skipping them submits exactly as before. */
       <details className="rounded-button border border-border bg-muted/30 p-3" open={uncertain.has('gst_included') || uncertain.has('transport_included') || uncertain.has('valid_until') || uncertain.has('advance_percent') || undefined}>
         <summary className="cursor-pointer text-sm font-medium text-foreground">
           {t('terms_section')} <span className="text-xs font-normal text-foreground-secondary">· {t('terms_optional_note')}</span>
@@ -379,6 +462,7 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
         </div>
         <p className="mt-2 text-xs text-foreground-secondary">{t('terms_help')}</p>
       </details>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="q-msg">{t('quote_message_label')}</Label>

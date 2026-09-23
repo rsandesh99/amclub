@@ -1744,5 +1744,24 @@
     "col_needed_by": "ఎప్పటికి",
     "col_quotes": "కోట్‌లు",
     "col_closes": "ముగుస్తుంది"
+  },
+  "quote_v3": {
+    "gst": "GST",
+    "gst_extra": "అదనంగా",
+    "gst_included": "కలిపి",
+    "gst_na_note": "“వర్తించదు” GST-మినహాయింపు నమోదుతో వస్తుంది.",
+    "transport": "రవాణా",
+    "transport_extra": "అదనంగా",
+    "transport_included": "కలిపి",
+    "transport_na": "వర్తించదు",
+    "valid_until": "చెల్లుబాటు తేదీ",
+    "days": "{n} రో",
+    "advance": "అడ్వాన్స్",
+    "custom": "అనుకూలం",
+    "included": "ఏమి కలిపి ఉంది",
+    "scaffold": "కలిపి ఉన్నవి:\n- \nకలపనివి:\n- \nమీరు పంచుకోవాల్సినవి:\n- ",
+    "buyer_sees_extra": "కొనుగోలుదారుకు కనిపించేది {price} + {pct} % GST = {total} మొత్తం",
+    "buyer_sees_included": "కొనుగోలుదారు {total} మొత్తం చెల్లిస్తారు (GST {gst} కలిపి)",
+    "you_receive": "AMClub రుసుము తర్వాత మీకు ≈ {amount} · కొనుగోలుదారు అంగీకరించిన {days} రోజుల తర్వాత చెల్లింపు"
   }
 }

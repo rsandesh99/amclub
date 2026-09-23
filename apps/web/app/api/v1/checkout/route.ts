@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { computeGstInclusiveOrderAmounts, computeOrderAmounts, isValidGstin } from '@amclub/shared'
+import { computeOrderAmounts, isValidGstin, quoteChargeAmounts } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
@@ -302,10 +302,8 @@ export async function POST(request: NextRequest) {
       // ADR-015 — a price the provider marked "GST included" is what the buyer
       // pays: GST is carved out of it, never added on top. Excluded or unstated
       // (the confirm sheet says GST is applied at checkout) adds it as before.
-      amounts:
-        quote.gst_included === true
-          ? computeGstInclusiveOrderAmounts({ grossPaise: Number(quote.price_paise), commissionBps })
-          : computeOrderAmounts({ pricePaise: Number(quote.price_paise), discountBps: 0, commissionBps }),
+      // ADR-017 — the ONE shared rule (quoteChargeAmounts); compare and the provider preview use it too.
+      amounts: quoteChargeAmounts({ pricePaise: Number(quote.price_paise), gstIncluded: quote.gst_included ?? null, commissionBps }),
     }
     }
   }
