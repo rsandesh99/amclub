@@ -723,6 +723,14 @@ CREATE POLICY "procurement_turns: admin read" ON procurement_turns
 REVOKE ALL ON procurement_turns FROM anon, authenticated;
 GRANT SELECT ON procurement_turns TO authenticated;
 
+-- ─── price_benchmarks (0046, S3.2) — aggregates only (no id column); any signed-in user reads; only the service role writes ─
+ALTER TABLE price_benchmarks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "price_benchmarks: authenticated read" ON price_benchmarks;
+CREATE POLICY "price_benchmarks: authenticated read" ON price_benchmarks
+  FOR SELECT TO authenticated USING (true);
+REVOKE ALL ON price_benchmarks FROM anon, authenticated;
+GRANT SELECT ON price_benchmarks TO authenticated;
+
 -- ─── order_events append-only guard (0019) ────────────────────────────────────
 -- Mirrors migration 0019: same protections quote_events/terms_acceptances carry.
 -- raise_append_only() is created in 0017 (bootstrap runs migrations first).
