@@ -1752,6 +1752,28 @@ Compare quotes · GST returns FY 25-26                 Shortlisted only ☐     
 
 **RICE:** R 0.7 · I 1 · C 0.9 · E 1.5 → **0.42**.
 
+**As built (E10).**
+- **Flag and entry.** `EXP_V3_ONBOARDING`. `/partner/onboarding` renders `ProviderWizardV3`: "What you'll need", then Contact · Business · Credentials & bank · Review & submit in the `Stepper`. `?step=` resumes at a step; the nudge links there. `/partner/signup` signs the applicant in and hands off to it.
+- **Writes.** They are unchanged: `acceptLegalDocs(PROVIDER_LEGAL_DOCS)` → `POST /profile/provider`.
+- **Typed inputs.** A non-credential category types 5: name, GSTIN, city (optional), account number and IFSC. The display name and state come prefilled; the category is picked.
+- **GSTIN autofill.**
+  - `verify-gstin` also returns `autofill` (shared `toGstinAutofill`): legal name, trade name, state, registration date, active status with its reason, and address when the vendor returns one.
+  - The state comes from the vendor when it names one, else from `stateFromGstin()`. All 38 GST codes are mapped and tested.
+  - A disagreement sets `stateMismatch`: an admin flag, never a block. An inactive GSTIN blocks Continue and shows the registry status.
+  - The legal name is read-only once filled ("From GST records"); the admin can override it.
+  - "In business since" is shown, not stored.
+  - Surepass now reads `gstin_status` for active / inactive and passes `address` through when present.
+- **"States served".** It stays the single profile state: the schema has no served-states list yet.
+- **Admin queue.** Each pending application shows, per field, "From GST records" or "Typed by the provider". The comparison is against the applicant's latest successful `gstin_verifications` row.
+  - The state check is shown as a warning when the GSTIN code differs from the saved state or the registry.
+  - `POST /api/v1/admin/verifications/[id]/legal-name` overrides the locked legal name. It is audit-logged with the reason.
+- **Stall nudge.**
+  - Migration 0055: `provider_onboarding_progress` (one row per applicant, written on every step, `submitted_at` stamped on submit) and `onboarding_nudges` (PK `(user_id, nudge_no)`).
+  - Hourly `cron/onboarding-nudges`: in-app plus the `onboarding_stalled` WhatsApp template. The dispatcher sends WhatsApp only to applicants who opted in.
+  - At most 2 per draft, 24 h apart. None after submit, or once the applicant has a profile past pending.
+- **"Finish on WhatsApp".** It appears only when the S1.6 onboarding agent is on for the applicant's cohort.
+- **PAN path (N27b).** Not built. It is written up as **ADR-016 (Proposed)**, `docs/adr/016-gst-exempt-providers.md`, and waits on D3 plus a CA's answers on §52 / §9(5).
+
 ---
 
 ### E11: Provider workspace v3

@@ -5,6 +5,10 @@ export interface GstinVerifyResult {
   state?: string
   registrationDate?: string
   isActive?: boolean
+  /** The registry's status text ("Active", "Cancelled", "Suspended") — the reason shown when not active. */
+  statusText?: string
+  /** Principal place of business, only when the vendor returns one. */
+  address?: string
   error?: string
   stub?: boolean
 }

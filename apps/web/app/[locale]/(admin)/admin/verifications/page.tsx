@@ -6,9 +6,12 @@ import { VerificationActions } from './VerificationActions'
 import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
 import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
 import { PendingLogos, type PendingLogo } from '@/components/trust/PendingLogos'
+import { autofillSources, type AutofillSource } from '@/lib/onboarding-v3/autofill-source'
+import { LegalNameOverride } from './LegalNameOverride'
 
 interface ProviderRow {
   id: string
+  user_id: string
   legal_name: string
   display_name: string
   gstin: string | null
@@ -27,7 +30,7 @@ async function getPendingProviders() {
   const { data, error } = await supabase
     .from('provider_profiles')
     .select(`
-      id, legal_name, display_name, gstin, pan, state, status, created_at,
+      id, user_id, legal_name, display_name, gstin, pan, state, status, created_at,
       user:users(phone, email),
       categories:provider_categories(category:categories(name_i18n)),
       verifications:provider_verifications(id, kind, document_url, status),
@@ -93,6 +96,9 @@ async function getGstinFlags(): Promise<{ id: string; name: string; at: string }
 export default async function VerificationsPage() {
   const t = await getTranslations('admin')
   const [providers, notReady, logos, gstinFlags] = await Promise.all([getPendingProviders(), getApprovedNotReady(), getPendingLogos(), getGstinFlags()])
+  // E10 (FR-10.3) — which fields came from the GST record, and any state-code mismatch (a flag, never a block).
+  const sources: Map<string, AutofillSource> = await autofillSources(await createAdminClient(), providers)
+  const tv = await getTranslations('onboarding_v3')
   const tt = await getTranslations('trust_admin')
 
   return (
@@ -162,6 +168,24 @@ export default async function VerificationsPage() {
                     {p.status === 'under_review' ? t('pending_badge') : 'Pending KYC'}
                   </Badge>
                 </div>
+
+                {/* E10 — autofill source per field + the state check */}
+                {sources.get(p.id) && (() => {
+                  const src = sources.get(p.id)!
+                  const chip = (v: 'gst' | 'typed') => <span className={`rounded-full px-2 py-0.5 ${v === 'gst' ? 'bg-success/10 text-success' : 'bg-foreground/5 text-foreground-secondary'}`}>{v === 'gst' ? tv('from_gst') : tv('typed')}</span>
+                  return (
+                    <div className="mt-3 space-y-1.5 text-xs" data-testid={`autofill-${p.id}`}>
+                      <div className="flex flex-wrap items-center gap-2"><span className="text-foreground-secondary">{tv('admin_legal')}</span>{chip(src.legalName)}<LegalNameOverride providerId={p.id} current={p.legal_name} /></div>
+                      <div className="flex flex-wrap items-center gap-2"><span className="text-foreground-secondary">{tv('admin_display')}</span>{chip(src.displayName)}</div>
+                      <div className="flex flex-wrap items-center gap-2"><span className="text-foreground-secondary">{tv('admin_state')}</span>{chip(src.state)}</div>
+                      {src.stateFlag && (
+                        <p className="rounded-button bg-warning/10 px-2 py-1 text-warning" data-testid={`state-flag-${p.id}`}>
+                          {tv('admin_state_flag', { gstin: src.stateFlag.gstinState ?? '—', saved: src.stateFlag.savedState, registry: src.stateFlag.registryState ?? '—' })}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Details grid */}
                 <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">

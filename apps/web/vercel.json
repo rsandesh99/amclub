@@ -11,6 +11,7 @@
     { "path": "/api/v1/cron/score-compute", "schedule": "45 3 * * *" },
     { "path": "/api/v1/cron/benchmark-compute", "schedule": "15 4 * * *" },
     { "path": "/api/v1/cron/licence-reminders", "schedule": "30 2 * * *" },
+    { "path": "/api/v1/cron/onboarding-nudges", "schedule": "25 * * * *" },
     { "path": "/api/v1/cron/pool-close", "schedule": "10 * * * *" },
     { "path": "/api/v1/cron/agent-onboarding-expire", "schedule": "20 * * * *" },
     { "path": "/api/v1/cron/agent-munshi-scan", "schedule": "*/15 * * * *" },

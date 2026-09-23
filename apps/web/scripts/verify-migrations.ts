@@ -338,6 +338,12 @@ const MANIFEST: Entry[] = [
     triggers: [['buyer_licences', 'buyer_licences_set_updated_at'], ['order_licence_facts', 'order_licence_facts_set_updated_at'], ['obligation_rules', 'obligation_rules_set_updated_at']],
     note: 'E9b / N45 (D-PRD5, dark): buyer_licences (owner RLS, soft delete), order_licence_facts + licence_reminders (service role), obligation_rules (unreviewed seed; reviewed rows public)',
   },
+  {
+    file: '0055_onboarding_v3.sql',
+    tables: ['provider_onboarding_progress', 'onboarding_nudges'],
+    triggers: [['provider_onboarding_progress', 'provider_onboarding_progress_set_updated_at']],
+    note: 'E10 / N27c: provider_onboarding_progress (last step per applicant) + onboarding_nudges (<= 2, PK idempotent); service role only',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

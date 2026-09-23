@@ -21,6 +21,7 @@ const CRON_JOBS = [
   { name: 'score-compute', staleAfterMs: 26 * 3600_000 },
   { name: 'benchmark-compute', staleAfterMs: 26 * 3600_000 },
   { name: 'licence-reminders', staleAfterMs: 26 * 3600_000 },
+  { name: 'onboarding-nudges', staleAfterMs: 2 * 3600_000 },
   // Agent crons beat even while AGENT_ENABLED=false (they only skip the enqueue).
   { name: 'agent-munshi-scan', staleAfterMs: 1 * 3600_000 },
   { name: 'agent-munshi-followup', staleAfterMs: 3 * 3600_000 },

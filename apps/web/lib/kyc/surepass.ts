@@ -41,7 +41,11 @@ export function makeSurepassClient(apiKey: string): KycClient {
           tradeName: d.trade_name,
           state: d.state_jurisdiction,
           registrationDate: d.date_of_registration,
-          isActive: d.taxpayer_type !== 'Cancelled',
+          // gstin_status is the registry status ("Active" / "Cancelled" / "Suspended"); older payloads
+          // carried only taxpayer_type, which is kept as the fallback.
+          isActive: typeof d.gstin_status === 'string' ? d.gstin_status.toLowerCase() === 'active' : d.taxpayer_type !== 'Cancelled',
+          ...(typeof d.gstin_status === 'string' ? { statusText: d.gstin_status } : {}),
+          ...(typeof d.address === 'string' && d.address.trim() ? { address: d.address.trim() } : {}),
         }
       } catch (e: unknown) {
         return { verified: false, error: e instanceof Error ? e.message : 'KYC error' }

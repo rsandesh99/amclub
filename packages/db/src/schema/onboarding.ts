@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb, integer, boolean, index, check } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, timestamp, jsonb, integer, boolean, index, check, primaryKey } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { users, providerProfiles } from './identity'
 import { agentRuns, aiDecisions } from './engagement'
@@ -61,3 +61,23 @@ export const providerCapabilityFacts = pgTable('provider_capability_facts', {
 }, (table) => [
   index('provider_capability_facts_user_idx').on(table.userId, table.categorySlug),
 ])
+
+// Experience v3 E10 (0055; FR-10.4, N27c): the v3 wizard's last saved step per
+// applicant and the stall nudges (at most 2; PK (user_id, nudge_no)). Service role only.
+export const providerOnboardingProgress = pgTable('provider_onboarding_progress', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  step: text('step').notNull(),
+  categorySlug: text('category_slug'),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+})
+
+export const onboardingNudges = pgTable('onboarding_nudges', {
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  nudgeNo: integer('nudge_no').notNull(),
+  step: text('step').notNull(),
+  sentAt: timestamp('sent_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [primaryKey({ columns: [table.userId, table.nudgeNo] })])
