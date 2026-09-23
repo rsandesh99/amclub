@@ -5,12 +5,18 @@
  * the seller confirms every field, the confirmed listing + the proposal are
  * written to ai_decisions by the create route. The agent never writes a row.
  *
- * ONE temperature-0 OpenRouter chat call (vision-capable small model; images
- * as URLs) returning strict JSON, Zod-validated and vocabulary-clamped here —
- * an out-of-vocabulary value never reaches the seller. STUB when
- * OPENROUTER_API_KEY is unset (keyword heuristic, uncertain=true).
+ * ONE temperature-0 chat call through the shared agent-core gateway (Track F:
+ * no direct model-host fetch outside agent-core/src/llm — so max_tokens, the
+ * residency guard and the per-tier base URL apply). Vision-capable small model
+ * (CATALOG_AGENT_MODEL, default flash-lite — passed as the explicit model, so the
+ * document_extract tier default never applies here); images as URLs; strict
+ * JSON, Zod-validated and vocabulary-clamped here — an out-of-vocabulary value
+ * never reaches the seller. STUB when the gateway has no key (keyword heuristic,
+ * uncertain=true). The draft route writes the ONE ai_invocations row (unchanged).
  */
 import 'server-only'
+import { z } from 'zod'
+import { createGateway, envelope, GatewayValidationError, type ChatResult, type PromptRef } from '@amclub/agent-core'
 import {
   catalogDraftSchema,
   GST_RATE_BPS_OPTIONS,
@@ -21,7 +27,6 @@ import {
 import { VendorHttpError } from '@/lib/voice/types'
 import type { MartCategoryRow } from './config'
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite'
 
 /** Common HSN chapters per launch category — hints for the model AND the stub. */
@@ -127,39 +132,51 @@ function stubDraft(input: CatalogDraftInput): CatalogDraft {
   )!
 }
 
+/** Raw model output: an object; the curated clamp (sanitize) is the real schema. */
+const rawDraftSchema = z.record(z.unknown())
+
+/**
+ * The system prompt carries the live category list, so it is built per call as
+ * an in-code PromptRef (id mart_catalog_draft@v1). It is platform-owned (trusted);
+ * the seller's description and photos are the user part.
+ */
+function catalogPrompt(categories: MartCategoryRow[]): PromptRef {
+  return { id: 'mart_catalog_draft', version: 'v1', taskClass: 'document_extract', schemaRef: 'catalogDraftSchema', text: systemPrompt(categories), maxTokens: 900 }
+}
+
 export async function draftListing(input: CatalogDraftInput): Promise<CatalogDraftResult> {
-  const apiKey = process.env['OPENROUTER_API_KEY']
   const model = process.env['CATALOG_AGENT_MODEL'] ?? DEFAULT_MODEL
-  if (!apiKey) {
-    console.warn('[catalog-agent] OPENROUTER_API_KEY unset — would draft with', model, '(stub heuristic used)')
-    return { draft: stubDraft(input), vendor: 'stub', stub: true, requestId: null }
-  }
-  const content: unknown[] = [{ type: 'text', text: input.description || '(no description — use the photos)' }]
-  for (const url of input.imageUrls.slice(0, 6)) content.push({ type: 'image_url', image_url: { url } })
-  const res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const description = input.description.trim()
+  let res: ChatResult<Record<string, unknown>>
+  try {
+    res = await createGateway().chatJson({
+      // Seller photos + description → structured facts: the document_extract class ('in' residency).
+      taskClass: 'document_extract',
+      prompt: catalogPrompt(input.categories),
+      schema: rawDraftSchema,
       model,
       temperature: 0,
-      response_format: { type: 'json_object' },
-      usage: { include: true },
-      messages: [
-        { role: 'system', content: systemPrompt(input.categories) },
-        { role: 'user', content },
-      ],
-    }),
-  })
-  if (!res.ok) throw new VendorHttpError('openrouter', res.status, await res.text().catch(() => ''))
-  const d = (await res.json()) as { id?: string; usage?: Record<string, unknown>; choices?: { message?: { content?: string } }[] }
-  const text = (d.choices?.[0]?.message?.content ?? '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
-  let raw: unknown
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    throw new Error('openrouter: non-JSON response')
+      parts: {
+        // The seller's words are third-party content → an Envelope (the photos ride as image parts).
+        ...(description
+          ? { untrusted: [envelope(description, { kind: 'listing_description', id: 'seller_draft' })] }
+          : { trusted: ['(no description — use the photos)'] }),
+        images: input.imageUrls.slice(0, 6).map((url) => ({ url, mime: 'image/*' })),
+      },
+      stub: () => {
+        console.warn('[catalog-agent] no LLM key — would draft with', model, '(stub heuristic used)')
+        return {}
+      },
+    })
+  } catch (e) {
+    // Same failure surface as before, so the route's classifyVendorFailure → 402 / 503 mapping is unchanged.
+    if (e instanceof GatewayValidationError) throw new Error(`gateway: ${e.reason === 'schema' ? 'response failed schema validation' : 'non-JSON response'}`)
+    const m = e instanceof Error ? /^gateway (\d{3})(?::\s*([\s\S]*))?$/.exec(e.message) : null
+    if (m) throw new VendorHttpError('gateway', Number(m[1]), m[2] ?? '')
+    throw e
   }
-  const draft = sanitize(raw, input.categories)
-  if (!draft) throw new Error('openrouter: response failed schema validation')
-  return { draft, vendor: `openrouter:${model}`, stub: false, requestId: d.id ?? null, usage: d.usage }
+  if (res.stub) return { draft: stubDraft(input), vendor: 'stub', stub: true, requestId: null }
+  const draft = sanitize(res.data, input.categories)
+  if (!draft) throw new Error('gateway: response failed schema validation')
+  return { draft, vendor: `gateway:${model}`, stub: false, requestId: null, usage: res.usage.raw ?? undefined }
 }
