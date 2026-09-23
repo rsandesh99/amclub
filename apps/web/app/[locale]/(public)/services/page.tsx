@@ -10,6 +10,7 @@ import { parseFilters, hasActiveFilters } from '@/lib/catalog/filters'
 import { hasNarrowingV2, parseSearchV2 } from '@amclub/shared'
 import { isOnForEveryone } from '@/lib/experiments'
 import { SearchResultsV3 } from '@/components/search-v3/SearchResultsV3'
+import { isVoiceSearchOn } from '@/lib/voice/search'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('catalog')
@@ -40,11 +41,11 @@ export default async function ServicesPage({
       </div>
 
       <div className="mb-8 max-w-2xl">
-        <SearchBar defaultValue={sp['query'] ?? ''} />
+        <SearchBar defaultValue={sp['query'] ?? ''} voice={v3 && (await isVoiceSearchOn())} />
       </div>
 
       {searching && v3 ? (
-        <SearchResultsV3 search={search} basePath="/services" />
+        <SearchResultsV3 search={search} basePath="/services" youSaid={sp['voice'] === '1' ? search.query : undefined} />
       ) : searching ? (
         <div className="space-y-5">
           <ListingControls />

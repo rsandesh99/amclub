@@ -27,5 +27,8 @@ export function toPackageRow(d: PackageInput, categoryId: string) {
     revision_count: d.revision_count,
     faqs: (d.faqs ?? []).map((f) => ({ q: f.question, a: f.answer })),
     status: d.status,
+    // Experience v3 E2 (0051): only written when the wizard sent it (flag on),
+    // so a database without the column is never asked to store it.
+    ...(d.service_slug !== undefined ? { service_slug: d.service_slug } : {}),
   }
 }

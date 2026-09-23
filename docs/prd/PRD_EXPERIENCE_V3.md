@@ -833,6 +833,13 @@ Each row is a UX element the survey found missing or weak. It's **paired with th
 - **List rows** leave out the save heart: one saved-state fetch per row is too costly. Save stays on the card and the provider page, and E2b's compare checkbox covers shortlisting.
 - **The grid/list choice** is remembered in the `amc_search_view` cookie.
 
+**As built (E2b: service pages, compare, recently viewed, voice search).**
+- **Services on packages.** The wizard offers the service chips of the chosen category when the flag is on. The routes refuse a service from another category (`invalid_service`), and `service_slug` is written only when sent.
+- **Service pages.** `/services/[category]/[service]` covers all 40 services and 404s while the flag is off. The provider table shows up to 8 providers, each with their lowest price for the service. Sibling chips link every service page to the others.
+- **Compare.** The shortlist lives on the device (`localStorage`, at most 4). The toggle sits beside the card link, never inside it. `/compare` is `noindex` and has 10 rows in 4 groups for every column, plus the actions.
+- **Recently viewed.** It is a device list merged with `recent_views` (migration 0052, owner-only RLS, newest 20) when signed in. It shows on the buyer home, in the ⌘K empty state and on zero-result pages.
+- **Voice search** reuses `/api/v1/rfq/voice-parse` with `mode=query`, behind the same limiters. It needs the search flag plus `agent_settings.voice_search_enabled` (default off until the 30-query eval). A signed-out tap goes to sign-in. A voice search lands on `?query=…&voice=1`, which shows "You said".
+
 ---
 
 ### E3: Trust made visible

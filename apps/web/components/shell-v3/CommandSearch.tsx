@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import type { UniversalHit, UniversalSearchResult } from '@amclub/shared'
 import { useRouter } from '@/i18n/navigation'
 import { cn } from '@/lib/utils'
+import { RecentlyViewed } from '@/components/recent-v3/RecentlyViewed'
 import { formatINR } from '@/lib/format'
 import { Sheet } from '@/components/ui-v3/Sheet'
 import { useAnalytics } from '@/components/providers/posthog'
@@ -149,6 +150,9 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
           </ul>
         </div>
       )}
+
+      {/* E2b (N8): recently viewed pages, from this device. */}
+      {!res && q.trim().length < 2 && <RecentlyViewed limit={6} className="px-1" />}
 
       {q.trim().length >= 2 && !loading && res && rows.length === 0 && (
         <p className="t-subhead px-1 py-6 text-center text-foreground-secondary">{t('no_results', { q: q.trim() })}</p>

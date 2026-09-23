@@ -319,6 +319,12 @@ const MANIFEST: Entry[] = [
     triggers: [['search_feedback', 'search_feedback_set_updated_at']],
     note: 'E2a: search_packages_v2 + search_facets_v2 (v1 untouched), packages.service_slug, search_feedback (service role only)',
   },
+  {
+    file: '0052_recent_views.sql',
+    tables: ['recent_views'],
+    triggers: [['recent_views', 'recent_views_set_updated_at']],
+    note: 'E2b / N8: recent_views (owner-only RLS; last 20 provider/package views per user)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

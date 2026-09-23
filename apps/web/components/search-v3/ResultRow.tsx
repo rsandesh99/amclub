@@ -1,6 +1,7 @@
 import { useLocale, useTranslations } from 'next-intl'
 import { formatStatPct, INDIAN_STATES } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
+import { CompareToggle } from '@/components/compare-v3/CompareToggle'
 import { ProviderCredential } from '@/components/catalog/ProviderCredential'
 import { formatINR, formatResponseTime, initials, pickI18n } from '@/lib/format'
 import type { CatalogResult } from '@/lib/catalog/types'
@@ -13,15 +14,15 @@ const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
  * rating (n) · stat · delivery · replies · price + GST (the server display).
  * Compact density; the desktop header row labels the columns.
  */
-export function ResultRow({ result, trust }: { result: CatalogResult; trust?: CardTrust | undefined }) {
+export function ResultRow({ result, trust, compare = false }: { result: CatalogResult; trust?: CardTrust | undefined; compare?: boolean }) {
   const locale = useLocale()
   const t = useTranslations('catalog')
   const reply = formatResponseTime(result.medianResponseMinutes)
   return (
-    <li>
+    <li className="flex items-center">
       <Link
         href={`/p/${result.providerSlug}/${result.packageSlug}`}
-        className="grid grid-cols-[2.25rem_1fr_auto] items-center gap-x-3 gap-y-1 px-3 py-2.5 hover:bg-sunken md:grid-cols-[2.25rem_minmax(0,2.4fr)_6rem_6rem_5rem_4.5rem_8rem]"
+        className="grid min-w-0 flex-1 grid-cols-[2.25rem_1fr_auto] items-center gap-x-3 gap-y-1 px-3 py-2.5 hover:bg-sunken md:grid-cols-[2.25rem_minmax(0,2.4fr)_6rem_6rem_5rem_4.5rem_8rem]"
         data-testid="result-row"
       >
         {trust && result.logoUrl ? (
@@ -46,6 +47,7 @@ export function ResultRow({ result, trust }: { result: CatalogResult; trust?: Ca
         <span className="hidden text-sm tabular-nums text-foreground-secondary md:block">{reply ?? '—'}</span>
         <span className="hidden text-sm tabular-nums md:block">{t('delivery_days', { days: result.deliveryDays })}</span>
       </Link>
+      {compare && <CompareToggle id={result.packageId} title={pickI18n(result.titleI18n, locale)} className="mr-3 shrink-0" />}
     </li>
   )
 }

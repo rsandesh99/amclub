@@ -107,3 +107,18 @@ export const searchFeedback = pgTable('search_feedback', {
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
+
+// Experience v3 E2b N8 (0052): the last 20 provider / package pages a
+// signed-in buyer opened. Owner-only RLS.
+export const recentViews = pgTable('recent_views', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id').notNull(),
+  // provider | package
+  kind: text('kind').notNull(),
+  refId: uuid('ref_id').notNull(),
+  viewedAt: timestamp('viewed_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  unique('recent_views_user_ref_uniq').on(table.userId, table.kind, table.refId),
+])

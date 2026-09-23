@@ -540,7 +540,78 @@ async function e2a() {
   const anonRead = await createClient(URL_, ANON, { auth: { persistSession: false } }).from('search_feedback').select('id').limit(1)
   check('FR-2.6: no client can read search_feedback', !!anonRead.error || (anonRead.data ?? []).length === 0)
   await admin.from('search_feedback').delete().eq('query', word)
-  void D
+  return { word, A, B, C, D, p1, p2 }
+}
+
+async function e2b(fx: { word: string; A: string; B: string; C: string; D: string }) {
+  console.log('\nE2b — service pages, compare, recently viewed, voice search')
+  const { word, A, B, C, D } = fx
+
+  // FR-2.3 — packages carry a service; the service landing page compares providers.
+  const prov = await mkUser('e2bprov', ['provider'])
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E2b Prov', display_name: 'E2b Prov', slug: `${tag}-e2bprov`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: tax!.id })
+  const pkgBody = { category_slug: 'tax-accounting', title: `${word} audit package`, scope_included: ['Audit'], deliverables: ['Report'], price_paise: 4000_00, delivery_days: 9, status: 'active' }
+  const bad = await api(prov.token, '/api/v1/partner/packages', { ...pkgBody, service_slug: 'trademark' })
+  check('FR-2.3: a service from another category → 422', bad.status === 422 && ((await bad.json()) as { error: string }).error === 'invalid_service')
+  const good = await api(prov.token, '/api/v1/partner/packages', { ...pkgBody, service_slug: 'audit' })
+  const gid = ((await good.json()) as { id?: string }).id
+  if (gid) created.packageIds.push(gid)
+  const { data: gRow } = await admin.from('packages').select('service_slug').eq('id', gid ?? '').maybeSingle()
+  check('FR-2.3: the wizard route stores the service', good.ok && gRow?.service_slug === 'audit', `status ${good.status}`)
+
+  const svc = visible(await (await fetch(`${BASE}/services/tax-accounting/gst-filing`)).text())
+  check('FR-2.3: service page renders hero + provider table for that service', svc.includes('data-testid="service-hero"') && svc.includes('data-testid="service-provider-table"') && svc.includes('e2p1') && svc.includes('e2p2'))
+  check('FR-2.3: the table shows each provider’s from-price + GST', svc.includes('₹1,499 + GST') && svc.includes('₹999 + GST'))
+  check('FR-2.3: sibling service chips link to the other services', svc.includes('data-testid="service-chips"') && svc.includes('href="/services/tax-accounting/itr-filing"'))
+  check('FR-2.3: a service of another category → 404', (await fetch(`${BASE}/services/tax-accounting/trademark`)).status === 404)
+
+  // FR-2.9 — shortlist compare: four columns, identical rows.
+  const cmp = visible(await (await fetch(`${BASE}/compare?items=${[A, B, C, D].join(',')}`)).text())
+  const table = cmp.slice(cmp.indexOf('data-testid="compare-table"'))
+  const rowCount = (table.match(/data-row="/g) ?? []).length
+  const tdCount = (table.match(/<td\b/g) ?? []).length
+  check('FR-2.9: compare renders 4 columns with identical row sets', rowCount === 10 && tdCount === rowCount * 4 + 4, `rows ${rowCount}, cells ${tdCount}`)
+  check('FR-2.9: compare prices are the server display', cmp.includes('₹999 + GST') && cmp.includes('₹2,699 + GST'))
+  check('FR-2.9: junk items → the empty state, not an error', (await fetch(`${BASE}/compare?items=nope,${'x'.repeat(36)}`)).ok)
+  check('FR-2.9: search results carry the Compare toggle', visible(await (await fetch(`${BASE}/services?query=${word}`)).text()).includes('data-testid="compare-toggle"'))
+
+  // FR-2.8 — recently viewed: the owner's own, newest first, 20 kept.
+  const buyer = await mkUser('e2bbuyer')
+  check('FR-2.8: a signed-out view is not stored (401)', (await fetch(`${BASE}/api/v1/me/recent-views`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'package', refId: A }) })).status === 401)
+  for (const id of [A, B, C, D]) await api(buyer.token, '/api/v1/me/recent-views', { kind: 'package', refId: id })
+  type RV = { items: { id: string; href: string }[] }
+  const rv = (await (await api(buyer.token, '/api/v1/me/recent-views', undefined, 'GET')).json()) as RV
+  check('FR-2.8: recently viewed resolves titles + links, newest first', rv.items?.length === 4 && rv.items[0]?.id === D && rv.items.every((x) => x.href.startsWith('/p/')))
+  const other = await mkUser('e2bother')
+  const orv = (await (await api(other.token, '/api/v1/me/recent-views', undefined, 'GET')).json()) as RV
+  check('FR-2.8: another user sees none of them', (orv.items ?? []).length === 0)
+  const filler = Array.from({ length: 21 }, () => ({ user_id: buyer.uid, kind: 'provider', ref_id: crypto.randomUUID(), viewed_at: new Date(Date.now() - 86400e3).toISOString() }))
+  await admin.from('recent_views').insert(filler)
+  await api(buyer.token, '/api/v1/me/recent-views', { kind: 'package', refId: A })
+  const { count } = await admin.from('recent_views').select('id', { count: 'exact', head: true }).eq('user_id', buyer.uid)
+  check('FR-2.8: only the newest 20 are kept', count === 20, `count ${count}`)
+  await admin.from('recent_views').delete().in('user_id', [buyer.uid, other.uid])
+
+  // FR-2.5 — voice search: off until voice_search_enabled; then an English query (stub keyless).
+  const voice = (text: string) => {
+    const fd = new FormData()
+    fd.append('text', text)
+    fd.append('mode', 'query')
+    return fetch(`${BASE}/api/v1/rfq/voice-parse`, { method: 'POST', headers: { Authorization: `Bearer ${buyer.token}` }, body: fd })
+  }
+  check('FR-2.5: voice search is off by default (404)', (await voice('GST registration for my shop')).status === 404)
+  const restore = await setSetting('voice_search_enabled', true)
+  try {
+    const on = await voice('GST registration for my shop')
+    const vj = (await on.json()) as { query?: string; category_slug?: string | null; original_language?: string }
+    check('FR-2.5: mode=query answers an English query + language (stub, keyless)', on.ok && vj.query === 'GST registration for my shop' && 'category_slug' in vj && typeof vj.original_language === 'string', `status ${on.status}`)
+  } finally {
+    await restore()
+  }
+  check('FR-2.5: results after a voice search show "You said"', visible(await (await fetch(`${BASE}/services?query=${word}&voice=1`)).text()).includes('data-testid="you-said"'))
 }
 
 async function main() {
@@ -550,7 +621,8 @@ async function main() {
     await e1()
     await e3()
     await e4()
-    await e2a()
+    const fx = await e2a()
+    await e2b(fx)
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

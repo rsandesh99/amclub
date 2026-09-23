@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
-import { packageSchema } from '@amclub/shared'
+import { packageSchema, isSpecializationOf } from '@amclub/shared'
 import { toPackageRow, slugify } from '@/lib/partner/packageRow'
 import { revalidateCatalog } from '@/lib/catalog/revalidate'
 
@@ -19,6 +19,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   }
   const d = parsed.data
+  // Experience v3 E2 — a service must belong to the package's category.
+  if (d.service_slug && !isSpecializationOf(d.category_slug, d.service_slug)) {
+    return NextResponse.json({ error: 'invalid_service' }, { status: 422 })
+  }
 
   // RLS session client — the provider crud-own policy enforces ownership.
   const supabase = await createClient()

@@ -4,7 +4,11 @@ import { useState } from 'react'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
+import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
+
+// The recorder code loads only where the mic is shown.
+const VoiceSearchButton = dynamic(() => import('@/components/search-v3/VoiceSearchButton').then((m) => m.VoiceSearchButton), { ssr: false })
 
 /** Hero/header search. Submits to /services?query=… (the all-listings page). */
 export function SearchBar({
@@ -12,12 +16,15 @@ export function SearchBar({
   className,
   defaultValue = '',
   action = '/services',
+  voice = false,
 }: {
   size?: 'md' | 'lg'
   className?: string
   defaultValue?: string
   /** Destination path for the search submit (e.g. /services or /app/search). */
   action?: string
+  /** Experience v3 E2b (N5): show the mic (server decides: flag + setting). */
+  voice?: boolean
 }) {
   const t = useTranslations('catalog')
   const router = useRouter()
@@ -42,6 +49,7 @@ export function SearchBar({
     >
       <Search className={cn('ml-2 shrink-0 text-foreground-secondary', size === 'lg' ? 'h-5 w-5' : 'h-4 w-4')} />
       <input
+        id="catalog-search-input"
         type="search"
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -52,6 +60,7 @@ export function SearchBar({
           size === 'lg' ? 'text-md' : 'text-sm',
         )}
       />
+      {voice && <VoiceSearchButton action={action} />}
       <button
         type="submit"
         className={cn(

@@ -8,6 +8,7 @@ import { onboardingDraftSchema } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { PackageWizard, type PackageDraft } from '@/components/partner/PackageWizard'
+import { isOnFor } from '@/lib/experiments'
 
 export default async function NewListingPage({ searchParams }: { searchParams: Promise<{ onboarding_session?: string; pkg?: string }> }) {
   const user = await getSessionUser()
@@ -60,7 +61,7 @@ export default async function NewListingPage({ searchParams }: { searchParams: P
       </Link>
       <h1 className="mb-6 font-display text-2xl font-bold">{t('new_listing')}</h1>
       {initial && <p className="mb-4 rounded-button bg-success/10 px-3 py-2 text-xs text-success">{t('from_interview_hint')}</p>}
-      <PackageWizard mode="create" allowedCategorySlugs={allowed} {...(initial ? { initial } : {})} />
+      <PackageWizard mode="create" allowedCategorySlugs={allowed} offerServices={isOnFor('search', user.id)} {...(initial ? { initial } : {})} />
     </div>
   )
 }

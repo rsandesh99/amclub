@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { PackageWizard, type PackageDraft } from '@/components/partner/PackageWizard'
+import { isOnFor } from '@/lib/experiments'
 
 interface RequirementField {
   label_en?: string
@@ -32,6 +33,11 @@ export default async function EditListingPage({
     .maybeSingle()
 
   if (!pk) notFound()
+  // Experience v3 E2: the service (0051) is read only when the flag is on.
+  const offerServices = isOnFor('search', user.id)
+  const service = offerServices
+    ? ((await supabase.from('packages').select('service_slug').eq('id', id).maybeSingle()).data?.service_slug as string | null | undefined) ?? ''
+    : ''
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const cat = pk.category as any
@@ -53,6 +59,7 @@ export default async function EditListingPage({
     deliveryDays: String(pk.delivery_days),
     revisionCount: String(pk.revision_count),
     faqs: faqs.map((f) => ({ question: f.q, answer: f.a })),
+    serviceSlug: service,
   }
 
   return (
@@ -61,7 +68,7 @@ export default async function EditListingPage({
         <ChevronLeft className="h-4 w-4" /> {t('back_to_listings')}
       </Link>
       <h1 className="mb-6 font-display text-2xl font-bold">{t('edit_listing')}</h1>
-      <PackageWizard mode="edit" initial={initial} allowedCategorySlugs={[]} />
+      <PackageWizard mode="edit" initial={initial} allowedCategorySlugs={[]} offerServices={offerServices} />
     </div>
   )
 }

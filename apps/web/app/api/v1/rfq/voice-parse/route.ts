@@ -10,6 +10,7 @@ import { BudgetExceededError } from '@/lib/agent/bounded'
 import { transcriberVendorTag } from '@/lib/voice/sarvam'
 import { estimateSttCostPaise, logAiInvocation } from '@/lib/voice/invocations'
 import { maybeClarify, requiredFieldsFor } from '@/lib/voice/clarify'
+import { isVoiceSearchOn } from '@/lib/voice/search'
 
 /**
  * Phase 8b — voice → structured RFQ prefill. Auth required and tightly
@@ -57,6 +58,11 @@ export async function POST(request: NextRequest) {
 
   const form = await request.formData().catch(() => null)
   if (!form) return NextResponse.json({ error: 'audio_required' }, { status: 422 })
+  // Experience v3 E2b (N5) — mode=query: the catalog mic. Same STT + parse,
+  // answered as a search (English query + detected language + the category /
+  // service the parser mapped). 404 unless voice search is switched on.
+  const queryMode = form.get('mode') === 'query'
+  if (queryMode && !(await isVoiceSearchOn())) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // S1.8 — round two: `prior` (validated) with audio OR a typed answer.
   let prior: VoiceParsePrior | null = null
@@ -155,6 +161,24 @@ export async function POST(request: NextRequest) {
       )
     }
     if (!transcript) return NextResponse.json({ error: 'transcription_empty' }, { status: 422 })
+  }
+
+  if (queryMode) {
+    try {
+      const pr = await getParser().parse(transcript, languageCode, { admin, userId })
+      const service = pr.parse.category_slug && pr.parse.specialization ? pr.parse.specialization : null
+      return NextResponse.json({
+        query: transcript.replace(/\s+/g, ' ').trim().slice(0, 120),
+        original_language: languageCode,
+        category_slug: pr.parse.category_slug,
+        service_slug: service,
+        stub: sttStub || pr.stub,
+      })
+    } catch (e) {
+      console.error('[voice-parse query]', e)
+      // The words still make a search — fall back to the transcript alone.
+      return NextResponse.json({ query: transcript.replace(/\s+/g, ' ').trim().slice(0, 120), original_language: languageCode, category_slug: null, service_slug: null, stub: sttStub })
+    }
   }
 
   // Transcript-only mode: the STT invocation is logged above exactly as in
