@@ -47,6 +47,8 @@ export { supportIntentSchema } from './prompts/support_intent/schema'
 export { supportTicketSummarySchema } from './prompts/support_ticket_summary/schema'
 export * from './score/parts'
 export { scoreNoteSchema } from './prompts/score_note/schema'
+export * from './benchmark/parts'
+export { benchmarkExplainSchema } from './prompts/benchmark_explain/schema'
 // S3.1 — the Buyer Procurement Agent (the turn + watch definitions, the session rules both the runtime and the harness apply, parts, keyless producers)
 export * from './procurement/parts'
 export * from './procurement/stub'
