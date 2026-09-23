@@ -6,6 +6,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { getPaymentGateway } from '@/lib/payments'
 import { materializeFromCapture } from '@/lib/payments/materialize'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
+import { accountSuspendedResponse } from '@/lib/auth/suspension'
 
 const bodySchema = z.object({ checkoutSessionId: z.string().uuid() })
 
@@ -46,7 +47,8 @@ export async function POST(request: NextRequest) {
   // Without this, any authenticated user knowing a session id could turn a
   // stranger's pending checkout into a "paid" order (simulate mode only, but
   // the check belongs here regardless — the admin client bypasses RLS).
-  const { data: msme } = await admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
+  const { data: msme } = await admin.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle()
+  if (msme?.deleted_at) return accountSuspendedResponse()
   if (!msme || session.msme_id !== msme.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

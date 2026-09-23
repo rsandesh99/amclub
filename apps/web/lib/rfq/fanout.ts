@@ -65,7 +65,7 @@ export async function fanoutRfq(admin: Admin, rfqId: string): Promise<{ matched:
     kind: 'rfq_matched',
     titleI18n: { en: 'New request matched to you', hi: 'आपके लिए नया अनुरोध' },
     bodyI18n: { en: rfq.title, hi: rfq.title },
-    link: '/partner/rfqs',
+    link: `/partner/rfqs/${rfqId}`,
     channels: ['sms', 'whatsapp'],
   })
 

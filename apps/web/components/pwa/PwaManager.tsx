@@ -7,7 +7,8 @@ import { WifiOff } from 'lucide-react'
 /**
  * Phase 8 §5 — registers the service worker and shows a "you're offline"
  * banner while connectivity is down. The SW itself is conservative (see
- * public/sw.js): GET-only, no API mutations ever cached.
+ * public/sw.js): GET-only, never caches pages or API responses (only static
+ * assets + the offline shell); sign-out purges caches via ./purge-caches.
  */
 export function PwaManager() {
   const t = useTranslations('common')

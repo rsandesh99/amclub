@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 
 /**
  * Standard 500 envelope. Logs the full error server-side (Vercel logs / Sentry)
@@ -10,6 +11,8 @@ import { NextResponse } from 'next/server'
  */
 export function serverError(context: string, error: unknown): NextResponse {
   console.error(context, error)
+  // A handled 500 never reaches Next's error hook — report it explicitly (no-op without SENTRY_DSN).
+  Sentry.captureException(error, { tags: { context } })
   return NextResponse.json(
     { error: 'Something went wrong, please try again.' },
     { status: 500 },

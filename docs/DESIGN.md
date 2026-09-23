@@ -345,7 +345,7 @@ Payout to provider releases ONLY from `completed` or `resolved_release/partial`.
 - **Empty RFQ quotes (pending):** timeline showing "Sent to 12 providers · usually replies within 24h".
 - **Empty search results:** "No providers yet for this in {state}" + CTA "Post a requirement instead" (RFQ funnel rescue) + relax-filters suggestion.
 - **Payment failure:** order NOT created; sheet shows retry + support link; abandoned-checkout nudge after 1h (one only).
-- **Offline (PWA):** cached shell + "You're offline" banner; orders list served from cache read-only.
+- **Offline (PWA):** cached shell + "You're offline" banner; the offline page only — no authenticated page or API data is cached on the device (shared-device privacy, USER_EXPECTATIONS_AUDIT P0-6), and sign-out purges caches.
 - **Provider unverified:** dashboard shows verification checklist with per-item status, not a dead end.
 - **Skeletons everywhere** listings/cards load; never spinner-on-white.
 - **Clarification thread empty (S1.3):** "No questions yet" inside the card, with the "visible to all providers who received this request" hint; never a blank card.
@@ -870,7 +870,7 @@ now matches this document.
 ## 9.1 Legal & regulatory (India)
 
 - **Entity & invoicing:** Platform raises (a) buyer invoice on behalf of provider or provider invoices buyer directly with platform commission invoice to provider — get CA sign-off on the GST structure for marketplace commission (SAC 9985/9997) **before** Phase 4; TCS under GST Sec 52 applies to e-commerce operators collecting consideration — build `tcs_paise` column readiness into payments.
-- **DPDP Act 2023:** consent capture at signup, purpose limitation, data-principal rights (export + delete endpoints — soft-delete + 30-day purge job), breach-notification runbook. Data stays in ap-south-1.
+- **DPDP Act 2023:** consent capture at signup, purpose limitation, data-principal rights (export + delete endpoints — soft-delete + 30-day purge job), breach-notification runbook. **Stored** data stays in ap-south-1 (Supabase Mumbai, incl. the private `wa-media` bucket for WhatsApp voice notes/photos sent to the assistant). **AI inference is a disclosed cross-border processor:** agent features send only the content a request needs to AI model providers that may process it outside India, under no-training / zero-retention terms (privacy policy §5/§6, v `2026-09-23`; `docs/agents/SECURITY.md` "Model-provider data terms"). An opt-in residency guard (`AGENT_RESIDENCY_ENFORCE`, `TASK_CLASS_RESIDENCY` in `packages/shared/src/agent.ts`) can pin in-India task classes to allow-listed hosts; a signed DPA per model provider is a blocker for enabling any agent cohort (`docs/COMPLIANCE.md`).
 - **IT Rules 2021 (intermediary):** grievance officer named on `/legal/grievance`, 24h acknowledgement / 15-day resolution SLA, takedown process.
 - **Terms:** marketplace is an intermediary, not the service performer; provider agreement covers commission, payout terms, quality SLAs, and professional-liability disclaimer (legal/CA advice is the provider's responsibility).
 
@@ -911,6 +911,7 @@ Clarifications + revision (S1.3): `rfq_question_asked` (server; props `rfq_id, k
 RFQ Quality (agent S1.5): `rfq_quality_checked` (server; props `rfq_id, complete, missing_count, rule_count, model_count, risk_flags, stub, model_used, deferred`) · `rfq_quality_answered` (server; props `rfq_id, answered_count, missing_count, seconds_since_check, redacted, matched`) · `rfq_quality_sent_as_is` (server; props `rfq_id, missing_count, matched`) · `rfq_quality_auto_released` (server, cron; props `rfq_id, matched, hold_minutes`) · `rfq_quality_answer_dictated` (client; props `rfq_id, field`).
 Dispute triage (S1.7): `dispute_statement_submitted` (server; props `order_id, dispute_id, role, has_docs, redacted, edited`) · `dispute_triage_written` (runtime; props `dispute_id, kind, recommendation, confidence, checks_failed, stub`) · `dispute_resolved_with_triage` (server; props `dispute_id, triage_id, agreed, recommendation, resolution`).
 Onboarding agent (S1.6): `onboarding_wa_started` (server; props `session_id, surface, enqueued|sent`) · `onboarding_wa_step` (runtime; props `session_id, step, kind, outcome, redacted`) · `onboarding_wa_drafted` (runtime; props `session_id, categories, packages, uncertain_count, stub, draft_count`) · `onboarding_wa_confirmed` (runtime; props `session_id, decision_id, facts, draft_count`) · `onboarding_wa_revised` (runtime; props `session_id, draft_count`) · `onboarding_wa_abandoned` (runtime; props `session_id, step, sent`) · `onboarding_wa_failed` (runtime; props `session_id, failure`) · `onboarding_wa_handed_off` (runtime; props `session_id, confirmed, cap?`) · `onboarding_prefill_used` (server; props `session_id, provider_id`).
+Quote withdraw (PR #15): `quote_withdrawn` (server; props `rfq_id, quote_id, has_reason, role`).
 Every event carries: `role, state, category_id, locale, device`. These power the §1.9 funnel — instrument in the same PR as the feature, not after.
 
 ## Appendix B — Glossary

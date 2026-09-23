@@ -16,6 +16,9 @@ import {
   scopesWithinPersona,
   AGENT_SURFACES,
   AGENT_CHANNELS,
+  AGENT_RESIDENCIES,
+  TASK_CLASS_RESIDENCY,
+  residencyFor,
 } from '../index'
 
 /**
@@ -141,5 +144,22 @@ describe('delegation grant — scopes are a subset of the persona allowlist', ()
     expect(AGENT_SURFACES).toContain('system')
     expect(AGENT_SURFACES).toContain('phone')
     for (const c of AGENT_CHANNELS) expect(AGENT_SURFACES).toContain(c)
+  })
+})
+
+describe('task class residency (DPDP guard input)', () => {
+  it('every task class has a residency', () => {
+    for (const c of AGENT_TASK_CLASSES) expect(AGENT_RESIDENCIES).toContain(TASK_CLASS_RESIDENCY[c])
+  })
+
+  it('classes that carry user documents, transcripts, onboarding answers, drafts or dispute text are in-India', () => {
+    for (const c of ['speech_to_text', 'rfq_parse', 'document_extract', 'quote_extract', 'quote_draft', 'onboarding_interview', 'dispute_triage', 'dispute_summary', 'support_intent', 'thread_reply', 'photo_plausibility'] as const) {
+      expect(residencyFor(c)).toBe('in')
+    }
+  })
+
+  it('only derived / platform-copy classes may leave India', () => {
+    const any = AGENT_TASK_CLASSES.filter((c) => TASK_CLASS_RESIDENCY[c] === 'any').sort()
+    expect(any).toEqual(['benchmark_explain', 'translation'])
   })
 })

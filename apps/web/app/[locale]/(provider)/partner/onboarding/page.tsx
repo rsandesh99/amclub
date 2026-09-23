@@ -14,9 +14,13 @@ export default async function ProviderOnboardingPage() {
 
   // An existing provider must never re-run onboarding — resubmitting would
   // reset an approved profile to under_review and wipe verification badges.
-  // Only brand-new applicants and rejected reapplicants may proceed.
+  // Only brand-new applicants, pending_kyc applicants (KYC never finished —
+  // the dashboard's "Complete onboarding" CTA lands here) and rejected
+  // reapplicants may proceed. Mirrors the POST /api/v1/profile/provider
+  // re-registration guard and /profile/me canOnboard; redirecting pending_kyc
+  // back to /partner made that CTA a dead loop.
   const existing = await getProviderProfile(user.id)
-  if (existing && existing.status !== 'rejected') redirect('/partner')
+  if (existing && existing.status !== 'rejected' && existing.status !== 'pending_kyc') redirect('/partner')
 
   // S1.6 — the "Finish on WhatsApp" flag and the CONFIRMED interview draft, server-side so the
   // prefilled fields and their chips render on first paint. Both null/false while dark.

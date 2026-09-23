@@ -7,6 +7,7 @@ import { getPaymentGateway } from '@/lib/payments'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { prepareMemberCheckout } from '@/lib/mart/pools'
 import { serverError } from '@/lib/api/errors'
+import { accountSuspendedResponse } from '@/lib/auth/suspension'
 
 /**
  * Pay-on-close: the member's goods order at the pool price. Same session →
@@ -22,8 +23,9 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
   const { id } = await params
   const admin = await createAdminClient()
-  const { data: msme } = await admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
+  const { data: msme } = await admin.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle()
   if (!msme) return NextResponse.json({ error: 'Complete your business profile first' }, { status: 403 })
+  if (msme.deleted_at) return accountSuspendedResponse()
   const r = await prepareMemberCheckout(admin, { poolId: id, msmeId: msme.id })
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
   const c = r.checkout

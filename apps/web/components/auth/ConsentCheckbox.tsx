@@ -24,7 +24,7 @@ export function ConsentCheckbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-4 w-4 shrink-0 accent-primary"
+        className="mt-0.5 h-6 w-6 shrink-0 accent-primary"
         required
       />
       <span>

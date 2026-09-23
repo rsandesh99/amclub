@@ -56,7 +56,9 @@ const config: Config = {
         muted: '#F3F4F1',
         foreground: {
           DEFAULT: '#1A1D1A',
-          secondary: '#5C645C', // muted text + disabled
+          // muted text + disabled — ≈7.8:1 on background, 7.4:1 on muted
+          // (FRONTEND.md §5/§8 7:1 body floor; was #5C645C ≈ 5.9:1).
+          secondary: '#4A514A',
         },
         // ── AMC Mart / FRONTEND.md v2 "Emerald & Brass" tokens (§2.1) ───────
         // ADDITIVE: the services palette above is untouched; these are used by
@@ -95,10 +97,12 @@ const config: Config = {
         body: ['17px', { lineHeight: '26px' }],
         meta: ['15px', { lineHeight: '22px' }],
         // §4.2 type scale — tightened tracking on the larger steps for cleaner
-        // heading hierarchy. Body stays at 15px.
+        // heading hierarchy (Indic locales reset tracking/leading in
+        // globals.css). `sm` and `base` were both 15px; base is now 16/1.6,
+        // sm 15/1.55 — a conservative step toward the 17/26 body target.
         xs: ['13px', { lineHeight: '1.4' }],
-        sm: ['15px', { lineHeight: '1.5' }],
-        base: ['15px', { lineHeight: '1.5' }],
+        sm: ['15px', { lineHeight: '1.55' }],
+        base: ['16px', { lineHeight: '1.6' }],
         md: ['17px', { lineHeight: '1.4' }],
         lg: ['20px', { lineHeight: '1.3', letterSpacing: '-0.01em' }],
         xl: ['24px', { lineHeight: '1.25', letterSpacing: '-0.015em' }],
@@ -110,6 +114,7 @@ const config: Config = {
       borderRadius: {
         card: '12px',
         button: '10px',
+        input: '10px', // `rounded-input` was referenced but undefined
         chip: '999px',
       },
       // §4 elevation scale — ONE coherent system. Brand-tinted (cool green-black)

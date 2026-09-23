@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { Link } from '@/i18n/navigation'
@@ -20,6 +20,8 @@ import {
 import type { RfqDetailForBuyer, QuoteForBuyer } from '@/lib/rfq/queries'
 import { formatINR, formatINRExact, formatResponseTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { ConfirmSheet } from '@/components/ui/confirm-sheet'
+import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 import { QuoteTermsRow } from './QuoteTermsRow'
 
 type Sort = 'price' | 'delivery' | 'rating' | 'response'
@@ -44,6 +46,7 @@ export interface QuoteCompareProps {
  */
 export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled }: QuoteCompareProps) {
   const t = useTranslations('rfq')
+  const tc = useTranslations('checkout')
   const locale = useLocale()
   const router = useRouter()
   const [sort, setSort] = useState<Sort>('price')
@@ -56,6 +59,18 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
   const [shortlistOnly, setShortlistOnly] = useState(false)
   const [declining, setDeclining] = useState<QuoteForBuyer | null>(null)
   const [localDeclined, setLocalDeclined] = useState<Record<string, QuoteDeclineReason>>({})
+  // Accept = confirm first (UX D1), then one checkout per quote. The key is
+  // stable per quote for the page lifetime (P0-5): a retry or a double tap
+  // resumes the same session instead of minting a second payable order.
+  const [confirming, setConfirming] = useState<QuoteForBuyer | null>(null)
+  const [confirmErr, setConfirmErr] = useState('')
+  const quoteKeys = useRef(new Map<string, string>())
+  const closeConfirm = useCallback(() => { setConfirming(null); setConfirmErr('') }, [])
+  const keyForQuote = (quoteId: string) => {
+    let k = quoteKeys.current.get(quoteId)
+    if (!k) { k = newIdempotencyKey(); quoteKeys.current.set(quoteId, k) }
+    return k
+  }
 
   const goods = rfq.kind === 'goods'
   const specUnit = String(rfq.goodsSpec?.['unit'] ?? '')
@@ -121,7 +136,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
           <p className="text-sm font-medium">{t('rescue_title')}</p>
           <p className="mt-1 text-xs text-foreground-secondary">{t('rescue_body')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link href={(goods ? '/app/mart/rfq/new' : '/app/rfq/new') as '/app/rfq/new'}><Button>{t('rebroadcast')}</Button></Link>
+            <Link href={(goods ? '/app/mart/rfq/new' : `/app/rfq/new?from=${rfq.id}`) as '/app/rfq/new'}><Button>{t('rebroadcast')}</Button></Link>
             <Link href={(goods ? '/mart' : '/services') as '/services'}><Button variant="outline">{t('browse_providers')}</Button></Link>
           </div>
         </div>
@@ -137,23 +152,29 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     )
   }
 
-  async function accept(quoteId: string) {
-    setAccepting(quoteId)
+  function askAccept(q: QuoteForBuyer) {
     setError('')
+    setConfirmErr('')
+    setConfirming(q)
+  }
+
+  // P0-4 — the same payment path as package checkout: simulation materialises
+  // now; real keys open the Razorpay sheet. The WEBHOOK creates the order (and
+  // finalizeQuoteAcceptance closes the RFQ); the redirect is cosmetic.
+  async function accept(q: QuoteForBuyer) {
+    setAccepting(q.id)
+    setConfirmErr('')
     try {
-      const res = await fetch('/api/v1/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId, idempotencyKey: crypto.randomUUID() }) })
-      const d = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(typeof d.error === 'string' ? d.error : 'failed')
-      if (d.simulated) {
-        const sim = await fetch('/api/v1/checkout/simulate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ checkoutSessionId: d.checkoutSessionId }) })
-        const sd = await sim.json()
-        if (!sim.ok) throw new Error(sd.error ?? 'failed')
-        router.push(`/app/orders/${sd.orderId}?first=1`)
-        return
-      }
-      router.push('/app/orders?processing=1')
+      const data = await startCheckout('/api/v1/checkout', { quoteId: q.id, idempotencyKey: keyForQuote(q.id) })
+      await payCheckout(data, {
+        description: rfq.title,
+        onPaid: (o) => router.push(o.kind === 'order' ? `/app/orders/${o.orderId}?first=1` : '/app/orders?processing=1'),
+        onDismiss: () => { setAccepting(null); setError(tc('payment_cancelled')) },
+      })
+      // The sheet is open (or we are navigating) — the confirm has done its job.
+      setConfirming(null)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'failed')
+      setConfirmErr(tc(checkoutErrorKey(e, CHECKOUT_ERROR_KEYS, 'failed') as 'failed'))
       setAccepting(null)
     }
   }
@@ -198,7 +219,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
       <div className="flex flex-wrap items-center gap-2">
         {!decided && st === 'submitted' && (
           <>
-            <Button size="sm" onClick={() => accept(q.id)} loading={accepting === q.id} title={goods && q.goods ? t('goods_accept_note', { qty: q.goods.qty, unit: specUnit, total: formatINRExact(q.goods.totalInclGstPaise) }) : undefined}>
+            <Button size="sm" onClick={() => askAccept(q)} loading={accepting === q.id} disabled={accepting != null && accepting !== q.id} title={goods && q.goods ? t('goods_accept_note', { qty: q.goods.qty, unit: specUnit, total: formatINRExact(q.goods.totalInclGstPaise) }) : undefined}>
               {accepting === q.id ? t('accepting') : t('accept_quote')}
             </Button>
             <Button size="sm" variant="outline" onClick={() => setDeclining(q)}>{t('decline_quote_button')}</Button>
@@ -341,6 +362,44 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
           <MessageThread quote={quotes.find((q) => q.id === threadFor)!} />
         </div>
       )}
+
+      <ConfirmSheet
+        open={confirming != null}
+        title={t('accept_confirm_title')}
+        confirmLabel={t('accept_confirm_submit')}
+        cancelLabel={t('accept_confirm_cancel')}
+        busy={confirming != null && accepting === confirming.id}
+        error={confirmErr || null}
+        onClose={closeConfirm}
+        onConfirm={() => (confirming ? accept(confirming) : undefined)}
+      >
+        {confirming && (() => {
+          const q = confirming
+          const others = rfq.quotes.filter((o) => o.id !== q.id && statusOf(o) === 'submitted').length
+          return (
+            <div className="space-y-3 text-sm">
+              <dl className="space-y-1.5 rounded-button border border-border bg-muted/40 p-3">
+                <div className="flex justify-between gap-3"><dt className="text-foreground-secondary">{t('accept_confirm_provider')}</dt><dd className="text-right font-medium">{q.provider.displayName}</dd></div>
+                {goods && q.goods ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-foreground-secondary">{t('accept_confirm_total_goods', { qty: q.goods.qty, unit: specUnit })}</dt>
+                    <dd className="text-right font-display text-base font-bold text-primary tabular-nums">{formatINRExact(q.goods.totalInclGstPaise)}</dd>
+                  </div>
+                ) : (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-foreground-secondary">{t('accept_confirm_price')}</dt>
+                    <dd className="text-right font-display text-base font-bold text-primary tabular-nums">{formatINRExact(q.pricePaise)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3"><dt className="text-foreground-secondary">{t('compare_delivery')}</dt><dd className="text-right">{t('delivery_days', { days: q.deliveryDays })}</dd></div>
+              </dl>
+              {!(goods && q.goods) && <p className="text-xs text-foreground-secondary">{t('accept_confirm_gst_note')}</p>}
+              <p className="flex items-start gap-1.5 text-foreground"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-trust" aria-hidden />{t('accept_confirm_escrow')}</p>
+              {others > 0 && <p className="text-foreground-secondary">{t('accept_confirm_others', { count: others })}</p>}
+            </div>
+          )
+        })()}
+      </ConfirmSheet>
 
       {declining && (
         <DeclineSheet

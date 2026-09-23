@@ -253,6 +253,19 @@ const MANIFEST: Entry[] = [
     ],
     note: 'S2.2 Digital Munshi: munshi_drafts (proposals the provider decides on) + munshi_provider_state (scan cursor, daily cap, reminders); provider_price_book gains accepted_at / deleted_at / source (source_quote_id nullable for manual rows; accepted_at backfilled from accepted quotes); quotes.munshi_draft_id (+ the S1.2 column grant restated); ai_decisions feature CHECK gains munshi_reply',
   },
+  {
+    file: '0042_users_privilege_guard.sql',
+    tables: ['users'],
+    functions: ['users_roles_guard'],
+    triggers: [['users', 'users_roles_guard']],
+    note: 'Security hotfix: users owner policy is SELECT-only, INSERT/UPDATE/DELETE revoked from anon + authenticated, users_roles_guard refuses a roles change by a client role (closes self-promotion to admin)',
+  },
+  {
+    file: '0043_rls_hardening.sql',
+    tables: ['messages', 'order_events', 'audit_logs', 'msme_profiles'],
+    triggers: [['audit_logs', 'audit_logs_no_update']],
+    note: 'Security hotfix: messages parties SELECT-only + INSERT/UPDATE/DELETE revoked; order_events parties-insert policy dropped + INSERT revoked; audit_logs append-only trigger (raise_append_only from 0017) + INSERT/UPDATE/DELETE revoked; msme_profiles owner SELECT-only + INSERT/UPDATE/DELETE revoked (no self-unsuspend / self-verify) — all from anon + authenticated (service role keeps its grants)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

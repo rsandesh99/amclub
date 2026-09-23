@@ -17,7 +17,7 @@ interface ProviderRow {
   created_at: string
   user: { phone: string | null; email: string | null } | null
   categories: { category: { name_i18n: { en: string } } }[]
-  verifications: { kind: string; document_url: string | null; status: string }[]
+  verifications: { id: string; kind: string; document_url: string | null; status: string }[]
   bank: { account_holder: string; ifsc: string; penny_drop_verified: boolean } | null
 }
 
@@ -29,7 +29,7 @@ async function getPendingProviders() {
       id, legal_name, display_name, gstin, pan, state, status, created_at,
       user:users(phone, email),
       categories:provider_categories(category:categories(name_i18n)),
-      verifications:provider_verifications(kind, document_url, status),
+      verifications:provider_verifications(id, kind, document_url, status),
       bank:provider_bank_accounts(account_holder, ifsc, penny_drop_verified)
     `)
     .in('status', ['pending_kyc', 'under_review'])
@@ -151,11 +151,13 @@ export default async function VerificationsPage() {
                     <p className="text-xs font-medium text-foreground-secondary uppercase tracking-wide mb-2">{t('credentials')}</p>
                     <div className="flex flex-wrap gap-2">
                       {p.verifications.map((v) => (
-                        <div key={v.kind} className="flex items-center gap-2 rounded-[8px] border border-border px-3 py-1.5 text-xs">
+                        <div key={v.id} className="flex items-center gap-2 rounded-[8px] border border-border px-3 py-1.5 text-xs">
                           <span className="font-medium">{v.kind.replace(/_/g, ' ')}</span>
                           {v.document_url && (
+                            // P0-9: document_url is a bucket path; the route
+                            // signs it at click time (15 min) and redirects.
                             <a
-                              href={v.document_url}
+                              href={`/api/v1/admin/verifications/${p.id}/document?v=${v.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-trust underline underline-offset-1"

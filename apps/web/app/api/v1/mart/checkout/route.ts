@@ -9,6 +9,7 @@ import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { prepareGoodsCheckout } from '@/lib/mart/totals'
 import { getMartSetting } from '@/lib/mart/config'
 import { serverError } from '@/lib/api/errors'
+import { accountSuspendedResponse } from '@/lib/auth/suspension'
 
 /**
  * Goods checkout (MART_DESIGN.md §4.3) — the SAME frozen-session → gateway
@@ -46,8 +47,9 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const { data: msme } = await supabase.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
+  const { data: msme } = await supabase.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle()
   if (!msme) return NextResponse.json({ error: 'Complete your business profile first' }, { status: 403 })
+  if (msme.deleted_at) return accountSuspendedResponse()
 
   const admin = await createAdminClient()
   const prepared = await prepareGoodsCheckout(admin, items)

@@ -5,23 +5,26 @@
 @layer base {
   :root {
     /* ── Semantic colour tokens — palette LOCKED, one colour one job (§4.2).
-       Mirrors packages tailwind.config.ts; both resolve to the same hex. ── */
+       Mirrors tailwind.config.ts; both resolve to the same hex (synced after
+       the contrast fixes — keep them in lockstep). ── */
+    /* Declared so Android/Chrome force-dark never inverts the light palette. */
+    color-scheme: light;
     --background: #fafaf7;
     --surface: #ffffff;
     --foreground: #1a1d1a;
-    --foreground-secondary: #5c645c;
+    --foreground-secondary: #4a514a; /* ≈7.8:1 on background (7:1 floor) */
     --primary: #1b4d3e;
     --primary-strong: #143f33; /* hover/pressed deepen */
     --primary-foreground: #ffffff;
     --accent: #f4a300; /* discounts + rating stars ONLY */
     --accent-foreground: #1a1d1a; /* AA text on marigold */
-    --trust: #1a6fbf;
-    --verified: #1a6fbf; /* verification badges/ticks ONLY */
+    --trust: #155c9e;
+    --verified: #155c9e; /* verification badges/ticks ONLY */
     --danger: #c73e3e;
     --danger-foreground: #ffffff;
     --destructive: #c73e3e;
-    --warning: #b45309;
-    --success: #1e8e5a;
+    --warning: #92400e;
+    --success: #14724a;
     --border: #e6e7e3;
     --muted: #f3f4f1;
     --ring: #1b4d3e;
@@ -65,6 +68,17 @@
   a {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  /* Form controls and disclosure summaries escaped the rule above (selects
+     at 30–40px, <summary> chips ≈ 18px). Base layer, so a component can
+     still opt out explicitly with a utility (e.g. `min-h-0` on a control
+     drawn inside a 44px wrapper). */
+  select,
+  /* :where() keeps this at element specificity so utilities still win. */
+  input:where(:not([type="checkbox"], [type="radio"], [type="hidden"])),
+  summary {
+    min-height: 44px;
   }
 }
 
@@ -115,7 +129,7 @@
       py-0 pl-3 pr-9 text-sm text-foreground transition-colors
       focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25
       disabled:cursor-not-allowed disabled:opacity-50;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235C645C' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234A514A' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.625rem center;
     background-size: 1rem;
@@ -390,3 +404,25 @@
   .mart-skeleton::after { display: none; }
 }
 /* ── end Paisa Moment / skeletons ── */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Indic typography (UX audit C1; FRONTEND.md §2.4). Devanagari / Telugu /
+   Tamil carry matras and stacked conjuncts above and below the Latin
+   x-height: tight leading clips them and negative tracking breaks the
+   shirorekha / joins. Unlayered and after the utilities on purpose — these
+   rules must beat the scale's tracking and `leading-*` utilities on pages in
+   those locales (the <html lang> is set per locale in [locale]/layout.tsx).
+   ═══════════════════════════════════════════════════════════════════════════ */
+:lang(hi),
+:lang(te),
+:lang(ta) {
+  letter-spacing: 0;
+}
+
+:is(:lang(hi), :lang(te), :lang(ta)) :is(body, p, li, dd, dt, td, th, label, blockquote, figcaption, .text-xs, .text-sm, .text-base, .text-md, .text-body, .text-meta) {
+  line-height: 1.7;
+}
+
+:is(:lang(hi), :lang(te), :lang(ta)) :is(h1, h2, h3, h4, h5, h6, .text-lg, .text-xl, .text-2xl, .text-3xl, .text-4xl, .text-5xl) {
+  line-height: 1.4;
+}

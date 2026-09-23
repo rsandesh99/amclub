@@ -193,23 +193,37 @@ export async function notifyReviewPrompt(admin: Admin, order: any): Promise<void
   })
 }
 
-/** System: order auto-cancelled (24h no-accept) → refunded. Notify buyer. */
+/** System: order auto-cancelled (24h no-accept) → refunded. Notify buyer, and tell the provider why they lost it. */
 export async function notifyAutoCancelled(admin: Admin, order: any): Promise<void> {
-  const { msmeUserId } = await parties(admin, order)
-  if (!msmeUserId) return
-  await createNotification(admin, {
-    userId: msmeUserId,
-    kind: 'order_auto_cancelled',
-    titleI18n: { en: 'Order cancelled & refunded', hi: 'ऑर्डर रद्द और धनवापसी' },
-    bodyI18n: { en: `${ref(order)} was not accepted in time and has been fully refunded.`, hi: `${ref(order)} समय पर स्वीकार नहीं हुआ और पूरी धनवापसी कर दी गई है।` },
-    link: `/app/orders/${order.id}`,
-    channels: ['email', 'sms'],
-  })
+  const { msmeUserId, providerUserId } = await parties(admin, order)
+  if (msmeUserId) {
+    await createNotification(admin, {
+      userId: msmeUserId,
+      kind: 'order_auto_cancelled',
+      titleI18n: { en: 'Order cancelled & refunded', hi: 'ऑर्डर रद्द और धनवापसी' },
+      bodyI18n: { en: `${ref(order)} was not accepted in time and has been fully refunded.`, hi: `${ref(order)} समय पर स्वीकार नहीं हुआ और पूरी धनवापसी कर दी गई है।` },
+      link: `/app/orders/${order.id}`,
+      channels: ['email', 'sms'],
+    })
+  }
+  if (providerUserId) {
+    await createNotification(admin, {
+      userId: providerUserId,
+      kind: 'order_auto_cancelled',
+      titleI18n: { en: 'Order auto-cancelled', hi: 'ऑर्डर स्वतः रद्द हुआ' },
+      bodyI18n: {
+        en: `${ref(order)} was cancelled because it was not accepted within 24 hours. The buyer has been refunded in full.`,
+        hi: `${ref(order)} रद्द हो गया क्योंकि इसे 24 घंटे के भीतर स्वीकार नहीं किया गया। खरीदार को पूरी धनवापसी कर दी गई है।`,
+      },
+      link: `/partner/orders/${order.id}`,
+      channels: ['email'],
+    })
+  }
 }
 
 /** System: delivered order auto-accepted (72h) → completed. Notify both + prompt review. */
 export async function notifyAutoAccepted(admin: Admin, order: any): Promise<void> {
-  const { providerUserId } = await parties(admin, order)
+  const { msmeUserId, providerUserId } = await parties(admin, order)
   if (providerUserId) {
     await createNotification(admin, {
       userId: providerUserId,
@@ -220,7 +234,78 @@ export async function notifyAutoAccepted(admin: Admin, order: any): Promise<void
       channels: ['email'],
     })
   }
+  if (msmeUserId) {
+    await createNotification(admin, {
+      userId: msmeUserId,
+      kind: 'order_auto_accepted',
+      titleI18n: { en: 'Delivery auto-accepted', hi: 'डिलीवरी स्वतः स्वीकार हुई' },
+      bodyI18n: {
+        en: `The delivery for ${ref(order)} was accepted automatically after 72 hours without a response, and the order is complete.`,
+        hi: `${ref(order)} की डिलीवरी 72 घंटे तक कोई जवाब न मिलने पर स्वतः स्वीकार कर ली गई, और ऑर्डर पूरा हो गया है।`,
+      },
+      link: `/app/orders/${order.id}`,
+      channels: ['email'],
+    })
+  }
   await notifyReviewPrompt(admin, order)
+}
+
+/** A provider withdrew their quote on the buyer's RFQ. In-app + SMS, like a new / revised quote. */
+export async function notifyQuoteWithdrawn(admin: Admin, rfqId: string): Promise<void> {
+  const { data } = await admin.from('rfqs').select('id, title, msme:msme_profiles!inner(user_id)').eq('id', rfqId).maybeSingle()
+  const r = data as any
+  const userId = r?.msme?.user_id as string | undefined
+  if (!userId) return
+  const title = r.title ?? 'your request'
+  await createNotification(admin, {
+    userId,
+    kind: 'quote_withdrawn',
+    titleI18n: { en: 'A provider withdrew their quote', hi: 'एक प्रदाता ने अपना कोटेशन वापस ले लिया' },
+    bodyI18n: { en: `A quote on "${title}" is no longer available. Your other quotes are unaffected.`, hi: `"${title}" पर एक कोटेशन अब उपलब्ध नहीं है। आपके बाकी कोटेशन पर कोई असर नहीं है।` },
+    link: `/app/rfq/${rfqId}`,
+    channels: ['sms'],
+  })
+}
+
+/** rfq.expire cron: the buyer's request ran out of time — offer to post it again. Once per transitioned RFQ. */
+export async function notifyRfqExpired(admin: Admin, rfq: { id: string; title: string | null; msme_id: string }): Promise<void> {
+  const { data: m } = await admin.from('msme_profiles').select('user_id').eq('id', rfq.msme_id).maybeSingle()
+  const userId = m?.user_id as string | undefined
+  if (!userId) return
+  const title = rfq.title ?? 'your request'
+  await createNotification(admin, {
+    userId,
+    kind: 'rfq_expired',
+    titleI18n: { en: 'Your request expired', hi: 'आपका अनुरोध समाप्त हो गया' },
+    bodyI18n: {
+      en: `"${title}" closed without an accepted quote. Post it again to reach providers afresh.`,
+      hi: `"${title}" बिना किसी स्वीकृत कोटेशन के बंद हो गया। प्रदाताओं तक फिर से पहुँचने के लिए इसे दोबारा पोस्ट करें।`,
+    },
+    link: `/app/rfq/new?from=${rfq.id}`,
+    channels: ['email'],
+  })
+}
+
+/** rfq.expire cron: the provider's still-submitted quote closed with the request. One per expired quote. */
+export async function notifyQuotesExpired(admin: Admin, quotes: { providerId: string; rfqId: string; rfqTitle: string | null }[]): Promise<void> {
+  if (quotes.length === 0) return
+  const { data: provs } = await admin.from('provider_profiles').select('id, user_id').in('id', [...new Set(quotes.map((q) => q.providerId))])
+  const userOf = new Map(((provs ?? []) as any[]).map((p) => [p.id as string, p.user_id as string]))
+  for (const q of quotes) {
+    const userId = userOf.get(q.providerId)
+    if (!userId) continue
+    const title = q.rfqTitle ?? 'a request'
+    await createNotification(admin, {
+      userId,
+      kind: 'quote_expired',
+      titleI18n: { en: 'Your quote expired', hi: 'आपका कोटेशन समाप्त हो गया' },
+      bodyI18n: {
+        en: `"${title}" closed before the buyer chose a quote, so your quote has expired.`,
+        hi: `"${title}" खरीदार के कोटेशन चुनने से पहले बंद हो गया, इसलिए आपका कोटेशन समाप्त हो गया है।`,
+      },
+      link: `/partner/rfqs/${q.rfqId}`,
+    })
+  }
 }
 
 /** Provider payout marked paid (payouts cron). */

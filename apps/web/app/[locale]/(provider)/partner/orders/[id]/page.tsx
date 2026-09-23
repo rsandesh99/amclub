@@ -21,7 +21,7 @@ export default async function PartnerOrderPage({ params }: { params: Promise<{ i
 
   return (
     <div className="min-h-screen bg-background">
-      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} />
+      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} extras={detail.extras} />
     </div>
   )
 }

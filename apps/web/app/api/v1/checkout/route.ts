@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { computeOrderAmounts } from '@amclub/shared'
+import { computeOrderAmounts, isValidGstin } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
@@ -32,6 +32,70 @@ const bodySchema = z
     message: 'Provide exactly one of packageId or quoteId',
   })
 
+/**
+ * Stable machine codes on every error body (`{ error, code }`). Clients map the
+ * code to a translated message and never render `error` (kept for API callers
+ * that already read it, e.g. mobile).
+ */
+type CheckoutErrorCode =
+  | 'unauthorized'
+  | 'gstin_invalid'
+  | 'profile_incomplete'
+  | 'account_suspended'
+  | 'package_unavailable'
+  | 'provider_paused'
+  | 'quote_not_found'
+  | 'not_your_rfq'
+  | 'quote_unavailable'
+  | 'rfq_closed'
+  | 'rfq_checkout_in_progress'
+  | 'rfq_already_paid'
+  | 'checkout_failed'
+  | 'goods_quote_unavailable'
+
+function fail(status: number, code: CheckoutErrorCode, error: string, extra?: Record<string, unknown>) {
+  return NextResponse.json({ error, code, ...(extra ?? {}) }, { status })
+}
+
+interface SessionRow {
+  id: string
+  razorpay_order_id: string | null
+  total_paise: number
+  status: string
+  order_id: string | null
+}
+const SESSION_COLS = 'id, razorpay_order_id, total_paise, status, order_id'
+/** A session whose payment was captured (materialize_order claimed it). */
+const isPaidSession = (s: SessionRow) => !!s.order_id || s.status === 'materializing' || s.status === 'materialized'
+
+/**
+ * Resume an existing session (same idempotency key, or a live session for the
+ * SAME quote). Never mints a second Razorpay order; once the session is paid
+ * the client is sent to the order instead of re-opening the payment sheet.
+ */
+function resumeResponse(s: SessionRow) {
+  if (isPaidSession(s)) {
+    return NextResponse.json({
+      checkoutSessionId: s.id,
+      razorpayOrderId: s.razorpay_order_id,
+      amountPaise: Number(s.total_paise),
+      orderId: s.order_id,
+      alreadyPaid: true,
+      idempotent: true,
+    })
+  }
+  return NextResponse.json({
+    checkoutSessionId: s.id,
+    razorpayOrderId: s.razorpay_order_id,
+    amountPaise: Number(s.total_paise),
+    keyId: process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'] ?? '',
+    idempotent: true,
+    // The resume path must say whether to simulate, or a stable client key
+    // would open the Razorpay sheet on a simulated order id.
+    simulated: !getPaymentGateway().isReal,
+  })
+}
+
 /** Common frozen-session shape produced by either the package or quote branch. */
 interface Prep {
   providerId: string
@@ -47,7 +111,7 @@ interface Prep {
 
 export async function POST(request: NextRequest) {
   const { supabase, userId } = await getAuthedSupabase()
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId) return fail(401, 'unauthorized', 'Unauthorized')
   const scope = await requireToolScope('place_order')
   if (scope) return scope
 
@@ -57,8 +121,21 @@ export async function POST(request: NextRequest) {
 
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
-  const { packageId, quoteId, gstInvoice, idempotencyKey } = parsed.data
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten(), code: 'invalid_body' }, { status: 422 })
+  const { packageId, quoteId, idempotencyKey } = parsed.data
+  // GSTIN typed at checkout: normalised and checksum-validated HERE — the
+  // invoice (lib/invoices/generate.ts) prefers it over the profile GSTIN, so
+  // the server is the authority on what gets frozen into the session.
+  let gstInvoice = parsed.data.gstInvoice
+  if (gstInvoice) {
+    const gstin = gstInvoice.gstin?.trim().toUpperCase() || undefined
+    if (gstin && !isValidGstin(gstin)) return fail(422, 'gstin_invalid', 'GSTIN is not valid')
+    const businessName = gstInvoice.businessName?.trim() || undefined
+    const address = gstInvoice.address?.trim() || undefined
+    gstInvoice = gstin || businessName || address
+      ? { ...(gstin ? { gstin } : {}), ...(businessName ? { businessName } : {}), ...(address ? { address } : {}) }
+      : undefined
+  }
   // Coupons are flag-gated (default OFF). When OFF, any client-supplied code is
   // ignored and the coupon branch is skipped entirely — one less branch in the
   // money math. Codes are stored upper-cased, so normalise before lookup.
@@ -67,22 +144,15 @@ export async function POST(request: NextRequest) {
   // Idempotent: a repeat with the same key returns the existing session/order.
   const { data: existing } = await supabase
     .from('checkout_sessions')
-    .select('id, razorpay_order_id, total_paise')
+    .select(SESSION_COLS)
     .eq('idempotency_key', idempotencyKey)
     .maybeSingle()
-  if (existing?.razorpay_order_id) {
-    return NextResponse.json({
-      checkoutSessionId: existing.id,
-      razorpayOrderId: existing.razorpay_order_id,
-      amountPaise: existing.total_paise,
-      keyId: process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'] ?? '',
-      idempotent: true,
-    })
-  }
+  if (existing?.razorpay_order_id) return resumeResponse(existing as SessionRow)
 
   // Buyer's MSME profile (RLS: owner read).
-  const { data: msme } = await supabase.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
-  if (!msme) return NextResponse.json({ error: 'Complete your business profile first' }, { status: 403 })
+  const { data: msme } = await supabase.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle()
+  if (!msme) return fail(403, 'profile_incomplete', 'Complete your business profile first')
+  if (msme.deleted_at) return fail(403, 'account_suspended', 'Your buyer account is suspended')
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   let goodsPrep: GoodsQuotePrep | null = null
@@ -92,7 +162,7 @@ export async function POST(request: NextRequest) {
     const { data: pkg } = await supabase
       .from('packages')
       .select(
-        'id, provider_id, category_id, title_i18n, scope_included, scope_excluded, deliverables, requirements_template, price_paise, discount_bps, member_extra_discount_bps, delivery_days, revision_count, status, provider:provider_profiles!inner(id, status), category:categories(commission_bps)',
+        'id, provider_id, category_id, title_i18n, scope_included, scope_excluded, deliverables, requirements_template, price_paise, discount_bps, member_extra_discount_bps, delivery_days, revision_count, status, provider:provider_profiles!inner(id, status, capacity_paused), category:categories(commission_bps)',
       )
       .eq('id', packageId)
       .eq('status', 'active')
@@ -100,7 +170,13 @@ export async function POST(request: NextRequest) {
 
     const p = pkg as any
     if (!p || p.provider?.status !== 'active') {
-      return NextResponse.json({ error: 'Package not available' }, { status: 404 })
+      return fail(404, 'package_unavailable', 'Package not available')
+    }
+    // Provider "pause capacity" promises buyers can't order while paused — the
+    // package Buy Now honours it. (An already-submitted QUOTE may still be
+    // accepted: the provider chose to quote while available.)
+    if (p.provider?.capacity_paused) {
+      return fail(409, 'provider_paused', 'This provider is not taking new orders right now')
     }
     const commissionBps: number = p.category?.commission_bps ?? 1000
 
@@ -144,11 +220,46 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
     const quote = q as any
     const rfq = quote?.rfq
-    if (!quote || !rfq) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
-    if (rfq.msme_id !== msme.id) return NextResponse.json({ error: 'Not your RFQ' }, { status: 403 })
-    if (quote.status !== 'submitted') return NextResponse.json({ error: 'Quote no longer available' }, { status: 409 })
+    if (!quote || !rfq) return fail(404, 'quote_not_found', 'Quote not found')
+    if (rfq.msme_id !== msme.id) return fail(403, 'not_your_rfq', 'Not your RFQ')
+    if (quote.status !== 'submitted') return fail(409, 'quote_unavailable', 'Quote no longer available')
     if (!(rfq.status === 'open' || rfq.status === 'quoted')) {
-      return NextResponse.json({ error: 'This request is closed' }, { status: 409 })
+      return fail(409, 'rfq_closed', 'This request is closed')
+    }
+
+    // P0-5 — ONE checkout per RFQ. A paid session on any quote of this RFQ
+    // closes it; a live (unexpired) unpaid session on ANOTHER quote blocks a
+    // second payment until it expires; a live session on THIS quote is
+    // resumed (same Razorpay order) instead of minting a second one. The
+    // buyer's ownership is established above; the admin read only makes sure
+    // no sibling session is hidden by RLS. finalizeQuoteAcceptance refunds a
+    // duplicate that still slips through a concurrent race.
+    {
+      const admin = await createAdminClient()
+      const { data: siblings } = await admin.from('quotes').select('id').eq('rfq_id', rfq.id)
+      const siblingIds = ((siblings ?? []) as { id: string }[]).map((s) => s.id)
+      if (siblingIds.length > 0) {
+        const { data: sessions } = await admin
+          .from('checkout_sessions')
+          .select(SESSION_COLS + ', quote_id, expires_at, created_at')
+          .in('quote_id', siblingIds)
+          .in('status', ['created', 'materializing', 'materialized'])
+          .order('created_at', { ascending: false })
+        const rows = (sessions ?? []) as unknown as (SessionRow & { quote_id: string; expires_at: string | null })[]
+        const paid = rows.find(isPaidSession)
+        if (paid) {
+          if (paid.quote_id === quote.id) return resumeResponse(paid)
+          return fail(409, 'rfq_already_paid', 'A quote on this request has already been paid for', { orderId: paid.order_id })
+        }
+        const now = Date.now()
+        const live = rows.filter((r) => r.razorpay_order_id && (!r.expires_at || new Date(r.expires_at).getTime() > now))
+        const same = live.find((r) => r.quote_id === quote.id)
+        if (same) return resumeResponse(same)
+        const other = live.find((r) => r.quote_id !== quote.id)
+        if (other) {
+          return fail(409, 'rfq_checkout_in_progress', 'A payment for another quote on this request is in progress', { retryAfter: other.expires_at })
+        }
+      }
     }
 
     if (isGoodsRow(rfq)) {
@@ -157,7 +268,7 @@ export async function POST(request: NextRequest) {
       // the request, commission from the Mart category. Same session →
       // webhook → materialize_order → goods workspace → release gate → payout.
       const g = await prepareGoodsQuoteCheckout(await createAdminClient(), quote)
-      if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.status })
+      if (!g.ok) return fail(g.status, 'goods_quote_unavailable', g.error, { reason: g.error })
       goodsPrep = g.prep
       prep = {
         providerId: quote.provider_id,
@@ -232,33 +343,48 @@ export async function POST(request: NextRequest) {
       },
       { onConflict: 'idempotency_key', ignoreDuplicates: true },
     )
-    .select('id')
-    .single()
+    .select('id, total_paise')
+    .maybeSingle()
 
-  if (insErr || !session) {
+  // ignoreDuplicates returns no row when this key already has a session (a
+  // racing double-submit, or a retry after the gateway call below failed).
+  // Re-read it so the SAME frozen session is bound — never a second one.
+  let bound = (session as { id: string; total_paise: number } | null) ?? null
+  if (!bound && !insErr) {
+    const { data: again } = await supabase.from('checkout_sessions').select(SESSION_COLS).eq('idempotency_key', idempotencyKey).maybeSingle()
+    if (again?.razorpay_order_id) return resumeResponse(again as SessionRow)
+    bound = again ? { id: again.id as string, total_paise: Number(again.total_paise) } : null
+  }
+  if (insErr || !bound) {
     console.error('[checkout] session insert', insErr)
-    return NextResponse.json({ error: 'Checkout failed' }, { status: 500 })
+    return fail(500, 'checkout_failed', 'Checkout failed')
   }
 
-  // Create the Razorpay order (TEST mode or simulation) and bind it to the session.
+  // Create the Razorpay order (TEST mode or simulation) and bind it to the
+  // session. The amount is the session's FROZEN total.
   const gateway = getPaymentGateway()
   const order = await gateway.createOrder({
-    amountPaise: amounts.totalPaise,
-    receipt: `cs_${session.id}`.slice(0, 40),
-    notes: { checkout_session_id: session.id, source: prep.source, msme_id: msme.id },
+    amountPaise: Number(bound.total_paise),
+    receipt: `cs_${bound.id}`.slice(0, 40),
+    notes: { checkout_session_id: bound.id, source: prep.source, msme_id: msme.id },
     idempotencyKey,
   })
 
   await supabase
     .from('checkout_sessions')
     .update({ razorpay_order_id: order.razorpayOrderId })
-    .eq('id', session.id)
+    .eq('id', bound.id)
     .is('razorpay_order_id', null)
 
+  // A concurrent request may have bound its order first — return whichever
+  // order the session actually carries, so every caller pays the same one.
+  const { data: final } = await supabase.from('checkout_sessions').select('razorpay_order_id').eq('id', bound.id).maybeSingle()
+  const razorpayOrderId = (final?.razorpay_order_id as string | null | undefined) ?? order.razorpayOrderId
+
   return NextResponse.json({
-    checkoutSessionId: session.id,
-    razorpayOrderId: order.razorpayOrderId,
-    amountPaise: amounts.totalPaise,
+    checkoutSessionId: bound.id,
+    razorpayOrderId,
+    amountPaise: Number(bound.total_paise),
     keyId: process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'] ?? '',
     simulated: !gateway.isReal,
   })

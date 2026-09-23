@@ -1,6 +1,6 @@
 'use client'
 
-import { Languages } from 'lucide-react'
+import { ChevronDown, Languages } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { cn } from '@/lib/utils'
@@ -42,19 +42,21 @@ export function LanguageSwitcher({ className }: { className?: string }) {
   return (
     <label
       className={cn(
-        'relative inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-button border border-border bg-surface px-2 text-sm text-foreground hover:border-primary/40 sm:gap-1.5 sm:pl-2.5 sm:pr-1',
+        'relative inline-flex h-11 items-center whitespace-nowrap rounded-button border border-border bg-surface text-sm text-foreground hover:border-primary/40 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20',
         className,
       )}
     >
-      <Languages className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+      <Languages className="pointer-events-none absolute left-2.5 hidden h-4 w-4 text-primary sm:block" aria-hidden />
       <span className="sr-only">{t('switch')}</span>
+      {/* Visible at every width (the current language's own name), a 44 px
+          target, and still the native picker for keyboard / screen readers.
+          The globe icon joins from sm up, where the header has room. */}
       <select
         value={locale}
         onChange={(e) => switchTo(e.target.value as AppLocale)}
         aria-label={t('switch')}
-        // Phones: icon-only (the label is transparent, the native picker still
-        // opens with full names). Tablet and up: the language's own name.
-        className="font-system w-6 cursor-pointer appearance-none bg-transparent py-1 font-semibold text-transparent focus:outline-none sm:w-auto sm:appearance-auto sm:pr-1 sm:text-foreground"
+        lang={locale}
+        className="font-system h-full min-h-0 cursor-pointer appearance-none rounded-button bg-transparent py-0 pl-2.5 pr-7 font-semibold text-foreground focus:outline-none sm:pl-8"
       >
         {LOCALES.map((l) => (
           <option key={l} value={l} lang={l} className="bg-surface text-foreground">
@@ -62,6 +64,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
           </option>
         ))}
       </select>
+      <ChevronDown className="pointer-events-none absolute right-2 h-4 w-4 text-foreground-secondary" aria-hidden />
     </label>
   )
 }

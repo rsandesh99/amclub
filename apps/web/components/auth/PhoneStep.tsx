@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { phoneSchema } from '@amclub/shared'
+import { normalizeIndianPhone, phoneSchema, toE164India } from '@amclub/shared'
 import type { RequestOtp } from './AuthPanel'
 
 interface PhoneStepProps {
@@ -34,13 +34,14 @@ export function PhoneStep({ onSuccess, requestOtp, captchaReady = true, emailFie
   async function handleSend() {
     setError('')
     setSendFailed(false)
-    const parsed = phoneSchema.safeParse(phone.replace(/\s/g, ''))
+    const national = normalizeIndianPhone(phone)
+    const parsed = phoneSchema.safeParse(national)
     if (!parsed.success) {
       setError(tErr('invalid_phone'))
       return
     }
 
-    const normalised = phone.startsWith('+91') ? phone : `+91${phone.replace(/^0/, '')}`
+    const normalised = toE164India(national)
 
     setLoading(true)
     const result = await requestOtp('sms', normalised)
@@ -71,7 +72,7 @@ export function PhoneStep({ onSuccess, requestOtp, captchaReady = true, emailFie
             inputMode="numeric"
             placeholder={t('phone_placeholder')}
             value={phone}
-            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            onChange={(e) => setPhone(normalizeIndianPhone(e.target.value))}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             className="rounded-l-none"
             autoComplete="tel-national"

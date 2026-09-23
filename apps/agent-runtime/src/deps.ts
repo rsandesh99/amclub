@@ -1,8 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { Redis } from '@upstash/redis'
 import {
+  budgetWithoutStore,
   createGateway,
-  createNoopBudget,
   createRedisBudget,
   createSupabaseLedger,
   createWhatsAppProvider,
@@ -62,7 +62,8 @@ function redis(): Redis | null {
  */
 function makeBudget(runId: string, userId: string, agentName?: string): Budget {
   const r = redis()
-  if (!r) return createNoopBudget()
+  // No Upstash: dev no-op, but FAIL CLOSED in production with AGENT_ENABLED=true (never unlimited spend).
+  if (!r) return budgetWithoutStore()
   return createRedisBudget({ redis: r, caps: () => budgetCapsFor(admin(), agentName), runId, userId })
 }
 

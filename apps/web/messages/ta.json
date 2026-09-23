@@ -253,7 +253,10 @@
     "intake_err_failed": "இப்போது ஆவணத்தைப் படிக்க முடியவில்லை. இணைத்து விவரங்களைத் தட்டச்சு செய்யலாம்.",
     "intake_stub_note": "மாடல் விசை இல்லாமல் ஆவணப் படிப்பு இயங்குகிறது — உண்மைகள் குறைவு.",
     "intake_attached_only": "இணைக்கப்பட்டது (படிக்கவில்லை)",
-    "attachments_title": "இணைப்புகள்"
+    "attachments_title": "இணைப்புகள்",
+    "intake_take_photo": "புகைப்படம் எடுக்கவும்",
+    "intake_choose_file": "கோப்பைத் தேர்ந்தெடுக்கவும்",
+    "intake_choose_file_hint": "புகைப்படம், PDF, STEP அல்லது DXF"
   },
   "provider_signup": {
     "wa_card_title": "WhatsApp-இல் முடிக்கவும்",

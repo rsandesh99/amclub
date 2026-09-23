@@ -1,13 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
 import { useRouter } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { INDIAN_STATES } from '@/lib/constants/india'
+import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
+
+const isSupportedLocale = (l: string): l is SupportedLocale => (SUPPORTED_LOCALES as readonly string[]).includes(l)
 
 export interface MsmeProfileInitial {
   fullName: string
@@ -28,8 +32,16 @@ export function MsmeProfileForm({ initial }: { initial: MsmeProfileInitial }) {
   const tAuth = useTranslations('auth')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const locale = useLocale()
 
-  const [form, setForm] = useState<MsmeProfileInitial>(initial)
+  // The saved preference wins; an unset/unsupported one pre-selects the UI
+  // locale (te included — never silently coerced to en).
+  const [form, setForm] = useState<MsmeProfileInitial>(() => ({
+    ...initial,
+    preferredLocale: isSupportedLocale(initial.preferredLocale)
+      ? initial.preferredLocale
+      : isSupportedLocale(locale) ? locale : 'en',
+  }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -58,7 +70,7 @@ export function MsmeProfileForm({ initial }: { initial: MsmeProfileInitial }) {
           city: form.city || undefined,
           udyamNumber: form.udyamNumber || undefined,
           gstin: form.gstin || undefined,
-          preferredLocale: form.preferredLocale === 'hi' ? 'hi' : 'en',
+          preferredLocale: isSupportedLocale(form.preferredLocale) ? form.preferredLocale : 'en',
         }),
       })
       if (!res.ok) {
@@ -85,8 +97,11 @@ export function MsmeProfileForm({ initial }: { initial: MsmeProfileInitial }) {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="locale">{tProfile('language_pref')}</Label>
           <Select id="locale" value={form.preferredLocale} onChange={(e) => update({ preferredLocale: e.target.value })}>
-            <option value="en">English</option>
-            <option value="hi">हिंदी</option>
+            {SUPPORTED_LOCALES.map((l) => (
+              <option key={l} value={l} lang={l}>
+                {LOCALE_LABELS[l]}
+              </option>
+            ))}
           </Select>
         </div>
       </section>

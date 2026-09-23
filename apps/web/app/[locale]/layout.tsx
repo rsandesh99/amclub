@@ -33,7 +33,9 @@ export const viewport: Viewport = {
 // dominated by "render delay" waiting on fonts).
 const notoSans = Noto_Sans({
   subsets: ['latin'],
-  weight: ['400', '600', '700'],
+  // 500 is `font-medium` — every Button / Badge / Label (240+ usages); without
+  // it the browser snapped those to 400 and the hierarchy flattened.
+  weight: ['400', '500', '600', '700'],
   variable: '--font-sans',
   display: 'optional',
   adjustFontFallback: true,

@@ -1,7 +1,9 @@
 /**
  * Phase 8 §5 — PWA verification: manifest + icons reachable, service worker
- * registers and controls the page, orders list readable from cache offline
- * (read-only, §3.8), offline shell for unvisited pages, offline banner shows.
+ * registers and controls the page, pages / API data are NEVER cached
+ * (shared-device leak, USER_EXPECTATIONS_AUDIT P0-6) so offline every page —
+ * authed or not — gets the offline shell, the offline banner shows, and the
+ * sign-out purge message leaves only the offline shell + icons cached.
  *
  * Run against a production `next start` (SW registers only in production):
  *   BASE_URL=http://localhost:3100 tsx scripts/verify-pwa.ts
@@ -81,21 +83,28 @@ async function main() {
     const controlled = await page.evaluate(() => !!navigator.serviceWorker.controller)
     check('page controlled by SW after reload', controlled)
 
-    // 3. Visit orders (authed) so its HTML lands in the SW cache.
+    // 3. Visit orders (authed). The SW must NOT cache the page or its API
+    //    data (shared-device leak, USER_EXPECTATIONS_AUDIT P0-6).
     await page.goto(`${BASE}/app/orders`, { waitUntil: 'networkidle' })
     const ordersVisible = page.url().includes('/app/orders')
     check('orders list loads (authed)', ordersVisible, page.url())
+    const cachedUrls = await page.evaluate(async () => {
+      const out: string[] = []
+      for (const k of await caches.keys()) for (const r of await (await caches.open(k)).keys()) out.push(new URL(r.url).pathname)
+      return out
+    })
+    const leaked = cachedUrls.filter((p) => !p.startsWith('/_next/static/') && !p.startsWith('/icons/') && p !== '/offline.html' && !/\.(?:png|jpg|jpeg|svg|webp|woff2?)$/.test(p))
+    check('no page / API response in Cache Storage (static assets + offline shell only)', leaked.length === 0, leaked.slice(0, 3).join(', '))
 
-    // 4. Airplane mode: orders page must still render from cache (read-only).
+    // 4. Airplane mode: an authed page is NOT served from cache — the offline
+    //    shell is shown instead (no previous user's orders on a shared device).
     await ctx.setOffline(true)
+    // The loaded app notices the drop and shows its banner (PwaManager).
+    const bannerVisible = await page.locator('[role="status"]').waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false)
+    check('offline banner shows', bannerVisible)
     await page.goto(`${BASE}/app/orders`, { waitUntil: 'load', timeout: 20_000 }).catch(() => {})
     const offlineOrdersHtml = await page.content()
-    check(
-      'orders list readable OFFLINE from cache',
-      offlineOrdersHtml.includes('orders') || offlineOrdersHtml.includes('Orders') || offlineOrdersHtml.includes('ऑर्डर'),
-    )
-    const bannerVisible = await page.locator('[role="status"]').isVisible().catch(() => false)
-    check('offline banner shows', bannerVisible)
+    check('authed page OFFLINE → offline shell, not a cached copy', /You.?re offline/i.test(offlineOrdersHtml))
 
     // 5. Unvisited page while offline → offline shell.
     await page.goto(`${BASE}/help?nocache=${Date.now()}`, { waitUntil: 'load', timeout: 20_000 }).catch(() => {})
@@ -103,6 +112,20 @@ async function main() {
     check('offline shell for unvisited page', /You.?re offline/i.test(shellHtml))
 
     await ctx.setOffline(false)
+
+    // 6. Sign-out purge: the SW drops every cache and re-precaches ONLY the
+    //    user-independent offline shell + icons (components/pwa/purge-caches).
+    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' })
+    const afterPurge = await page.evaluate(async () => {
+      const reg = await navigator.serviceWorker.ready
+      reg.active?.postMessage({ type: 'amclub:purge-caches' })
+      await new Promise((r) => setTimeout(r, 1500))
+      const out: string[] = []
+      for (const k of await caches.keys()) for (const r of await (await caches.open(k)).keys()) out.push(new URL(r.url).pathname)
+      return out
+    })
+    const allowed = new Set(['/offline.html', '/icons/icon-192.png', '/icons/icon-512.png'])
+    check('after purge message: only the offline shell + icons remain', afterPurge.every((p) => allowed.has(p)) && afterPurge.includes('/offline.html'), afterPurge.join(', '))
   } finally {
     await browser.close()
     await admin.from('msme_profiles').delete().eq('user_id', u.user.id)
