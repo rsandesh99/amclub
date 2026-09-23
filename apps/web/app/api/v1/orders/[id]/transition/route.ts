@@ -56,7 +56,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status ?? 400 })
+    return NextResponse.json({ error: result.error, ...(result.endsAt ? { endsAt: result.endsAt } : {}) }, { status: result.status ?? 400 })
   }
   return NextResponse.json({ ok: true, status: (result.order as { status: string }).status })
 }

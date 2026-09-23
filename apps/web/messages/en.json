@@ -258,6 +258,8 @@
     "confirm_raise_dispute_title": "Report a problem with this order?",
     "confirm_raise_dispute_body": "Your payment stays held: nothing is released to the provider while the dispute is open. Our team reviews both sides and decides on a release, a partial refund or a full refund. After you submit, a statement card appears on this page so you can explain in detail.",
     "confirm_raise_dispute_cta": "Raise dispute",
+    "dispute_window_until": "You can report a problem with this order until {date} IST.",
+    "dispute_window_closed": "The window to report a problem with this order has closed. If something is still wrong, contact support from the help page.",
     "confirm_accept_title": "Accept this order?",
     "confirm_accept_body": "You commit to delivering within {days} days of receiving the buyer’s requirements. You’ll earn {amount} once the buyer accepts the delivery.",
     "confirm_accept_body_nodays": "You’ll earn {amount} once the buyer accepts the delivery.",

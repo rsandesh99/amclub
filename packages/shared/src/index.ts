@@ -6,6 +6,7 @@ export * from './money'
 
 // ADR-014 — what a dispute resolution may do to the payout and refund rows
 export * from './dispute-settlement'
+export * from './dispute-window'
 
 // Category taxonomy
 export * from './categories'

@@ -232,6 +232,12 @@ export const AGENT_SETTING_DEFS = {
     default: 6,
     hint: 'S1.4 dHash Hamming distance at/below which two evidence photos count as duplicates (same provider, different order => anomaly). 0 = exact only.',
   },
+  // ── ADR-014 (H2) dispute window ─────────────────────────────────────────
+  dispute_window_days: {
+    schema: z.number().int().min(1).max(90),
+    default: 7,
+    hint: 'ADR-014 H2 — days after a services order completes (completed_at) during which the buyer can still report a problem. Before completion a dispute is always possible. Goods orders use their Mart category return window instead.',
+  },
   evidence_required_from: {
     schema: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').nullable(),
     default: null,

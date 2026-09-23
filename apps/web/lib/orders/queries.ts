@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
-import type { PayoutStatus } from '@amclub/shared'
+import { disputeWindowEndsAt, type PayoutStatus } from '@amclub/shared'
+import { getAgentSetting } from '@/lib/agent/settings'
 import { resolveActor } from './actor'
 
 /** One requirement field from the package's frozen `scope_snapshot.requirementsTemplate`. */
@@ -25,6 +26,15 @@ export interface ServicesOrderExtras {
   lastRevisionNote: string | null
   /** The refunds row for this order's payment, if any (buyer-visible). */
   refund: { amountPaise: number; status: string; createdAt: string } | null
+  /** ADR-014 (H2) — a completed order's last moment to report a problem (ISO); null otherwise. */
+  disputeWindowEndsAt: string | null
+}
+
+/** ADR-014 (H2) — the post-completion dispute deadline for a services order, or null. */
+export async function orderDisputeWindowEndsAt(admin: Awaited<ReturnType<typeof createAdminClient>>, order: { status?: unknown; kind?: unknown; completed_at?: unknown }): Promise<string | null> {
+  if (order.status !== 'completed' || order.kind === 'goods') return null
+  const windowDays = Number(await getAgentSetting(admin, 'dispute_window_days'))
+  return disputeWindowEndsAt(typeof order.completed_at === 'string' ? order.completed_at : null, windowDays)
 }
 
 export interface OrderEventView {
@@ -87,13 +97,14 @@ export async function getOrderDetail(userId: string, orderId: string): Promise<O
   const isProvider = actor.providerId && order.provider_id === actor.providerId
   if (!isMsme && !isProvider) return null
 
-  const [{ data: events }, { data: payment }] = await Promise.all([
+  const [{ data: events }, { data: payment }, disputeEndsAt] = await Promise.all([
     admin
       .from('order_events')
       .select('id, event, payload, created_at, actor_id')
       .eq('order_id', orderId)
       .order('created_at', { ascending: true }),
     admin.from('payments').select('id').eq('order_id', orderId).maybeSingle(),
+    orderDisputeWindowEndsAt(admin, order),
   ])
   const { data: refund } = payment
     ? await admin.from('refunds').select('amount_paise, status, created_at').eq('payment_id', payment.id).maybeSingle()
@@ -115,6 +126,7 @@ export async function getOrderDetail(userId: string, orderId: string): Promise<O
       refund: refund
         ? { amountPaise: Number(refund.amount_paise), status: String(refund.status), createdAt: String(refund.created_at) }
         : null,
+      disputeWindowEndsAt: disputeEndsAt,
     },
   }
 }

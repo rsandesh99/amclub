@@ -30,6 +30,7 @@ interface ActionDef {
 
 const IN_PROGRESS: OrderStatus = 'in_progress'
 const DISPUTED: OrderStatus = 'disputed'
+const COMPLETED: OrderStatus = 'completed'
 
 const ACTION_DEFS: readonly ActionDef[] = [
   { action: 'accept', role: 'provider', to: 'accepted' },
@@ -45,7 +46,12 @@ const ACTION_DEFS: readonly ActionDef[] = [
 export function actionsFor(
   role: Role,
   status: string,
-  opts: { revisionsLeft: number },
+  opts: {
+    revisionsLeft: number
+    /** ADR-014 (H2) — server-computed deadline for a completed order (null = none). */
+    disputeWindowEndsAt?: string | null
+    now?: number
+  },
 ): OrderActionKey[] {
   const s = status as OrderStatus
   const next = ORDER_TRANSITIONS[s] ?? []
@@ -58,7 +64,11 @@ export function actionsFor(
   // Raising a dispute: the buyer's "report a problem" (the server allows either
   // party). The server checks BOTH lists — DISPUTABLE_STATUSES (the rule) and
   // isValidOrderTransition(from, 'disputed') — so offer only their intersection.
-  if (role === 'msme' && DISPUTABLE_STATUSES.includes(s) && next.includes(DISPUTED)) out.push('raise_dispute')
+  // After completion the server also requires the post-completion window
+  // (ADR-014 H2); the deadline comes from the server, never computed here.
+  const windowOpen =
+    s !== COMPLETED || (!!opts.disputeWindowEndsAt && (opts.now ?? Date.now()) < Date.parse(opts.disputeWindowEndsAt))
+  if (role === 'msme' && DISPUTABLE_STATUSES.includes(s) && next.includes(DISPUTED) && windowOpen) out.push('raise_dispute')
   return out
 }
 
