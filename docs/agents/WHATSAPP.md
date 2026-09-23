@@ -142,14 +142,45 @@ keywords → JOIN → support (S2.3) → holding reply. Procurement sits with Mu
 takes a `pr:` button of this buyer (`pr:ok|edit|no:<runId>`, `pr:label:<session>:<A-G>`, `pr:sess:new|cur:<messageId>`
 — the `pr:` namespace keeps them apart from Munshi's `edit:` and Support's `nudge:`) or any message while
 `wa_conversations.procurement_session_id` points at an active session. With no session, Support's `new_need`
-(`support_intent@v2`) offers "Shall I start a request for this?" with one `pr:sess:new` button. STOP still wins, and a
-typed "no" / "cancel" / "नहीं" is the S0.5 opt-out — the agent's cards use buttons. `grantWhatsApp` now keeps the
+(`support_intent@v2`) offers "Shall I start a request for this?" with one `pr:sess:new` button. STOP still wins; a typed
+"no" to an open card is that card's No (see "Typed no" below). `grantWhatsApp` now keeps the
 scopes of the grant it refreshes (a re-sent "hi" used to re-insert `[]`, silently dropping Munshi / procurement
 scopes).
 
 **Template** `procurement_update` (`amc_procurement_update_{en,hi,te}`, params `[one line, the assistant link]`; opt-in
 gated) carries any procurement message outside the 24 h window; the buttons are in-window only, so decisions then
 happen in the app. Runbook `docs/agents/PROCUREMENT.md`.
+
+## Typed "no" — founder decision 2026-09-23
+
+**The rule.** The explicit opt-out words — **STOP, UNSUBSCRIBE, बंद, रोकें, ఆపు** (`WA_STOP_KEYWORDS`) — ALWAYS revoke
+the WhatsApp grant, whatever card or session is open. WhatsApp's policy requires honouring explicit opt-out words, not
+every negative word. The plain negatives — **no, cancel, नहीं, వద్దు** (`WA_CARD_NO_KEYWORDS`) — revoke only when no
+agent card is open; while one is open they mean **"no to this card"**. A buyer answering a card with "no" does not mean
+to leave WhatsApp, and treating it as consent withdrawal is a false positive with a real cost (the same class as the
+S2.3 "No" button, which is classified by its payload).
+
+**One classifier, three agents.** `classifyKeyword(text, { cardOpen })` (agent-core) is the only classifier; the default
+`cardOpen: false` is the S0.5 behaviour byte-for-byte. The dispatcher looks for a card ONLY when a typed message is one
+of the four plain negatives and the agents are on (`apps/agent-runtime/src/whatsapp/cards.ts`):
+
+| Agent | Open card | A typed "no" becomes |
+|---|---|---|
+| Munshi (S2.2) | a `proposed` draft delivered on WhatsApp in the last 24 h | the draft's Skip (`munshi.decide` skip, `skipped_via: whatsapp_text`; no classifier call) |
+| Support (S2.3) | a nudge offer: a support run for this conversation parked `awaiting_confirmation`, < 24 h | the offer's No (`support.decide` no) |
+| Procurement (S3.1) | the conversation's active session has an open proposal (`open_run_id`) | the proposal's No (`procurement.decide` no, `via: text_no`) |
+
+The most recently sent card wins (`latestOpenCard`). Every path is the card's own decline — the same job its No
+button runs — so a typed "no" can never write anything. With no card open, or the agents off, "no" is the S0.5
+opt-out exactly as before. Button taps are unchanged (classified by payload).
+
+**Not covered (open question):** the S1.6 onboarding interview asks "Do you have an Udyam registration number?"; a
+typed "no" there is still the S0.5 opt-out (the active-session branch sits after STOP). Extending the rule to an open
+interview question is a separate founder decision.
+
+**Proven by** the agent-core classifier tests, `whatsapp:verify` (offline), and the Support / Munshi / Procurement rigs
+(a typed "no" with a card open keeps the grant and declines the card; with none it opts out; STOP with a card open
+still opts out).
 
 ## S1.4 note — founder one-tap
 

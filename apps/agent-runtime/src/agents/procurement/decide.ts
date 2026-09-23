@@ -34,7 +34,8 @@ export interface ProcurementDecideJob {
   runId: string
   userId: string
   action: 'ok' | 'edit' | 'no'
-  via: 'whatsapp_button' | 'voice_yes' | 'text_yes' | 'web_text_yes' | 'web'
+  /** `text_no` = a typed "no" to the open proposal (the dispatcher's card rule, 2026-09-23); only ever with action 'no'. */
+  via: 'whatsapp_button' | 'voice_yes' | 'text_yes' | 'web_text_yes' | 'web' | 'text_no'
   messageId?: string | null
   jobId?: string | null
 }

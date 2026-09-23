@@ -603,12 +603,29 @@ async function http() {
     const tn = await waSay(convN, { kind: 'text', body: 'where is my order' })
     const outN = await outbound(convN)
     check('a cohorted user WITHOUT a WhatsApp grant → the S0.5 holding reply only (no support job)', tn.results.length === 0 && outN.length === 1 && /holding/.test(String(outN[0]?.template_name ?? '')), JSON.stringify(outN.map((m) => m.template_name)))
-    // STOP → grant revoked → holding reply only
+    // typed "no" (founder decision 2026-09-23): with the nudge offer open it is "no to this card", not an opt-out;
+    // with no card open it is the S0.5 opt-out; STOP always opts out, even with a card open
+    const grantsOf = async (uid: string) => ((await admin.from('agent_grants').select('id').eq('user_id', uid).eq('channel', 'whatsapp').is('revoked_at', null)).data ?? []).length
+    const ow3 = await mkOrder(w.msmeId, p1.providerId)
+    const t8 = await waSay(convW, { kind: 'text', body: 'where is my order' })
+    const runId8 = t8.results[0]?.detail?.run_id as string | undefined
+    const typedNo = await waSay(convW, { kind: 'text', body: 'no' })
+    const { data: dec8 } = await admin.from('agent_events').select('kind, actor').eq('run_id', runId8 ?? NIL).eq('kind', 'declined')
+    const appr8 = (await admin.from('ai_decisions').select('id', { count: 'exact', head: true }).eq('run_id', runId8 ?? NIL)).count ?? 0
+    const nudges8 = (await admin.from('nudges').select('id', { count: 'exact', head: true }).eq('subject_id', ow3.id).eq('from_user_id', w.uid)).count ?? 0
+    check(`typed "no" with the nudge offer open (${ow3.number}) → the offer's own decline (support.decide no): the WhatsApp grant STAYS, no nudge sent, a user decline on the run (no approval), the run cancelled`, t8.results[0]?.detail?.outcome === 'nudge_offered' && typedNo.results[0]?.detail?.outcome === 'declined' && (await grantsOf(w.uid)) === 1 && nudges8 === 0 && (dec8 ?? []).length === 1 && (dec8 as any[])[0].actor === 'user' && appr8 === 0 && (await runRow(runId8 ?? NIL))?.status === 'cancelled', JSON.stringify({ offer: t8.results[0]?.detail?.outcome, no: typedNo.results[0], dec8, grants: await grantsOf(w.uid) }))
+    const noCard = await waSay(convW, { kind: 'text', body: 'No' })
+    const lastNo = (await outbound(convW)).at(-1)
+    check('typed "No" with NO card open → the S0.5 opt-out, unchanged (grant revoked, the opt-out confirmation)', noCard.results.length === 0 && (await grantsOf(w.uid)) === 0 && /opt_out/.test(String(lastNo?.template_name ?? '')), JSON.stringify([lastNo?.kind, lastNo?.template_name]))
+    await waSay(convW, { kind: 'text', body: 'hi' })
+    const t9 = await waSay(convW, { kind: 'text', body: 'where is my order' })
+    check('"hi" re-grants; a fresh offer opens (the next leg sends STOP with this card open)', (await grantsOf(w.uid)) === 1 && t9.results[0]?.detail?.outcome === 'nudge_offered', JSON.stringify(t9.results[0]?.detail))
+    // STOP (a nudge offer open) → grant revoked → holding reply only
     await waSay(convW, { kind: 'text', body: 'STOP' })
     const { data: gW } = await admin.from('agent_grants').select('id').eq('user_id', w.uid).eq('channel', 'whatsapp').is('revoked_at', null)
     const ts = await waSay(convW, { kind: 'text', body: 'where is my order' })
     const lastS = (await outbound(convW)).at(-1)
-    check('STOP → the WhatsApp grant is revoked → the next text gets the holding reply only (no support job)', (gW ?? []).length === 0 && ts.results.length === 0 && /holding/.test(String(lastS?.template_name ?? '')), JSON.stringify([lastS?.kind, lastS?.template_name]))
+    check('STOP with a nudge offer OPEN → the WhatsApp grant is still revoked (STOP always wins) → the next text gets the holding reply only (no support job)', (gW ?? []).length === 0 && ts.results.length === 0 && /holding/.test(String(lastS?.template_name ?? '')), JSON.stringify([lastS?.kind, lastS?.template_name]))
 
     // RLS through the runtime lookups: another user's order number never resolves (B1's token asks for B2's order)
     const rlsDeps = { ...deps, core: { ...core, ledger: { ...core.ledger, appendEvent: async () => undefined } } } as typeof deps

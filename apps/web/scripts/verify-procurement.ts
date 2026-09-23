@@ -615,6 +615,19 @@ async function http() {
     if (bb?.existed) await setSetting('budget_run_paise_by_agent', bb.value)
     else await admin.from('agent_settings').delete().eq('key', 'budget_run_paise_by_agent')
 
+    // ── typed "no" to an open proposal (founder decision 2026-09-23): no to the card, never an opt-out ──
+    await waSay(convB, { kind: 'text', body: 'decline A, too slow' })
+    const sNo = await sessionOf(s1?.id ?? NIL)
+    const noRun = sNo?.open_run_id as string | undefined
+    const typedNo = await waSay(convB, { kind: 'text', body: 'no' })
+    const sNo2 = await sessionOf(s1?.id ?? NIL)
+    const { data: qaRow } = await admin.from('quotes').select('status').eq('id', qA ?? NIL).maybeSingle()
+    const { data: noDec } = await admin.from('agent_events').select('kind, actor').eq('run_id', noRun ?? NIL).eq('kind', 'declined')
+    const noAppr = (await admin.from('ai_decisions').select('id', { count: 'exact', head: true }).eq('run_id', noRun ?? NIL)).count ?? 0
+    const noRunRow = await core.ledger.getRun(noRun ?? NIL)
+    const { data: gNo } = await admin.from('agent_grants').select('id').eq('user_id', b.uid).eq('channel', 'whatsapp').is('revoked_at', null)
+    check('typed "no" with a decline_quote proposal open → the proposal\'s own No (decide no, via text_no): quote A NOT declined, a user decline on the run (no approval), the run cancelled, the proposal closed, the WhatsApp grant STAYS', !!noRun && typedNo.results.some((x) => x.r?.detail?.outcome === 'no') && !sNo2?.open_run_id && (qaRow as any)?.status === QUOTE_STATUS.submitted && (noDec ?? []).length === 1 && (noDec as any[])[0].actor === 'user' && noAppr === 0 && noRunRow?.status === 'cancelled' && (gNo ?? []).length === 1, JSON.stringify({ noRun, r: typedNo.results.map((x) => x.r?.detail), qa: (qaRow as any)?.status, noDec, noAppr, run: noRunRow?.status, grants: (gNo ?? []).length }))
+
     // ── STOP → WhatsApp stops, the web mirror continues ──
     await waSay(convB, { kind: 'text', body: 'STOP' })
     const waBefore = (await outbound(convB)).length
@@ -740,8 +753,8 @@ async function http() {
         const { count } = await admin.from('notifications').select('id', { count: 'exact', head: true }).like('link', `%${id}%`)
         if (count) residue.push(`notifications(link ${id.slice(0, 8)})=${count}`)
       }
-      const { data: hb } = await admin.from('cron_heartbeats').select('name').eq('name', 'agent-procurement-watch')
-      if ((hb ?? []).length) residue.push('heartbeat agent-procurement-watch (left by a cron call)')
+      // no heartbeat check: since S3.1 merged, production's own Vercel cron (vercel.json, every 15 min) writes the
+      // agent-procurement-watch heartbeat (reason agent_disabled while dark) — a legitimate prod row, never rig residue
       if (errors.length) record('cleanup', 'FAIL', errors.join(' | '))
       else check(`cleanup: zero residue (${created.users.length} users, ${rfqIds.length} RFQs, ${created.convIds.length} conversations removed and recounted incl. seed-provider notifications by link; settings restored)`, residue.length === 0, residue.join(', '))
     } catch (e) {

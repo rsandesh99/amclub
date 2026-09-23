@@ -4,7 +4,12 @@ import {
   WA_ALWAYS_ALLOWED_KINDS,
   WA_TEMPLATES,
   allTemplateNames,
+  WA_CARD_NO_KEYWORDS,
+  WA_OPT_OUT_KEYWORDS,
+  WA_STOP_KEYWORDS,
   classifyKeyword,
+  isCardNoKeyword,
+  latestOpenCard,
   createWhatsAppProvider,
   makeInteraktDriver,
   makeMetaCloudDriver,
@@ -67,6 +72,39 @@ describe('template registry', () => {
     expect(classifyKeyword('STOP')).toBe('opt_out')
     expect(classifyKeyword('बंद')).toBe('opt_out')
     expect(classifyKeyword('how much for gst filing?')).toBeNull()
+  })
+  it('typed no (founder decision 2026-09-23): STOP words always opt out; plain negatives answer an open card', () => {
+    // no card open → the S0.5 law, byte-identical (the default)
+    for (const w of ['no', 'NO', ' cancel ', 'नहीं', 'వద్దు']) expect(classifyKeyword(w)).toBe('opt_out')
+    for (const w of ['no', 'Cancel', 'नहीं', 'వద్దు']) expect(classifyKeyword(w, { cardOpen: false })).toBe('opt_out')
+    // a card open → no to the card
+    for (const w of ['no', ' No ', 'CANCEL', 'नहीं', 'వద్దు']) expect(classifyKeyword(w, { cardOpen: true })).toBe('card_no')
+    // explicit opt-out words win whatever is open
+    for (const w of ['stop', 'STOP', ' Unsubscribe ', 'बंद', 'रोकें', 'ఆపు']) {
+      expect(classifyKeyword(w, { cardOpen: true })).toBe('opt_out')
+      expect(classifyKeyword(w)).toBe('opt_out')
+    }
+    // the opt-in / onboarding words are untouched by an open card (the agent branches see them first)
+    expect(classifyKeyword('yes', { cardOpen: true })).toBe('opt_in')
+    expect(classifyKeyword('JOIN', { cardOpen: true })).toBe('onboard')
+    expect(classifyKeyword('no thanks', { cardOpen: true })).toBeNull()
+  })
+  it('the opt-out set is unchanged: STOP words ∪ plain negatives, disjoint', () => {
+    expect([...WA_OPT_OUT_KEYWORDS].sort()).toEqual(['cancel', 'no', 'stop', 'unsubscribe', 'बंद', 'रोकें', 'नहीं', 'ఆపు', 'వద్దు'].sort())
+    for (const w of WA_STOP_KEYWORDS) expect(WA_CARD_NO_KEYWORDS.has(w)).toBe(false)
+    expect(isCardNoKeyword(' No ')).toBe(true)
+    expect(isCardNoKeyword('stop')).toBe(false)
+    expect(isCardNoKeyword(null)).toBe(false)
+  })
+  it('latestOpenCard: the most recently sent card is the one a typed no answers', () => {
+    const m = { agent: 'munshi' as const, runId: 'r1', at: '2026-09-23T10:00:00Z' }
+    const s = { agent: 'support' as const, runId: 'r2', at: '2026-09-23T11:00:00Z' }
+    const p = { agent: 'procurement' as const, runId: 'r3', at: '2026-09-23T10:30:00Z' }
+    expect(latestOpenCard([m, s, p])?.runId).toBe('r2')
+    expect(latestOpenCard([m, null, p])?.agent).toBe('procurement')
+    expect(latestOpenCard([null, null])).toBeNull()
+    expect(latestOpenCard([])).toBeNull()
+    expect(latestOpenCard([{ ...m, runId: '' }])).toBeNull()
   })
 })
 

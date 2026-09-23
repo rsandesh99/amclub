@@ -248,8 +248,8 @@ async function http() {
     const deps: import('../../agent-runtime/src/agents/munshi/index').MunshiRuntimeDeps = {
       core, admin, whatsapp, apiUrl: BASE, agentEnabled: true, tokenFor: async ({ userId }) => tokens.get(userId) ?? '', mediaBucket: BUCKET, runtimeSecret: '', capture: () => undefined,
     }
-    const queue: Array<{ runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance' }> = []
-    const hooks = { enqueueMunshiDecide: async (j: { runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance' }) => { queue.push(j); return 'queued' } }
+    const queue: Array<{ runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance'; via?: 'whatsapp_text' }> = []
+    const hooks = { enqueueMunshiDecide: async (j: { runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance'; via?: 'whatsapp_text' }) => { queue.push(j); return 'queued' } }
     const drain = async () => { const out: any[] = []; while (queue.length) { const j = queue.shift()!; out.push(await rt.runMunshiDecide(deps, { kind: 'decide', ...j })) } return out }
     const scan = () => rt.runMunshiScan(deps)
     const followup = () => rt.runMunshiFollowup(deps)
@@ -503,6 +503,27 @@ async function http() {
     await admin.from('munshi_provider_state').update({ drafts_today: 0, drafts_today_date: today }).eq('provider_id', p1.providerId)
     skip('budget_run_paise_by_agent.munshi = 1 → child run fails cleanly', 'the keyless gateway reports zero cost so the cap is never crossed here; the breach → clean failure path is agent-core budget.test.ts + runner.test.ts')
 
+    // ── typed "no" to an open draft (founder decision 2026-09-23): no to the card, never an opt-out ─
+    await mkRfq(`${tag} typed no`)
+    await scan()
+    // the scan can open more than one card (a request the daily cap held back drafts now too): a typed "no" answers
+    // the LATEST card sent — the rule — so the leg targets that one and checks the others stay open
+    const openDrafts = async () => (((await admin.from('munshi_drafts').select('id, run_id, status, delivered, result_ref, created_at').eq('user_id', p1.uid).eq('status', 'proposed').is('deleted_at', null).order('created_at', { ascending: false }).limit(10)).data ?? []) as any[]).filter((r) => r.run_id && r.delivered?.whatsapp)
+    const openBefore = await openDrafts()
+    const dNo = openBefore[0]
+    const invBefore = (await admin.from('ai_invocations').select('id', { count: 'exact', head: true }).eq('task_class', 'approval_intent')).count ?? 0
+    const typedNo = await say({ kind: 'text', body: 'नहीं' })
+    const dNoB = (await admin.from('munshi_drafts').select('status, result_ref').eq('id', dNo?.id ?? '00000000-0000-0000-0000-000000000000').maybeSingle()).data as any
+    const openAfter = await openDrafts()
+    const invAfter = (await admin.from('ai_invocations').select('id', { count: 'exact', head: true }).eq('task_class', 'approval_intent')).count ?? 0
+    const { data: gNo } = await admin.from('agent_grants').select('id').eq('user_id', p1.uid).eq('channel', 'whatsapp').is('revoked_at', null)
+    const { data: decNo } = await admin.from('agent_events').select('kind, actor').eq('run_id', dNo?.run_id ?? '00000000-0000-0000-0000-000000000000').eq('kind', 'declined')
+    check(`typed "नहीं" with ${openBefore.length} Munshi card(s) open on WhatsApp → the LATEST card's own skip (skipped_via whatsapp_text, no classifier call, a user decline on the run), the others stay open; the WhatsApp grant STAYS`, !!dNo && typedNo.results[0]?.detail?.outcome === 'skipped' && dNoB?.status === 'skipped' && dNoB?.result_ref?.skipped_via === 'whatsapp_text' && openAfter.length === openBefore.length - 1 && invAfter === invBefore && (decNo ?? []).length === 1 && (gNo ?? []).length === 1, JSON.stringify({ r: typedNo.results[0], open: [openBefore.length, openAfter.length], after: dNoB, decNo, grants: (gNo ?? []).length }))
+    // a draft left OPEN for the STOP leg: STOP always opts out, whatever is open
+    const rfqOpen = await mkRfq(`${tag} open for stop`)
+    await scan()
+    const dOpen = (await draftsFor(p1.providerId, rfqOpen))[0]
+
     // ── STOP stops WhatsApp delivery; web drafts continue. Disable stops the scan. ─
     const stop = await say({ kind: 'text', body: 'STOP' })
     void stop
@@ -511,7 +532,7 @@ async function http() {
     const outBefore = (await outbound(conv)).length
     await scan()
     const d16 = (await draftsFor(p1.providerId, rfq16))[0]
-    check('WhatsApp STOP → the WhatsApp grant is revoked; the next draft is still proposed (web grant) but NOT delivered on WhatsApp', !waGrant && !!d16 && d16.status === 'proposed' && !d16.delivered?.whatsapp && (await outbound(conv)).length === outBefore, JSON.stringify(d16?.delivered))
+    check('WhatsApp STOP with a draft OPEN on WhatsApp → the WhatsApp grant is revoked (STOP always wins); the next draft is still proposed (web grant) but NOT delivered on WhatsApp', !!dOpen?.delivered?.whatsapp && !waGrant && !!d16 && d16.status === 'proposed' && !d16.delivered?.whatsapp && (await outbound(conv)).length === outBefore, JSON.stringify(d16?.delivered))
     const dis = await api(p1.token, '/api/v1/agent/munshi/disable', {})
     const disB = await json(dis)
     const rfq17 = await mkRfq(`${tag} seventeen`)

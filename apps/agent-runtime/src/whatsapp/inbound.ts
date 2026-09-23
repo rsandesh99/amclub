@@ -1,5 +1,6 @@
 import {
   classifyKeyword,
+  isCardNoKeyword,
   createWhatsAppProvider,
   metaVerifyChallenge,
   templateFor,
@@ -17,6 +18,7 @@ import { routeSupportInbound } from '../agents/support/index'
 import { routeProcurementInbound } from '../agents/procurement/index'
 import type { ProcurementDecideJob, ProcurementTurnJob } from '../agents/procurement/index'
 import { buttonPayloadOf } from '../agents/onboarding/index'
+import { openWhatsAppCard } from './cards'
 
 /**
  * WhatsApp inbound (S0.5). Two halves:
@@ -55,7 +57,7 @@ export type EnqueueFn = (messageId: string) => Promise<string | null>
 export interface InboundHooks {
   enqueueOnboarding?: (turn: { kind: 'start' | 'message'; sessionId: string; messageId?: string }) => Promise<string | null>
   /** S2.2 — a Munshi button (approve | edit | skip:<runId>) or an utterance while a draft is open. */
-  enqueueMunshiDecide?: (job: { runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance' }) => Promise<string | null>
+  enqueueMunshiDecide?: (job: { runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance'; via?: 'whatsapp_text' }) => Promise<string | null>
   /** S2.3 — a support turn, or the Yes / No on a nudge offer. */
   enqueueSupportReply?: (job: { conversationId: string; messageId: string }) => Promise<string | null>
   enqueueSupportDecide?: (job: { runId: string; messageId: string; action: 'yes' | 'no' }) => Promise<string | null>
@@ -172,9 +174,27 @@ export async function handleWaInbound(messageId: string, hooks: InboundHooks = {
   // S2.3 — a button tap is classified by its PAYLOAD id, never its visible title: the nudge offer's "No" / "नहीं"
   // (payload nudge:no:<runId>) is not the S0.5 opt-out keyword "no", while a template quick-reply whose payload IS a
   // keyword (STOP) still opts out. Typed text is classified exactly as before.
-  const intent = classifyKeyword(msg.kind === 'button' ? buttonPayloadOf({ kind: 'button', body: (msg.body as string | null) ?? null, payload: (msg.payload as Record<string, unknown> | null) ?? null }) : (msg.body as string | null))
+  // Founder decision 2026-09-23: a TYPED plain negative ("no" / "cancel" / "नहीं" / "వద్దు") while one of the user's
+  // agent cards is open on WhatsApp means "no to this card" (the card's own decline); STOP / UNSUBSCRIBE and their
+  // translations always opt out. The card lookup runs only for those four words, only with the agents on (dark: no
+  // card can exist, so the S0.5 path is byte-identical).
+  const typedNo = msg.kind === 'text' && isCardNoKeyword(msg.body as string | null)
+  const card = typedNo && RUNTIME_ENV.AGENT_ENABLED && conv.user_id ? await openWhatsAppCard(db, { userId: conv.user_id as string, conversationId: conv.id as string }) : null
+  const intent = classifyKeyword(msg.kind === 'button' ? buttonPayloadOf({ kind: 'button', body: (msg.body as string | null) ?? null, payload: (msg.payload as Record<string, unknown> | null) ?? null }) : (msg.body as string | null), { cardOpen: !!card })
 
-  if (intent === 'opt_out') {
+  if (intent === 'card_no' && card && conv.user_id) {
+    const routed =
+      card.agent === 'munshi' && hooks.enqueueMunshiDecide
+        ? await hooks.enqueueMunshiDecide({ runId: card.runId, messageId, action: 'skip', via: 'whatsapp_text' })
+        : card.agent === 'support' && hooks.enqueueSupportDecide
+          ? await hooks.enqueueSupportDecide({ runId: card.runId, messageId, action: 'no' })
+          : card.agent === 'procurement' && hooks.enqueueProcurementDecide
+            ? await hooks.enqueueProcurementDecide({ runId: card.runId, userId: conv.user_id as string, action: 'no', via: 'text_no', messageId })
+            : undefined
+    // a hook that is not wired here (never in the runtime) falls back to the S0.5 opt-out below: never a silent drop
+    if (routed !== undefined) return
+  }
+  if (intent === 'opt_out' || intent === 'card_no') {
     if (conv.user_id) {
       await db.from('agent_grants').update({ revoked_at: new Date().toISOString() }).eq('user_id', conv.user_id).eq('channel', 'whatsapp').is('revoked_at', null)
     }
