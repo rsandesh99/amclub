@@ -33,6 +33,7 @@ interface MunshiStats {
 export function AgentsConsoleClient() {
   const t = useTranslations('admin_agents')
   const tScore = useTranslations('admin_score')
+  const tBench = useTranslations('admin_benchmarks')
   const { toast } = useToast()
   const [settings, setSettings] = useState<SettingRow[]>([])
   const [spend, setSpend] = useState<Spend | null>(null)
@@ -42,6 +43,8 @@ export function AgentsConsoleClient() {
   // S2.4 — AMC Score distribution (compute / card / ranking switches are ordinary settings rows below)
   const [score, setScore] = useState<{ provider: { subjects: number; scored: number; gated_share_pct: number | null; median: number | null }; buyer: { scored: number }; movers_week: unknown[] } | null>(null)
   // S3.1 — the buying assistant (30 days): sessions, proposal outcomes, RFQs + completed orders from agent sessions, cost
+  // S3.2 — fair price ranges: the switches, the last nightly run, the table (aggregates only)
+  const [bench, setBench] = useState<{ compute_enabled: boolean; display_enabled: boolean; rows_total: number; last_run: { at: string; result: { keys_considered?: number; rows_written?: number; gated_by_reason?: Record<string, number> } | null } | null; rows: { category_slug: string; scope: string; state: string | null; p25_paise: number; p75_paise: number; sample_n: number; providers_n: number }[] } | null>(null)
   const [procurement, setProcurement] = useState<{ sessions_active: number; sessions_total: number; proposals: { approved: number; edited: number; declined: number; open: number }; rfqs_created: number; orders_from_sessions: number; cost_per_completed_order_paise: number | null } | null>(null)
   const [agentsDraft, setAgentsDraft] = useState<Record<string, boolean>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -52,7 +55,7 @@ export function AgentsConsoleClient() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [s, sp, ds, ts, ms, sc, pr] = await Promise.all([
+    const [s, sp, ds, ts, ms, sc, pr, bm] = await Promise.all([
       fetch('/api/v1/agent/admin/settings', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { settings: [] })),
       fetch('/api/v1/agent/admin/spend', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
       fetch('/api/v1/agent/admin/dossiers/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
@@ -60,6 +63,7 @@ export function AgentsConsoleClient() {
       fetch('/api/v1/agent/admin/munshi/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/api/v1/agent/admin/score/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/api/v1/agent/admin/procurement/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/v1/agent/admin/benchmarks/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
     const rows: SettingRow[] = s.settings ?? []
     setSettings(rows)
@@ -72,6 +76,7 @@ export function AgentsConsoleClient() {
     setMunshi(ms)
     setScore(sc)
     setProcurement(pr)
+    setBench(bm)
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -166,6 +171,20 @@ export function AgentsConsoleClient() {
               <p className="mt-1 text-xs text-foreground-secondary">{t('proc_active')} · {t('proc_total', { n: procurement?.sessions_total ?? 0 })}</p>
               <p className="text-xs text-foreground-secondary">{t('proc_proposals', { approved: procurement?.proposals.approved ?? 0, edited: procurement?.proposals.edited ?? 0, declined: procurement?.proposals.declined ?? 0 })}</p>
               <p className="text-xs text-foreground-secondary">{t('proc_outcomes', { rfqs: procurement?.rfqs_created ?? 0, orders: procurement?.orders_from_sessions ?? 0 })} · {t('proc_cost')}: {procurement?.cost_per_completed_order_paise == null ? '—' : formatINR(procurement.cost_per_completed_order_paise)}</p>
+            </div>
+            {/* S3.2 — fair price ranges tile: review the table for two weeks with compute on before turning display on */}
+            <div className="rounded-card border border-border bg-surface p-4 shadow-card" data-testid="benchmarks-tile">
+              <p className="text-xs font-medium text-foreground-secondary">{tBench('tile_title')}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{bench?.rows_total ?? 0}</p>
+              <p className="mt-1 text-xs text-foreground-secondary">{tBench('tile_rows')} · {tBench('tile_compute')}: {bench?.compute_enabled ? tBench('on') : tBench('off')} · {tBench('tile_display')}: {bench?.display_enabled ? tBench('on') : tBench('off')}</p>
+              <p className="text-xs text-foreground-secondary">{tBench('tile_last_run')}: {bench?.last_run?.result ? tBench('tile_run_summary', { keys: bench.last_run.result.keys_considered ?? 0, written: bench.last_run.result.rows_written ?? 0, gated: Object.values(bench.last_run.result.gated_by_reason ?? {}).reduce((a, b) => a + b, 0) }) : '—'}</p>
+              {(bench?.rows ?? []).length > 0 && (
+                <ul className="mt-2 space-y-0.5 text-xs tabular-nums">
+                  {(bench?.rows ?? []).slice(0, 8).map((r) => (
+                    <li key={`${r.category_slug}|${r.scope}|${r.state ?? ''}`}>{r.category_slug} · {r.scope === 'state' ? r.state : tBench('national')}: {formatINR(r.p25_paise)}–{formatINR(r.p75_paise)} ({r.sample_n}/{r.providers_n})</li>
+                  ))}
+                </ul>
+              )}
             </div>
             {/* S2.4 — AMC Score tile */}
             <div className="rounded-card border border-border bg-surface p-4 shadow-card" data-testid="score-tile">

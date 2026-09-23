@@ -891,7 +891,9 @@
     "intake_choose_file_hint": "ఫోటో, PDF, STEP లేదా DXF",
     "sort_reliability": "విశ్వసనీయతతో సర్దుబాటు చేసిన ధర",
     "reliability_line": "ధర క్రమంలో, AMClub లో ప్రతి ప్రొవైడర్ డెలివరీ మరియు వివాదాల రికార్డుకు అనుగుణంగా సర్దుబాటు చేయబడింది.",
-    "reliability_switch": "బదులుగా ధరతో క్రమం చేయండి"
+    "reliability_switch": "బదులుగా ధరతో క్రమం చేయండి",
+    "benchmark_how_title": "ఇది ఎలా లెక్కిస్తారు?",
+    "benchmark_how_body": "గత 180 రోజుల్లో AMClubలో చెల్లించిన పనుల నుండి మాత్రమే ఇది తయారవుతుంది — కొటేషన్ల నుండి ఎప్పుడూ కాదు. కనీసం 8 ప్రొవైడర్లు, 8 కొనుగోలుదారుల నుండి కనీసం 30 అలాంటి పనులు ఉండి, ఏ ఒక్క ప్రొవైడర్ వాటా నాలుగో వంతు మించకపోతేనే రేంజ్ కనిపిస్తుంది. సంఖ్యలు రౌండ్ చేయబడతాయి, ఏ ఒక్క పని ధర ఎప్పుడూ చూపబడదు. ఇది సమాచారం మాత్రమే, సిఫార్సు కాదు."
   },
   "provider_signup": {
     "wa_card_title": "WhatsAppలో పూర్తి చేయండి",
@@ -1134,5 +1136,16 @@
     "state_closed": "మూసివేశాం",
     "state_expired": "ముగిసింది",
     "state_failed": "ఆగిపోయింది"
+  },
+  "admin_benchmarks": {
+    "tile_title": "Fair price ranges",
+    "tile_rows": "rows passing the privacy gates",
+    "tile_compute": "compute",
+    "tile_display": "display",
+    "on": "on",
+    "off": "off",
+    "tile_last_run": "last run",
+    "tile_run_summary": "{keys} keys, {written} written, {gated} gated",
+    "national": "India"
   }
 }

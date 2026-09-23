@@ -247,8 +247,9 @@ export async function fetchMyRfqs(): Promise<{ ok: boolean; rfqs: unknown[] }> {
   }
 }
 
-export async function fetchRfq(rfqId: string) {
-  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}`, { headers: await authHeaders() })
+/** S3.2 — `locale` picks the language of the optional fair-price note (the body carries `benchmark` only when there is one). */
+export async function fetchRfq(rfqId: string, locale?: string) {
+  const res = await fetch(`${API_URL}/api/v1/rfq/${rfqId}`, { headers: { ...(await authHeaders()), ...(locale ? { 'x-amc-locale': locale } : {}) } })
   if (!res.ok) return null
   return res.json()
 }

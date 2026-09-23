@@ -1259,7 +1259,9 @@
     "accept_confirm_cancel": "Not now",
     "sort_reliability": "Price, adjusted for reliability",
     "reliability_line": "Ordered by price, adjusted for each provider's delivery and dispute record on AMClub.",
-    "reliability_switch": "Sort by price instead"
+    "reliability_switch": "Sort by price instead",
+    "benchmark_how_title": "How is this calculated?",
+    "benchmark_how_body": "Built only from jobs that were paid for on AMClub in the last 180 days — never from quotes. A range appears only when there are at least 30 such jobs from at least 8 providers and 8 buyers, and no single provider makes up more than a quarter of them. Figures are rounded, and no individual price is ever shown. It is information, not a recommendation."
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -2779,5 +2781,16 @@
     "state_closed": "Closed",
     "state_expired": "Ended",
     "state_failed": "Stopped"
+  },
+  "admin_benchmarks": {
+    "tile_title": "Fair price ranges",
+    "tile_rows": "rows passing the privacy gates",
+    "tile_compute": "compute",
+    "tile_display": "display",
+    "on": "on",
+    "off": "off",
+    "tile_last_run": "last run",
+    "tile_run_summary": "{keys} keys, {written} written, {gated} gated",
+    "national": "India"
   }
 }

@@ -26,6 +26,8 @@ import { ConfirmSheet } from '@/components/ui/confirm-sheet'
 import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 import { QuoteTermsRow } from './QuoteTermsRow'
 import { useAnalytics } from '@/components/providers/posthog'
+import type { BenchmarkView } from '@amclub/shared'
+import { BenchmarkLine } from './BenchmarkLine'
 
 type Sort = 'price' | 'delivery' | 'rating' | 'response' | 'reliability'
 
@@ -48,6 +50,8 @@ export interface QuoteCompareProps {
    * the buyer's own tap. Absent = nothing changes.
    */
   payQuoteId?: string | null
+  /** S3.2 — the fair price range for this request (services, display switch on, a row passed the gates), or null = nothing. */
+  benchmark?: BenchmarkView | null
 }
 
 /**
@@ -58,7 +62,7 @@ export interface QuoteCompareProps {
  * Decline opens a sheet: reason, optional private note, the template preview
  * in the provider's language, no undo (the quote machine has no way back).
  */
-export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering, payQuoteId = null }: QuoteCompareProps) {
+export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering, payQuoteId = null, benchmark = null }: QuoteCompareProps) {
   const t = useTranslations('rfq')
   const tc = useTranslations('checkout')
   const locale = useLocale()
@@ -176,12 +180,14 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     )
   }
   if (rfq.quotes.length === 0) {
-    return (
+    const empty = (
       <div className="rounded-card border border-dashed border-border bg-surface p-8 text-center">
         <p className="text-sm font-medium">{t('no_quotes_yet_title')}</p>
         <p className="mt-1 text-sm text-foreground-secondary">{t('no_quotes_yet_body')}</p>
       </div>
     )
+    // S3.2 — the range shows as soon as the request is open (above where the table will be); nothing when there is none
+    return benchmark ? <div className="space-y-4"><BenchmarkLine view={benchmark} role="buyer" />{empty}</div> : empty
   }
 
   function askAccept(q: QuoteForBuyer) {
@@ -342,6 +348,9 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
           </label>
         </div>
       </div>
+
+      {/* S3.2 — the fair price range above the table (the same line the matched providers see); nothing when there is none */}
+      {benchmark && <BenchmarkLine view={benchmark} role="buyer" />}
 
       {/* S2.4 — one fixed line, never a number; price is one tap away */}
       {sort === 'reliability' && (

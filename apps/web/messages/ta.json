@@ -259,7 +259,9 @@
     "intake_choose_file_hint": "புகைப்படம், PDF, STEP அல்லது DXF",
     "sort_reliability": "நம்பகத்தன்மையுடன் சரிசெய்த விலை",
     "reliability_line": "விலை வரிசையில், AMClub இல் ஒவ்வொரு வழங்குநரின் டெலிவரி மற்றும் சர்ச்சை பதிவுக்கு ஏற்ப சரிசெய்யப்பட்டது.",
-    "reliability_switch": "பதிலாக விலைப்படி வரிசைப்படுத்து"
+    "reliability_switch": "பதிலாக விலைப்படி வரிசைப்படுத்து",
+    "benchmark_how_title": "இது எப்படி கணக்கிடப்படுகிறது?",
+    "benchmark_how_body": "கடந்த 180 நாட்களில் AMClub இல் பணம் செலுத்தப்பட்ட வேலைகளிலிருந்து மட்டுமே இது உருவாகிறது — விலைப்புள்ளிகளிலிருந்து ஒருபோதும் இல்லை. குறைந்தது 8 வழங்குநர்கள் மற்றும் 8 வாங்குபவர்களிடமிருந்து குறைந்தது 30 வேலைகள் இருந்து, எந்த ஒரு வழங்குநரின் பங்கும் நான்கில் ஒரு பங்கை மீறாதபோது மட்டுமே வரம்பு தோன்றும். எண்கள் முழுமையாக்கப்படுகின்றன, எந்த ஒரு வேலையின் விலையும் ஒருபோதும் காட்டப்படாது. இது தகவல் மட்டுமே, பரிந்துரை அல்ல."
   },
   "provider_signup": {
     "wa_card_title": "WhatsApp-இல் முடிக்கவும்",
@@ -497,5 +499,16 @@
     "state_closed": "மூடப்பட்டது",
     "state_expired": "முடிந்தது",
     "state_failed": "நிறுத்தப்பட்டது"
+  },
+  "admin_benchmarks": {
+    "tile_title": "Fair price ranges",
+    "tile_rows": "rows passing the privacy gates",
+    "tile_compute": "compute",
+    "tile_display": "display",
+    "on": "on",
+    "off": "off",
+    "tile_last_run": "last run",
+    "tile_run_summary": "{keys} keys, {written} written, {gated} gated",
+    "national": "India"
   }
 }
