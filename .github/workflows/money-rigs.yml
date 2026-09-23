@@ -87,7 +87,21 @@ jobs:
           version: 2.117.0
 
       - name: Start the disposable Supabase stack
-        run: supabase start --workdir .github/supabase-ci -x studio,imgproxy,realtime,edge-runtime,logflare,vector
+        run: |
+          # ghcr.io throttles shared runner IPs ("toomanyrequests", 2026-09-23 — twice in a row, before any
+          # rig ran). The CLI publishes the same images to public ECR and Docker Hub: retry each registry
+          # with a backoff, then move on. A real start failure still fails the job after the last one.
+          for reg in ghcr.io public.ecr.aws docker.io; do
+            for attempt in 1 2; do
+              echo "supabase start via $reg (attempt $attempt)"
+              if SUPABASE_INTERNAL_IMAGE_REGISTRY="$reg" supabase start --workdir .github/supabase-ci -x studio,imgproxy,realtime,edge-runtime,logflare,vector; then exit 0; fi
+              echo "::warning::supabase start failed via $reg (attempt $attempt)"
+              supabase stop --workdir .github/supabase-ci --no-backup || true
+              sleep $((attempt * 20))
+            done
+          done
+          echo "::error::supabase start failed on every registry"
+          exit 1
 
       - name: Export the local stack's URL and keys
         run: |
