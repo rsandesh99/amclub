@@ -395,6 +395,7 @@
     "status_disputed": "Disputed",
     "status_refunded": "Refunded",
     "status_auto_cancelled": "Auto-cancelled",
+    "status_cancelled_duplicate": "Cancelled (duplicate payment)",
     "status_cancelled_by_buyer": "Cancelled",
     "status_resolved_refund": "Resolved: refunded",
     "status_resolved_release": "Resolved: paid to provider",

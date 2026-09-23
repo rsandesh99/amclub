@@ -395,6 +395,7 @@
     "status_disputed": "विवादित",
     "status_refunded": "वापस किया गया",
     "status_auto_cancelled": "स्वतः रद्द",
+    "status_cancelled_duplicate": "रद्द (दोहरा भुगतान)",
     "status_cancelled_by_buyer": "रद्द किया गया",
     "status_resolved_refund": "निपटा: रिफंड किया गया",
     "status_resolved_release": "निपटा: प्रोवाइडर को भुगतान",

@@ -334,6 +334,7 @@ in_progress → delivered → revision_requested → in_progress  (max N revisio
 any-pre-completed → disputed → {resolved_refund | resolved_release | resolved_partial}
 completed → disputed  (only within dispute_window_days of completion — ADR-014)
 placed|accepted → cancelled_by_buyer (policy-based refund %)
+placed → cancelled_duplicate → refunded  (a second paid order on one RFQ — ADR-014 §7)
 completed → reviewed
 ```
 Payout to provider releases ONLY from `completed` or `resolved_release/partial`.

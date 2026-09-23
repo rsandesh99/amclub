@@ -23,6 +23,10 @@ export const ORDER_STATUSES = [
   'cancelled_by_buyer',
   'refunded',
   'reviewed',
+  // ADR-014 §7 (H6): a second paid order on an already-accepted RFQ, cancelled and
+  // refunded in full by the system. Its own state, so auto_cancelled keeps
+  // meaning "the provider never accepted" and cancelled_by_buyer "the buyer chose".
+  'cancelled_duplicate',
 ] as const
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number]
@@ -33,7 +37,7 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number]
  * this map is purely about what transitions are structurally valid.
  */
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
-  placed: ['accepted', 'auto_cancelled', 'cancelled_by_buyer'],
+  placed: ['accepted', 'auto_cancelled', 'cancelled_by_buyer', 'cancelled_duplicate'],
   // ADR-014 (H2): accepted / requirements_submitted / revision_requested → disputed
   // are §3.7's "any-pre-completed → disputed" — edges the map had been missing,
   // so a buyer whose provider accepted and went silent had no exit.
@@ -51,6 +55,7 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   cancelled_by_buyer: ['refunded'],
   refunded: [],
   reviewed: [],
+  cancelled_duplicate: ['refunded'],
 }
 
 /** Statuses from which a dispute may be raised: every status after the provider

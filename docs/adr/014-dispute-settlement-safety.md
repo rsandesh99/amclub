@@ -1,10 +1,9 @@
 # ADR 014 — Dispute settlement safety: never pay twice, never refund silently
 
 **Status:** Accepted 2026-09-23. Touches money and the order state machine (§8.4).
-Decides hardening items **H3** and **H4** (merged in PR #21) and **H2** (§6 below,
-a later PR; the founder delegated the decision). **H6** (duplicate paid orders on
-one RFQ) is still an open question; it is decided here before ADR-011
-(first-order guarantee) can be approved. Numbering: 011–013 are reserved by
+Decides hardening items **H3** and **H4** (merged in PR #21), **H2** (§6) and **H6**
+(§7); the founder delegated H2 and H6. With all four decided, this ADR no longer
+blocks ADR-011 (first-order guarantee). Numbering: 011–013 are reserved by
 `BUILD_PROMPTS.md` for S3.3, S4.1 and S4.3.
 
 ## Context
@@ -129,6 +128,37 @@ the founder the next step.
 - Goods orders are unaffected: they never use `raise_dispute`; their returns follow
   the Mart category return window.
 
+### 7. A duplicate paid order on one RFQ is cancelled and refunded at once (H6)
+
+Two checkouts can still race past the checkout-route guard (P0-5), so a second
+paid order can materialise on an RFQ that is already accepted. Until now it was
+flagged for ops and stayed `placed`. The provider could still accept it, the buyer
+waited for a manual refund, and if nobody acted, the 24-hour cron cancelled it as
+`auto_cancelled` ("the provider never accepted"), which is not what happened.
+
+- **A new state, `cancelled_duplicate`.** It is an extension; nothing is
+  repurposed. Edges: `placed → cancelled_duplicate` and
+  `cancelled_duplicate → refunded`, and nothing else. It is never disputable and
+  never releases a payout. `auto_cancelled` and `cancelled_by_buyer` keep their
+  meanings.
+- **Settled in the same pass that detects it.** `finalizeQuoteAcceptance`:
+  1. Records the duplicate once (event plus audit).
+  2. Moves the order `placed → cancelled_duplicate`, guarded on `placed`.
+  3. Refunds through `processRefund`, computed from `placed` (100 %), and reads the
+     amount back (H4).
+  4. Moves the order `→ refunded`.
+
+  Every step is guarded on the state it expects, so a replay finishes an
+  interrupted pass. The buyer is told the order was cancelled and refunded in
+  full. The provider is never notified about the duplicate.
+- **What still goes to ops:** the provider acted first (the order is no longer
+  `placed`), the refund engine reports a different amount, or the gateway fails.
+  These leave an audit row (`duplicate_rfq_refund_mismatch` /
+  `duplicate_rfq_refund_failed`) and the old "our team will refund" notice.
+- **No migration:** `orders.status` has no check constraint. The support agent's
+  replies and labels cover the new status (en / hi / te / ta), and the web and
+  mobile order pages label it (en, hi).
+
 ## Consequences
 
 - No second transfer and no silent refund no-op. An interrupted resolve can be
@@ -143,11 +173,6 @@ the founder the next step.
     is not in `PAYOUT_TRANSITIONS`, so a real `cancelled` payout state is a follow-up.
   - `processRefund` can still race two callers completing the same pending row.
   - `createTransfer` still has no gateway-side idempotency key.
-
-## Open question (decided in this ADR before ADR-011 approval)
-
-- **H6.** A racing duplicate paid order on one RFQ is flagged for an ops refund only.
-  It needs a dedicated state and a refund route through `processRefund`.
 
 ## Verification
 
@@ -165,6 +190,11 @@ the founder the next step.
 fail-safe, setting bounds) plus `verify-phase7.ts` criteria **3d** (dispute from
 `requirements_submitted` accepted) and **3e** (deadline exposed; a dispute past the
 window is refused). The rig criteria need a test database.
+
+**H6 (§7):** shared `order-duplicate.test.ts` (edges, not disputable, no payout,
+full refund from `placed`) plus `verify-rfq.ts` criterion **4b** (a duplicate paid
+session on the accepted RFQ ends `refunded` with one full refund row; the winner
+stands). The rig needs a test database.
 
 ## Rollback
 

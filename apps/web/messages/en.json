@@ -177,6 +177,7 @@
     "dispute_statement_min": "At least 20 characters.",
     "status_refunded": "Refunded",
     "status_auto_cancelled": "Auto-cancelled",
+    "status_cancelled_duplicate": "Cancelled (duplicate payment)",
     "status_cancelled_by_buyer": "Cancelled",
     "action_accept": "Accept order",
     "action_start": "Start work",

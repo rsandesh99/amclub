@@ -249,10 +249,11 @@ const ORDER_STATUS_KEY: Record<string, SupportReplyKey> = {
   resolved_partial: 'order_status.resolved',
   cancelled_by_buyer: 'order_status.cancelled',
   auto_cancelled: 'order_status.cancelled',
+  cancelled_duplicate: 'order_status.cancelled',
   refunded: 'order_status.refunded',
 }
 
-export const ORDER_TERMINAL_STATUSES = ['completed', 'reviewed', 'resolved_refund', 'resolved_release', 'resolved_partial', 'cancelled_by_buyer', 'auto_cancelled', 'refunded'] as const
+export const ORDER_TERMINAL_STATUSES = ['completed', 'reviewed', 'resolved_refund', 'resolved_release', 'resolved_partial', 'cancelled_by_buyer', 'auto_cancelled', 'refunded', 'cancelled_duplicate'] as const
 export function orderIsActive(status: string): boolean {
   return !(ORDER_TERMINAL_STATUSES as readonly string[]).includes(status)
 }
@@ -302,7 +303,7 @@ export function resolveSupportReply(intent: SupportIntent, lookup: SupportLookup
       const o = lookup.order
       const slots = { ...base, ...orderSlots(o, lookup.role) }
       if (o.status === 'refunded' || o.status === 'resolved_refund') return { key: 'payment_status.refunded', slots }
-      if (o.refund || o.status === 'resolved_partial' || o.status === 'cancelled_by_buyer' || o.status === 'auto_cancelled') return { key: 'payment_status.refund_pending', slots }
+      if (o.refund || o.status === 'resolved_partial' || o.status === 'cancelled_by_buyer' || o.status === 'auto_cancelled' || o.status === 'cancelled_duplicate') return { key: 'payment_status.refund_pending', slots }
       // an order row exists only after the payment webhook (webhooks are the payment truth)
       return { key: 'payment_status.paid', slots }
     }

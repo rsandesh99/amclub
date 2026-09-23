@@ -1,9 +1,9 @@
 import 'server-only'
 import { AGENT_ENABLED } from '@/lib/flags'
-import { canTransitionQuote, QUOTE_STATUS } from '@amclub/shared'
+import { canTransitionQuote, isValidOrderTransition, QUOTE_STATUS } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
-import { addEvent } from '@/lib/orders/transitions'
+import { addEvent, processRefund } from '@/lib/orders/transitions'
 import { writeAudit } from '@/lib/audit/log'
 import { addQuoteEvent, addQuoteEvents } from './events'
 
@@ -14,7 +14,8 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
  * - `finalized` — this order won the RFQ (quote accepted, siblings declined).
  * - `noop` — not a quote order, or a replay of the winner.
  * - `duplicate_flagged` — a second paid order on an already-accepted RFQ;
- *   recorded for ops, who refund it (see handleDuplicateRfqOrder).
+ *   cancelled and refunded in full at once (ADR-014 §7), or left for ops if
+ *   that cannot complete (see handleDuplicateRfqOrder).
  */
 export type FinalizeResult = 'finalized' | 'noop' | 'duplicate_flagged'
 
@@ -176,15 +177,12 @@ async function winningOrderId(admin: Admin, rfqId: string): Promise<string | nul
  * P0-5 — the RFQ was already claimed when this order finalised. Either this is
  * a replay of the winning order (no-op), or a SECOND paid order materialised on
  * the same RFQ (two checkouts raced past the checkout-route guard). A duplicate
- * is recorded ONCE (order_event `duplicate_rfq_order` + audit row) and the buyer
- * is told a refund is on its way; ops refunds it through the existing admin
- * refund path.
- *
- * Deliberately NOT automatic: the §3.7 machine has no transition that means
- * "cancelled as a duplicate" (auto_cancelled is the 24 h no-accept path and
- * cancelled_by_buyer is the buyer's choice), and CLAUDE.md §8.4 forbids
- * repurposing a transition — payout and refund policy read them. An automatic
- * duplicate refund needs a new state + ADR first.
+ * is recorded ONCE (order_event `duplicate_rfq_order` + audit row) and then
+ * settled: ADR-014 §7 gives it its own state, `placed → cancelled_duplicate →
+ * refunded`, with a full refund through the one refund engine. The provider is
+ * never told to start it (materialize skips the new-order notice). Anything
+ * that cannot complete (the provider acted first, the refund engine reports a
+ * different amount, the gateway fails) is left flagged for ops, as before.
  */
 async function handleDuplicateRfqOrder(admin: Admin, orderId: string, rfqId: string): Promise<FinalizeResult> {
   const winnerId = await winningOrderId(admin, rfqId)
@@ -204,12 +202,16 @@ async function handleDuplicateRfqOrder(admin: Admin, orderId: string, rfqId: str
     .eq('event', 'duplicate_rfq_order')
     .limit(1)
     .maybeSingle()
-  if (marked) return 'duplicate_flagged' // already recorded and announced — replay
+  if (!marked) {
+    const detail = { rfq_id: rfqId, quote_id: order.quote_id, winning_order_id: winnerId, status_at_detection: order.status, total_paise: order.total_paise }
+    await addEvent(admin, orderId, 'duplicate_rfq_order', null, detail)
+    await writeAudit(admin, null, { actorId: null, action: 'duplicate_rfq_order_detected', entity: 'orders', entityId: orderId, after: detail })
+    console.error('[finalize] DUPLICATE paid order on an accepted RFQ', orderId, detail)
+  }
 
-  const detail = { rfq_id: rfqId, quote_id: order.quote_id, winning_order_id: winnerId, status_at_detection: order.status, total_paise: order.total_paise }
-  await addEvent(admin, orderId, 'duplicate_rfq_order', null, detail)
-  await writeAudit(admin, null, { actorId: null, action: 'duplicate_rfq_order_detected', entity: 'orders', entityId: orderId, after: detail })
-  console.error('[finalize] DUPLICATE paid order on an accepted RFQ — ops must refund', orderId, detail)
+  // Settle on every pass (idempotent), so a replay finishes an interrupted one.
+  const refunded = await settleDuplicateRfqOrder(admin, order)
+  if (marked) return 'duplicate_flagged' // already announced — replay
 
   const { data: msme } = await admin.from('msme_profiles').select('user_id').eq('id', order.msme_id).maybeSingle()
   if (msme?.user_id) {
@@ -217,13 +219,67 @@ async function handleDuplicateRfqOrder(admin: Admin, orderId: string, rfqId: str
       userId: msme.user_id as string,
       kind: 'order_duplicate_payment',
       titleI18n: { en: 'We noticed a duplicate payment', hi: 'हमें एक दोहरा भुगतान दिखा' },
-      bodyI18n: {
-        en: `You paid twice for the same request. Our team will refund order ${order.order_number} in full; your other order stands.`,
-        hi: `आपने एक ही अनुरोध के लिए दो बार भुगतान किया। हमारी टीम ऑर्डर ${order.order_number} की पूरी राशि वापस करेगी; आपका दूसरा ऑर्डर जारी है।`,
-      },
+      bodyI18n: refunded
+        ? {
+            en: `You paid twice for the same request. We cancelled order ${order.order_number} and refunded it in full; your bank usually shows it within 5–7 working days. Your other order stands.`,
+            hi: `आपने एक ही अनुरोध के लिए दो बार भुगतान किया। हमने ऑर्डर ${order.order_number} रद्द करके पूरी राशि वापस कर दी है; आपका बैंक इसे आमतौर पर 5–7 कार्य दिवसों में दिखाता है। आपका दूसरा ऑर्डर जारी है।`,
+          }
+        : {
+            en: `You paid twice for the same request. Our team will refund order ${order.order_number} in full; your other order stands.`,
+            hi: `आपने एक ही अनुरोध के लिए दो बार भुगतान किया। हमारी टीम ऑर्डर ${order.order_number} की पूरी राशि वापस करेगी; आपका दूसरा ऑर्डर जारी है।`,
+          },
       link: `/app/orders/${orderId}`,
       channels: ['email', 'sms'],
     })
   }
   return 'duplicate_flagged'
+}
+
+/**
+ * ADR-014 §7 — cancel a duplicate and refund it in full: `placed →
+ * cancelled_duplicate` (guarded; the provider accepting first leaves it to
+ * ops), then processRefund computed from `placed` (100 %), read back, then
+ * `cancelled_duplicate → refunded`. Idempotent: every write is guarded on the
+ * state it expects and the refund is key-guarded. Returns true once refunded.
+ */
+async function settleDuplicateRfqOrder(
+  admin: Admin,
+  order: { id: string; status: string; total_paise: number | string },
+): Promise<boolean> {
+  if (!isValidOrderTransition('placed', 'cancelled_duplicate') || !isValidOrderTransition('cancelled_duplicate', 'refunded')) {
+    throw new Error('ORDER_TRANSITIONS drift: placed → cancelled_duplicate → refunded must be allowed')
+  }
+  if (order.status === 'refunded') return true
+  const nowIso = () => new Date().toISOString()
+  if (order.status === 'placed') {
+    const { data: moved } = await admin
+      .from('orders')
+      .update({ status: 'cancelled_duplicate', cancelled_reason: 'duplicate_rfq_order', updated_at: nowIso() })
+      .eq('id', order.id)
+      .eq('status', 'placed')
+      .select('id')
+    if (!moved || moved.length === 0) return false // someone acted first — ops handles it
+    await addEvent(admin, order.id, 'cancelled_duplicate', null, { reason: 'duplicate_rfq_order' })
+  } else if (order.status !== 'cancelled_duplicate') {
+    return false // accepted or beyond — out of the automatic path, flagged for ops
+  }
+
+  const totalPaise = Number(order.total_paise)
+  try {
+    const refundedPaise = await processRefund(admin, order, 'placed')
+    if (refundedPaise !== totalPaise) {
+      // ADR-014 H4: never record a refund that did not happen.
+      console.error('[finalize] duplicate refund mismatch — ops must check', order.id, { expected: totalPaise, refundedPaise })
+      await writeAudit(admin, null, { actorId: null, action: 'duplicate_rfq_refund_mismatch', entity: 'orders', entityId: order.id, after: { expected_paise: totalPaise, refunded_paise: refundedPaise } })
+      return false
+    }
+  } catch (e) {
+    console.error('[finalize] duplicate refund failed — ops must refund', order.id, (e as Error).message)
+    await writeAudit(admin, null, { actorId: null, action: 'duplicate_rfq_refund_failed', entity: 'orders', entityId: order.id, after: { error: (e as Error).message } })
+    return false
+  }
+
+  await admin.from('orders').update({ status: 'refunded', updated_at: nowIso() }).eq('id', order.id).eq('status', 'cancelled_duplicate')
+  await addEvent(admin, order.id, 'refunded', null, { amount_paise: totalPaise, reason: 'duplicate_rfq_order' })
+  return true
 }
