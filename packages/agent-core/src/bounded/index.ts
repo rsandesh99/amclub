@@ -1,9 +1,9 @@
 import type { z } from 'zod'
 import { tierFor, type AgentTaskClass } from '@amclub/shared'
-import type { ChatParts, Gateway } from '../llm/gateway'
+import { GatewayError, GatewayValidationError, type ChatParts, type Gateway } from '../llm/gateway'
 import type { Budget } from '../budget'
 import type { Ledger } from '../ledger/types'
-import { usdToPaise } from '../ledger/invocations'
+import { costPaiseFor } from '../ledger/invocations'
 import type { PromptRef } from '../prompts/registry'
 import { BudgetExceededError } from '../runner'
 import type { BudgetBreach } from '../budget'
@@ -31,6 +31,8 @@ export interface BoundedChatArgs<T> {
   meta?: Record<string, unknown> | null
   /** S1.8 — explicit model id for this call (see ChatJsonParams.model). */
   model?: string
+  /** Output cap override (else prompt front-matter, else the tier default). */
+  maxTokens?: number
 }
 
 export interface BoundedChatDeps {
@@ -63,9 +65,12 @@ export async function runBoundedChatJson<T>(deps: BoundedChatDeps, args: Bounded
       temperature: args.temperature ?? 0,
       ...(args.stub !== undefined ? { stub: args.stub } : {}),
       ...(args.model ? { model: args.model } : {}),
+      ...(args.maxTokens !== undefined ? { maxTokens: args.maxTokens } : {}),
     })
-    const costPaise = res.usage.costUsd != null ? usdToPaise(res.usage.costUsd) : null
-    const invocationMeta = { model: res.model, prompt: `${args.prompt.id}@${args.prompt.version}`, usage: res.usage.raw, ...(args.meta ?? {}) }
+    // Never ₹0 for a live call: vendor cost → AGENT_MODEL_RATES × tokens → conservative fallback.
+    const cost = costPaiseFor({ stub: res.stub, costUsd: res.usage.costUsd, model: res.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens })
+    const costPaise: number | null = cost.paise
+    const invocationMeta = { model: res.model, prompt: `${args.prompt.id}@${args.prompt.version}`, usage: res.usage.raw, cost_source: cost.source, ...(args.meta ?? {}) }
     await safeLog(deps.ledger, {
       runId: null,
       userId: args.userId,
@@ -84,20 +89,32 @@ export async function runBoundedChatJson<T>(deps: BoundedChatDeps, args: Bounded
     return { data: res.data, stub: res.stub, model: res.model, latencyMs: res.latencyMs, costPaise, invocationMeta }
   } catch (e) {
     if (e instanceof BudgetExceededError) throw e
+    // A billed-but-invalid response still costs money: log its usage and charge the budget.
+    const billed = e instanceof GatewayValidationError
+    const cost = billed
+      ? costPaiseFor({ stub: false, costUsd: e.usage.costUsd, model: e.model, inputTokens: e.usage.inputTokens, outputTokens: e.usage.outputTokens })
+      : null
     await safeLog(deps.ledger, {
       runId: null,
       userId: args.userId,
       taskClass: args.taskClass,
       tier,
-      vendor: 'gateway',
+      vendor: billed ? `gateway:${e.model}` : 'gateway',
       status: 'error',
-      latencyMs: Date.now() - started,
-      costEstPaise: null,
-      inputTokens: null,
-      outputTokens: null,
+      latencyMs: billed ? e.latencyMs : Date.now() - started,
+      costEstPaise: cost ? cost.paise : null,
+      inputTokens: billed ? e.usage.inputTokens : null,
+      outputTokens: billed ? e.usage.outputTokens : null,
       feature: args.feature,
-      meta: { error: (e as Error).message, prompt: `${args.prompt.id}@${args.prompt.version}`, ...(args.meta ?? {}) },
+      meta: {
+        error: (e as Error).message,
+        prompt: `${args.prompt.id}@${args.prompt.version}`,
+        ...(e instanceof GatewayError ? { error_code: e.code } : {}),
+        ...(billed ? { reason: e.reason, model: e.model, usage: e.usage.raw, cost_source: cost?.source } : {}),
+        ...(args.meta ?? {}),
+      },
     })
+    if (cost && cost.paise > 0) await deps.budget.add(cost.paise).catch(() => undefined)
     throw e
   }
 }
