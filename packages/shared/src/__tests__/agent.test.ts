@@ -35,10 +35,17 @@ describe('agent contract — routing table', () => {
 })
 
 describe('agent contract — tools and personas', () => {
-  it('tool names are unique and valid enum members', () => {
-    const names = AGENT_TOOLS.map((t) => t.name)
-    expect(new Set(names).size).toBe(names.length)
-    for (const n of names) expect(agentToolNameSchema.safeParse(n).success).toBe(true)
+  it('tool names are unique PER PERSONA (S2.3: support_lookup / nudge_counterparty exist for buyer and provider) and valid enum members', () => {
+    const keys = AGENT_TOOLS.map((t) => `${t.persona}:${t.name}`)
+    expect(new Set(keys).size).toBe(keys.length)
+    for (const t of AGENT_TOOLS) expect(agentToolNameSchema.safeParse(t.name).success).toBe(true)
+    // a repeated name must carry the SAME confirm + wraps shape for every persona (one route contract per name)
+    const byName = new Map<string, { confirm: boolean; wraps: string }>()
+    for (const t of AGENT_TOOLS) {
+      const prev = byName.get(t.name)
+      if (prev) expect({ confirm: t.confirm, wraps: t.wraps }, t.name).toEqual(prev)
+      else byName.set(t.name, { confirm: t.confirm, wraps: t.wraps })
+    }
   })
 
   it('every persona has at least one tool and never sees another persona\'s tools', () => {
@@ -46,7 +53,7 @@ describe('agent contract — tools and personas', () => {
       const mine = toolsForPersona(p)
       expect(mine.length).toBeGreaterThan(0)
       for (const t of AGENT_TOOLS) {
-        expect(isToolAllowed(p, t.name)).toBe(t.persona === p)
+        expect(isToolAllowed(p, t.name)).toBe(AGENT_TOOLS.some((x) => x.name === t.name && x.persona === p))
       }
     }
   })

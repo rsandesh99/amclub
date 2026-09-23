@@ -689,5 +689,22 @@
     "pool_err_cannot_leave": "You can only leave while the pool is open.",
     "pool_err_already_paid": "Already paid.",
     "pool_err_pay_window_lapsed": "The payment window has lapsed."
+  },
+  "support": {
+    "title": "Help",
+    "subtitle": "Ask about an order, a request, a payment or a payout.",
+    "empty": "Ask me anything about your orders, requests, payments or payouts.",
+    "placeholder": "Type your question…",
+    "send": "Send",
+    "chip_refund": "How do I get a refund?",
+    "chip_payout_timing": "When will I be paid?",
+    "chip_fees": "What are the fees?",
+    "chip_contact_human": "I want to talk to a person",
+    "nudge_question": "Shall I send a polite reminder to the other party?",
+    "nudge_yes": "Send the reminder",
+    "nudge_no": "Not now",
+    "escalated_title": "A person is looking at this ({ref})",
+    "escalated_body": "We acknowledge within 24 hours.",
+    "tile_sub": "Orders, payments, payouts"
   }
 }

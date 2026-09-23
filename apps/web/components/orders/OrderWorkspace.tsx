@@ -2,6 +2,8 @@
 
 import { useState, useRef } from 'react'
 import { useTranslations } from 'next-intl'
+import { orderIsActive } from '@amclub/shared'
+import { NudgeButton } from '@/components/orders/NudgeButton'
 import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -223,6 +225,8 @@ function ServicesOrderWorkspace({
             </div>
           )}
           <div className="flex flex-wrap gap-2">
+            {/* S2.3 — a fixed-template reminder to the other party (spine; once per 24 h). */}
+            {orderIsActive(status) && <NudgeButton subjectKind="order" subjectId={id} />}
             {actions.map((a) => (
               <Button key={a.action} variant={a.variant ?? 'primary'} onClick={() => doAction(a.action)} loading={busy === a.action}>
                 {t(`action_${a.label}` as 'action_accept')}

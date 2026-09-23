@@ -14,13 +14,15 @@ import { decodeJwtClaims } from './jwt'
  * carries no `amc_scopes` claim, so this is a no-op for every human caller —
  * zero behaviour change for existing traffic.
  */
-export async function requireToolScope(tool: AgentToolName): Promise<NextResponse | null> {
+export async function requireToolScope(tool: AgentToolName | readonly AgentToolName[]): Promise<NextResponse | null> {
   const claims = await bearerClaims()
   const scopes = claims?.['amc_scopes']
   // No scope claim => ordinary session (or a full-persona delegated token): allow.
   if (!Array.isArray(scopes)) return null
-  if (!scopes.includes(tool)) {
-    return NextResponse.json({ error: 'tool_out_of_scope', tool }, { status: 403 })
+  // S2.3 — a route several tools wrap (an RFQ read: extract_requirements for Munshi, support_lookup for Support) accepts any of them.
+  const tools = Array.isArray(tool) ? tool : [tool as AgentToolName]
+  if (!tools.some((t) => scopes.includes(t))) {
+    return NextResponse.json({ error: 'tool_out_of_scope', tool: tools[0] }, { status: 403 })
   }
   return null
 }

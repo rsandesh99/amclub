@@ -242,6 +242,15 @@ const MANIFEST: Entry[] = [
       ['munshi_drafts', 'munshi_drafts_set_updated_at'],
       ['munshi_provider_state', 'munshi_provider_state_set_updated_at'],
     ],
+    note: 'S2.3 Support agent: support_tickets (escalations a human resolves; the agent halts on an open one), support_threads + support_messages (web / mobile chat; user text masked, assistant text = the template), nudges (the counterparty nudge ledger written by the spine routes); wa_conversations support_ticket_id / support_last_intents / support_unclear_streak; ai_decisions feature CHECK gains support_nudge',
+  },
+  {
+    file: '0041_support.sql',
+    tables: ['support_tickets', 'support_threads', 'support_messages', 'nudges'],
+    triggers: [
+      ['support_tickets', 'support_tickets_set_updated_at'],
+      ['support_threads', 'support_threads_set_updated_at'],
+    ],
     note: 'S2.2 Digital Munshi: munshi_drafts (proposals the provider decides on) + munshi_provider_state (scan cursor, daily cap, reminders); provider_price_book gains accepted_at / deleted_at / source (source_quote_id nullable for manual rows; accepted_at backfilled from accepted quotes); quotes.munshi_draft_id (+ the S1.2 column grant restated); ai_decisions feature CHECK gains munshi_reply',
   },
   {
