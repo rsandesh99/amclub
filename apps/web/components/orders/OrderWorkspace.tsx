@@ -78,8 +78,9 @@ const EVENT_LABEL: Record<string, string> = {
 }
 
 // Internal markers (and the requirements payload, which submit_requirements
-// already represents) never appear in the timeline.
-const HIDDEN_EVENTS = new Set(['placed_side_effects', 'requirements_data'])
+// already represents) never appear in the timeline. The two ops flags written by
+// finalizeQuoteAcceptance are for the admin queue; the buyer gets a notification.
+const HIDDEN_EVENTS = new Set(['placed_side_effects', 'requirements_data', 'duplicate_rfq_order', 'quote_not_live_at_payment'])
 // Provider-money events are shown to the provider only.
 const PROVIDER_ONLY_EVENTS = new Set(['payout_held', 'payout_scheduled', 'payout_released', 'payout_paid', 'payout_failed', 'payout_voided'])
 
