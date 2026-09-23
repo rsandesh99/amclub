@@ -92,9 +92,14 @@ CREATE POLICY "users: admin read" ON users
 
 -- ─── msme_profiles ────────────────────────────────────────────────────────────
 
+-- 0043: owner is read-only. Every write is the service role (profile/msme
+-- upsert, admin suspend/reactivate, kyc/verify-udyam); a client role could
+-- otherwise clear its own suspension (deleted_at) or self-set *_verified.
 DROP POLICY IF EXISTS "msme_profiles: owner all" ON msme_profiles;
-CREATE POLICY "msme_profiles: owner all" ON msme_profiles
-  FOR ALL USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
+DROP POLICY IF EXISTS "msme_profiles: owner read" ON msme_profiles;
+CREATE POLICY "msme_profiles: owner read" ON msme_profiles
+  FOR SELECT USING (user_id = auth_user_id());
+REVOKE INSERT, UPDATE, DELETE ON msme_profiles FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "msme_profiles: admin read" ON msme_profiles;
 CREATE POLICY "msme_profiles: admin read" ON msme_profiles

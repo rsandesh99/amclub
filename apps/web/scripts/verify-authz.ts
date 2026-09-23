@@ -613,6 +613,25 @@ async function main() {
       } else {
         console.log('  (skipped audit_logs update checks — no admin audit row)')
       }
+
+      // msme_profiles: owner read-only — no self-verification, no self-unsuspend.
+      eq('buyerA direct-reads OWN msme_profile → 1 row (control)', ((await aBuyer.from('msme_profiles').select('id').eq('id', msmeA!.id)).data ?? []).length, 1)
+      deniedRows('buyerA self-sets udyam_verified/gstin_verified', await aBuyer.from('msme_profiles').update({ udyam_verified: true, gstin_verified: true }).eq('id', msmeA!.id).select('id'))
+      deniedRows('buyerA DELETEs OWN msme_profile', await aBuyer.from('msme_profiles').delete().eq('id', msmeA!.id).select('id'))
+
+      // P0-8 — suspension is enforced on act paths, and cannot be self-reversed.
+      const susp = await api(adminUser.token, `/api/v1/admin/msmes/${msmeA!.id}`, { action: 'suspend', reason: 'killtest suspension' })
+      eq('admin suspends buyerA → 200', susp.status, 200)
+      if (susp.status === 200) {
+        denied('suspended buyerA creates an RFQ', (await api(buyerA.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'GST filing while suspended please', details: { work: 'gst' } })).status)
+        denied('suspended buyerA cancels OWN order', (await api(buyerA.token, `/api/v1/orders/${orderA}/transition`, { action: 'cancel' })).status)
+        deniedRows('suspended buyerA clears OWN deleted_at', await aBuyer.from('msme_profiles').update({ deleted_at: null }).eq('id', msmeA!.id).select('id'))
+        const { data: stillSusp } = await admin.from('msme_profiles').select('deleted_at').eq('id', msmeA!.id).maybeSingle()
+        eq('buyerA still suspended after self-unsuspend attempt', Boolean(stillSusp?.deleted_at), true)
+        eq('admin MSME detail still readable while suspended → 200', (await api(adminUser.token, `/api/v1/admin/msmes/${msmeA!.id}`, undefined, 'GET')).status, 200)
+        eq('admin reactivates buyerA → 200', (await api(adminUser.token, `/api/v1/admin/msmes/${msmeA!.id}`, { action: 'reactivate' })).status, 200)
+        eq('reactivated buyerA GET own order → 200 (control)', (await api(buyerA.token, `/api/v1/orders/${orderA}`, undefined, 'GET')).status, 200)
+      }
     }
 
     // ── 8. Phase 2: terms_acceptances (append-only, self-read) + signup gate ──

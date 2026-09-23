@@ -70,15 +70,22 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   }
 }
 
+/**
+ * The user's ACTIVE buyer profile. P0-8: a profile an admin suspended
+ * (msme_profiles.deleted_at set) resolves as null — the same as "no buyer
+ * profile" — so no buyer surface treats a suspended account as a buyer. To
+ * tell the two apart (e.g. to show an "account suspended" screen instead of
+ * the signup wizard) use getMsmeSuspension() from lib/auth/suspension.ts.
+ */
 export async function getMsmeProfile(userId: string): Promise<MsmeProfile | null> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('msme_profiles')
-    .select('id, business_name, sector, state, city, profile_completeness, udyam_verified, gstin_verified')
+    .select('id, business_name, sector, state, city, profile_completeness, udyam_verified, gstin_verified, deleted_at')
     .eq('user_id', userId)
     .single()
 
-  if (!data) return null
+  if (!data || data.deleted_at) return null
 
   return {
     id: data.id,

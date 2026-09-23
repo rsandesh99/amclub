@@ -262,9 +262,9 @@ const MANIFEST: Entry[] = [
   },
   {
     file: '0043_rls_hardening.sql',
-    tables: ['messages', 'order_events', 'audit_logs'],
+    tables: ['messages', 'order_events', 'audit_logs', 'msme_profiles'],
     triggers: [['audit_logs', 'audit_logs_no_update']],
-    note: 'Security hotfix: messages parties SELECT-only + INSERT/UPDATE/DELETE revoked; order_events parties-insert policy dropped + INSERT revoked; audit_logs append-only trigger (raise_append_only from 0017) + INSERT/UPDATE/DELETE revoked — all from anon + authenticated (service role keeps its grants)',
+    note: 'Security hotfix: messages parties SELECT-only + INSERT/UPDATE/DELETE revoked; order_events parties-insert policy dropped + INSERT revoked; audit_logs append-only trigger (raise_append_only from 0017) + INSERT/UPDATE/DELETE revoked; msme_profiles owner SELECT-only + INSERT/UPDATE/DELETE revoked (no self-unsuspend / self-verify) — all from anon + authenticated (service role keeps its grants)',
   },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },

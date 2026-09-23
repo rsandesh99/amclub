@@ -1,5 +1,5 @@
--- Security hotfix — RLS hardening for messages, order_events, audit_logs
--- (docs/USER_EXPECTATIONS_AUDIT.md P0-2, P0-3, P0-10).
+-- Security hotfix — RLS hardening for messages, order_events, audit_logs,
+-- msme_profiles (docs/USER_EXPECTATIONS_AUDIT.md P0-2, P0-3, P0-10, P0-8).
 --
 -- Before:
 --   * "messages: parties all" was FOR ALL → either party of a conversation
@@ -11,8 +11,12 @@
 --   * audit_logs had no append-only trigger and client roles kept the
 --     default INSERT/UPDATE/DELETE grants (only RLS stood in the way).
 --
--- After: parties are SELECT-only on messages and order_events; client roles
--- hold no INSERT/UPDATE/DELETE on messages, order_events or audit_logs.
+--   * "msme_profiles: owner all" was FOR ALL → a suspended buyer could clear
+--     their own deleted_at (see the msme_profiles section below).
+--
+-- After: parties are SELECT-only on messages and order_events, owners are
+-- SELECT-only on msme_profiles; client roles hold no INSERT/UPDATE/DELETE on
+-- messages, order_events, audit_logs or msme_profiles.
 -- Every legitimate writer already uses the service role (verified by grep):
 --   messages     — api/v1/quotes/[quoteId]/messages POST (admin client)
 --   order_events — lib/orders/transitions.ts, lib/mart/goods-transitions.ts,
@@ -34,6 +38,10 @@
 --     WITH CHECK (<parties>);  GRANT INSERT ON order_events TO authenticated;
 --   DROP TRIGGER audit_logs_no_update ON audit_logs;
 --   GRANT INSERT, UPDATE, DELETE ON audit_logs TO authenticated;
+--   DROP POLICY "msme_profiles: owner read" ON msme_profiles;
+--   CREATE POLICY "msme_profiles: owner all" ON msme_profiles FOR ALL
+--     USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
+--   GRANT INSERT, UPDATE, DELETE ON msme_profiles TO authenticated;
 -- (<parties> = the conversation/order party predicate as it was in
 -- rls/policies.sql before this change.) No data is touched, so rollback is
 -- grants/policies only.
@@ -70,3 +78,18 @@ CREATE TRIGGER audit_logs_no_update
   FOR EACH ROW EXECUTE FUNCTION raise_append_only();
 --> statement-breakpoint
 REVOKE INSERT, UPDATE, DELETE ON audit_logs FROM anon, authenticated;
+--> statement-breakpoint
+
+-- ─── msme_profiles: owner read-only (P0-8 suspension bypass) ─────────────────
+-- "msme_profiles: owner all" let a suspended buyer clear their own deleted_at
+-- (or hard-delete the row and re-sign-up clean), and self-set udyam_verified /
+-- gstin_verified. Every writer is the service role (profile/msme POST upsert,
+-- admin/msmes suspend/reactivate, kyc/verify-udyam), so the owner keeps SELECT only.
+DROP POLICY IF EXISTS "msme_profiles: owner all" ON msme_profiles;
+--> statement-breakpoint
+DROP POLICY IF EXISTS "msme_profiles: owner read" ON msme_profiles;
+--> statement-breakpoint
+CREATE POLICY "msme_profiles: owner read" ON msme_profiles
+  FOR SELECT USING (user_id = auth_user_id());
+--> statement-breakpoint
+REVOKE INSERT, UPDATE, DELETE ON msme_profiles FROM anon, authenticated;
