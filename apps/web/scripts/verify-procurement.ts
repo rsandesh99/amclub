@@ -82,6 +82,11 @@ const SUPA_URL = process.env['NEXT_PUBLIC_SUPABASE_URL'] || ''
 const ANON = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || ''
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY'] || ''
 const RIG_RUNTIME_SECRET = process.env['AGENT_RUNTIME_SECRET'] || ''
+const unRsc = (body: string): string => body.replace(/\\"/g, '"')
+const sameMap = (a: unknown, b: Record<string, string>): boolean => {
+  const x = (a ?? {}) as Record<string, unknown>
+  return Object.keys(x).length === Object.keys(b).length && Object.entries(b).every(([k, v]) => x[k] === v)
+}
 const BUCKET = process.env['WA_MEDIA_BUCKET'] || 'wa-media'
 const VOICE_STUB = process.env['VOICE_STUB_TRANSCRIPT'] || ''
 
@@ -443,7 +448,7 @@ async function http() {
     const cmp = await json(await api(b.token, `/api/v1/rfq/${rfqId}/compare`, undefined, 'GET'))
     const pageQuotes = ((await json(await api(b.token, `/api/v1/rfq/${rfqId}`, undefined, 'GET')))['rfq'] as any)?.quotes ?? []
     const pageLetters = Object.fromEntries((pageQuotes as any[]).map((q, i) => [q.id, String.fromCharCode(65 + i)]))
-    check('the watch → ONE quotes summary (three lines + the compare link); the session’s letters equal the compare page’s (price-as-quoted order: A = ₹25,000, B = ₹27,000, C = ₹34,000); state quotes_in', summaries.length === 1 && s4?.state === 'quotes_in' && JSON.stringify(s4?.labels) === JSON.stringify(pageLetters) && pageLetters[qA ?? ''] === 'A' && pageLetters[qB ?? ''] === 'B' && pageLetters[qC ?? ''] === 'C' && String(summaries[0]?.body).includes(`/app/rfq/${rfqId}`) && Array.isArray(cmp['results']), JSON.stringify({ n: summaries.length, state: s4?.state, labels: s4?.labels, pageLetters }))
+    check('the watch → ONE quotes summary (three lines + the compare link); the session’s letters equal the compare page’s (price-as-quoted order: A = ₹25,000, B = ₹27,000, C = ₹34,000); state quotes_in', summaries.length === 1 && s4?.state === 'quotes_in' && sameMap(s4?.labels, pageLetters) && pageLetters[qA ?? ''] === 'A' && pageLetters[qB ?? ''] === 'B' && pageLetters[qC ?? ''] === 'C' && String(summaries[0]?.body).includes(`/app/rfq/${rfqId}`) && Array.isArray(cmp['results']), JSON.stringify({ n: summaries.length, state: s4?.state, labels: s4?.labels, pageLetters }))
     await pr.runProcurementWatch(deps, { sessionIds: [s1?.id ?? NIL] })
     check('a second watch with the same quote set sends no second summary', (await agentTurns(s1?.id ?? NIL)).filter((t) => t.proposal?.key === 'quotes_summary').length === 1)
 
@@ -503,8 +508,15 @@ async function http() {
     check('the agent never paid: no checkout_session / order row for the buyer, no place_order / accept_quote event on any procurement run', (await checkoutCount()) === checkoutBefore && (coEvents ?? 0) === 0, `checkout rows ${checkoutBefore} → ${await checkoutCount()}`)
     const html = await (await fetch(`${BASE}/en${expectPath}`, { headers: { cookie: await cookieFor(b.email) } })).text()
     const forged = await (await fetch(`${BASE}/en/app/rfq/${rfqId}?pay=${qB}&d=${NIL}`, { headers: { cookie: await cookieFor(b.email) } })).text()
-    const foreign = await fetch(`${BASE}/en${expectPath}`, { headers: { cookie: await cookieFor(other.email) } })
-    check('the link opens the page’s OWN confirm sheet for B (payQuoteId set) only with the real decision; a forged decision id sets nothing; another buyer gets 404', html.includes(`"payQuoteId":"${qB}"`) && !forged.includes(`"payQuoteId":"${qB}"`) && foreign.status === 404, `real=${html.includes(`"payQuoteId":"${qB}"`)} forged=${forged.includes(`"payQuoteId":"${qB}"`)} foreign=${foreign.status}`)
+    const foreignRes = await fetch(`${BASE}/en${expectPath}`, { headers: { cookie: await cookieFor(other.email) } })
+    const foreign = await foreignRes.text()
+    // the props ride in the escaped RSC payload (\"payQuoteId\":\"…\"); the (msme) group streams (loading.tsx), so a
+    // notFound() for another buyer is a soft-404 (HTTP 200 + the not-found UI) — judged by CONTENT, as verify-phase8 does
+    const { data: rfqRow } = await admin.from('rfqs').select('title').eq('id', rfqId ?? NIL).maybeSingle()
+    const title = String((rfqRow as any)?.title ?? '')
+    const paySet = (body: string) => unRsc(body).includes(`"payQuoteId":"${qB}"`)
+    const foreignSees = paySet(foreign) || (title.length > 0 && unRsc(foreign).includes(title))
+    check('the link opens the page’s OWN confirm sheet for B (payQuoteId set) only with the real decision; a forged decision id sets nothing; another buyer gets the not-found page (no title, no sheet)', paySet(html) && unRsc(html).includes(title) && !paySet(forged) && !foreignSees && (foreignRes.status === 404 || foreignRes.status === 200), `real=${paySet(html)} forged=${paySet(forged)} foreign=${foreignRes.status} sees=${foreignSees}`)
     skip('the buyer’s own payment from that page', 'the checkout route and the confirm sheet are unchanged (Phase 4 kill-tests); the rig proves the agent created no checkout / payment row')
 
     // ── the web mirror: the composer + a tap run the SAME engine ──
