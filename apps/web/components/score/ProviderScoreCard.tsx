@@ -92,7 +92,9 @@ export async function ProviderScoreCard({ card }: { card: Card }) {
         </div>
       )}
 
-      <p className="mt-4 text-xs text-foreground-secondary">
+      {/* ADR-010 §9 (e) condition: shown from day one, before the ranking switch is ever turned on */}
+      <p className="mt-4 text-xs text-foreground-secondary" data-testid="score-ranking-line">{t('ranking_line', { threshold: card.ranking.threshold })}</p>
+      <p className="mt-2 text-xs text-foreground-secondary">
         {t('private_line')}{' '}
         <Link href="/provider-addendum" className="text-primary underline underline-offset-2">{t('addendum_link')}</Link>
       </p>

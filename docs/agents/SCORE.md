@@ -66,8 +66,8 @@ Only with `reliability_rank_enabled`, ≥ 2 quotes and the largest normalised to
 k is the penalty in basis points **at a score of 0**: score 90 → +1.5 %, 60 → +6 %, 40 → +9 %, 0 → +15 %. Prices shown
 are unchanged. The response carries `ordering: { mode, ids }`, never a score; the screen shows "Ordered by price,
 adjusted for each provider's delivery and dispute record on AMClub. Sort by price instead" and price is one tap away.
-S1.2 pointers never talk about ordering (`COMPARE_ORDERING_PHRASES`, pointer-only). **Keep the switch off until the
-founder confirms ADR-010 §9 (e)** (ordering is not "showing" the score).
+S1.2 pointers never talk about ordering (`COMPARE_ORDERING_PHRASES`, pointer-only). ADR-010 §9 (e) is confirmed with
+conditions (see the enablement order). **A provider with no history ranks as the neutral prior, never as 0.**
 
 ## The coaching note (the one model call)
 
@@ -100,7 +100,9 @@ next nightly run recomputes it.
 2. `score_compute_enabled = true` for **two weeks**; review the distribution, the gated share and the movers on the
    agents-console tile. Adjusting anything now is a v1 amendment only if no v1 score has been shown to anyone.
 3. `score_card_enabled = true` — providers see their own.
-4. `reliability_rank_enabled = true` — **only after the founder confirms ADR-010 §9 (e)**.
+4. `reliability_rank_enabled = true` — ADR-010 §9 (e) is **confirmed with conditions** (2026-09-23): the provider card's
+   ranking line (shown from day one), the buyer's track-record line + re-sort by price / delivery, the public statement
+   of the ranking parameters on `/help` (**counsel confirms the E-Commerce Rules clause and wording first**).
 5. `growth_nudge_enabled = true` — with Munshi live for a cohort; the `amc_munshi_growth_*` templates approved.
 
 ## Rollback

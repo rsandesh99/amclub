@@ -330,7 +330,10 @@ DROP POLICY IF EXISTS "provider_scores: admin read" ON provider_scores;
 CREATE POLICY "provider_scores: admin read" ON provider_scores
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 --> statement-breakpoint
-REVOKE INSERT, UPDATE, DELETE ON provider_scores FROM anon, authenticated;
+-- only the service role writes scores: every client privilege off (incl. TRUNCATE / REFERENCES / TRIGGER), then SELECT for signed-in users (RLS decides the rows)
+REVOKE ALL ON provider_scores FROM anon, authenticated;
+--> statement-breakpoint
+GRANT SELECT ON provider_scores TO authenticated;
 --> statement-breakpoint
 ALTER TABLE buyer_scores ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
@@ -339,7 +342,10 @@ DROP POLICY IF EXISTS "buyer_scores: admin read" ON buyer_scores;
 CREATE POLICY "buyer_scores: admin read" ON buyer_scores
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 --> statement-breakpoint
-REVOKE INSERT, UPDATE, DELETE ON buyer_scores FROM anon, authenticated;
+-- only the service role writes scores: every client privilege off (incl. TRUNCATE / REFERENCES / TRIGGER), then SELECT for signed-in users (RLS decides the rows)
+REVOKE ALL ON buyer_scores FROM anon, authenticated;
+--> statement-breakpoint
+GRANT SELECT ON buyer_scores TO authenticated;
 --> statement-breakpoint
 ALTER TABLE score_history ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
@@ -353,7 +359,10 @@ DROP POLICY IF EXISTS "score_history: admin read" ON score_history;
 CREATE POLICY "score_history: admin read" ON score_history
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 --> statement-breakpoint
-REVOKE INSERT, UPDATE, DELETE ON score_history FROM anon, authenticated;
+-- only the service role writes scores: every client privilege off (incl. TRUNCATE / REFERENCES / TRIGGER), then SELECT for signed-in users (RLS decides the rows)
+REVOKE ALL ON score_history FROM anon, authenticated;
+--> statement-breakpoint
+GRANT SELECT ON score_history TO authenticated;
 --> statement-breakpoint
 ALTER TABLE score_events ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
@@ -367,4 +376,7 @@ DROP POLICY IF EXISTS "score_events: admin read" ON score_events;
 CREATE POLICY "score_events: admin read" ON score_events
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 --> statement-breakpoint
-REVOKE INSERT, UPDATE, DELETE ON score_events FROM anon, authenticated;
+-- only the service role writes scores: every client privilege off (incl. TRUNCATE / REFERENCES / TRIGGER), then SELECT for signed-in users (RLS decides the rows)
+REVOKE ALL ON score_events FROM anon, authenticated;
+--> statement-breakpoint
+GRANT SELECT ON score_events TO authenticated;

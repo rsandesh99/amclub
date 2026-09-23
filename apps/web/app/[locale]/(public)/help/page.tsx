@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { Mail, MessageCircle, Clock, ShieldCheck, Wallet, RotateCcw } from 'lucide-react'
+import { Mail, MessageCircle, Clock, ShieldCheck, Wallet, RotateCcw, ArrowDownUp } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { GRIEVANCE_OFFICER, GRIEVANCE_SLA, SUPPORT_CONTACT, whatsappHref } from '@/lib/legal/grievance'
 
@@ -20,6 +20,9 @@ export default async function HelpPage() {
     { icon: ShieldCheck, body: t('faq_verify') },
     // ADR-004 — providers never bear gateway charges.
     { icon: Wallet, body: t('faq_fees') },
+    // S2.4 / ADR-010 §9 (e) — the main parameters that can order quotes, named without weights (Consumer Protection
+    // (E-Commerce) Rules 2020 disclosure; counsel to confirm the clause). Factors only: the formula is not published.
+    { icon: ArrowDownUp, body: t('faq_ranking') },
   ]
 
   return (

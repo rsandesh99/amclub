@@ -209,6 +209,24 @@ score"), not displaying it. **This is a reading, not a certainty:** the
 is rejected, the compute and the card still ship, and ranking waits for an addendum
 revision through counsel.
 
+**(e) — founder decision, 2026-09-23: CONFIRMED, with conditions.** Ordering quotes by a documented composite is
+already in DESIGN.md §9.3 ("default sort = composite (rating, completion rate, response time, recency)"); showing the
+score would be new ground, and v1 does not. The ranking switch may be turned on only when all of these hold:
+
+1. **Provider side:** the provider's own score card says, from the day it is shown and before the switch is ever
+   turned on, that on requests at or above the threshold their score can change where their quote appears (the
+   `ranking_line` copy, with the threshold formatted from the setting — never a constant).
+2. **Buyer side:** the fixed "ordered using track record" line stays visible while the reliability order is shown,
+   and buyers can still re-sort by price or by delivery time (the compare sort control stays).
+3. **Public statement:** the main parameters are named, without weights, on the public help page (`help.faq_ranking`)
+   — the Consumer Protection (E-Commerce) Rules 2020 disclosure of the main parameters that determine ranking. Counsel
+   confirms the exact clause and the wording before the switch (FOLLOWUPS S2.4).
+4. **Sequence unchanged:** compute on for two weeks → review the distribution → the card → ranking.
+
+**New providers are neutral, not bottom.** A provider with no history (no score row, or a gated `null` score) ranks
+exactly as `score_null_prior` — never as 0 — so a brand-new provider in a thin cluster does not start at the bottom
+(tested in shared and proven live in the rig with a provider that has no score row at all).
+
 **(f) §3, buyers rated on objective service levels — holds.** `confirmation_speed`
 ("confirming delivery on time") and `payment_follow_through` ("payment behaviour") are
 named there; `follow_through` and `dispute_record` fall under "such as". Buyer scores are

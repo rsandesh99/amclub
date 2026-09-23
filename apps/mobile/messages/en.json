@@ -804,6 +804,7 @@
     "c_dispute_record": "Dispute record",
     "d_dispute_record": "Disputes decided against you, compared with the orders you closed.",
     "c_decision_rate": "Decisions on requests",
-    "d_decision_rate": "Requests you quoted or declined with a reason, instead of letting them lapse."
+    "d_decision_rate": "Requests you quoted or declined with a reason, instead of letting them lapse.",
+    "ranking_line": "On requests of {threshold} or more, your score can change where your quote appears in the buyer's comparison. Your price is never changed, and buyers never see the number."
   }
 }

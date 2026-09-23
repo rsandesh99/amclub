@@ -290,3 +290,25 @@ describe('score_note rules (the coaching sentence)', () => {
     }
   })
 })
+
+describe('a brand-new provider is neutral, never scored 0 (ADR-010 §4)', () => {
+  const blank: ProviderScoreInputs = { response_samples: 0, median_response_hours: null, delivered_orders: 0, on_time_deliveries: 0, completed_orders: 0, confirmed_by_buyer: 0, auto_accepted: 0, closed_orders: 0, disputes_at_fault: 0, matches_decided_or_closed: 0, matches_quoted: 0, matches_declined_with_reason: 0 }
+  it('no activity at all → score null (gated), every component null — never 0', () => {
+    const r = scoreProvider(blank)
+    expect(r.score).toBeNull()
+    expect(r.gated).toBe(true)
+    expect(PROVIDER_COMPONENTS.every((k) => r.components[k].value === null)).toBe(true)
+  })
+  it('no score row, a gated snapshot and a brand-new provider all rank exactly as the neutral prior', () => {
+    const neutral = reliabilityAdjustedTotal(2_950_000, 60, OPTS)
+    expect(reliabilityAdjustedTotal(2_950_000, null, OPTS)).toBe(neutral)
+    expect(reliabilityAdjustedTotal(2_950_000, scoreProvider(blank).score, OPTS)).toBe(neutral)
+    // a 0 would add the full 15 % — the newcomer penalty this rule exists to prevent
+    expect(reliabilityAdjustedTotal(2_950_000, 0, OPTS)).toBeGreaterThan(neutral)
+  })
+  it('a newcomer between a strong and a weak provider sorts by the neutral prior, not to the bottom', () => {
+    const ids = reliabilityOrder([{ id: 'strong', normalizedTotalPaise: 3_000_000, providerScore: 100 }, { id: 'weak', normalizedTotalPaise: 2_900_000, providerScore: 44 }, { id: 'new', normalizedTotalPaise: 2_950_000, providerScore: null }], OPTS)
+    expect(ids).toEqual(['strong', 'new', 'weak'])
+    expect(reliabilityOrder([{ id: 'strong', normalizedTotalPaise: 3_000_000, providerScore: 100 }, { id: 'weak', normalizedTotalPaise: 2_900_000, providerScore: 44 }, { id: 'new', normalizedTotalPaise: 2_950_000, providerScore: 0 }], OPTS)).toEqual(['strong', 'weak', 'new'])
+  })
+})

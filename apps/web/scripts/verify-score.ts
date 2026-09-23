@@ -241,6 +241,8 @@ async function http() {
     const A = await mkProvider('a')
     const B = await mkProvider('b', 'LD')
     const C = await mkProvider('c')
+    // D: brand new — no quotes, no orders, no score row. It must rank as the neutral prior, never as 0.
+    const Dn = await mkProvider('d')
     const X = await mkBuyer('x')
     const Y = await mkBuyer('y')
     const adminU = await mkUser('admin', ['admin'])
@@ -278,7 +280,7 @@ async function http() {
     // compare fixtures: two open requests from X quoted by A and B — one above the ₹25,000 threshold, one below. Their
     // matches and quotes are dated OUTSIDE the 90-day window so they never move the scores the checks above expect.
     const OLD = Date.now() - 100 * D
-    const rfqHi = await mkRfq(X.msmeId, { status: 'quoted', quoteCount: 2, createdAt: OLD, open: true })
+    const rfqHi = await mkRfq(X.msmeId, { status: 'quoted', quoteCount: 3, createdAt: OLD, open: true })
     const rfqLo = await mkRfq(X.msmeId, { status: 'quoted', quoteCount: 2, createdAt: OLD, open: true })
     const q: Record<string, string> = {}
     for (const [r, key, pa, pb] of [[rfqHi, 'hi', 3_000_000, 2_900_000], [rfqLo, 'lo', 1_000_000, 950_000]] as const) {
@@ -287,6 +289,8 @@ async function http() {
       q[`${key}A`] = await mkQuote(r, A.providerId, pa, OLD + 4 * H, QUOTE_STATUS.submitted)
       q[`${key}B`] = await mkQuote(r, B.providerId, pb, OLD + 4 * H, QUOTE_STATUS.submitted)
     }
+    await mkMatch(rfqHi, Dn.providerId, OLD)
+    q['hiD'] = await mkQuote(rfqHi, Dn.providerId, 2_950_000, OLD + 4 * H, QUOTE_STATUS.submitted)
 
     // ── the privacy guard: no buyer-reachable payload carries a score field ──
     async function privacySweep(label: string) {
@@ -332,12 +336,15 @@ async function http() {
     await json(card0)
     check('flag OFF: GET /partner/score → 404 (score_card_enabled off)', card0.status === 404, `status ${card0.status}`)
     const cmp0 = await json(await api(X.token, `/api/v1/rfq/${rfqHi}/compare`))
-    check('flag OFF: compare above the threshold still orders by price (mode price; B cheaper first) — byte-identical to the price sort', (cmp0['ordering'] as any)?.mode === 'price' && ((cmp0['ordering'] as any)?.ids ?? []).join() === [q['hiB'], q['hiA']].join(), JSON.stringify(cmp0['ordering']))
+    check('flag OFF: compare above the threshold still orders by price (mode price; B, D, A cheapest first) — byte-identical to the price sort', (cmp0['ordering'] as any)?.mode === 'price' && ((cmp0['ordering'] as any)?.ids ?? []).join() === [q['hiB'], q['hiD'], q['hiA']].join(), JSON.stringify(cmp0['ordering']))
     if (compute) {
-      const r = await compute.computeScores(admin, { only: { providers: [A.providerId, B.providerId, C.providerId], buyers: [X.msmeId, Y.msmeId] } })
+      const r = await compute.computeScores(admin, { only: { providers: [A.providerId, B.providerId, C.providerId, Dn.providerId], buyers: [X.msmeId, Y.msmeId] } })
       check('flag OFF: computeScores is a no-op (enabled false, nothing written)', r.enabled === false && r.providers === 0, JSON.stringify(r))
     }
     await privacySweep('flag OFF')
+    const help = await fetch(`${BASE}/help`)
+    const helpHtml = await help.text()
+    check('the public statement of the ranking parameters is on /help (factors named — response, on-time delivery, confirmations, disputes — no weights)', help.status === 200 && helpHtml.includes('How are quotes ordered?') && helpHtml.includes('on-time delivery') && !/\b(25|20|10)\s?%/.test(helpHtml.slice(helpHtml.indexOf('How are quotes ordered?'), helpHtml.indexOf('How are quotes ordered?') + 700)), `status ${help.status}`)
 
     // ── flag ON ─────────────────────────────────────────────────────────────
     if (!has0044 || !compute) {
@@ -350,6 +357,7 @@ async function http() {
     await setSetting('reliability_rank_threshold_paise', 2_500_000)
     await setSetting('reliability_rank_k_bps', 1500)
     await setSetting('score_null_prior', 60)
+    // D stays OUT of the first compute: a brand-new provider has no score row at all until the nightly run reaches it
     const only = { providers: [A.providerId, B.providerId, C.providerId], buyers: [X.msmeId, Y.msmeId] }
     const r1 = await compute.computeScores(admin, { only })
     const snap = async (table: 'provider_scores' | 'buyer_scores', idCol: string, id: string) => (await admin.from(table).select('score, gated, components, sample').eq(idCol, id).eq('score_version', 'v1').maybeSingle()).data as any
@@ -381,7 +389,7 @@ async function http() {
 
     // the card
     const cardB = await json(await api(B.token, '/api/v1/partner/score?locale=en'))
-    check("card (B): score 44, five components with weights, the two weakest (dispute_record 20, responsiveness 25) with their tips, gate have 5 closed, a trend point", cardB['score'] === 44 && (cardB['components'] as any[])?.length === 5 && ((cardB['weakest'] as string[]) ?? []).join() === 'dispute_record,responsiveness' && (cardB['tips'] as any[])?.length === 2 && (cardB['tips'] as any[])[0]?.text === SCORE_TIPS.en.dispute_record && (cardB['gate'] as any)?.have?.closed_orders === 5 && ((cardB['trend'] as any[]) ?? []).length >= 1, JSON.stringify({ s: cardB['score'], w: cardB['weakest'] }))
+    check("card (B): score 44, five components with weights, the two weakest (dispute_record 20, responsiveness 25) with their tips, gate have 5 closed, a trend point", cardB['score'] === 44 && (cardB['components'] as any[])?.length === 5 && ((cardB['weakest'] as string[]) ?? []).join() === 'dispute_record,responsiveness' && (cardB['tips'] as any[])?.length === 2 && (cardB['tips'] as any[])[0]?.text === SCORE_TIPS.en.dispute_record && (cardB['gate'] as any)?.have?.closed_orders === 5 && ((cardB['trend'] as any[]) ?? []).length >= 1 && (cardB['ranking'] as any)?.threshold === '₹25,000', JSON.stringify({ s: cardB['score'], w: cardB['weakest'] }))
     const cardC = await json(await api(C.token, '/api/v1/partner/score'))
     check('card (C, below the gate): score null, gated, "2 of 3 closed orders" — never a number', cardC['score'] === null && cardC['gated'] === true && (cardC['gate'] as any)?.have?.closed_orders === 2 && (cardC['gate'] as any)?.needed?.closed_orders === 3, JSON.stringify(cardC['gate']))
     const cardX = await api(X.token, '/api/v1/partner/score')
@@ -405,7 +413,13 @@ async function http() {
     // compare
     const cmpHi = await json(await api(X.token, `/api/v1/rfq/${rfqHi}/compare`))
     const cmpLo = await json(await api(X.token, `/api/v1/rfq/${rfqLo}/compare`))
-    check('compare above ₹25,000 → reliability: A (₹30,000, score 100) before B (₹29,000, score 44); the response carries no score', (cmpHi['ordering'] as any)?.mode === 'reliability' && ((cmpHi['ordering'] as any)?.ids ?? []).join() === [q['hiA'], q['hiB']].join() && scoreFieldPaths(cmpHi).length === 0, JSON.stringify(cmpHi['ordering']))
+    const { data: dRow } = await admin.from('provider_scores').select('provider_id').eq('provider_id', Dn.providerId)
+    check('compare above ₹25,000 → reliability: A (₹30,000, score 100), then D (₹29,500, brand new — NO score row — ranked as the neutral prior 60, never as 0), then B (₹29,000, score 44); the response carries no score', (dRow ?? []).length === 0 && (cmpHi['ordering'] as any)?.mode === 'reliability' && ((cmpHi['ordering'] as any)?.ids ?? []).join() === [q['hiA'], q['hiD'], q['hiB']].join() && scoreFieldPaths(cmpHi).length === 0, JSON.stringify(cmpHi['ordering']))
+    // once the nightly run reaches D: score null (gated) — still neutral, same order
+    await compute.computeScores(admin, { only: { providers: [Dn.providerId] } })
+    const { data: dSnap } = await admin.from('provider_scores').select('score, gated').eq('provider_id', Dn.providerId).maybeSingle()
+    const cmpHi2 = await json(await api(X.token, `/api/v1/rfq/${rfqHi}/compare`))
+    check('after D is computed: score null, gated (never 0) — and the order is unchanged (A, D, B)', (dSnap as any)?.score === null && (dSnap as any)?.gated === true && ((cmpHi2['ordering'] as any)?.ids ?? []).join() === [q['hiA'], q['hiD'], q['hiB']].join(), JSON.stringify({ dSnap, ordering: cmpHi2['ordering'] }))
     check('compare below the threshold → price (B cheaper first), identical to the price sort', (cmpLo['ordering'] as any)?.mode === 'price' && ((cmpLo['ordering'] as any)?.ids ?? []).join() === [q['loB'], q['loA']].join(), JSON.stringify(cmpLo['ordering']))
     await privacySweep('flag ON (scores exist, reliability ordering live)')
 

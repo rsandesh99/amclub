@@ -190,6 +190,7 @@ interface ScoreCardView {
   components: { key: string; value: number | null; weight: number }[]
   tips: { key: string; text: string }[]
   note: string | null
+  ranking?: { threshold: string }
 }
 
 function ScoreCard({ card, t }: { card: ScoreCardView; t: (k: string) => string }) {
@@ -223,7 +224,8 @@ function ScoreCard({ card, t }: { card: ScoreCardView; t: (k: string) => string 
           {card.tips.map((tip) => <Text key={tip.key} className="mt-1 text-sm text-foreground">{tip.text}</Text>)}
         </View>
       )}
-      <Text className="mt-4 text-xs text-foreground-secondary">{t('score_card.private_line')}</Text>
+      {card.ranking && <Text className="mt-4 text-xs text-foreground-secondary" testID="score-ranking-line">{t('score_card.ranking_line').replace('{threshold}', card.ranking.threshold)}</Text>}
+      <Text className="mt-2 text-xs text-foreground-secondary">{t('score_card.private_line')}</Text>
     </View>
   )
 }

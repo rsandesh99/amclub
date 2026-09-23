@@ -2,6 +2,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   BUYER_COMPONENTS,
+  formatRupees,
   PROVIDER_COMPONENTS,
   SAMPLE_GATES_V1,
   SCORE_VERSION,
@@ -18,6 +19,7 @@ import { AGENT_ENABLED } from '@/lib/flags'
 import { isAgentEnabledForUser } from '@/lib/agent/settings'
 import { boundedChatJson } from '@/lib/agent/bounded'
 import { istDate } from '@/lib/score/compute'
+import { getScoreSettings } from '@/lib/score/settings'
 
 /**
  * S2.4 — the AMC Score payloads (ADR-010 §6). The provider card is the provider's OWN snapshot (the route resolves
@@ -41,6 +43,11 @@ export interface ProviderScoreCard {
   trend: { on: string; score: number | null }[]
   note: string | null
   computed_at: string | null
+  /**
+   * ADR-010 §9 (e) condition: the card tells the provider, before ranking is ever switched on, that on requests at or
+   * above this total their score can change where their quote appears. Formatted from the SETTING, never a constant.
+   */
+  ranking: { threshold: string }
 }
 
 function componentsOf<C extends string>(raw: unknown, order: readonly C[]): Record<C, ComponentResult> {
@@ -92,9 +99,10 @@ async function coachingNote(admin: SupabaseClient, args: { userId: string; provi
 export async function providerScoreCard(admin: SupabaseClient, args: { providerId: string; userId: string; locale: string | null | undefined }): Promise<ProviderScoreCard> {
   const locale = toScoreTipLocale(args.locale)
   const gateNeed = { closed_orders: SAMPLE_GATES_V1.provider.closed_orders, response_samples: SAMPLE_GATES_V1.provider.response_samples }
+  const ranking = { threshold: formatRupees((await getScoreSettings(admin)).rankThresholdPaise) }
   const { data: snap } = await admin.from('provider_scores').select('score, gated, components, sample, note, computed_at').eq('provider_id', args.providerId).eq('score_version', SCORE_VERSION).maybeSingle()
   if (!snap) {
-    return { version: SCORE_VERSION, computed: false, score: null, gated: true, gate: { needed: gateNeed, have: { closed_orders: 0, response_samples: 0 } }, components: [], weakest: [], tips: [], trend: [], note: null, computed_at: null }
+    return { version: SCORE_VERSION, computed: false, score: null, gated: true, gate: { needed: gateNeed, have: { closed_orders: 0, response_samples: 0 } }, components: [], weakest: [], tips: [], trend: [], note: null, computed_at: null, ranking }
   }
   const s = snap as any
   const components = componentsOf(s.components, PROVIDER_COMPONENTS)
@@ -114,6 +122,7 @@ export async function providerScoreCard(admin: SupabaseClient, args: { providerI
     trend: await trendOf(admin, 'provider', args.providerId),
     note: noteOn ? await coachingNote(admin, { userId: args.userId, providerId: args.providerId, locale, cached: s.note, input }) : null,
     computed_at: s.computed_at ?? null,
+    ranking,
   }
 }
 

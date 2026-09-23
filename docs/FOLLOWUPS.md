@@ -859,6 +859,14 @@ Runbook `docs/agents/SCORE.md`.
   AGENT_ENABLED legs against a dark server.
 - **Live evals not run** (no LLM key): `score_note` ≥ 90 % and 0 policy violations; the injection set (now 276 pairs,
   36 of them `score_note`) — the cohort gate for the note.
+- **ADR-010 §9 (e) confirmed with conditions (founder, 2026-09-23).** Before `reliability_rank_enabled` is switched on:
+  **counsel confirms the Consumer Protection (E-Commerce) Rules 2020 clause** on disclosing the main ranking parameters
+  and the wording of `help.faq_ranking` (en / hi; te / ta fall back to English — translate if counsel wants them).
+  The provider card's `ranking_line` and the buyer's track-record line + price / delivery re-sort are built.
+- **The score tables grant clients SELECT only** (`REVOKE ALL` from anon + authenticated, then `GRANT SELECT` to
+  authenticated; RLS picks the rows): no client INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER. Proven in
+  a rolled-back dry run, which also showed 0044 leaves the grants and policies on users, messages, order_events,
+  audit_logs and msme_profiles byte-identical.
 - **Migration renumbered 0042 → 0044** for PR #15 (0042 users privilege guard + 0043 RLS hardening, both applied to prod
   2026-09-23). Master merged in: `score_note: 'in'` in `TASK_CLASS_RESIDENCY` (a named provider's own score —
   derived, but personal); the rig uses `QUOTE_STATUS` and the shared order / RFQ status types; the note prompt sends
