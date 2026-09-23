@@ -88,6 +88,8 @@ export async function GET() {
     homeV3Enabled: isOnFor('home', userId),
     // E7 — compare v3 for THIS user; the mobile compare cards carry the web's groups.
     compareV3Enabled: isOnFor('compare', userId),
+    // E13 — mobile parity (role-aware tabs; provider listings / earnings; buyer profile / invoices).
+    mobileV3Enabled: isOnFor('mobile', userId),
     // S2.4 — the caller's own listing facts (Munshi's weekly growth nudge reads them under the provider's token)
     providerProfileGaps: provider ? providerProfileGaps(provider as Parameters<typeof providerProfileGaps>[0]) : null,
     providerState: provider ? ((provider as { state?: string | null }).state ?? null) : null,

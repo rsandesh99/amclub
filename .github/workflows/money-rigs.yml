@@ -64,6 +64,7 @@ jobs:
       EXP_V3_PARTNER: "on"
       EXP_V3_COMPARE: "on"
       EXP_V3_ORDERS: "on"
+      EXP_V3_MOBILE: "on"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

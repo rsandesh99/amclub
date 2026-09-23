@@ -69,7 +69,12 @@
     "label": "తెలుగు"
   },
   "tabs": {
-    "mart": "మార్ట్"
+    "mart": "మార్ట్",
+    "today": "ఈరోజు",
+    "rfqs": "RFQలు",
+    "listings": "లిస్టింగ్‌లు",
+    "earnings": "ఆదాయం",
+    "requirements": "అవసరాలు"
   },
   "mart": {
     "title": "AMC మార్ట్",
@@ -282,5 +287,59 @@
     "action_review_delivery": "డెలివరీని సమీక్షించండి",
     "action_leave_review": "సమీక్ష రాయండి",
     "action_dispute_statement": "వివాదంలో మీ వైపు జోడించండి"
+  },
+  "earnings_v3": {
+    "hold_reason_approval_gate": "Our team checks each completed order before releasing the payout.",
+    "hold_reason_dispute_open": "A dispute is open on this order. The payout is held until it is resolved.",
+    "hold_reason_provider_suspended": "Your account is suspended, so payouts are paused. Contact support to resolve this.",
+    "hold_reason_bank_unverified": "Your bank account is not verified yet. The payout is released once it is.",
+    "hold_reason_missing_work_complete_photo": "Add the work-complete photo on the order to release this payout.",
+    "hold_reason_awaiting_buyer_confirmation": "Waiting for the buyer to confirm the work is complete.",
+    "hold_reason_no_delivery_photo": "Upload the delivery photo on the order to release this payout.",
+    "hold_reason_awaiting_receipt": "Waiting for the buyer to confirm they received the goods.",
+    "hold_reason_return_window_open": "The buyer’s return window is still open.",
+    "hold_reason_return_open": "A return is open on this order.",
+    "hold_reason_unknown": "On hold. Our team will contact you if anything is needed.",
+    "title": "ఆదాయం",
+    "empty": "ఇంకా చెల్లింపులు లేవు. కొనుగోలుదారు మీ పనిని అంగీకరించాక ఇక్కడ కనిపిస్తాయి.",
+    "group_scheduled": "షెడ్యూల్ అయింది",
+    "group_held": "నిలిపివేయబడింది",
+    "group_paid": "చెల్లించారు",
+    "scheduled_for": "{date}న షెడ్యూల్",
+    "scheduled": "షెడ్యూల్ అయింది",
+    "processing": "మీ బ్యాంకుకు వస్తోంది",
+    "paid_on": "{date}న చెల్లించారు",
+    "paid": "చెల్లించారు",
+    "on_hold": "నిలిపివేయబడింది",
+    "failed": "ఆలస్యం — మళ్లీ ప్రయత్నిస్తున్నాం"
+  },
+  "listings_v3": {
+    "title": "మీ లిస్టింగ్‌లు",
+    "empty": "ఇంకా లిస్టింగ్‌లు లేవు. మొదటిది వెబ్‌లో సృష్టించండి.",
+    "create_on_web": "వెబ్‌లో సృష్టించండి",
+    "edit_on_web": "వెబ్‌లో మార్చండి",
+    "pause": "నిలిపివేయండి",
+    "resume": "మళ్లీ ప్రారంభించండి",
+    "discount": "{pct}% తగ్గింపు",
+    "status_active": "ప్రత్యక్షం",
+    "status_paused": "నిలిపివేయబడింది",
+    "status_draft": "డ్రాఫ్ట్"
+  },
+  "profile_v3": {
+    "open": "మీ ప్రొఫైల్ తెరవండి",
+    "title": "ప్రొఫైల్",
+    "switch_label": "AMClubని ఇలా ఉపయోగించండి",
+    "role_buyer": "కొనుగోలుదారు",
+    "role_provider": "ప్రొవైడర్",
+    "invoices": "ఇన్‌వాయిస్‌లు",
+    "notifications": "నోటిఫికేషన్‌లు",
+    "help": "సహాయం",
+    "language": "భాష"
+  },
+  "invoices_v3": {
+    "title": "ఇన్‌వాయిస్‌లు",
+    "empty": "ఇంకా ఇన్‌వాయిస్‌లు లేవు. చెల్లించిన ప్రతి ఆర్డర్‌కు GST ఇన్‌వాయిస్ ఇక్కడ వస్తుంది.",
+    "download": "PDF",
+    "pending": "సిద్ధమవుతోంది…"
   }
 }

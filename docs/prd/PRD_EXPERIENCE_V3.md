@@ -2181,6 +2181,15 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.5 · I 1 · C 0.8 · E 4 → **0.10**.
 
+**As built (E13a: tab bars, provider listings / earnings, buyer profile / invoices).**
+- **Flag.** `EXP_V3_MOBILE`, delivered as `/profile/me.mobileV3Enabled`; off = the v2 tab bar exactly as before.
+- **FR-13.1.** Shared `mobile-v3.ts`: `mobileTabsFor` (buyer Home · Search · Requirements · Orders · Saved (+ Mart when live); provider Today · RFQs · Orders · Listings · Earnings; no Partner tab), `mobileRolesOf` / `initialMobileRole` (the device remembers the side; an account loses a side it no longer has). The layout orders the tabs by role; the profile (avatar) sheet switches sides. The Orders tab lists the provider's orders on the provider side.
+- **FR-13.2 (part).** Listings: every listing with status, stored price and discount, pause / resume through the web's status route (now Bearer-aware; the provider's own RLS still decides), "Edit on web" for everything else. Earnings: the payout ledger grouped scheduled (incl. on its way / delayed) · on hold (existing hold reasons) · paid (shared `groupPayoutsForEarnings`).
+- **FR-13.3.** Profile sheet (name, the side switch, invoices, notifications, help, language, sign out) and Invoices (the web rows; 15-minute signed PDF links fetched on each visit).
+- **API.** Thin GETs over the web's own loaders, 404 while the flag is off: `/api/v1/partner/packages`, `/api/v1/partner/payouts`, `/api/v1/me/invoices`.
+- **Tests.** The screens' logic is shared and unit-tested; `verify-experience` e13 drives the routes with Bearer tokens as the app does. RN component tests need a mobile test runner (E13b).
+- **E13b.** Provider reviews, profile + availability (N11), read-only insights, deliver-with-upload, native onboarding (D-PRD3), native feel (haptics, sheets) and deep links.
+
 ---
 
 ### E14: Language

@@ -1413,6 +1413,59 @@ async function e8() {
   }
 }
 
+async function e13() {
+  console.log('\nE13a — mobile parity: role-aware tabs, provider listings / earnings, buyer invoices (Bearer, as the app calls them)')
+  const buyer = await mkUser('e13buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E13 Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  const mkP = async (label: string) => {
+    const u = await mkUser(label, ['provider'])
+    const { data: pp } = await admin.from('provider_profiles').insert({ user_id: u.uid, legal_name: label, display_name: label, slug: `${tag.replace(/_/g, '-')}-${label}`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+    created.providerIds.push(pp!.id)
+    return { ...u, providerId: pp!.id as string }
+  }
+  const prov = await mkP('e13prov')
+  const other = await mkP('e13other')
+  const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const mkPkg = async (providerId: string, slug: string, status: string) => {
+    const { data } = await admin.from('packages').insert({ provider_id: providerId, category_id: cat!.id, slug: `${tag.replace(/_/g, '-')}-${slug}`, title_i18n: { en: `E13 ${slug}` }, price_paise: 250_000, discount_bps: 1000, delivery_days: 4, revision_count: 1, status, scope_included: ['x'], scope_excluded: [], deliverables: ['y'] }).select('id').single()
+    created.packageIds.push(data!.id)
+    return data!.id as string
+  }
+  const mine = await mkPkg(prov.providerId, 'mine', 'active')
+  const theirs = await mkPkg(other.providerId, 'theirs', 'active')
+  const { data: o } = await admin.from('orders').insert({ msme_id: msme!.id, provider_id: prov.providerId, source: 'package', title: 'E13 order', scope_snapshot: {}, price_paise: 250_000, gst_paise: 45_000, total_paise: 295_000, commission_bps: 1000, commission_paise: 25_000, provider_earning_paise: 225_000, delivery_days: 4, status: 'completed' }).select('id').single()
+  created.orderIds.push(o!.id)
+  const { data: po } = await admin.from('payouts').insert({ provider_id: prov.providerId, order_id: o!.id, amount_paise: 225_000, status: 'held' }).select('id').single()
+  await admin.from('order_events').insert({ order_id: o!.id, event: 'payout_held', payload: { reasons: ['bank_unverified'] } })
+  const get = async (token: string, path: string) => { const r = await api(token, path, undefined, 'GET'); return { status: r.status, body: (await r.json().catch(() => ({}))) as Record<string, unknown> } }
+  try {
+    const me = await get(prov.token, '/api/v1/profile/me')
+    check('FR-13.1: /profile/me tells the app the mobile experience is on', me.body['mobileV3Enabled'] === true)
+    const ls = await get(prov.token, '/api/v1/partner/packages?locale=en')
+    const ids = ((ls.body['listings'] as { id: string }[] | undefined) ?? []).map((x) => x.id)
+    check('FR-13.2 listings: the provider sees their own listings only (Bearer)', ls.status === 200 && ids.includes(mine) && !ids.includes(theirs), JSON.stringify(ids))
+    check('FR-13.2 listings: a buyer has no listings (403)', (await get(buyer.token, '/api/v1/partner/packages')).status === 403)
+    const pause = await api(prov.token, `/api/v1/partner/packages/${mine}`, { status: 'paused' })
+    const { data: afterPause } = await admin.from('packages').select('status').eq('id', mine).single()
+    const resume = await api(prov.token, `/api/v1/partner/packages/${mine}`, { status: 'active' })
+    const { data: afterResume } = await admin.from('packages').select('status').eq('id', mine).single()
+    check('FR-13.2 listings: pause / resume from the phone (Bearer) through the web status route', pause.ok && afterPause?.status === 'paused' && resume.ok && afterResume?.status === 'active', `${pause.status}/${afterPause?.status} ${resume.status}/${afterResume?.status}`)
+    const steal = await api(other.token, `/api/v1/partner/packages/${mine}`, { status: 'paused' })
+    const { data: afterSteal } = await admin.from('packages').select('status').eq('id', mine).single()
+    check('FR-13.2 listings: another provider cannot pause it (404, unchanged)', steal.status === 404 && afterSteal?.status === 'active', String(steal.status))
+    const pay = await get(prov.token, '/api/v1/partner/payouts')
+    const rows = (pay.body['payouts'] as { id: string; status: string; holdReasons: string[] }[] | undefined) ?? []
+    check('FR-13.2 earnings: own payouts with the hold reasons (the web ledger)', pay.status === 200 && rows.length === 1 && rows[0]!.status === 'held' && rows[0]!.holdReasons.includes('bank_unverified'))
+    check('FR-13.2 earnings: another provider sees none of them', ((await get(other.token, '/api/v1/partner/payouts')).body['payouts'] as unknown[] | undefined)?.length === 0)
+    const inv = await get(buyer.token, '/api/v1/me/invoices')
+    check('FR-13.3 invoices: the buyer list answers (the web rows, signed links)', inv.status === 200 && Array.isArray(inv.body['invoices']))
+    check('every new route is private (no session → 401)', (await fetch(`${BASE}/api/v1/partner/payouts`)).status === 401 && (await fetch(`${BASE}/api/v1/me/invoices`)).status === 401)
+  } finally {
+    if (po) await admin.from('payouts').delete().eq('id', po.id)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1432,6 +1485,7 @@ async function main() {
     await e11c()
     await e7()
     await e8()
+    await e13()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

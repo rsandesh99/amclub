@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
 import { fetchUnreadCount, fetchMe } from '@/lib/api'
+import { AvatarButton } from '@/components/AvatarButton'
 import { LocaleToggle } from '@/components/LocaleToggle'
 import { HeroBanner } from '@/components/HeroBanner'
 import { HomeV3Block } from '@/components/HomeV3Block'
@@ -19,6 +20,8 @@ export default function HomeScreen() {
   const [supportEnabled, setSupportEnabled] = useState(false)
   const [assistantEnabled, setAssistantEnabled] = useState(false)
   const [homeV3, setHomeV3] = useState(false)
+  // E13 — the avatar opens the profile sheet (role switch, invoices, sign out) while `mobile` is on.
+  const [mobileV3, setMobileV3] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -29,6 +32,7 @@ export default function HomeScreen() {
       setAssistantEnabled(me?.procurementEnabled === true)
       // Experience v3 E9 — the server decides (flag `home`).
       setHomeV3(me?.homeV3Enabled === true)
+      setMobileV3(me?.mobileV3Enabled === true)
     })()
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserName((user?.user_metadata?.['full_name'] as string | undefined) ?? '')
@@ -70,12 +74,16 @@ export default function HomeScreen() {
                 </View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={async () => { await supabase.auth.signOut(); router.replace('/(auth)/login') }}
-              className="rounded-lg border border-gray-200 px-3 py-2"
-            >
-              <Text className="text-xs text-foreground-secondary">{t('common.sign_out')}</Text>
-            </TouchableOpacity>
+            {mobileV3 ? (
+              <AvatarButton name={userName} />
+            ) : (
+              <TouchableOpacity
+                onPress={async () => { await supabase.auth.signOut(); router.replace('/(auth)/login') }}
+                className="rounded-lg border border-gray-200 px-3 py-2"
+              >
+                <Text className="text-xs text-foreground-secondary">{t('common.sign_out')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 

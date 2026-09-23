@@ -55,6 +55,7 @@ export * from './insights-v3'
 export * from './quote-loss'
 export * from './order-workspace-v3'
 export * from './order-messages'
+export * from './mobile-v3'
 
 // N9 — public measured stats (gated; never the composite score)
 export * from './public-stats'

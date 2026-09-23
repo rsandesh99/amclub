@@ -125,7 +125,12 @@
     "saved": "सहेजे",
     "orders": "ऑर्डर",
     "partner": "पार्टनर",
-    "mart": "मार्ट"
+    "mart": "मार्ट",
+    "today": "आज",
+    "rfqs": "RFQ",
+    "listings": "लिस्टिंग",
+    "earnings": "कमाई",
+    "requirements": "आवश्यकताएँ"
   },
   "rfq": {
     "new_title": "आवश्यकता पोस्ट करें",
@@ -859,5 +864,59 @@
     "action_review_delivery": "डिलीवरी देखें",
     "action_leave_review": "समीक्षा लिखें",
     "action_dispute_statement": "विवाद में अपना पक्ष जोड़ें"
+  },
+  "earnings_v3": {
+    "hold_reason_approval_gate": "भुगतान जारी करने से पहले हमारी टीम हर पूरे हुए ऑर्डर की जाँच करती है।",
+    "hold_reason_dispute_open": "इस ऑर्डर पर विवाद खुला है। उसके निपटने तक भुगतान रुका रहेगा।",
+    "hold_reason_provider_suspended": "आपका खाता निलंबित है, इसलिए भुगतान रुके हुए हैं। इसे सुलझाने के लिए सपोर्ट से संपर्क करें।",
+    "hold_reason_bank_unverified": "आपका बैंक खाता अभी सत्यापित नहीं है। सत्यापन होते ही भुगतान जारी होगा।",
+    "hold_reason_missing_work_complete_photo": "यह भुगतान जारी करवाने के लिए ऑर्डर पर काम-पूरा होने की फ़ोटो जोड़ें।",
+    "hold_reason_awaiting_buyer_confirmation": "खरीदार के काम पूरा होने की पुष्टि का इंतज़ार है।",
+    "hold_reason_no_delivery_photo": "यह भुगतान जारी करवाने के लिए ऑर्डर पर डिलीवरी फ़ोटो अपलोड करें।",
+    "hold_reason_awaiting_receipt": "खरीदार के सामान मिलने की पुष्टि का इंतज़ार है।",
+    "hold_reason_return_window_open": "खरीदार की वापसी अवधि अभी खुली है।",
+    "hold_reason_return_open": "इस ऑर्डर पर वापसी का अनुरोध खुला है।",
+    "hold_reason_unknown": "रोका गया है। कुछ ज़रूरत होने पर हमारी टीम आपसे संपर्क करेगी।",
+    "title": "कमाई",
+    "empty": "अभी कोई भुगतान नहीं। खरीदार के काम स्वीकारने पर यहाँ दिखेंगे।",
+    "group_scheduled": "तय",
+    "group_held": "रुका हुआ",
+    "group_paid": "भुगतान हुआ",
+    "scheduled_for": "{date} को तय",
+    "scheduled": "तय",
+    "processing": "आपके बैंक की ओर भेजा जा रहा है",
+    "paid_on": "{date} को भुगतान हुआ",
+    "paid": "भुगतान हुआ",
+    "on_hold": "रुका हुआ",
+    "failed": "देरी — हम फिर कोशिश कर रहे हैं"
+  },
+  "listings_v3": {
+    "title": "आपकी लिस्टिंग",
+    "empty": "अभी कोई लिस्टिंग नहीं। पहली लिस्टिंग वेब पर बनाएँ।",
+    "create_on_web": "वेब पर बनाएँ",
+    "edit_on_web": "वेब पर बदलें",
+    "pause": "रोकें",
+    "resume": "फिर शुरू करें",
+    "discount": "{pct}% छूट",
+    "status_active": "चालू",
+    "status_paused": "रुकी हुई",
+    "status_draft": "ड्राफ़्ट"
+  },
+  "profile_v3": {
+    "open": "अपनी प्रोफ़ाइल खोलें",
+    "title": "प्रोफ़ाइल",
+    "switch_label": "AMClub का उपयोग इस रूप में",
+    "role_buyer": "खरीदार",
+    "role_provider": "प्रदाता",
+    "invoices": "चालान",
+    "notifications": "सूचनाएँ",
+    "help": "सहायता",
+    "language": "भाषा"
+  },
+  "invoices_v3": {
+    "title": "चालान",
+    "empty": "अभी कोई चालान नहीं। हर भुगतान वाले ऑर्डर का GST चालान यहाँ मिलेगा।",
+    "download": "PDF",
+    "pending": "तैयार हो रहा है…"
   }
 }

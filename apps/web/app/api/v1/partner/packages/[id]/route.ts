@@ -7,6 +7,7 @@ import { packageSchema, isSpecializationOf } from '@amclub/shared'
 import { toPackageRow } from '@/lib/partner/packageRow'
 import { revalidateCatalog } from '@/lib/catalog/revalidate'
 import { serverError } from '@/lib/api/errors'
+import { getAuthedSupabase } from '@/lib/auth/request'
 
 // Edit accepts the full package shape; status may also be 'paused'.
 const editSchema = packageSchema.extend({
@@ -94,21 +95,24 @@ export async function PATCH(
 
 const statusPatchSchema = z.object({ status: z.enum(['active', 'paused', 'draft']) })
 
-/** Lightweight status toggle (pause/activate) without a full edit payload. */
+/**
+ * Lightweight status toggle (pause/activate) without a full edit payload.
+ * Web (cookie) and mobile (Bearer, E13 Listings) — the session client either
+ * way, so the provider crud-own RLS policy still decides.
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getSessionUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { supabase, userId } = await getAuthedSupabase()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
 
   const json = await request.json().catch(() => null)
   const parsed = statusPatchSchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: 'Invalid status' }, { status: 422 })
 
-  const supabase = await createClient()
-  const own = await ownPackage(supabase, user.id, id)
+  const own = await ownPackage(supabase, userId, id)
   if (!own.ok) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }

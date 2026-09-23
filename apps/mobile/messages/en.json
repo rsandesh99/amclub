@@ -125,7 +125,12 @@
     "saved": "Saved",
     "orders": "Orders",
     "partner": "Partner",
-    "mart": "Mart"
+    "mart": "Mart",
+    "today": "Today",
+    "rfqs": "RFQs",
+    "listings": "Listings",
+    "earnings": "Earnings",
+    "requirements": "Requirements"
   },
   "rfq": {
     "new_title": "Post a requirement",
@@ -859,5 +864,59 @@
     "action_review_delivery": "Review the delivery",
     "action_leave_review": "Leave a review",
     "action_dispute_statement": "Add your side of the dispute"
+  },
+  "earnings_v3": {
+    "hold_reason_approval_gate": "Our team checks each completed order before releasing the payout.",
+    "hold_reason_dispute_open": "A dispute is open on this order. The payout is held until it is resolved.",
+    "hold_reason_provider_suspended": "Your account is suspended, so payouts are paused. Contact support to resolve this.",
+    "hold_reason_bank_unverified": "Your bank account is not verified yet. The payout is released once it is.",
+    "hold_reason_missing_work_complete_photo": "Add the work-complete photo on the order to release this payout.",
+    "hold_reason_awaiting_buyer_confirmation": "Waiting for the buyer to confirm the work is complete.",
+    "hold_reason_no_delivery_photo": "Upload the delivery photo on the order to release this payout.",
+    "hold_reason_awaiting_receipt": "Waiting for the buyer to confirm they received the goods.",
+    "hold_reason_return_window_open": "The buyer’s return window is still open.",
+    "hold_reason_return_open": "A return is open on this order.",
+    "hold_reason_unknown": "On hold. Our team will contact you if anything is needed.",
+    "title": "Earnings",
+    "empty": "No payouts yet. They appear here once a buyer accepts your work.",
+    "group_scheduled": "Scheduled",
+    "group_held": "On hold",
+    "group_paid": "Paid",
+    "scheduled_for": "Scheduled for {date}",
+    "scheduled": "Scheduled",
+    "processing": "On its way to your bank",
+    "paid_on": "Paid on {date}",
+    "paid": "Paid",
+    "on_hold": "On hold",
+    "failed": "Delayed — we’re retrying"
+  },
+  "listings_v3": {
+    "title": "Your listings",
+    "empty": "No listings yet. Create your first one on the web.",
+    "create_on_web": "Create on web",
+    "edit_on_web": "Edit on web",
+    "pause": "Pause",
+    "resume": "Resume",
+    "discount": "{pct}% off",
+    "status_active": "Live",
+    "status_paused": "Paused",
+    "status_draft": "Draft"
+  },
+  "profile_v3": {
+    "open": "Open your profile",
+    "title": "Profile",
+    "switch_label": "Use AMClub as",
+    "role_buyer": "Buyer",
+    "role_provider": "Provider",
+    "invoices": "Invoices",
+    "notifications": "Notifications",
+    "help": "Help",
+    "language": "Language"
+  },
+  "invoices_v3": {
+    "title": "Invoices",
+    "empty": "No invoices yet. Each paid order gets a GST invoice here.",
+    "download": "PDF",
+    "pending": "Preparing…"
   }
 }

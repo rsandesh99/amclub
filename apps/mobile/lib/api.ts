@@ -933,3 +933,86 @@ export async function sendProcurementDecision(runId: string, action: 'ok' | 'edi
   const res = await fetch(`${API_URL}/api/v1/agent/procurement/decision`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: JSON.stringify({ run_id: runId, action }) })
   return { ok: res.ok, status: res.status }
 }
+
+// ── Experience v3 E13 — mobile parity (flag `mobile`; every route 404s while it is off) ─────────────
+
+export interface MyListing {
+  id: string
+  slug: string
+  providerSlug: string | null
+  title: string
+  status: string
+  /** The stored list price and discount (server paise) — shown as stored, never recomputed. */
+  pricePaise: number
+  discountBps: number
+  deliveryDays: number | null
+  categorySlug: string | null
+  categoryName: string | null
+}
+
+export async function fetchMyListings(locale: string): Promise<{ ok: boolean; listings: MyListing[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/packages?locale=${encodeURIComponent(locale)}`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, listings: [] }
+    const d = (await res.json().catch(() => ({}))) as { listings?: MyListing[] }
+    return { ok: true, listings: d.listings ?? [] }
+  } catch {
+    return { ok: false, listings: [] }
+  }
+}
+
+/** Pause / resume a listing (the web's status toggle; the provider's own RLS decides). */
+export async function setListingStatus(id: string, status: 'active' | 'paused'): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/packages/${id}`, { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export interface MyPayout {
+  id: string
+  orderId: string
+  orderNumber: string | null
+  orderTitle: string | null
+  amountPaise: number
+  status: string
+  scheduledFor: string | null
+  paidAt: string | null
+  holdReasons: string[]
+}
+
+export async function fetchMyPayouts(): Promise<{ ok: boolean; payouts: MyPayout[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/payouts`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, payouts: [] }
+    const d = (await res.json().catch(() => ({}))) as { payouts?: MyPayout[] }
+    return { ok: true, payouts: d.payouts ?? [] }
+  } catch {
+    return { ok: false, payouts: [] }
+  }
+}
+
+export interface MyInvoice {
+  id: string
+  number: string
+  orderId: string
+  orderNumber: string | null
+  orderTitle: string | null
+  totalPaise: number
+  createdAt: string
+  /** A 15-minute signed PDF link, or null while the PDF is being generated. */
+  downloadUrl: string | null
+}
+
+export async function fetchMyInvoices(): Promise<{ ok: boolean; invoices: MyInvoice[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/me/invoices`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, invoices: [] }
+    const d = (await res.json().catch(() => ({}))) as { invoices?: MyInvoice[] }
+    return { ok: true, invoices: d.invoices ?? [] }
+  } catch {
+    return { ok: false, invoices: [] }
+  }
+}

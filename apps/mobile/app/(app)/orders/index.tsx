@@ -7,20 +7,24 @@ import { useI18n } from '@/lib/i18n'
 import { fetchMyOrders, type OrderListItem } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 import { ErrorState } from '@/components/ErrorState'
+import { useMobileRole } from '@/lib/role'
 
 export default function OrdersScreen() {
   const { t } = useI18n()
   const [orders, setOrders] = useState<OrderListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
+  // E13 — the provider side lists the orders it works on (null = v3 off → the buyer list, as before).
+  const role = useMobileRole()
+  const asProvider = role === 'provider'
 
   const load = useCallback(async () => {
     setLoading(true)
-    const r = await fetchMyOrders('msme')
+    const r = await fetchMyOrders(asProvider ? 'provider' : 'msme')
     setFailed(!r.ok)
     setOrders(r.orders)
     setLoading(false)
-  }, [])
+  }, [asProvider])
 
   useFocusEffect(
     useCallback(() => {

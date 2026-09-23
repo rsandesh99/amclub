@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
 import { formatINR } from '@/lib/format'
 import type { ProfileMeResponse } from '@amclub/shared'
+import { AvatarButton } from '@/components/AvatarButton'
 
 interface ProviderStatus {
   status: 'under_review' | 'active' | 'rejected' | 'suspended' | null
@@ -17,6 +18,9 @@ export default function PartnerScreen() {
   // 'ready' | 'missing_route' | 'bank_unverified' | 'not_ready' | 'no_bank' | null (from /profile/me)
   const [payoutReadiness, setPayoutReadiness] = useState<string | null>(null)
   const [munshiEnabled, setMunshiEnabled] = useState(false)
+  // E13 — Today in the provider tab bar: the avatar opens the profile sheet while `mobile` is on.
+  const [mobileV3, setMobileV3] = useState(false)
+  const [fullName, setFullName] = useState<string | null>(null)
   const [supportEnabled, setSupportEnabled] = useState(false)
   // S2.4 — the provider's OWN AMC Score (the route 404s unless score_card_enabled → no card)
   const [scoreCard, setScoreCard] = useState<ScoreCardView | null>(null)
@@ -37,6 +41,8 @@ export default function PartnerScreen() {
         const data = (await res.json()) as Partial<ProfileMeResponse>
         setProviderStatus((data.providerStatus ?? null) as ProviderStatus['status'])
         setMunshiEnabled(data.munshiEnabled === true)
+        setMobileV3(data.mobileV3Enabled === true)
+        setFullName(data.fullName ?? null)
         setSupportEnabled(data.supportEnabled === true)
         setPayoutReadiness(data.payoutReadiness ?? null)
         if (data.providerStatus === 'active') {
@@ -71,13 +77,17 @@ export default function PartnerScreen() {
       <ScrollView contentContainerClassName="px-6 py-8 gap-6">
         {/* Header */}
         <View className="flex-row items-center justify-between">
-          <Text className="text-2xl font-bold text-foreground">{t('partner_home.title')}</Text>
-          <TouchableOpacity
-            onPress={signOut}
-            className="rounded-lg border border-gray-200 px-3 py-2"
-          >
-            <Text className="text-sm text-foreground-secondary">{t('common.sign_out')}</Text>
-          </TouchableOpacity>
+          <Text className="text-2xl font-bold text-foreground">{mobileV3 ? t('tabs.today') : t('partner_home.title')}</Text>
+          {mobileV3 ? (
+            <AvatarButton name={fullName} />
+          ) : (
+            <TouchableOpacity
+              onPress={signOut}
+              className="rounded-lg border border-gray-200 px-3 py-2"
+            >
+              <Text className="text-sm text-foreground-secondary">{t('common.sign_out')}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Status banner */}
