@@ -29,6 +29,7 @@ Per-agent runbooks land with their stages and live here:
 | `MUNSHI.md` | S2.2 | drafts, price book, voice approval |
 | `SUPPORT.md` | S2.3 | intents, escalation, self-serve rate |
 | `PROCUREMENT.md` | S3.1 | The Buyer Procurement Agent (A2, built dark): what it does and never does (never pays, never accepts, never negotiates price), the session machine, tools + confirm rules, the dispatcher order, surfaces, settings, the V1.5→V2 enablement gate and the §8.1 mini-PRD it needs, rollback, metrics |
+| `BENCHMARKS.md` | S3.2 | Fair price ranges (dark): what counts as a closed (paid) job, the four privacy gates + the share cap and why each exists, the rounding rule, the scope fallback, what is never shown, the optional policed sentence, compute → review → display enablement, rollback |
 | `SCORE.md` | S2.4 | AMC Score v1: components, curves, weights, gates, the version rule, exposure matrix, reliability ordering, the coaching note, the growth nudge, appeal, enablement order, rollback (ADR-010) |
 | `PROCUREMENT.md` | S3.1 | buyer agent flow |
 | `BENCHMARKS.md` | S3.2 | density gate, fair-price ranges |

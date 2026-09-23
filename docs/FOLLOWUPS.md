@@ -819,6 +819,44 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
+## Agent S3.2 — fair price ranges (logged 2026-09-23)
+
+**Shipped (dark):** shared `benchmarks.ts` (the v1 formula: four gates + the share cap, nearest-rank p25 / p50 / p75,
+the rounding rule, the key grouping, the strict `benchmarkViewSchema` with no id, `benchmarkLine` in en / hi / te /
+ta, the note policy); six settings; migration **0046** (`price_benchmarks` with no id column,
+`benchmark_inputs()`, `replace_price_benchmarks()`); `cron/benchmark-compute`; the buyer / provider RFQ pages, the
+API field and both mobile screens; `benchmark_explain@v1` (golden 17, a red-team target with no untrusted surface);
+the agents-console tile. Runbook `docs/agents/BENCHMARKS.md`.
+
+**Prompt vs tree:**
+- **The gate settings can only TIGHTEN** (floor 30 / 8 / 8, share ≤ 25 %; the brief left the ranges open). The
+  "How is this calculated?" copy states the floor as fixed text, so a looser setting would make that copy false; the
+  table CHECK `price_benchmarks_gate_floor_check` restates the floor.
+- **No surrogate key.** The brief lists no id column and the rig asserts "no id column at all", so `price_benchmarks`
+  has none; its identity is the unique expression index. The nightly write is a SQL function (supabase-js has no
+  transactions; a function call is atomic), with an optional category scope so the verify rig can never delete a real
+  row.
+- **`benchmark_inputs` returns a `seq` column** (row_number over the orders) — PostgREST pages at 1 000 rows and the
+  reader needs a stable key that exposes no order id. The brief's six columns are otherwise exact.
+- **"Paid jobs", not "completed jobs", in the line.** The brief's example sentence said "completed jobs", but the
+  source rows are paid orders (some not yet completed); the disclosure says paid, so the line does too.
+- **Refund-resolved orders are excluded** (`resolved_refund`, `resolved_partial`): the price both sides kept is not
+  the price quoted. `disputed` orders count while open (the price was paid); a refund removes them the next night.
+- **The delivery clause has its own gate:** the delivered subset must pass the same four gates alone, or the "typically
+  in … days" clause is left out.
+- **The note is per viewer, the line is not:** the optional sentence needs the viewer in the cohort; the numbers and
+  the line are identical for both sides regardless.
+- **Admin review** is an agents-console tile (the S2.4 precedent), so it needs `AGENT_ENABLED` on the server to be
+  seen; the table is also readable by SQL.
+
+**Follow-ups:**
+- **Specialization key** once RFQs carry a specialization (the key column exists, always null in v1).
+- **Goods benchmarks** after the Mart Launch Gate (per unit, by HSN / grade — its own design).
+- **Munshi using the band as a second check** on its own drafts (never to raise a price; its own decision).
+- **A per-quote "within typical range" chip** is judgement, not information — it needs its own founder decision (S1.2's
+  pointers already forbid ranking language).
+- **WhatsApp:** the S3.1 three-line summary does not carry the band in v1.
+
 ## Agent S3.1 — Buyer Procurement Agent (logged 2026-09-23)
 
 **Shipped (dark; A2 — enablement at the V1.5→V2 gate + its own §8.1 mini-PRD):** the shared contract

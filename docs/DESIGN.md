@@ -846,6 +846,8 @@ work. Both hit §1.9 directly (RFQ→quote response ≥70% in 48h; search→chec
 *Status (2026-09-23): **A2 built dark (S3.1)** — the Buyer Procurement Agent (`docs/agents/PROCUREMENT.md`): drafts the request through the S1.8 pipeline and creates it only after the buyer's Yes, relays provider questions (answering only from the buyer's own words), summarises quotes by code, and on "go with B" sends the buyer a decision-bound link to the ORDINARY pay page — it never pays, never accepts, never negotiates price (§8.3), and money-adjacent steps confirm by button only. **Enablement stays at the V1.5→V2 gate**: switching it on for any cohort needs its own §8.1 mini-PRD + founder sign-off (the runbook lists what it must contain).*
 | A3+ | Live multimodal tier, telephony, business twin, provider work-drafting, negotiation protocol | per roadmap | Each its own §8.1 entry + ADR; negotiation touches the §8.3 "bidding" exclusion and needs an explicit amendment. |
 
+*Status (2026-09-23): **Fair price ranges built dark (S3.2)** (`docs/agents/BENCHMARKS.md`): both sides of a services request see the same line — "Similar jobs in <state> closed at ₹X–₹Y, typically in N–M days (based on n paid jobs from p providers)" — computed nightly by CODE from PAID orders only (never quotes), shown only past four privacy gates (≥ 30 jobs, ≥ 8 providers, ≥ 8 buyers, no provider > 25 %; settings can only tighten them) and rounded; the table has no id column. Not advice: fixed copy, no per-quote judgement; the optional explanatory sentence (`benchmark_explain@v1`) is policed for advice words and any number not in the row. Compute and display are separate switches (both OFF): compute on → review two weeks → display on.*
+
 **RICE (A1 only, Impact measured against §1.9).** Reach 0.8 (every buyer
 creating an RFQ; every provider quoting) · Impact 2 (high: RFQ→quote response
 rate and search→checkout conversion) · Confidence 0.6 (voice RFQ already
@@ -905,6 +907,8 @@ Voice RFQ v2 (S1.8): `voice_rfq_clarify_shown { gap, tts, locale } · voice_rfq_
 
 Voice RFQ funnel (Phase 8b): `voice_rfq_started · voice_rfq_transcribed · voice_rfq_parsed · voice_rfq_edited · voice_rfq_submitted · voice_rfq_failed` (props: `surface ('rfq_form'|'gateway'), original_language, uncertain, duration_ms, field` — `voice_rfq_edited` fires once per corrected field; `voice_rfq_submitted` marks an RFQ created with voice_meta attached).
 Buyer Procurement Agent (S3.1, dark): `procurement_enabled { whatsapp_widened }` · `procurement_disabled` · `procurement_message { surface, kind, enqueued }` (server) · `procurement_turn { surface, outcome, tool, reply_keys }` · `procurement_proposed { tool, surface }` · `procurement_step_decided { tool, outcome, via|status, surface }` · `procurement_yes_needs_button { tool }` · `procurement_quotes_summarised { rfq_id }` · `procurement_checkout_link_sent { rfq_id }` · `procurement_session_closed { state, reason }` (runtime) · `procurement_checkout_opened { rfq_id, device }` · `procurement_card_tapped { action, device }` (client).
+
+Fair price ranges (S3.2): `benchmark_shown { role: buyer|provider, scope: state|national, category }` (client, web + mobile; fires once per render of the line).
 
 AMC Score (S2.4): `score_card_viewed { computed, gated, has_note }` (server) · `compare_ordering { rfq_id, mode: price|reliability, quote_count, reordered }` (server) · `compare_sort_changed { from, to }` (client) · `munshi_growth_sent { kind: profile_field|category_demand|score_tip|score_rise, whatsapp, in_app }` (runtime).
 
