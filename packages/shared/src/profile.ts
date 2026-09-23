@@ -14,6 +14,8 @@ export interface ProfileMeResponse {
   roles: string[]
   hasMsmeProfile: boolean
   hasProviderProfile: boolean
+  /** P0-8 — the buyer profile exists but ops suspended it (hasMsmeProfile is then false). Optional for older servers. */
+  msmeSuspended?: boolean
   /** provider_profiles.status, or null when no provider profile exists. */
   providerStatus: string | null
   /**

@@ -1,33 +1,55 @@
 import 'server-only'
 import { AGENT_ENABLED } from '@/lib/flags'
-import { canTransitionQuote } from '@amclub/shared'
+import { canTransitionQuote, QUOTE_STATUS } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
+import { addEvent } from '@/lib/orders/transitions'
+import { writeAudit } from '@/lib/audit/log'
 import { addQuoteEvent, addQuoteEvents } from './events'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
+
+/**
+ * What finalize did with the order:
+ * - `finalized` — this order won the RFQ (quote accepted, siblings declined).
+ * - `noop` — not a quote order, or a replay of the winner.
+ * - `duplicate_flagged` — a second paid order on an already-accepted RFQ;
+ *   recorded for ops, who refund it (see handleDuplicateRfqOrder).
+ */
+export type FinalizeResult = 'finalized' | 'noop' | 'duplicate_flagged'
 
 /**
  * Runs when a QUOTE-sourced order materialises (called from the payment
  * materialize path, so it covers both the webhook and the reconciliation cron).
  * Idempotent: marks the accepted quote `accepted`, auto-declines the other
  * submitted quotes politely, moves the RFQ → `accepted`, and notifies everyone.
- * No-op for package orders or if the RFQ is already accepted.
+ * No-op for package orders or a replay of the winning order. A SECOND paid
+ * order on an already-accepted RFQ (P0-5 race) is never left silently: it is
+ * recorded for an ops refund (see handleDuplicateRfqOrder).
  */
-export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Promise<void> {
+export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Promise<FinalizeResult> {
   const { data: order } = await admin
     .from('orders')
     .select('id, source, quote_id')
     .eq('id', orderId)
     .maybeSingle()
-  if (!order || order.source !== 'quote' || !order.quote_id) return
+  if (!order || order.source !== 'quote' || !order.quote_id) return 'noop'
 
   const { data: quote } = await admin
     .from('quotes')
-    .select('id, rfq_id, provider_id')
+    .select('id, rfq_id, provider_id, status')
     .eq('id', order.quote_id)
     .maybeSingle()
-  if (!quote) return
+  if (!quote) return 'noop'
+  // The buyer paid for a quote that is no longer live (e.g. withdrawn or expired
+  // while a checkout session was open). The payment stands — never drop a paid
+  // order — but ops must see it.
+  if (quote.status !== QUOTE_STATUS.submitted && quote.status !== QUOTE_STATUS.accepted) {
+    const detail = { quote_id: quote.id, quote_status: quote.status, rfq_id: quote.rfq_id }
+    await addEvent(admin, orderId, 'quote_not_live_at_payment', null, detail)
+    await writeAudit(admin, null, { actorId: null, action: 'quote_not_live_at_payment', entity: 'orders', entityId: orderId, after: detail })
+    console.error('[finalize] paid order on a quote that is no longer live', orderId, detail)
+  }
 
   // Claim the RFQ atomically — only the first finalize proceeds (idempotent).
   const { data: claimed } = await admin
@@ -37,7 +59,18 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     .neq('status', 'accepted')
     .select('id, msme_id, title')
     .maybeSingle()
-  if (!claimed) return // someone else already finalised
+  if (!claimed) return handleDuplicateRfqOrder(admin, orderId, quote.rfq_id as string)
+
+  // The acceptance is the buyer's paid checkout, recorded via the payment path
+  // (no interactive actor here) — attribute to system with the order as proof.
+  // Written FIRST after the claim: its payload.order_id is how a racing second
+  // order learns which order won (handleDuplicateRfqOrder).
+  await addQuoteEvent(admin, {
+    quoteId: quote.id,
+    eventType: 'accepted',
+    reason: 'order_paid',
+    payload: { order_id: orderId, rfq_id: quote.rfq_id },
+  })
 
   // Accept the winning quote.
   await admin.from('quotes').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', quote.id)
@@ -47,14 +80,6 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     const { error: pbErr } = await admin.from('provider_price_book').update({ accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('source_quote_id', quote.id).is('accepted_at', null)
     if (pbErr) console.warn('[finalize] price-book accepted_at', pbErr.message)
   }
-  // The acceptance is the buyer's paid checkout, recorded via the payment path
-  // (no interactive actor here) — attribute to system with the order as proof.
-  await addQuoteEvent(admin, {
-    quoteId: quote.id,
-    eventType: 'accepted',
-    reason: 'order_paid',
-    payload: { order_id: orderId, rfq_id: quote.rfq_id },
-  })
 
   // Politely decline the rest (still 'submitted'). S1.2: the .eq('status',
   // 'submitted') guard IS the QUOTE_TRANSITIONS rule (submitted → declined);
@@ -112,4 +137,93 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
       link: '/partner/rfqs',
     })
   }
+  return 'finalized'
+}
+
+/**
+ * The order that won the RFQ: the winner's quote_events.accepted row carries
+ * it. RFQs accepted before that event existed fall back to the earliest order
+ * on the RFQ's accepted quote. Null while neither is visible yet (a racing
+ * loser can look a moment before the winner writes) — re-read briefly.
+ */
+async function winningOrderId(admin: Admin, rfqId: string): Promise<string | null> {
+  const { data: quotes } = await admin.from('quotes').select('id, status').eq('rfq_id', rfqId)
+  const rows = (quotes ?? []) as { id: string; status: string }[]
+  const ids = rows.map((q) => q.id)
+  if (ids.length === 0) return null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: ev } = await admin
+      .from('quote_events')
+      .select('payload, created_at')
+      .in('quote_id', ids)
+      .eq('event_type', 'accepted')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const id = (ev?.payload as { order_id?: string } | null)?.order_id
+    if (id) return id
+    const { data: acc } = await admin.from('quotes').select('id').eq('rfq_id', rfqId).eq('status', 'accepted').limit(1).maybeSingle()
+    if (acc?.id) {
+      const { data: first } = await admin.from('orders').select('id').eq('quote_id', acc.id).order('created_at', { ascending: true }).limit(1).maybeSingle()
+      if (first?.id) return first.id as string
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 750))
+  }
+  return null
+}
+
+/**
+ * P0-5 — the RFQ was already claimed when this order finalised. Either this is
+ * a replay of the winning order (no-op), or a SECOND paid order materialised on
+ * the same RFQ (two checkouts raced past the checkout-route guard). A duplicate
+ * is recorded ONCE (order_event `duplicate_rfq_order` + audit row) and the buyer
+ * is told a refund is on its way; ops refunds it through the existing admin
+ * refund path.
+ *
+ * Deliberately NOT automatic: the §3.7 machine has no transition that means
+ * "cancelled as a duplicate" (auto_cancelled is the 24 h no-accept path and
+ * cancelled_by_buyer is the buyer's choice), and CLAUDE.md §8.4 forbids
+ * repurposing a transition — payout and refund policy read them. An automatic
+ * duplicate refund needs a new state + ADR first.
+ */
+async function handleDuplicateRfqOrder(admin: Admin, orderId: string, rfqId: string): Promise<FinalizeResult> {
+  const winnerId = await winningOrderId(admin, rfqId)
+  if (winnerId === orderId) return 'noop' // replay of the winner
+
+  const { data: order } = await admin
+    .from('orders')
+    .select('id, msme_id, quote_id, status, total_paise, order_number')
+    .eq('id', orderId)
+    .maybeSingle()
+  if (!order) return 'noop'
+
+  const { data: marked } = await admin
+    .from('order_events')
+    .select('id')
+    .eq('order_id', orderId)
+    .eq('event', 'duplicate_rfq_order')
+    .limit(1)
+    .maybeSingle()
+  if (marked) return 'duplicate_flagged' // already recorded and announced — replay
+
+  const detail = { rfq_id: rfqId, quote_id: order.quote_id, winning_order_id: winnerId, status_at_detection: order.status, total_paise: order.total_paise }
+  await addEvent(admin, orderId, 'duplicate_rfq_order', null, detail)
+  await writeAudit(admin, null, { actorId: null, action: 'duplicate_rfq_order_detected', entity: 'orders', entityId: orderId, after: detail })
+  console.error('[finalize] DUPLICATE paid order on an accepted RFQ — ops must refund', orderId, detail)
+
+  const { data: msme } = await admin.from('msme_profiles').select('user_id').eq('id', order.msme_id).maybeSingle()
+  if (msme?.user_id) {
+    await createNotification(admin, {
+      userId: msme.user_id as string,
+      kind: 'order_duplicate_payment',
+      titleI18n: { en: 'We noticed a duplicate payment', hi: 'हमें एक दोहरा भुगतान दिखा' },
+      bodyI18n: {
+        en: `You paid twice for the same request. Our team will refund order ${order.order_number} in full; your other order stands.`,
+        hi: `आपने एक ही अनुरोध के लिए दो बार भुगतान किया। हमारी टीम ऑर्डर ${order.order_number} की पूरी राशि वापस करेगी; आपका दूसरा ऑर्डर जारी है।`,
+      },
+      link: `/app/orders/${orderId}`,
+      channels: ['email', 'sms'],
+    })
+  }
+  return 'duplicate_flagged'
 }

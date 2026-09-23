@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AgentTaskClass } from '@amclub/shared'
+import { residencyFor, tierFor, type AgentTaskClass, type AgentTier } from '@amclub/shared'
 import { resolveModel, resolveEmbeddingModel } from './router'
 import {
   assertEnvelope,
@@ -15,7 +15,76 @@ import type { PromptRef } from '../prompts/registry'
  * built from TRUSTED parts + untrusted Envelopes kept separate, retries with
  * jitter, a hard timeout, and stub mode so CI (and any keyless env) never bills.
  * Model ids come only from the router; a prompt never names one.
+ *
+ * Track F hardening:
+ *  - every chat call sends `max_tokens` (call → prompt front-matter → tier default)
+ *    so one runaway response cannot blow through the budget caps, which are only
+ *    checked BEFORE a call;
+ *  - a billed response that fails JSON / Zod validation throws a
+ *    GatewayValidationError that CARRIES the usage, so the runner / bounded
+ *    helper log the paid call and add its cost before rethrowing;
+ *  - per-tier base URLs (AGENT_LLM_BASE_URL_<TIER>) and an OPT-IN data-residency
+ *    guard (AGENT_RESIDENCY_ENFORCE=true + AGENT_IN_RESIDENCY_HOSTS): an 'in'
+ *    task class is refused before any byte leaves for a host off the allow-list.
  */
+
+/** Conservative per-tier output caps (tokens). Env override AGENT_MAX_TOKENS_<TIER>. */
+export const DEFAULT_MAX_TOKENS_BY_TIER: Record<Exclude<AgentTier, 'device'>, number> = {
+  live: 800,
+  routine: 1200,
+  // reasoning models spend part of max_tokens on hidden reasoning; a lower cap truncates the JSON.
+  reasoning: 4000,
+  frontier: 2500,
+}
+
+export function defaultMaxTokens(tier: AgentTier): number {
+  const t = tier === 'device' ? 'live' : tier
+  const env = Number(process.env[`AGENT_MAX_TOKENS_${t.toUpperCase()}`] ?? '')
+  return Number.isInteger(env) && env > 0 ? env : DEFAULT_MAX_TOKENS_BY_TIER[t]
+}
+
+/** A gateway failure with a stable machine code (the runner reports it as the run error). */
+export class GatewayError extends Error {
+  constructor(public code: string, message: string) {
+    super(message)
+    this.name = 'GatewayError'
+  }
+}
+
+export type GatewayValidationReason = 'no_content' | 'non_json' | 'schema' | 'truncated'
+
+/**
+ * The vendor answered (and billed) but the output is unusable. Carries usage /
+ * model / latency so the caller logs the paid call and charges the budget.
+ */
+export class GatewayValidationError extends GatewayError {
+  constructor(
+    public reason: GatewayValidationReason,
+    public usage: ChatUsage,
+    public model: string,
+    public latencyMs: number,
+    detail?: string,
+  ) {
+    super('model_output_invalid', `gateway: model output invalid (${reason})${detail ? `: ${detail}` : ''}`)
+    this.name = 'GatewayValidationError'
+  }
+}
+
+/** An 'in'-residency task class would have been sent to a host outside AGENT_IN_RESIDENCY_HOSTS. */
+export class ResidencyViolationError extends GatewayError {
+  constructor(public taskClass: AgentTaskClass, public host: string) {
+    super('residency_violation', `gateway: task class '${taskClass}' is in-India residency; host '${host}' is not on AGENT_IN_RESIDENCY_HOSTS`)
+    this.name = 'ResidencyViolationError'
+  }
+}
+
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
 
 export interface ChatUsage {
   inputTokens: number | null
@@ -69,6 +138,8 @@ export interface ChatJsonParams<T> {
   signal?: AbortSignal
   /** S1.8 — explicit model id for this call (an env override such as VOICE_PARSE_MODEL); default = the task class's tier model. */
   model?: string
+  /** Output cap for this call. Default: prompt.maxTokens, else the tier default. Always sent as max_tokens. */
+  maxTokens?: number
 }
 
 export interface EmbedResult {
@@ -85,7 +156,14 @@ export interface Gateway {
 }
 
 export interface GatewayConfig {
+  /** Default chat base URL (AGENT_LLM_BASE_URL). */
   baseUrl: string
+  /** Per-tier overrides (AGENT_LLM_BASE_URL_<TIER>); a missing tier falls back to baseUrl. */
+  baseUrlByTier?: Partial<Record<AgentTier, string>>
+  /** AGENT_RESIDENCY_ENFORCE=true — refuse an 'in' class to a host off the allow-list. Default off. */
+  residencyEnforce?: boolean
+  /** AGENT_IN_RESIDENCY_HOSTS — hostnames that keep data in India (lower-case). */
+  inResidencyHosts?: readonly string[]
   apiKey: string | null
   embedBaseUrl: string
   timeoutMs: number
@@ -98,11 +176,30 @@ export interface GatewayConfig {
   fetchImpl?: typeof fetch
 }
 
+export const TIER_BASE_URL_ENV_KEY: Record<Exclude<AgentTier, 'device'>, string> = {
+  live: 'AGENT_LLM_BASE_URL_LIVE',
+  routine: 'AGENT_LLM_BASE_URL_ROUTINE',
+  reasoning: 'AGENT_LLM_BASE_URL_REASONING',
+  frontier: 'AGENT_LLM_BASE_URL_FRONTIER',
+}
+
 export function gatewayConfigFromEnv(): GatewayConfig {
   const baseUrl = process.env['AGENT_LLM_BASE_URL'] || 'https://openrouter.ai/api/v1'
   const apiKey = process.env['AGENT_LLM_API_KEY'] || process.env['OPENROUTER_API_KEY'] || null
+  const baseUrlByTier: Partial<Record<AgentTier, string>> = {}
+  for (const [tier, key] of Object.entries(TIER_BASE_URL_ENV_KEY) as Array<[AgentTier, string]>) {
+    const v = process.env[key]
+    if (v) baseUrlByTier[tier] = v
+  }
+  const hosts = (process.env['AGENT_IN_RESIDENCY_HOSTS'] ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean)
   return {
     baseUrl,
+    baseUrlByTier,
+    residencyEnforce: process.env['AGENT_RESIDENCY_ENFORCE'] === 'true',
+    inResidencyHosts: hosts,
     apiKey,
     embedBaseUrl: process.env['AGENT_EMBED_BASE_URL'] || baseUrl,
     timeoutMs: Number(process.env['AGENT_LLM_TIMEOUT_MS'] ?? '30000'),
@@ -155,6 +252,31 @@ export function buildMessages(prompt: PromptRef, parts: ChatParts | undefined, u
     { role: 'system', content: system },
     { role: 'user', content },
   ]
+}
+
+/** Chat base URL for a tier: AGENT_LLM_BASE_URL_<TIER>, else AGENT_LLM_BASE_URL. */
+export function baseUrlForTier(config: GatewayConfig, tier: AgentTier): string {
+  return config.baseUrlByTier?.[tier] || config.baseUrl
+}
+
+/**
+ * The residency guard (opt-in). Throws ResidencyViolationError when enforcement
+ * is on, the class is 'in', and the host is not on the allow-list. Logged.
+ */
+export function assertResidency(config: GatewayConfig, taskClass: AgentTaskClass, url: string): void {
+  if (!config.residencyEnforce) return
+  if (residencyFor(taskClass) !== 'in') return
+  const host = hostOf(url)
+  const allowed = (config.inResidencyHosts ?? []).map((h) => h.toLowerCase())
+  if (host && allowed.includes(host)) return
+  const err = new ResidencyViolationError(taskClass, host || url)
+  console.error('[agent-core gateway] residency refused', { taskClass, host: host || null })
+  throw err
+}
+
+/** Strip a ```json … ``` fence some vendors wrap JSON-mode output in. */
+function unfence(text: string): string {
+  return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
 }
 
 export function createGateway(config: GatewayConfig = gatewayConfigFromEnv()): Gateway {
@@ -210,6 +332,10 @@ export function createGateway(config: GatewayConfig = gatewayConfigFromEnv()): G
       return { data, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, raw: null }, model: 'stub', latencyMs: Date.now() - started, stub: true }
     }
 
+    const tier = tierFor(params.taskClass)
+    const url = `${baseUrlForTier(config, tier)}/chat/completions`
+    assertResidency(config, params.taskClass, url)
+    const maxTokens = params.maxTokens ?? params.prompt.maxTokens ?? defaultMaxTokens(tier)
     const messages = buildMessages(params.prompt, params.parts, 'Return ONLY a JSON object that matches the required schema.')
     const responseFormat = params.jsonSchema
       ? { type: 'json_schema', json_schema: { name: `${params.prompt.id}_${params.prompt.version}`, schema: params.jsonSchema, strict: true } }
@@ -219,20 +345,27 @@ export function createGateway(config: GatewayConfig = gatewayConfigFromEnv()): G
       messages,
       temperature: params.temperature ?? 0,
       response_format: responseFormat,
+      max_tokens: maxTokens,
       usage: { include: true },
     }
-    const json = await postJson(`${config.baseUrl}/chat/completions`, body, params.signal)
-    const choices = json['choices'] as Array<{ message?: { content?: string } }> | undefined
+    const json = await postJson(url, body, params.signal)
+    // From here on the call is billed: every failure carries the usage.
+    const usage = usageFrom(json['usage'])
+    const invalid = (reason: GatewayValidationReason, detail?: string) =>
+      new GatewayValidationError(reason, usage, model, Date.now() - started, detail)
+    const choices = json['choices'] as Array<{ message?: { content?: string }; finish_reason?: string }> | undefined
+    const truncated = choices?.[0]?.finish_reason === 'length'
     const content = choices?.[0]?.message?.content
-    if (typeof content !== 'string') throw new Error('gateway returned no message content')
+    if (typeof content !== 'string') throw invalid(truncated ? 'truncated' : 'no_content')
     let parsed: unknown
     try {
-      parsed = JSON.parse(content)
+      parsed = JSON.parse(unfence(content))
     } catch {
-      throw new Error('gateway returned non-JSON content in JSON mode')
+      throw invalid(truncated ? 'truncated' : 'non_json')
     }
-    const data = params.schema.parse(parsed)
-    return { data, usage: usageFrom(json['usage']), model, latencyMs: Date.now() - started, stub: false }
+    const result = params.schema.safeParse(parsed)
+    if (!result.success) throw invalid('schema', result.error.issues.slice(0, 3).map((i) => `${i.path.join('.')}: ${i.message}`).join('; '))
+    return { data: result.data, usage, model, latencyMs: Date.now() - started, stub: false }
   }
 
   async function embed(texts: string[], opts?: { stub?: () => number[][] }): Promise<EmbedResult> {
@@ -242,7 +375,9 @@ export function createGateway(config: GatewayConfig = gatewayConfigFromEnv()): G
       const vectors = opts?.stub ? opts.stub() : texts.map(() => [])
       return { vectors, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, raw: null }, model: 'stub', latencyMs: Date.now() - started, stub: true }
     }
-    const json = await postJson(`${config.embedBaseUrl}/embeddings`, { model, input: texts })
+    const url = `${config.embedBaseUrl}/embeddings`
+    assertResidency(config, 'embedding', url)
+    const json = await postJson(url, { model, input: texts })
     const rows = json['data'] as Array<{ embedding?: number[] }> | undefined
     const vectors = (rows ?? []).map((r) => r.embedding ?? [])
     return { vectors, usage: usageFrom(json['usage']), model, latencyMs: Date.now() - started, stub: false }

@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import type { PaymentGateway, GatewayPayment } from './types'
-import { finalizeQuoteAcceptance } from '@/lib/rfq/finalize'
+import { finalizeQuoteAcceptance, type FinalizeResult } from '@/lib/rfq/finalize'
 import { notifyOrderPlaced } from '@/lib/notifications/events'
 import { recordCouponRedemption } from '@/lib/coupons/redeem'
 
@@ -60,13 +60,17 @@ export async function materializeFromCapture(
   if (orderId) {
     // Quote-sourced orders: accept the quote, auto-decline siblings, close the
     // RFQ. Idempotent + best-effort — must never fail order creation.
+    let finalized: FinalizeResult = 'noop'
     try {
-      await finalizeQuoteAcceptance(admin, orderId)
+      finalized = await finalizeQuoteAcceptance(admin, orderId)
     } catch (e) {
       console.error('[finalizeQuoteAcceptance]', e)
     }
     // One-time placed side effects (coupon redemption + notifications). The
     // webhook can replay, so gate on an order_events marker — these run once.
+    // A duplicate RFQ order finalize flagged for an ops refund (P0-5) gets the
+    // marker but no "new order" notice / coupon redemption — the provider must
+    // never be told to start work on it.
     const { data: already } = await admin
       .from('order_events')
       .select('id')
@@ -75,15 +79,17 @@ export async function materializeFromCapture(
       .maybeSingle()
     if (!already) {
       await admin.from('order_events').insert({ order_id: orderId, event: 'placed_side_effects' })
-      try {
-        await recordCouponRedemption(admin, orderId)
-      } catch (e) {
-        console.error('[recordCouponRedemption]', e)
-      }
-      try {
-        await notifyOrderPlaced(admin, orderId)
-      } catch (e) {
-        console.error('[notifyOrderPlaced]', e)
+      if (finalized !== 'duplicate_flagged') {
+        try {
+          await recordCouponRedemption(admin, orderId)
+        } catch (e) {
+          console.error('[recordCouponRedemption]', e)
+        }
+        try {
+          await notifyOrderPlaced(admin, orderId)
+        } catch (e) {
+          console.error('[notifyOrderPlaced]', e)
+        }
       }
     }
   }

@@ -449,11 +449,18 @@ export async function fetchOrder(orderId: string) {
   return res.json()
 }
 
-export async function transitionOrder(orderId: string, action: string) {
+/** Optional fields the transition route accepts alongside the action. */
+export interface OrderTransitionExtra {
+  revisionNote?: string
+  disputeReason?: string
+  requirementsData?: Record<string, string>
+}
+
+export async function transitionOrder(orderId: string, action: string, extra?: OrderTransitionExtra) {
   const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/transition`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, ...(extra ?? {}) }),
   })
   return { ok: res.ok, data: await res.json().catch(() => ({})) }
 }

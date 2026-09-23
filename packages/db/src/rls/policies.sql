@@ -77,9 +77,14 @@ ALTER TABLE IF EXISTS product_events   ENABLE ROW LEVEL SECURITY;
 
 -- ─── users ────────────────────────────────────────────────────────────────────
 
+-- 0042: owner is read-only. Every write goes through the service role; client
+-- roles hold no INSERT/UPDATE/DELETE, and users_roles_guard refuses a roles
+-- change by any client role (the "owner all" policy let a user self-promote).
 DROP POLICY IF EXISTS "users: owner all" ON users;
-CREATE POLICY "users: owner all" ON users
-  FOR ALL USING (id = auth_user_id()) WITH CHECK (id = auth_user_id());
+DROP POLICY IF EXISTS "users: owner read" ON users;
+CREATE POLICY "users: owner read" ON users
+  FOR SELECT USING (id = auth_user_id());
+REVOKE INSERT, UPDATE, DELETE ON users FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "users: admin read" ON users;
 CREATE POLICY "users: admin read" ON users
@@ -87,9 +92,14 @@ CREATE POLICY "users: admin read" ON users
 
 -- ─── msme_profiles ────────────────────────────────────────────────────────────
 
+-- 0043: owner is read-only. Every write is the service role (profile/msme
+-- upsert, admin suspend/reactivate, kyc/verify-udyam); a client role could
+-- otherwise clear its own suspension (deleted_at) or self-set *_verified.
 DROP POLICY IF EXISTS "msme_profiles: owner all" ON msme_profiles;
-CREATE POLICY "msme_profiles: owner all" ON msme_profiles
-  FOR ALL USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
+DROP POLICY IF EXISTS "msme_profiles: owner read" ON msme_profiles;
+CREATE POLICY "msme_profiles: owner read" ON msme_profiles
+  FOR SELECT USING (user_id = auth_user_id());
+REVOKE INSERT, UPDATE, DELETE ON msme_profiles FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "msme_profiles: admin read" ON msme_profiles;
 CREATE POLICY "msme_profiles: admin read" ON msme_profiles
@@ -744,15 +754,11 @@ CREATE POLICY "order_events: parties read" ON order_events
     )
   );
 
+-- 0043: no client inserts. Every event is written by the service role (the
+-- transition/milestone/document/payout/dispute paths + materialize_order), so a
+-- party can no longer forge an event or actor_id in their own timeline.
 DROP POLICY IF EXISTS "order_events: parties insert" ON order_events;
-CREATE POLICY "order_events: parties insert" ON order_events
-  FOR INSERT WITH CHECK (
-    order_id IN (
-      SELECT id FROM orders
-      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
-         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
-    )
-  );
+REVOKE INSERT, UPDATE, DELETE ON order_events FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "order_events: admin all" ON order_events;
 CREATE POLICY "order_events: admin all" ON order_events
@@ -881,15 +887,20 @@ CREATE POLICY "conversations: parties all" ON conversations
     OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
   );
 
+-- 0043: parties are read-only. The one writer (api/v1/quotes/[quoteId]/messages
+-- POST) masks contact info and inserts with the service role; client roles
+-- hold no INSERT/UPDATE/DELETE, so a party cannot edit/un-redact/delete.
 DROP POLICY IF EXISTS "messages: parties all" ON messages;
-CREATE POLICY "messages: parties all" ON messages
-  FOR ALL USING (
+DROP POLICY IF EXISTS "messages: parties read" ON messages;
+CREATE POLICY "messages: parties read" ON messages
+  FOR SELECT USING (
     conversation_id IN (
       SELECT id FROM conversations
       WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
          OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
     )
   );
+REVOKE INSERT, UPDATE, DELETE ON messages FROM anon, authenticated;
 
 -- ─── saved_providers ──────────────────────────────────────────────────────────
 
@@ -950,6 +961,13 @@ CREATE POLICY "invoices: admin all" ON invoices
 DROP POLICY IF EXISTS "audit_logs: admin read" ON audit_logs;
 CREATE POLICY "audit_logs: admin read" ON audit_logs
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
+-- 0043: append-only; writes are service-role only (lib/audit/log.ts et al.).
+-- raise_append_only() is created in 0017 (bootstrap runs migrations first).
+DROP TRIGGER IF EXISTS audit_logs_no_update ON audit_logs;
+CREATE TRIGGER audit_logs_no_update
+  BEFORE UPDATE ON audit_logs
+  FOR EACH ROW EXECUTE FUNCTION raise_append_only();
+REVOKE INSERT, UPDATE, DELETE ON audit_logs FROM anon, authenticated;
 
 -- ─── cms_banners ──────────────────────────────────────────────────────────────
 

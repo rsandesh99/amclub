@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { createGateway } from '../llm/gateway'
+import { createGateway, GatewayValidationError } from '../llm/gateway'
 import { createSupabaseLedger } from '../ledger/supabase'
 import type { Budget } from '../budget'
 import type { PromptRef } from '../prompts/registry'
@@ -84,6 +84,37 @@ describe('runBoundedChatJson', () => {
     expect(inserts).toHaveLength(1)
     expect(inserts[0]!['status']).toBe('error')
     expect((inserts[0]!['meta'] as Record<string, unknown>)['error']).toBe('gateway 502')
+  })
+
+  it('Track F — billed but invalid output: one error row WITH the cost + tokens, budget charged, then rethrows', async () => {
+    const { admin, inserts } = fakeAdmin()
+    const gateway = {
+      ...stubGateway(),
+      chatJson: async () => {
+        throw new GatewayValidationError('schema', { inputTokens: 200, outputTokens: 80, costUsd: 0.005, raw: { cost: 0.005 } }, 'vendor/m', 7)
+      },
+    } as unknown as ReturnType<typeof createGateway>
+    const budget = budgetOf(true)
+    await expect(runBoundedChatJson({ gateway, ledger: createSupabaseLedger(admin), budget }, { userId: 'u1', feature: 'f', taskClass: 'quote_extract', prompt, schema })).rejects.toBeInstanceOf(GatewayValidationError)
+    expect(inserts).toHaveLength(1)
+    expect(inserts[0]!['status']).toBe('error')
+    expect(inserts[0]!['cost_est_paise']).toBe(44)
+    expect(inserts[0]!['input_tokens']).toBe(200)
+    expect((inserts[0]!['meta'] as Record<string, unknown>)['error_code']).toBe('model_output_invalid')
+    expect(budget.added).toEqual([44])
+  })
+
+  it('Track F — a live result with no vendor cost is estimated (never null / ₹0)', async () => {
+    const { admin, inserts } = fakeAdmin()
+    const gateway = {
+      ...stubGateway(),
+      chatJson: async () => ({ data: { ok: true }, usage: { inputTokens: 100, outputTokens: 50, costUsd: null, raw: null }, model: 'unpriced/m', latencyMs: 1, stub: false }),
+    } as unknown as ReturnType<typeof createGateway>
+    const budget = budgetOf(true)
+    const r = await runBoundedChatJson({ gateway, ledger: createSupabaseLedger(admin), budget }, { userId: 'u1', feature: 'f', taskClass: 'quote_extract', prompt, schema })
+    expect(r.costPaise).toBeGreaterThan(0)
+    expect(inserts[0]!['cost_est_paise']).toBe(r.costPaise)
+    expect(budget.added).toEqual([r.costPaise])
   })
 
   it('a priced live-shaped result adds to the budget', async () => {

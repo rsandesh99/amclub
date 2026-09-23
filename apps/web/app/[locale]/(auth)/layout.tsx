@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSessionUser, getMsmeProfile, getProviderProfile } from '@/lib/auth/session'
+import { createAdminClient } from '@/lib/supabase/server'
+import { getMsmeSuspension } from '@/lib/auth/suspension'
 
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
@@ -23,6 +25,8 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
       redirect(provider.status === 'active' ? '/partner' : '/app')
     }
     if (msme) redirect('/app')
+    // A suspended buyer has no ACTIVE profile but must not reach the wizard.
+    if (await getMsmeSuspension(await createAdminClient(), user.id)) redirect('/account-suspended')
     // else: authenticated but profile-less (or provider-only) → fall through
     // to the wizard so the missing profile can be completed.
   }

@@ -11,6 +11,7 @@ import {
 } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSessionUser, upsertUserRow } from '@/lib/auth/session'
+import { credentialDocumentRef } from '@/lib/auth/kyc-documents'
 import { encryptColumn, fingerprintColumn } from '@/lib/crypto'
 import { serverError } from '@/lib/api/errors'
 import { missingLegalDocs } from '@/lib/legal/acceptance'
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
   // (defense-in-depth; the wizard also gates this).
   const missingCreds = categoriesRequiringCredential(d.categorySlugs).filter((slug) => {
     const u = d.credentialUploads[slug]
-    return !u || (!u.url && !u.path) || !u.kind || !u.number
+    return !u || !credentialDocumentRef(user.id, u) || !u.kind || !u.number
   })
   if (missingCreds.length > 0) {
     return NextResponse.json(
@@ -237,7 +238,9 @@ export async function POST(request: NextRequest) {
       provider_id: providerId,
       kind: canonicalKind,
       value: upload.number?.trim() || categorySlug,
-      document_url: upload.url ?? upload.path ?? null,
+      // P0-9: the bucket PATH (never a signed URL — those expire); the admin
+      // queue signs on read. Only paths under this user's own prefix count.
+      document_url: credentialDocumentRef(user.id, upload),
       status: 'pending',
     })
   }

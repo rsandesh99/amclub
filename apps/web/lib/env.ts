@@ -47,8 +47,10 @@ const serverEnvSchema = z.object({
   KYC_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   SENTRY_AUTH_TOKEN: z.string().optional(),
-  // Upstash Redis REST — backs rate limiting. When unset, the limiter is a
-  // no-op (allow all) so local/dev keeps working without Redis.
+  // Upstash Redis REST — backs rate limiting AND the agent budget counters. When
+  // unset, the limiter is a no-op (allow all) so local/dev keeps working without
+  // Redis; agent model calls FAIL CLOSED instead when NODE_ENV/VERCEL_ENV is
+  // production and AGENT_ENABLED=true (budget breach 'store_unavailable').
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
   // Voice RFQ (Phase 8b). Both vendors stub (log "would …", no paid call)
@@ -79,6 +81,26 @@ const serverEnvSchema = z.object({
   AGENT_LLM_API_KEY: z.string().optional(),
   AGENT_EMBED_BASE_URL: z.string().url().optional(),
   AGENT_MODEL_EMBEDDING: z.string().optional(),
+  // Track F — per-tier chat base URL overrides (fallback AGENT_LLM_BASE_URL), so an
+  // in-India endpoint can serve one tier without moving the others.
+  AGENT_LLM_BASE_URL_LIVE: z.string().url().optional(),
+  AGENT_LLM_BASE_URL_ROUTINE: z.string().url().optional(),
+  AGENT_LLM_BASE_URL_REASONING: z.string().url().optional(),
+  AGENT_LLM_BASE_URL_FRONTIER: z.string().url().optional(),
+  // Data-residency guard (OPT-IN; default off = today's behaviour). When 'true' the
+  // gateway refuses an 'in' task class (TASK_CLASS_RESIDENCY) to any host not in
+  // AGENT_IN_RESIDENCY_HOSTS (comma-separated hostnames).
+  AGENT_RESIDENCY_ENFORCE: z.enum(['true', 'false']).optional(),
+  AGENT_IN_RESIDENCY_HOSTS: z.string().optional(),
+  // Cost estimation when the vendor reports no cost: JSON
+  // {"<model id>": {"inPerMTokUsd": n, "outPerMTokUsd": n}}. Missing model -> a
+  // conservative fallback rate (never ₹0 for a live call).
+  AGENT_MODEL_RATES: z.string().optional(),
+  // Output caps (max_tokens) per tier; unset -> gateway defaults (800/1200/4000/2500).
+  AGENT_MAX_TOKENS_LIVE: z.string().optional(),
+  AGENT_MAX_TOKENS_ROUTINE: z.string().optional(),
+  AGENT_MAX_TOKENS_REASONING: z.string().optional(),
+  AGENT_MAX_TOKENS_FRONTIER: z.string().optional(),
   // Budget cap overrides (else agent_settings, else registry defaults).
   AGENT_BUDGET_RUN_PAISE: z.string().optional(),
   AGENT_BUDGET_USER_DAY_PAISE: z.string().optional(),

@@ -14,9 +14,14 @@ import { INDIAN_STATES } from '@/lib/constants/india'
 import { loadBuyerDraft } from '@/components/gateway/draft'
 import { ConsentCheckbox } from '@/components/auth/ConsentCheckbox'
 import { acceptLegalDocs } from '@/lib/legal/client'
-import { BUYER_LEGAL_DOCS } from '@amclub/shared'
+import { BUYER_LEGAL_DOCS, SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
+import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 
 type Step = 'auth' | 'profile' | 'business'
+
+function toSupportedLocale(l: string): SupportedLocale {
+  return (SUPPORTED_LOCALES as readonly string[]).includes(l) ? (l as SupportedLocale) : 'en'
+}
 
 interface WizardState {
   fullName: string
@@ -51,7 +56,9 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
     city: '',
     udyamNumber: '',
     gstin: '',
-    preferredLocale: 'en',
+    // Pre-select the language the visitor is using (te included); ta is a
+    // gateway-only partial locale the profile API does not accept → en.
+    preferredLocale: toSupportedLocale(locale),
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -71,11 +78,8 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
       ...s,
       sector: s.sector || (draft.biz ?? ''),
       stateCode: s.stateCode || (draft.state ?? ''),
-      // preferred_locale is en/hi in the DB (notifications §Phase 6); te/ta
-      // gateway visitors keep the 'en' default until those channels exist.
-      preferredLocale: locale === 'hi' ? 'hi' : s.preferredLocale,
     }))
-  }, [locale])
+  }, [])
 
   const stepOrder: Step[] = skipAuth ? ['profile', 'business'] : ['auth', 'profile', 'business']
   const currentIdx = stepOrder.indexOf(step)
@@ -181,8 +185,11 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
                 value={wizardState.preferredLocale}
                 onChange={(e) => update({ preferredLocale: e.target.value })}
               >
-                <option value="en">English</option>
-                <option value="hi">हिंदी</option>
+                {SUPPORTED_LOCALES.map((l) => (
+                  <option key={l} value={l} lang={l}>
+                    {LOCALE_LABELS[l]}
+                  </option>
+                ))}
               </Select>
             </div>
             {/* Already-authenticated arrivals never saw the auth step — consent here. */}

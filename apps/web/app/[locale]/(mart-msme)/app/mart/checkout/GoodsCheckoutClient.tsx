@@ -12,12 +12,7 @@ import { Select } from '@/components/ui/select'
 import { useCart, groupBySeller } from '@/lib/mart/cart-store'
 import { SheetCard, EmeraldCard, GoldNumeral } from '@/components/mart/primitives'
 import type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void }
-  }
-}
+import { CHECKOUT_ERROR_KEYS, CheckoutError, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 
 interface Preview {
   sellerName: string
@@ -39,12 +34,25 @@ const ERR_KEYS: Record<string, string> = {
 }
 
 /**
+ * Indian mobile → the last 10 digits: strips spaces/dashes and a +91 / 91 / 0
+ * prefix (a pasted "+91 98765 43210" or "098765 43210" both become
+ * "9876543210"). Returns the digits as typed when there is no prefix to strip.
+ */
+function normalizeIndianPhone(raw: string): string {
+  let d = raw.replace(/\D/g, '')
+  if (d.length > 10 && d.startsWith('91')) d = d.slice(2)
+  if (d.length > 10 && d.startsWith('0')) d = d.replace(/^0+/, '')
+  return d.length > 10 ? d.slice(-10) : d
+}
+
+/**
  * Goods checkout — delivery form + server-computed summary + pay. Mirrors the
  * services CheckoutClient flow (simulate in test mode; the WEBHOOK creates the
  * order with real keys). No motion while money is uncertain (FRONTEND.md §3.2).
  */
 export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: string | null; states: { value: string; label: string }[]; defaults: DeliveryDefaults | null }) {
   const t = useTranslations('mart')
+  const tc = useTranslations('checkout')
   const router = useRouter()
   const lines = useCart((s) => s.lines)
   const removeMany = useCart((s) => s.remove)
@@ -56,72 +64,90 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
   const [previewErr, setPreviewErr] = useState('')
   const [form, setForm] = useState({
     contact_name: defaults?.contact_name ?? '', contact_phone: defaults?.contact_phone ?? '', address: defaults?.address ?? '',
-    city: defaults?.city ?? '', state: defaults?.state || 'AP', pincode: defaults?.pincode ?? '', pickup: defaults?.pickup ?? false,
+    // No silent default state (it drove the wrong IGST/CGST split): use the
+    // buyer's saved delivery/profile state only if it is a known code, else
+    // the buyer must choose.
+    city: defaults?.city ?? '', state: defaults?.state && states.some((s) => s.value === defaults.state) ? defaults.state : '', pincode: defaults?.pincode ?? '', pickup: defaults?.pickup ?? false,
   })
   const [gstin, setGstin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const set = (k: keyof typeof form, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }))
 
+  // Server preview — re-fetched whenever the cart OR the delivery state
+  // changes (the state decides the IGST vs CGST+SGST split), so what is shown
+  // is always the server's answer for the current inputs. A stale response
+  // from an earlier state is discarded.
   useEffect(() => {
     if (!hydrated || !group) return
+    let cancelled = false
+    setPreview(null)
+    setPreviewErr('')
     fetch('/api/v1/mart/cart/preview', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: group.lines.map((l) => ({ product_id: l.productId, qty: l.qty })) }),
+      body: JSON.stringify({ items: group.lines.map((l) => ({ product_id: l.productId, qty: l.qty })), ...(form.state ? { state: form.state } : {}) }),
     })
-      .then(async (r) => { const d = await r.json(); if (!r.ok) { setPreviewErr(ERR_KEYS[d?.error?.code] ?? 'preview_failed'); return } setPreview(d as Preview) })
-      .catch(() => setPreviewErr('preview_failed'))
+      .then(async (r) => {
+        const d = await r.json().catch(() => null)
+        if (cancelled) return
+        if (!r.ok) { setPreviewErr(ERR_KEYS[d?.error?.code] ?? 'preview_failed'); return }
+        setPreview(d as Preview)
+      })
+      .catch(() => { if (!cancelled) setPreviewErr('preview_failed') })
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, group?.sellerId, JSON.stringify(group?.lines.map((l) => [l.productId, l.qty]) ?? [])])
+  }, [hydrated, group?.sellerId, form.state, JSON.stringify(group?.lines.map((l) => [l.productId, l.qty]) ?? [])])
 
   if (!hydrated) return null
   if (!group) {
     return <p className="text-sm text-foreground-secondary">{t('cart_empty_title')}</p>
   }
 
+  const phone10 = normalizeIndianPhone(form.contact_phone)
+  const phoneValid = /^[6-9]\d{9}$/.test(phone10)
+  const gstinTyped = gstin.trim()
+  const gstinOk = gstinTyped.length === 0 || isValidGstin(gstinTyped)
+
   async function pay() {
     setLoading(true); setError('')
     try {
-      const res = await fetch('/api/v1/mart/checkout', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: group!.lines.map((l) => ({ product_id: l.productId, qty: l.qty })),
-          delivery: form,
-          idempotencyKey: crypto.randomUUID(),
-          ...(gstin.trim() ? { gstInvoice: { gstin: gstin.trim() } } : {}),
-        }),
+      // Mart checkout keeps a fresh key per tap: /api/v1/mart/checkout's resume
+      // path does not yet report simulated/paid state (follow-up), and the
+      // button is disabled while a request is in flight.
+      const data = await startCheckout('/api/v1/mart/checkout', {
+        items: group!.lines.map((l) => ({ product_id: l.productId, qty: l.qty })),
+        delivery: { ...form, contact_phone: phone10 },
+        idempotencyKey: newIdempotencyKey(),
+        ...(gstinTyped ? { gstInvoice: { gstin: gstinTyped } } : {}),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        const code = data?.error?.code as string | undefined
-        throw new Error(code && ERR_KEYS[code] ? t(ERR_KEYS[code] as 'item_unavailable') : typeof data.error === 'string' ? data.error : t('failed'))
-      }
       const clearLines = () => group!.lines.forEach((l) => removeMany(l.productId))
-      if (data.simulated) {
-        const sim = await fetch('/api/v1/checkout/simulate', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ checkoutSessionId: data.checkoutSessionId }),
-        })
-        const simData = await sim.json()
-        if (!sim.ok) throw new Error(simData.error ?? t('failed'))
-        clearLines()
-        router.push(`/app/orders/${simData.orderId}?first=1` as '/app')
-        return
-      }
-      await loadRazorpay()
-      const rzp = new window.Razorpay!({
-        key: data.keyId, order_id: data.razorpayOrderId, amount: data.amountPaise, currency: 'INR', name: 'AMClub',
-        description: preview?.sellerName ?? 'AMC Mart',
-        handler: () => { clearLines(); router.push('/app/orders?processing=1' as '/app') },
-        modal: { ondismiss: () => setError(t('payment_cancelled')) },
+      await payCheckout(data, {
+        description: preview?.sellerName ?? group!.sellerName,
+        onPaid: (o) => {
+          clearLines()
+          router.push((o.kind === 'order' ? `/app/orders/${o.orderId}?first=1` : '/app/orders?processing=1') as '/app')
+        },
+        onDismiss: () => setError(t('payment_cancelled')),
       })
-      rzp.open()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('failed'))
+      const code = e instanceof CheckoutError ? e.code : 'failed'
+      setError(ERR_KEYS[code] ? t(ERR_KEYS[code] as 'item_unavailable') : CHECKOUT_ERROR_KEYS[code] ? tc(CHECKOUT_ERROR_KEYS[code] as 'failed') : t('failed'))
     } finally { setLoading(false) }
   }
 
-  const formValid = form.contact_name.trim().length >= 2 && /^(?:\+91)?[6-9]\d{9}$/.test(form.contact_phone) && form.address.trim().length >= 5 && form.city.trim().length >= 2 && /^\d{6}$/.test(form.pincode)
+  const formValid = form.contact_name.trim().length >= 2 && phoneValid && form.address.trim().length >= 5 && form.city.trim().length >= 2 && /^\d{6}$/.test(form.pincode) && form.state !== '' && gstinOk
+  // Say WHY Pay is disabled (first unmet requirement), instead of a dead button.
+  const blockedReason: string | null = !preview
+    ? (previewErr ? null : t('pay_blocked_preview'))
+    : form.state === ''
+      ? t('pay_blocked_state')
+      : !phoneValid
+        ? t('pay_blocked_phone')
+        : !gstinOk
+          ? t('pay_blocked_gstin')
+          : !formValid
+            ? t('pay_blocked_form')
+            : null
 
   return (
     <div className="space-y-5">
@@ -146,7 +172,8 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
         <h2 className="text-meta font-semibold text-emerald-ink">{t('delivery_title')}</h2>
         {defaults && <p className="text-xs text-foreground-secondary">{t('address_prefilled')}</p>}
         <div><Label htmlFor="cn">{t('contact_name')}</Label><Input id="cn" value={form.contact_name} onChange={(e) => set('contact_name', e.target.value)} /></div>
-        <div><Label htmlFor="cp">{t('contact_phone')}</Label><Input id="cp" inputMode="tel" value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} /></div>
+        <div><Label htmlFor="cp">{t('contact_phone')}</Label><Input id="cp" type="tel" inputMode="tel" autoComplete="tel-national" maxLength={16} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} onBlur={() => { if (phoneValid) set('contact_phone', phone10) }} aria-invalid={form.contact_phone.trim() !== '' && !phoneValid} />
+          {form.contact_phone.trim() !== '' && !phoneValid && <p className="mt-1 text-xs text-warning">{t('pay_blocked_phone')}</p>}</div>
         <div><Label htmlFor="ad">{t('address')}</Label><Input id="ad" value={form.address} onChange={(e) => set('address', e.target.value)} /></div>
         <div className="grid grid-cols-2 gap-3">
           <div><Label htmlFor="ci">{t('city')}</Label><Input id="ci" value={form.city} onChange={(e) => set('city', e.target.value)} /></div>
@@ -154,7 +181,8 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
         </div>
         <div>
           <Label htmlFor="st">{t('state')}</Label>
-          <Select id="st" value={form.state} onChange={(e) => set('state', e.target.value)}>
+          <Select id="st" value={form.state} onChange={(e) => set('state', e.target.value)} required aria-invalid={form.state === ''}>
+            <option value="" disabled>{t('state_placeholder')}</option>
             {states.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </Select>
         </div>
@@ -164,8 +192,8 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
         </label>
         <div>
           <Label htmlFor="gstin">{t('gstin')} ({t('gst_invoice')})</Label>
-          <Input id="gstin" value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase())} placeholder="37AAPFU0939F1ZV" />
-          {gstin.trim().length >= 15 && !isValidGstin(gstin.trim()) && <p className="text-xs text-warning">GSTIN checksum looks wrong</p>}
+          <Input id="gstin" value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/\s/g, '').slice(0, 15))} maxLength={15} autoCapitalize="characters" autoComplete="off" spellCheck={false} placeholder="37AAPFU0939F1ZV" />
+          {gstinTyped.length >= 15 && !isValidGstin(gstinTyped) && <p className="text-xs text-warning">{t('gstin_check_hint')}</p>}
         </div>
       </SheetCard>
 
@@ -186,21 +214,11 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
       )}
 
       {error && <p className="text-sm text-stamp" role="alert">{error}</p>}
-      <Button onClick={pay} loading={loading} disabled={!preview || !formValid} className="w-full bg-gold-metal text-emerald-ink" size="lg">
+      {blockedReason && <p id="pay-blocked" className="text-center text-xs text-foreground-secondary" role="status">{blockedReason}</p>}
+      <Button onClick={pay} loading={loading} disabled={!preview || !formValid} aria-describedby={blockedReason ? 'pay-blocked' : undefined} className="w-full bg-gold-metal text-emerald-ink" size="lg">
         {t('pay', { amount: preview ? formatINR(preview.amounts.totalPaise) : '' })}
       </Button>
       <p className="text-center text-xs text-foreground-secondary">{t('secure_note')}</p>
     </div>
   )
-}
-
-function loadRazorpay(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.Razorpay) return resolve()
-    const s = document.createElement('script')
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error('Failed to load Razorpay'))
-    document.body.appendChild(s)
-  })
 }

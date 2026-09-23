@@ -17,6 +17,11 @@ export interface PromptMeta {
   taskClass: AgentTaskClass
   /** Name of the Zod schema (in this repo) the model output must satisfy. */
   schemaRef: string
+  /**
+   * Optional output cap (front-matter `maxTokens: 600`). The gateway always sends
+   * max_tokens: call override → this → the tier default (DEFAULT_MAX_TOKENS_BY_TIER).
+   */
+  maxTokens?: number
 }
 
 export interface PromptRef extends PromptMeta {
@@ -45,7 +50,13 @@ export function parsePromptFile(raw: string): PromptRef {
   const tc = agentTaskClassSchema.safeParse(taskClass)
   if (!tc.success) throw new Error(`prompt ${id}@${version}: unknown taskClass '${taskClass}'`)
   if (!body) throw new Error(`prompt ${id}@${version}: empty body`)
-  return { id, version, taskClass: tc.data, schemaRef, text: body }
+  const ref: PromptRef = { id, version, taskClass: tc.data, schemaRef, text: body }
+  if (meta['maxTokens'] !== undefined) {
+    const mt = Number(meta['maxTokens'])
+    if (!Number.isInteger(mt) || mt <= 0 || mt > 32_000) throw new Error(`prompt ${id}@${version}: maxTokens must be a positive integer ≤ 32000`)
+    ref.maxTokens = mt
+  }
+  return ref
 }
 
 const key = (id: string, version: string) => `${id}@${version}`

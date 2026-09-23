@@ -34,6 +34,9 @@ export * from './states'
 // GSTIN format + mod-36 checksum validation
 export * from './gstin'
 
+// Indian mobile number normalisation (paste-safe national form + E.164)
+export * from './phone'
+
 // /api/v1/profile/me response contract (web + mobile)
 export * from './profile'
 

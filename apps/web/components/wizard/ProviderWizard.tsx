@@ -19,7 +19,9 @@ import {
   isStatutoryCredential,
   isValidGstin,
   PROVIDER_LEGAL_DOCS,
+  PROVIDER_LANGUAGES,
 } from '@amclub/shared'
+import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 import { loadProviderDraft } from '@/components/gateway/draft'
 
 type Step = 'auth' | 'business' | 'kyc' | 'bank' | 'submit' | 'under_review'
@@ -107,7 +109,7 @@ function prefillFromWa(d: Draft, v: WaDraftProp | null | undefined): { next: Par
   if (p.state && !d.stateCode) { next.stateCode = p.state; filled.push('stateCode') }
   if (typeof v.gstin === 'string' && v.gstin && !d.gstin) { next.gstin = v.gstin; filled.push('gstin') }
   if (Array.isArray(p.languages) && p.languages.length > 0 && d.languages.length === 1 && d.languages[0] === 'en') {
-    const langs = p.languages.filter((l) => l === 'en' || l === 'hi' || l === 'te')
+    const langs = p.languages.filter((l) => (PROVIDER_LANGUAGES as readonly string[]).includes(l))
     if (langs.length > 0) { next.languages = langs; filled.push('languages') }
   }
   if (Array.isArray(p.category_slugs) && p.category_slugs.length > 0 && d.categorySlugs.length === 0) {
@@ -169,7 +171,13 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
         localStorage.removeItem(DRAFT_KEY)
         return
       }
-      setDraft((d) => ({ ...d, ...parsed, bankAccount: '' }))
+      // The account number is never persisted, so it comes back blank — a
+      // stored "verified" flag would then let the wizard submit with NO
+      // account. Verification always re-runs against the re-entered number.
+      setDraft((d) => {
+        const next = { ...d, ...parsed, bankAccount: '' }
+        return next.bankAccount ? next : { ...next, bankVerified: false, bankStub: false }
+      })
       setDraftRestored(true)
       setTimeout(() => setDraftRestored(false), 3000)
     } catch {}
@@ -354,10 +362,10 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
       if (d.verified) {
         update({ bankVerified: true, bankStub: d.stub ?? false })
       } else {
-        setError(d.error ?? 'Bank verification failed')
+        setError(t('bank_verify_failed'))
       }
     } catch {
-      setError('Bank verification failed')
+      setError(t('bank_verify_failed'))
     } finally {
       setBankLoading(false)
     }
@@ -392,6 +400,12 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
   async function submitForReview() {
     if (!addendumAccepted) {
       setError(t('addendum_required'))
+      return
+    }
+    // Never submit a "verified" bank flag without the account it verified.
+    if (!draft.bankVerified || !draft.bankAccount) {
+      setError(t('err_bank_verify_required'))
+      setStep('bank')
       return
     }
     setLoading(true)
@@ -601,13 +615,13 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
             <div className="flex gap-3">
               <div className="flex-1 flex flex-col gap-1.5">
                 <Label htmlFor="stateCode">{t('state_label')} <span className="text-danger">*</span>{waChip('stateCode')}</Label>
-                <Select id="stateCode" value={draft.stateCode} onChange={(e) => update({ stateCode: e.target.value })} placeholder="— Select state —" className={triedContinue && !draft.stateCode ? 'border-danger' : ''}>
+                <Select id="stateCode" value={draft.stateCode} onChange={(e) => update({ stateCode: e.target.value })} placeholder={t('state_placeholder')} className={triedContinue && !draft.stateCode ? 'border-danger' : ''}>
                   {INDIAN_STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </Select>
               </div>
               <div className="flex-1 flex flex-col gap-1.5">
                 <Label htmlFor="city">{t('city_label')}{waChip('city')}</Label>
-                <Input id="city" placeholder="City" value={draft.city} onChange={(e) => update({ city: e.target.value })} />
+                <Input id="city" placeholder={t('city_placeholder')} autoComplete="address-level2" value={draft.city} onChange={(e) => update({ city: e.target.value })} />
               </div>
             </div>
             <div className="flex gap-3">
@@ -642,10 +656,10 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
             <div className="flex flex-col gap-1.5">
               <Label>{t('languages_label')}{waChip('languages')}</Label>
               <div className="flex gap-2">
-                {(['en', 'hi'] as const).map((lang) => (
-                  <button key={lang} type="button" onClick={() => toggleLanguage(lang)}
-                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${draft.languages.includes(lang) ? 'border-primary bg-primary text-white' : 'border-border text-foreground hover:border-primary'}`}>
-                    {lang === 'en' ? 'English' : 'हिंदी'}
+                {PROVIDER_LANGUAGES.map((lang) => (
+                  <button key={lang} type="button" onClick={() => toggleLanguage(lang)} lang={lang} aria-pressed={draft.languages.includes(lang)}
+                    className={`min-h-[44px] rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${draft.languages.includes(lang) ? 'border-primary bg-primary text-white' : 'border-border text-foreground hover:border-primary'}`}>
+                    {LOCALE_LABELS[lang]}
                   </button>
                 ))}
               </div>
@@ -813,11 +827,11 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="bankHolder">{t('bank_holder_label')}</Label>
-              <Input id="bankHolder" placeholder="Account holder name" value={draft.bankHolder} onChange={(e) => update({ bankHolder: e.target.value, bankVerified: false })} />
+              <Input id="bankHolder" placeholder={t('bank_holder_placeholder')} autoComplete="name" value={draft.bankHolder} onChange={(e) => update({ bankHolder: e.target.value, bankVerified: false })} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="bankAccount">{t('bank_account_label')}</Label>
-              <Input id="bankAccount" type="text" inputMode="numeric" placeholder="Account number" value={draft.bankAccount} onChange={(e) => update({ bankAccount: e.target.value, bankVerified: false })} />
+              <Input id="bankAccount" type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" placeholder={t('bank_account_placeholder')} value={draft.bankAccount} onChange={(e) => update({ bankAccount: e.target.value.replace(/\D/g, '').slice(0, 18), bankVerified: false })} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="bankIfsc">{t('bank_ifsc_label')}</Label>
@@ -831,7 +845,7 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
               <Button variant="ghost" onClick={goBack} className="shrink-0">{tCommon('back')}</Button>
               <Button
                 onClick={() => {
-                  if (!draft.bankVerified) { setError(t('err_bank_verify_required')); return }
+                  if (!draft.bankVerified || !draft.bankAccount) { setError(t('err_bank_verify_required')); return }
                   setError('')
                   setStep('submit')
                 }}
@@ -860,7 +874,7 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
                 // When no selected category needs an upload, show "not required".
                 label: credsRequired ? t('submit_checklist_creds') : t('submit_checklist_creds_not_required'),
               },
-              { key: 'bank', done: draft.bankVerified, label: t('submit_checklist_bank') },
+              { key: 'bank', done: draft.bankVerified && !!draft.bankAccount, label: t('submit_checklist_bank') },
             ].map(({ key, done, label }) => (
               <div key={key} className="flex items-center gap-2 text-sm">
                 <span className={done ? 'text-success' : 'text-foreground-secondary'}>{done ? '✓' : '○'}</span>
@@ -892,7 +906,7 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
             <Button
               onClick={submitForReview}
               loading={loading}
-              disabled={!draft.gstinVerified || !credsComplete || !draft.bankVerified || !addendumAccepted}
+              disabled={!draft.gstinVerified || !credsComplete || !draft.bankVerified || !draft.bankAccount || !addendumAccepted}
               className="flex-1"
             >
               {t('submit_btn')}

@@ -34,6 +34,8 @@ async function loadThread(admin: Awaited<ReturnType<typeof createAdminClient>>, 
     rfqId: quote.rfq_id as string,
     rfqTitle: q.rfq.title as string,
     counterpartyUserId: isBuyer ? providerUserId : buyerUserId,
+    /** Who receives the notification — decides which app surface the link opens. */
+    counterpartyRole: (isBuyer ? 'provider' : 'buyer') as 'provider' | 'buyer',
   }
 }
 
@@ -113,7 +115,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     kind: 'quote_message',
     titleI18n: { en: 'New message on a quote', hi: 'कोटेशन पर नया संदेश' },
     bodyI18n: { en: thread.rfqTitle, hi: thread.rfqTitle },
-    link: `/app/rfq/${thread.rfqId}`,
+    // Role-aware deep link: the provider's RFQ page for a provider, the buyer's compare view for a buyer.
+    link: thread.counterpartyRole === 'provider' ? `/partner/rfqs/${thread.rfqId}` : `/app/rfq/${thread.rfqId}`,
   })
 
   return NextResponse.json({ id: message.id, body: text, redacted, mine: true, createdAt: message.created_at })

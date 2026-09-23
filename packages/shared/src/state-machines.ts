@@ -99,6 +99,18 @@ export const QUOTE_STATUSES = [
 export type QuoteStatus = (typeof QUOTE_STATUSES)[number]
 
 /**
+ * Named quote statuses, so a route guards on `.eq('status', QUOTE_STATUS.submitted)`
+ * instead of a bare literal (rule 8). Mirrors QUOTE_STATUSES one-to-one.
+ */
+export const QUOTE_STATUS = {
+  submitted: 'submitted',
+  withdrawn: 'withdrawn',
+  accepted: 'accepted',
+  declined: 'declined',
+  expired: 'expired',
+} as const satisfies { [K in QuoteStatus]: K }
+
+/**
  * S1.2 — the ONE quote transition map (rule 8). It codifies what the code
  * already did: a submitted quote is accepted by the paid checkout, declined by
  * the buyer (new route) or by finalizeQuoteAcceptance (system), withdrawn by

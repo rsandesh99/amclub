@@ -557,6 +557,83 @@ async function main() {
     deniedRows('buyerB direct-reads bank_account_verifications', await bClient.from('bank_account_verifications').select('id'))
     deniedRows('provA direct-reads bank_account_verifications', await asUser(provA.token).from('bank_account_verifications').select('id'))
 
+    // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
+    console.log('users privilege guard (0042, direct PostgREST):')
+    eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)
+    deniedRows('buyerB sets OWN roles to admin', await bClient.from('users').update({ roles: ['admin'] }).eq('id', buyerB.uid).select('id'))
+    deniedRows('buyerB DELETEs OWN users row', await bClient.from('users').delete().eq('id', buyerB.uid).select('id'))
+    deniedRows('buyerB INSERTs a users row', await bClient.from('users').insert({ id: crypto.randomUUID(), email: `${tag}_forged@killtest.amclub`, roles: ['admin'] }).select('id'))
+    const { data: bRow } = await admin.from('users').select('roles').eq('id', buyerB.uid).single()
+    eq('after escalation attempts: buyerB roles unchanged', JSON.stringify((bRow as { roles: string[] } | null)?.roles ?? null), JSON.stringify(['msme']))
+    denied('buyerB GET admin API after attempts', (await api(buyerB.token, '/api/v1/admin/kpi', undefined, 'GET')).status)
+
+    // ── 7c. RLS hardening (0043) — messages / order_events / audit_logs ──────
+    console.log('RLS hardening (0043, direct PostgREST):')
+    {
+      const aBuyer = asUser(buyerA.token)
+      const aProv = asUser(provA.token)
+      // messages: parties are read-only — no edit / un-redact / delete of the
+      // other side's message, and no insert that skips the masking route.
+      const { data: cv } = quoteId
+        ? await admin.from('conversations').select('id').eq('context_type', 'quote').eq('context_id', quoteId).maybeSingle()
+        : { data: null }
+      if (cv) {
+        const { data: mRows } = await admin.from('messages').select('id, body, sender_id').eq('conversation_id', cv.id).limit(1)
+        const m = mRows?.[0]
+        eq('buyerA direct-reads OWN thread messages → ≥1 row (control)', ((await aBuyer.from('messages').select('id').eq('conversation_id', cv.id)).data ?? []).length > 0, true)
+        if (m) {
+          deniedRows('provA UPDATEs buyerA’s message (un-redact)', await aProv.from('messages').update({ body: 'call me on 9876543210', redacted: false }).eq('id', m.id).select('id'))
+          deniedRows('buyerA UPDATEs OWN message', await aBuyer.from('messages').update({ body: 'edited' }).eq('id', m.id).select('id'))
+          deniedRows('provA DELETEs buyerA’s message', await aProv.from('messages').delete().eq('id', m.id).select('id'))
+          const { data: mAfter } = await admin.from('messages').select('body').eq('id', m.id).maybeSingle()
+          eq('message unchanged after tamper attempts', mAfter?.body, m.body)
+        }
+        deniedRows('provA INSERTs a message directly (skips masking)', await aProv.from('messages').insert({ conversation_id: cv.id, sender_id: provA.uid, body: 'call 9876543210', redacted: false }).select('id'))
+      } else {
+        console.log('  (skipped messages checks — no quote thread)')
+      }
+      // order_events: no client insert at all — a party cannot forge a
+      // payout/refund row or someone else's actor_id in its own timeline.
+      const evBefore = ((await admin.from('order_events').select('id').eq('order_id', orderA)).data ?? []).length
+      deniedRows('buyerA INSERTs forged payout_paid on OWN order', await aBuyer.from('order_events').insert({ order_id: orderA, actor_id: provA.uid, event: 'payout_paid', payload: { forged: true } }).select('id'))
+      deniedRows('provA INSERTs forged manual_refund on OWN order', await aProv.from('order_events').insert({ order_id: orderA, actor_id: adminUser.uid, event: 'manual_refund', payload: { forged: true } }).select('id'))
+      eq('order_events count unchanged after forgery attempts', ((await admin.from('order_events').select('id').eq('order_id', orderA)).data ?? []).length, evBefore)
+      // audit_logs: client roles cannot write; even the service role cannot UPDATE.
+      deniedRows('buyerB INSERTs an audit_logs row', await bClient.from('audit_logs').insert({ actor_id: buyerB.uid, action: 'forged', entity: 'users', entity_id: buyerB.uid }).select('id'))
+      const { data: aRows } = await admin.from('audit_logs').select('id, action').eq('actor_id', adminUser.uid).limit(1)
+      const a = aRows?.[0]
+      if (a) {
+        const asAdmin = asUser(adminUser.token)
+        deniedRows('admin (client JWT) UPDATEs an audit_logs row', await asAdmin.from('audit_logs').update({ action: 'tampered' }).eq('id', a.id).select('id'))
+        deniedRows('admin (client JWT) DELETEs an audit_logs row', await asAdmin.from('audit_logs').delete().eq('id', a.id).select('id'))
+        const svcUpd = await admin.from('audit_logs').update({ action: 'tampered' }).eq('id', a.id).select('id')
+        eq('service-role UPDATE on audit_logs raises (append-only trigger)', Boolean(svcUpd.error), true)
+        const { data: aAfter } = await admin.from('audit_logs').select('action').eq('id', a.id).maybeSingle()
+        eq('audit row unchanged after tamper attempts', aAfter?.action, a.action)
+      } else {
+        console.log('  (skipped audit_logs update checks — no admin audit row)')
+      }
+
+      // msme_profiles: owner read-only — no self-verification, no self-unsuspend.
+      eq('buyerA direct-reads OWN msme_profile → 1 row (control)', ((await aBuyer.from('msme_profiles').select('id').eq('id', msmeA!.id)).data ?? []).length, 1)
+      deniedRows('buyerA self-sets udyam_verified/gstin_verified', await aBuyer.from('msme_profiles').update({ udyam_verified: true, gstin_verified: true }).eq('id', msmeA!.id).select('id'))
+      deniedRows('buyerA DELETEs OWN msme_profile', await aBuyer.from('msme_profiles').delete().eq('id', msmeA!.id).select('id'))
+
+      // P0-8 — suspension is enforced on act paths, and cannot be self-reversed.
+      const susp = await api(adminUser.token, `/api/v1/admin/msmes/${msmeA!.id}`, { action: 'suspend', reason: 'killtest suspension' })
+      eq('admin suspends buyerA → 200', susp.status, 200)
+      if (susp.status === 200) {
+        denied('suspended buyerA creates an RFQ', (await api(buyerA.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'GST filing while suspended please', details: { work: 'gst' } })).status)
+        denied('suspended buyerA cancels OWN order', (await api(buyerA.token, `/api/v1/orders/${orderA}/transition`, { action: 'cancel' })).status)
+        deniedRows('suspended buyerA clears OWN deleted_at', await aBuyer.from('msme_profiles').update({ deleted_at: null }).eq('id', msmeA!.id).select('id'))
+        const { data: stillSusp } = await admin.from('msme_profiles').select('deleted_at').eq('id', msmeA!.id).maybeSingle()
+        eq('buyerA still suspended after self-unsuspend attempt', Boolean(stillSusp?.deleted_at), true)
+        eq('admin MSME detail still readable while suspended → 200', (await api(adminUser.token, `/api/v1/admin/msmes/${msmeA!.id}`, undefined, 'GET')).status, 200)
+        eq('admin reactivates buyerA → 200', (await api(adminUser.token, `/api/v1/admin/msmes/${msmeA!.id}`, { action: 'reactivate' })).status, 200)
+        eq('reactivated buyerA GET own order → 200 (control)', (await api(buyerA.token, `/api/v1/orders/${orderA}`, undefined, 'GET')).status, 200)
+      }
+    }
+
     // ── 8. Phase 2: terms_acceptances (append-only, self-read) + signup gate ──
     console.log('Phase 2 — terms_acceptances + signup gate:')
     const buyerC = await mkUser('buyerC', ['msme'])

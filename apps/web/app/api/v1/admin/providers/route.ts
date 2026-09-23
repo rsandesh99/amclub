@@ -38,7 +38,12 @@ export async function GET(request: NextRequest) {
     .limit(200)
   if (status) query = query.eq('status', status)
   if (state) query = query.eq('state', state)
-  if (q) query = query.or(`display_name.ilike.%${q}%,legal_name.ilike.%${q}%,slug.ilike.%${q}%`)
+  if (q) {
+    // PostgREST filter syntax: strip the characters that would let the search
+    // text add or close filter clauses (`,` `(` `)` `:` `*` `%` `\\`).
+    const safe = q.replace(/[,():*%\\]/g, ' ').trim()
+    if (safe) query = query.or(`display_name.ilike.%${safe}%,legal_name.ilike.%${safe}%,slug.ilike.%${safe}%`)
+  }
   if (minRating) query = query.gte('avg_rating', minRating)
   if (providerIdFilter) query = query.in('id', providerIdFilter)
 

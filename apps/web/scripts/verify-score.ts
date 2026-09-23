@@ -42,6 +42,7 @@ import {
 import {
   GROWTH_PROFILE_FIELDS,
   MUNSHI_SCOPES,
+  QUOTE_STATUS,
   PROVIDER_COMPONENTS,
   SCORE_TIPS,
   SCORE_TIP_LOCALES,
@@ -55,6 +56,9 @@ import {
   scoreNoteProblems,
   scoreProvider,
   stubScoreNote,
+  type OrderStatus,
+  type QuoteStatus,
+  type RfqStatus,
 } from '@amclub/shared'
 
 config({ path: path.resolve(__dirname, '../.env.local') })
@@ -202,7 +206,7 @@ async function http() {
     const T0 = Date.now() - 10 * D
     const iso = (ms: number) => new Date(ms).toISOString()
     let rfqSeq = 0
-    async function mkRfq(msmeId: string, o: { status: string; quoteCount: number; createdAt: number; category?: string; open?: boolean }) {
+    async function mkRfq(msmeId: string, o: { status: RfqStatus; quoteCount: number; createdAt: number; category?: string; open?: boolean }) {
       const { data, error } = await admin.from('rfqs').insert({ msme_id: msmeId, category_id: catId(o.category ?? 'tax-accounting'), title: `${tag} rfq ${++rfqSeq}`, details: { additional_details: 'kill-test fixture' }, status: o.status, quote_count: o.quoteCount, max_quotes: 7, created_at: iso(o.createdAt), fanout_at: iso(o.createdAt), expires_at: iso(o.open ? Date.now() + 3 * D : o.createdAt + 3 * D) }).select('id').single()
       if (error) throw new Error(`rfq: ${error.message}`)
       created.rfqIds.push(data!.id)
@@ -212,13 +216,13 @@ async function http() {
       const { error } = await admin.from('rfq_matches').insert({ rfq_id: rfqId, provider_id: providerId, notified_at: iso(notifiedAt), ...(declined ? { declined_at: iso(declined.at), decline_reason: declined.reason } : {}) })
       if (error) throw new Error(`match: ${error.message}`)
     }
-    async function mkQuote(rfqId: string, providerId: string, pricePaise: number, createdAt: number, status: string) {
+    async function mkQuote(rfqId: string, providerId: string, pricePaise: number, createdAt: number, status: QuoteStatus) {
       const { data, error } = await admin.from('quotes').insert({ rfq_id: rfqId, provider_id: providerId, price_paise: pricePaise, delivery_days: 5, scope: 'Monthly GST return filing for one GSTIN (kill-test fixture).', status, created_at: iso(createdAt) }).select('id').single()
       if (error) throw new Error(`quote: ${error.message}`)
       return data!.id as string
     }
     let orderSeq = 0
-    async function mkOrder(msmeId: string, providerId: string, o: { status: string; dueAt: number; completedAt?: number; createdAt: number }) {
+    async function mkOrder(msmeId: string, providerId: string, o: { status: OrderStatus; dueAt: number; completedAt?: number; createdAt: number }) {
       const n = ++orderSeq
       const { data, error } = await admin.from('orders').insert({ order_number: `${TAG}-${n}`, msme_id: msmeId, provider_id: providerId, source: 'package', title: `Score kill-test ${n}`, scope_snapshot: { items: ['kill-test'] }, price_paise: 1000000, discount_paise: 0, gst_paise: 180000, total_paise: 1180000, commission_bps: 500, commission_paise: 50000, provider_earning_paise: 950000, delivery_days: 5, status: o.status, due_at: iso(o.dueAt), created_at: iso(o.createdAt), ...(o.completedAt ? { completed_at: iso(o.completedAt) } : {}) }).select('id').single()
       if (error) throw new Error(`order ${n}: ${error.message}`)
@@ -248,7 +252,7 @@ async function http() {
         const t = T0 + i * H
         const r = await mkRfq(X.msmeId, { status: 'accepted', quoteCount: 1, createdAt: t })
         await mkMatch(r, p.providerId, t)
-        await mkQuote(r, p.providerId, 1000000, t + hours * H, 'accepted')
+        await mkQuote(r, p.providerId, 1000000, t + hours * H, QUOTE_STATUS.accepted)
         const late = p === B && i < 2
         const auto = p === B && i >= 2
         const o = await mkOrder(X.msmeId, p.providerId, { status: 'completed', dueAt: t + 3 * D, createdAt: t + 2 * D, completedAt: t + 5 * D })
@@ -280,8 +284,8 @@ async function http() {
     for (const [r, key, pa, pb] of [[rfqHi, 'hi', 3_000_000, 2_900_000], [rfqLo, 'lo', 1_000_000, 950_000]] as const) {
       await mkMatch(r, A.providerId, OLD)
       await mkMatch(r, B.providerId, OLD)
-      q[`${key}A`] = await mkQuote(r, A.providerId, pa, OLD + 4 * H, 'submitted')
-      q[`${key}B`] = await mkQuote(r, B.providerId, pb, OLD + 4 * H, 'submitted')
+      q[`${key}A`] = await mkQuote(r, A.providerId, pa, OLD + 4 * H, QUOTE_STATUS.submitted)
+      q[`${key}B`] = await mkQuote(r, B.providerId, pb, OLD + 4 * H, QUOTE_STATUS.submitted)
     }
 
     // ── the privacy guard: no buyer-reachable payload carries a score field ──

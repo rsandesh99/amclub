@@ -3,13 +3,13 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { CHANNELS, type ChannelMessage, type ChannelResult } from './channels'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
-// te is optional: templates carry it only where translated; resolveText falls
-// back to en (never hi) for a te user with no te slot (S3.2).
-type I18n = { en: string; hi: string; te?: string }
-type Locale = 'en' | 'hi' | 'te'
+// te / ta are optional: templates carry them only where translated; resolveText
+// falls back to en (never hi) for a te / ta user with no slot of their own (S3.2).
+type I18n = { en: string; hi: string; te?: string; ta?: string }
+type TextLocale = 'en' | 'hi' | 'te' | 'ta'
 
 /** Pick the user's locale text, en fallback for any missing slot. */
-function resolveText(t: I18n, locale: Locale): string {
+function resolveText(t: I18n, locale: TextLocale): string {
   return t[locale] ?? t.en
 }
 
@@ -35,7 +35,8 @@ export async function createNotification(admin: Admin, input: NotificationInput)
   const extra = input.channels ?? []
   const channels = ['in_app', ...extra]
   try {
-    await admin.from('notifications').insert({
+    // supabase-js reports a failed insert in `error` (it does not throw) — log it with context.
+    const { error } = await admin.from('notifications').insert({
       user_id: input.userId,
       kind: input.kind,
       title_i18n: input.titleI18n,
@@ -43,6 +44,7 @@ export async function createNotification(admin: Admin, input: NotificationInput)
       link: input.link ?? null,
       channels,
     })
+    if (error) console.error('[createNotification:in_app] insert failed', { kind: input.kind, userId: input.userId, code: error.code, message: error.message })
   } catch (e) {
     console.error('[createNotification:in_app]', e)
   }
@@ -59,7 +61,7 @@ export async function createNotificationsBulk(
   const extra = base.channels ?? []
   const channels = ['in_app', ...extra]
   try {
-    await admin.from('notifications').insert(
+    const { error } = await admin.from('notifications').insert(
       userIds.map((userId) => ({
         user_id: userId,
         kind: base.kind,
@@ -69,6 +71,7 @@ export async function createNotificationsBulk(
         channels,
       })),
     )
+    if (error) console.error('[createNotificationsBulk:in_app] insert failed', { kind: base.kind, recipients: userIds.length, code: error.code, message: error.message })
   } catch (e) {
     console.error('[createNotificationsBulk:in_app]', e)
   }
@@ -98,15 +101,18 @@ async function fanout(
   for (const userId of userIds) {
     const u = byId.get(userId)
     const pl = u?.preferred_locale
-    const locale: Locale = pl === 'hi' || pl === 'te' ? pl : 'en'
+    // Text: the user's own locale when the copy carries it, else en. Channel locale (WhatsApp
+    // template language) stays en | hi | te — there are no ta templates, so ta sends en.
+    const textLocale: TextLocale = pl === 'hi' || pl === 'te' || pl === 'ta' ? pl : 'en'
+    const locale: ChannelMessage['locale'] = textLocale === 'ta' ? 'en' : textLocale
     const msg: ChannelMessage = {
       toUserId: userId,
       whatsappOptIn: optIn.has(userId),
       email: u?.email ?? null,
       phone: u?.phone ?? null,
       locale,
-      title: resolveText(base.titleI18n, locale),
-      body: resolveText(base.bodyI18n, locale),
+      title: resolveText(base.titleI18n, textLocale),
+      body: resolveText(base.bodyI18n, textLocale),
       link: base.link ?? null,
       kind: base.kind,
     }

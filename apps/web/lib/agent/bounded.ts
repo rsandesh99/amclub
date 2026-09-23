@@ -4,8 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { z } from 'zod'
 import type { AgentTaskClass } from '@amclub/shared'
 import {
+  budgetWithoutStore,
   createGateway,
-  createNoopBudget,
   createRedisBudget,
   createSupabaseLedger,
   getPrompt,
@@ -22,7 +22,8 @@ import { getRedis } from '@/lib/rate-limit'
  * Bounded single-shot model call on Vercel (ADR-009 §2; S1.1 §3) — the pattern
  * every later single-shot stage reuses. Prompt from the registry, gateway from
  * env (stub mode without a key), the three budget caps from agent_settings on
- * the shared Upstash client (no-op without Upstash), one ai_invocations row per
+ * the shared Upstash client (dev no-op without Upstash; FAIL CLOSED in production
+ * with AGENT_ENABLED=true — BudgetExceededError breach 'store_unavailable'), one ai_invocations row per
  * call (ok / stub / error) with run_id null. Throws BudgetExceededError before
  * the gateway is touched; the route maps it to 429. Telemetry never throws.
  */
@@ -49,6 +50,8 @@ export interface BoundedCallArgs<T> {
   meta?: Record<string, unknown> | null
   /** S1.8 — explicit model id for this call (VOICE_PARSE_MODEL precedence for the voice parser). */
   model?: string
+  /** Output cap override (else prompt front-matter, else the tier default). */
+  maxTokens?: number
 }
 
 export async function boundedChatJson<T>(admin: SupabaseClient, args: BoundedCallArgs<T>): Promise<BoundedChatResult<T>> {
@@ -63,7 +66,7 @@ export async function boundedChatJson<T>(admin: SupabaseClient, args: BoundedCal
   const redis = getRedis()
   // A bounded call is its own "run" for the per-run cap; user-day and month
   // counters are shared with every other agent call for this user.
-  const budget = redis ? createRedisBudget({ redis, caps, runId: `bounded:${randomUUID()}`, userId: args.userId }) : createNoopBudget()
+  const budget = redis ? createRedisBudget({ redis, caps, runId: `bounded:${randomUUID()}`, userId: args.userId }) : budgetWithoutStore()
   return runBoundedChatJson(
     { gateway: createGateway(), ledger: createSupabaseLedger(admin), budget },
     {
@@ -77,6 +80,7 @@ export async function boundedChatJson<T>(admin: SupabaseClient, args: BoundedCal
       ...(args.stub !== undefined ? { stub: args.stub } : {}),
       ...(args.meta !== undefined ? { meta: args.meta } : {}),
       ...(args.model ? { model: args.model } : {}),
+      ...(args.maxTokens !== undefined ? { maxTokens: args.maxTokens } : {}),
     },
   )
 }

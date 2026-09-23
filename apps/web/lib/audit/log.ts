@@ -31,7 +31,8 @@ export function stableEntityId(entity: string, key: string): string {
  */
 export async function writeAudit(admin: Admin, request: Request | null, entry: AuditEntry): Promise<void> {
   try {
-    await admin.from('audit_logs').insert({
+    // supabase-js reports failures in `error` rather than throwing.
+    const { error } = await admin.from('audit_logs').insert({
       actor_id: entry.actorId,
       action: entry.action,
       entity: entry.entity,
@@ -40,6 +41,7 @@ export async function writeAudit(admin: Admin, request: Request | null, entry: A
       after: entry.after ?? null,
       ip: request ? clientIp(request) : null,
     })
+    if (error) console.error('[writeAudit] insert failed', entry.action, entry.entity, entry.entityId, error.message)
   } catch (e) {
     console.error('[writeAudit]', entry.action, e)
   }

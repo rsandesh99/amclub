@@ -254,6 +254,19 @@ const MANIFEST: Entry[] = [
     note: 'S2.3 Support agent: support_tickets (escalations a human resolves; the agent halts on an open one), support_threads + support_messages (web / mobile chat; user text masked, assistant text = the template), nudges (the counterparty nudge ledger written by the spine routes); wa_conversations support_ticket_id / support_last_intents / support_unclear_streak; ai_decisions feature CHECK gains support_nudge',
   },
   {
+    file: '0042_users_privilege_guard.sql',
+    tables: ['users'],
+    functions: ['users_roles_guard'],
+    triggers: [['users', 'users_roles_guard']],
+    note: 'Security hotfix: users owner policy is SELECT-only, INSERT/UPDATE/DELETE revoked from anon + authenticated, users_roles_guard refuses a roles change by a client role (closes self-promotion to admin)',
+  },
+  {
+    file: '0043_rls_hardening.sql',
+    tables: ['messages', 'order_events', 'audit_logs', 'msme_profiles'],
+    triggers: [['audit_logs', 'audit_logs_no_update']],
+    note: 'Security hotfix: messages parties SELECT-only + INSERT/UPDATE/DELETE revoked; order_events parties-insert policy dropped + INSERT revoked; audit_logs append-only trigger (raise_append_only from 0017) + INSERT/UPDATE/DELETE revoked; msme_profiles owner SELECT-only + INSERT/UPDATE/DELETE revoked (no self-unsuspend / self-verify) — all from anon + authenticated (service role keeps its grants)',
+  },
+  {
     file: '0044_amc_score.sql',
     tables: ['provider_scores', 'buyer_scores', 'score_history', 'score_events'],
     functions: ['score_inputs_provider', 'score_inputs_buyer'],
