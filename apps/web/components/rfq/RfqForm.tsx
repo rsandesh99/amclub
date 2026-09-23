@@ -61,7 +61,10 @@ function specLabel(slug: string): string {
     .join(' ')
 }
 
-export function RfqForm({ categories, documentIntakeEnabled = false }: { categories: RfqCategoryOption[]; documentIntakeEnabled?: boolean }) {
+/** "Repost with edits" — fields copied from one of the buyer's own earlier RFQs (loaded server-side, RLS-scoped). */
+export type RfqPrefill = Pick<DraftState, 'categorySlug' | 'title' | 'details' | 'budgetMin' | 'budgetMax'>
+
+export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: { categories: RfqCategoryOption[]; documentIntakeEnabled?: boolean; prefill?: RfqPrefill | undefined }) {
   const t = useTranslations('rfq')
   const tv = useTranslations('voice')
   const locale = useLocale()
@@ -85,6 +88,13 @@ export function RfqForm({ categories, documentIntakeEnabled = false }: { categor
   )
 
   useEffect(() => {
+    // A repost starts from the earlier request, not from whatever draft this device holds.
+    if (prefill) {
+      setS({ ...EMPTY, ...prefill })
+      setRestored(true)
+      setTimeout(() => setRestored(false), 3000)
+      return
+    }
     try {
       const raw = localStorage.getItem(DRAFT_KEY)
       if (raw) {
@@ -96,6 +106,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false }: { categor
         setTimeout(() => setRestored(false), 3000)
       }
     } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount; prefill is fixed for the page
   }, [])
   useEffect(() => {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(s)) } catch {}

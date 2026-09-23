@@ -136,7 +136,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
           <p className="text-sm font-medium">{t('rescue_title')}</p>
           <p className="mt-1 text-xs text-foreground-secondary">{t('rescue_body')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link href={(goods ? '/app/mart/rfq/new' : '/app/rfq/new') as '/app/rfq/new'}><Button>{t('rebroadcast')}</Button></Link>
+            <Link href={(goods ? '/app/mart/rfq/new' : `/app/rfq/new?from=${rfq.id}`) as '/app/rfq/new'}><Button>{t('rebroadcast')}</Button></Link>
             <Link href={(goods ? '/mart' : '/services') as '/services'}><Button variant="outline">{t('browse_providers')}</Button></Link>
           </div>
         </div>
