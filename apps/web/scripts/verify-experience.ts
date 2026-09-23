@@ -689,8 +689,10 @@ async function e6() {
   const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E6 Buyer Co', state: 'MZ', sector: 'services' }).select('id').single()
   created.msmeIds.push(msme!.id)
   await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  // Real slugs are [a-z0-9-] (slugify); the run tag has an underscore.
+  const e6slug = `${tag.replace(/_/g, '-')}-e6prov`
   const prov = await mkUser('e6prov', ['provider'])
-  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E6 Prov', display_name: 'E6 Prov', slug: `${tag}-e6prov`, state: 'MZ', status: 'active', languages: ['en'] }).select('id').single()
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E6 Prov', display_name: 'E6 Prov', slug: e6slug, state: 'MZ', status: 'active', languages: ['en'] }).select('id').single()
   created.providerIds.push(pp!.id)
   await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: tax!.id })
   const { data: pkg } = await admin.from('packages').insert({ provider_id: pp!.id, category_id: tax!.id, slug: `${tag}-e6pkg`, title_i18n: { en: 'E6 GST filing' }, scope_included: ['x'], deliverables: ['y'], price_paise: 1500_00, delivery_days: 5, status: 'active', service_slug: 'gst-filing' }).select('id').single()
@@ -703,11 +705,11 @@ async function e6() {
   check('FR-6.6: search → category + service + entry', attr(search, 'data-prefill-category') === 'tax-accounting' && attr(search, 'data-prefill-service') === 'gst-filing' && attr(search, 'data-entry') === 'search')
   const fromPkg = await page(`?from_package=${pkg!.id}`)
   check('FR-6.6: a package page → its category + service', attr(fromPkg, 'data-prefill-category') === 'tax-accounting' && attr(fromPkg, 'data-prefill-service') === 'gst-filing' && attr(fromPkg, 'data-entry') === 'package')
-  const fromProv = await page(`?from_provider=${tag}-e6prov`)
+  const fromProv = await page(`?from_provider=${e6slug}`)
   check('FR-6.6: a provider profile → the category only', attr(fromProv, 'data-prefill-category') === 'tax-accounting' && attr(fromProv, 'data-prefill-service') === '' && attr(fromProv, 'data-entry') === 'provider')
   const junk = await page('?category=nope&service=nope&from_package=x')
   check('FR-6.6: unknown values are dropped', attr(junk, 'data-prefill-category') === '' && attr(junk, 'data-entry') === 'direct')
-  const pkgPage = visible(await (await fetch(`${BASE}/p/${tag}-e6prov/${tag}-e6pkg`)).text())
+  const pkgPage = visible(await (await fetch(`${BASE}/p/${e6slug}/${tag}-e6pkg`)).text())
   check('FR-6.6: the package page links "Need something different?"', pkgPage.includes(`href="/app/rfq/new?from_package=${pkg!.id}&amp;entry=package"`))
 
   // FR-6.3 — suggestions only when switched on, and only reviewed rows.
