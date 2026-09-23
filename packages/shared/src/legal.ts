@@ -12,7 +12,8 @@ export type LegalDoc = (typeof LEGAL_DOCS)[number]
 
 export const LEGAL_VERSIONS: Record<LegalDoc, string> = {
   terms: '2026-07-07',
-  privacy: '2026-07-07',
+  // 2026-09-23 (Track F): AI model providers disclosed as a cross-border processor (s5/s6); WhatsApp media storage (s4). DRAFT FOR COUNSEL.
+  privacy: '2026-09-23',
   provider_addendum: '2026-08-28',
 }
 
