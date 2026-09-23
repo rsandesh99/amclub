@@ -1,6 +1,7 @@
 import { getRequestConfig } from 'next-intl/server'
 import type { AbstractIntlMessages } from 'next-intl'
 import { routing } from './routing'
+import { DRAFT_LOCALES, draftNamespacesOn, pickDraftNamespaces } from './drafts'
 
 type Messages = AbstractIntlMessages
 
@@ -42,5 +43,12 @@ export default getRequestConfig(async ({ requestLocale }) => {
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   const fallback = (await import(`../messages/en.json`)).default as Messages
+  // E14 — reviewed-pending te / ta drafts sit between English and the live file (live copy always wins).
+  const on = DRAFT_LOCALES.includes(locale) ? draftNamespacesOn() : []
+  if (on.length) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const drafts = (await import(`../messages/drafts/${locale}.json`)).default as Messages
+    return { locale, messages: deepMerge(deepMerge(fallback, pickDraftNamespaces(drafts, on) as Messages), messages) }
+  }
   return { locale, messages: deepMerge(fallback, messages) }
 })

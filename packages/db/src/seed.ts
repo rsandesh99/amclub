@@ -30,10 +30,12 @@ const db = postgres(DATABASE_URL, { max: 1 })
 const CATEGORIES = [
   {
     slug: 'company-registrations',
-    nameI18n: { en: 'Company & Registrations', hi: 'कंपनी एवं पंजीकरण' },
+    nameI18n: { en: 'Company & Registrations', hi: 'कंपनी एवं पंजीकरण', te: 'కంపెనీ & రిజిస్ట్రేషన్లు', ta: 'நிறுவனம் & பதிவுகள்' },
     descriptionI18n: {
       en: 'Pvt Ltd / LLP / OPC incorporation, Udyam, GST, FSSAI, IEC',
       hi: 'प्राइवेट लिमिटेड / एलएलपी / ओपीसी निगमन, उद्यम, जीएसटी, एफएसएसएआई',
+      te: 'Pvt Ltd / LLP / OPC ఏర్పాటు, Udyam, GST, FSSAI, IEC',
+      ta: 'Pvt Ltd / LLP / OPC நிறுவுதல், Udyam, GST, FSSAI, IEC',
     },
     icon: 'building-2',
     commissionBps: 1000,
@@ -50,10 +52,12 @@ const CATEGORIES = [
   },
   {
     slug: 'tax-accounting',
-    nameI18n: { en: 'Tax & Accounting', hi: 'कर एवं लेखा' },
+    nameI18n: { en: 'Tax & Accounting', hi: 'कर एवं लेखा', te: 'పన్ను & అకౌంటింగ్', ta: 'வரி & கணக்கியல்' },
     descriptionI18n: {
       en: 'GST filing, ITR, bookkeeping, audits, TDS',
       hi: 'जीएसटी रिटर्न, आईटीआर, बहीखाता, ऑडिट, टीडीएस',
+      te: 'GST ఫైలింగ్, ITR, బుక్‌కీపింగ్, ఆడిట్‌లు, TDS',
+      ta: 'GST தாக்கல், ITR, கணக்குப் பதிவு, தணிக்கை, TDS',
     },
     icon: 'calculator',
     commissionBps: 1000,
@@ -71,10 +75,12 @@ const CATEGORIES = [
   },
   {
     slug: 'legal',
-    nameI18n: { en: 'Legal', hi: 'कानूनी सेवाएं' },
+    nameI18n: { en: 'Legal', hi: 'कानूनी सेवाएं', te: 'చట్ట సేవలు', ta: 'சட்டச் சேவைகள்' },
     descriptionI18n: {
       en: 'Contracts, trademarks / IP, notices, labour-law compliance',
       hi: 'अनुबंध, ट्रेडमार्क / आईपी, नोटिस, श्रम कानून अनुपालन',
+      te: 'ఒప్పందాలు, ట్రేడ్‌మార్క్‌లు / IP, నోటీసులు, కార్మిక చట్టాల పాటింపు',
+      ta: 'ஒப்பந்தங்கள், வர்த்தக முத்திரைகள் / IP, நோட்டீஸ்கள், தொழிலாளர் சட்ட இணக்கம்',
     },
     icon: 'scale',
     commissionBps: 1200,
@@ -91,10 +97,12 @@ const CATEGORIES = [
   },
   {
     slug: 'hr-staffing',
-    nameI18n: { en: 'HR & Staffing', hi: 'एचआर एवं स्टाफिंग' },
+    nameI18n: { en: 'HR & Staffing', hi: 'एचआर एवं स्टाफिंग', te: 'HR & స్టాఫింగ్', ta: 'HR & பணியாளர்' },
     descriptionI18n: {
       en: 'Recruitment (skilled / unskilled), payroll, HR policy setup',
       hi: 'भर्ती (कुशल / अकुशल), वेतन प्रबंधन, एचआर नीति',
+      te: 'రిక్రూట్‌మెంట్ (నైపుణ్యం ఉన్న / లేని), పేరోల్, HR పాలసీ ఏర్పాటు',
+      ta: 'ஆட்சேர்ப்பு (திறன் பெற்ற / திறன் பெறாத), சம்பளப் பட்டியல், HR கொள்கை அமைப்பு',
     },
     icon: 'users',
     commissionBps: 1000,
@@ -111,10 +119,12 @@ const CATEGORIES = [
   },
   {
     slug: 'finance-facilitation',
-    nameI18n: { en: 'Finance Facilitation', hi: 'वित्त सुविधा' },
+    nameI18n: { en: 'Finance Facilitation', hi: 'वित्त सुविधा', te: 'ఫైనాన్స్ సదుపాయం', ta: 'நிதி வசதி' },
     descriptionI18n: {
       en: 'Loan documentation, CGTMSE / Mudra application, project reports',
       hi: 'ऋण दस्तावेज़, सीजीटीएमएसई / मुद्रा आवेदन, प्रोजेक्ट रिपोर्ट',
+      te: 'లోన్ డాక్యుమెంటేషన్, CGTMSE / Mudra దరఖాస్తు, ప్రాజెక్ట్ రిపోర్టులు',
+      ta: 'கடன் ஆவணங்கள், CGTMSE / Mudra விண்ணப்பம், திட்ட அறிக்கைகள்',
     },
     icon: 'banknote',
     commissionBps: 800,
@@ -131,10 +141,12 @@ const CATEGORIES = [
   },
   {
     slug: 'digital-marketing',
-    nameI18n: { en: 'Digital Marketing', hi: 'डिजिटल मार्केटिंग' },
+    nameI18n: { en: 'Digital Marketing', hi: 'डिजिटल मार्केटिंग', te: 'డిజిటల్ మార్కెటింగ్', ta: 'டிஜிட்டல் மார்க்கெட்டிங்' },
     descriptionI18n: {
       en: 'Social media, SEO, performance ads, branding',
       hi: 'सोशल मीडिया, एसईओ, परफॉर्मेंस विज्ञापन, ब्रांडिंग',
+      te: 'సోషల్ మీడియా, SEO, పెర్ఫార్మెన్స్ యాడ్స్, బ్రాండింగ్',
+      ta: 'சமூக ஊடகம், SEO, செயல்திறன் விளம்பரங்கள், பிராண்டிங்',
     },
     icon: 'trending-up',
     commissionBps: 1200,
@@ -151,10 +163,12 @@ const CATEGORIES = [
   },
   {
     slug: 'web-tech',
-    nameI18n: { en: 'Web & Tech', hi: 'वेब एवं टेक' },
+    nameI18n: { en: 'Web & Tech', hi: 'वेब एवं टेक', te: 'వెబ్ & టెక్', ta: 'வெப் & டெக்' },
     descriptionI18n: {
       en: 'Websites, e-commerce, ONDC onboarding, app development',
       hi: 'वेबसाइट, ई-कॉमर्स, ओएनडीसी ऑनबोर्डिंग, ऐप विकास',
+      te: 'వెబ్‌సైట్లు, ఇ-కామర్స్, ONDC ఆన్‌బోర్డింగ్, యాప్ డెవలప్‌మెంట్',
+      ta: 'இணையதளங்கள், இ-காமர்ஸ், ONDC இணைப்பு, ஆப் உருவாக்கம்',
     },
     icon: 'monitor',
     commissionBps: 1200,
@@ -171,10 +185,12 @@ const CATEGORIES = [
   },
   {
     slug: 'government-licensing',
-    nameI18n: { en: 'Government & Licensing', hi: 'सरकारी लाइसेंस' },
+    nameI18n: { en: 'Government & Licensing', hi: 'सरकारी लाइसेंस', te: 'ప్రభుత్వ & లైసెన్సింగ్', ta: 'அரசு & உரிமம்' },
     descriptionI18n: {
       en: 'Factory licence, pollution NOC, subsidies (PMEGP, state schemes), GeM / tender',
       hi: 'फैक्ट्री लाइसेंस, प्रदूषण एनओसी, सब्सिडी, जीईएम / टेंडर',
+      te: 'ఫ్యాక్టరీ లైసెన్స్, పొల్యూషన్ NOC, సబ్సిడీలు (PMEGP, రాష్ట్ర పథకాలు), GeM / టెండర్',
+      ta: 'தொழிற்சாலை உரிமம், மாசு NOC, மானியங்கள் (PMEGP, மாநிலத் திட்டங்கள்), GeM / டெண்டர்',
     },
     icon: 'landmark',
     commissionBps: 1000,

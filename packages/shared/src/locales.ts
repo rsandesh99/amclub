@@ -1,3 +1,5 @@
+import { pickI18n } from './i18n-text'
+
 /**
  * S3 — locale/language single sources of truth. Two DELIBERATELY SEPARATE
  * lists (founder decision): UI locale is app infrastructure; spoken languages
@@ -21,18 +23,14 @@ export const PROVIDER_LANGUAGES = ['en', 'hi', 'te'] as const
 export type ProviderLanguage = (typeof PROVIDER_LANGUAGES)[number]
 
 /**
- * Resolve a DB i18n map ({ en, hi, te? } — te optional, added incrementally)
- * for the active UI locale, with en fallback. Used wherever a locale (now
- * possibly 'te') indexes an object that may only carry en/hi (category
- * name_i18n, notification title_i18n, …), so widening SUPPORTED_LOCALES can
- * never produce an out-of-range index or a raw undefined.
+ * Resolve a DB i18n map ({ en, hi?, te?, ta? }) for the active UI locale, with
+ * en fallback. Kept as the historical name; it IS `pickI18n` (E14 FR-14.2), so
+ * widening the locales can never produce an out-of-range index or a raw
+ * undefined.
  */
 export function pickLocale(
-  map: { en: string; hi?: string; te?: string } | null | undefined,
+  map: { en: string; hi?: string; te?: string; ta?: string } | null | undefined,
   locale: string,
 ): string {
-  if (!map) return ''
-  if (locale === 'te') return map.te ?? map.en
-  if (locale === 'hi') return map.hi ?? map.en
-  return map.en
+  return pickI18n(map, locale)
 }

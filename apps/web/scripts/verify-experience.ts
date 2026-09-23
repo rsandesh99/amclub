@@ -1497,6 +1497,23 @@ async function e13c() {
   }
 }
 
+async function e14() {
+  console.log('\nE14a — language: te / ta drafts stay dark, category names in four languages')
+  const flagOn = (process.env['EXP_V3_LOCALES'] ?? '').trim().toLowerCase() === 'on'
+  const te = visible(await (await fetch(`${BASE}/te/services`)).text())
+  if (flagOn) {
+    check('FR-14.1: with EXP_V3_LOCALES on, the te drafts render on the buying path', te.includes('అన్ని సేవలు'))
+  } else {
+    check('FR-14.1: te drafts never render while EXP_V3_LOCALES is off (English fallback key by key)', te.includes('Browse verified providers across every category') && !te.includes('అన్ని సేవలు'))
+  }
+  const { data: cat } = await admin.from('categories').select('name_i18n').eq('slug', 'tax-accounting').single()
+  const names = (cat?.name_i18n ?? {}) as Record<string, string>
+  check('FR-14.2: category names carry te + ta (migration 0060 / seed)', names['te'] === 'పన్ను & అకౌంటింగ్' && names['ta'] === 'வரி & கணக்கியல்', JSON.stringify(names))
+  check('FR-14.2: a te page shows the Telugu category name (pickI18n, en fallback per slot)', te.includes('పన్ను &amp; అకౌంటింగ్') || te.includes('పన్ను & అకౌంటింగ్'))
+  const ta = visible(await (await fetch(`${BASE}/ta/services`)).text())
+  check('FR-14.2: a ta page shows the Tamil category name', ta.includes('வரி &amp; கணக்கியல்') || ta.includes('வரி & கணக்கியல்'))
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1518,6 +1535,7 @@ async function main() {
     await e8()
     await e13()
     await e13c()
+    await e14()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

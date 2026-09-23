@@ -110,6 +110,7 @@ export function Gateway() {
   function selectLocale(next: AppLocale) {
     if (next === locale) return
     track('language_switched', { to: next, surface: 'gateway' })
+    track('locale_changed', { from: locale, to: next }) // E14 canonical
     router.replace(pathname, { locale: next })
   }
 

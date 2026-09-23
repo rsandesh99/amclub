@@ -8,6 +8,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import * as SecureStore from 'expo-secure-store'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
+import { track } from './analytics'
 import en from '../messages/en.json'
 import hi from '../messages/hi.json'
 import te from '../messages/te.json'
@@ -51,6 +52,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   function setLocale(next: Locale) {
+    if (next !== locale) track('locale_changed', { from: locale, to: next, platform: 'android' }) // E14
     setLocaleState(next)
     SecureStore.setItemAsync(LOCALE_KEY, next).catch(() => {})
   }

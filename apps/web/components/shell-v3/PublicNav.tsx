@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Link, usePathname } from '@/i18n/navigation'
 import { cn } from '@/lib/utils'
 import { pickI18n } from '@/lib/format'
+import type { I18nText } from '@amclub/shared'
 import { CategoryIcon } from '@/components/catalog/CategoryIcon'
 import { useAnalytics } from '@/components/providers/posthog'
 
@@ -16,8 +17,8 @@ const CommandSearch = dynamic(() => import('./CommandSearch').then((m) => m.Comm
 
 export interface NavCategory {
   slug: string
-  name: { en: string; hi?: string }
-  description: { en: string; hi?: string } | null
+  name: I18nText
+  description: I18nText | null
   icon: string | null
 }
 

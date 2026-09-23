@@ -2922,7 +2922,7 @@
   },
   "dev_ui": {
     "title": "UI v3 — Precision",
-    "subtitle": "Every component, both densities. Change the locale in the URL to review hi / te / ta.",
+    "subtitle": "Every component, both densities. Review each language with the links below.",
     "segmented": "Segmented control",
     "gst": "GST",
     "gst_extra": "Extra",
@@ -2959,7 +2959,10 @@
     "sheet_title": "Filters",
     "sheet_body": "A sheet keeps the page behind it.",
     "sheet_content": "Drag the handle down on a phone, or press Escape, to close.",
-    "done": "Done"
+    "done": "Done",
+    "locales": "Review in",
+    "stress": "Long labels (Tamil runs longest)",
+    "stress_button": "Continue to secure payment"
   },
   "public_nav": {
     "services": "Services",

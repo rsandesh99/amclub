@@ -125,6 +125,7 @@ const serverEnvSchema = z.object({
   EXP_V3_PARTNER: z.string().optional(),
   EXP_V3_MOBILE: z.string().optional(),
   EXP_V3_LOCALES: z.string().optional(),
+  EXP_V3_LOCALES_NAMESPACES: z.string().optional(),
   // Comma-separated user ids who see every Experience v3 flag (internal testing on prod).
   EXP_V3_COHORT: z.string().optional(),
 })

@@ -53,6 +53,9 @@ jobs:
       - name: Component tests (mobile — Experience v3 E13 screens, jest-expo)
         run: pnpm --filter @amclub/mobile test
 
+      - name: Language coverage (E14 — buying path in te / ta, live or pending review; ICU placeholders match English)
+        run: pnpm --filter @amclub/web i18n:coverage
+
       - name: Prompt golden eval (agent-core — STUB mode, no key; includes the injection red-team set)
         run: pnpm --filter @amclub/agent-core eval
 

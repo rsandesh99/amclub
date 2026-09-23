@@ -2259,6 +2259,16 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.4 · I 1 · C 0.8 · E 2 → **0.16**.
 
+**As built (E14a: the language gate, te / ta drafts, four-language maps, numerals).**
+- **FR-14.1.** `apps/web/i18n/coverage.config.json` is the ONE list of 32 buying-path namespaces. `pnpm --filter @amclub/web i18n:coverage` (CI step "Language coverage") fails on a missing te / ta key, a message that does not parse, argument names or tags that differ from English, stale keys, or a draft outside the buying path; `--strict` counts drafts as missing (the launch gate). Today: te 52 % live / 100 % with drafts; ta 44 % / 100 %.
+- **Drafts, never silently live.** The missing ~610 te and ~710 ta buying-path strings are machine drafts in `messages/drafts/<locale>.json`, loaded by `i18n/request.ts` between English and the live file only while `EXP_V3_LOCALES=on`, and only for the namespaces in `EXP_V3_LOCALES_NAMESPACES` (unset = all). A reviewer promotes a namespace with `i18n:promote` (moves it live in English key order and logs locale / namespace / keys / reviewer / date in `drafts/REVIEW_LOG.json`). Runbook, the 12-screen review list and the terminology choices to settle: `docs/i18n/REVIEW.md`.
+- **FR-14.2.** Shared `i18n-text.ts`: `i18nTextSchema` `{ en, hi?, te?, ta? }`, `pickI18n` (own non-blank slot, else English — never Hindi for te / ta); web and mobile `pickI18n` and shared `pickLocale` are that one function; the catalog `I18nText` type is the shared one. Category names and descriptions in all four languages: shared `CATEGORIES`, the seed, and migration 0060 (names reuse the live gateway copy). Level-2 service names were already four-language (`services` namespace, E2).
+- **FR-14.4 (D-PRD7).** `numeralsTag(locale)` (`<locale>-IN-u-nu-latn`) and `formatCount`: Latin digits and Indian grouping for money, dates and counts in every locale, unit-tested for en / hi / te / ta. No native digits in the drafts.
+- **FR-14.6.** `/admin/dev/ui` links the same gallery in all four languages and shows a long-label strip (buttons size to their label; only names truncate, full text on hover / focus); its own strings are now in te / ta.
+- **Events.** `locale_changed { from, to }` from the header switcher and the gateway (web) and the mobile language setting (`platform: 'android'`).
+- **Rig** `e14`: te drafts stay dark with the flag off (English fallback), category names carry te / ta and render on `/te` and `/ta` pages.
+- **E14b.** Notification templates as the `notify` namespace (into the gate), N32b provider content translation (dark), voice-language eval gates (FR-14.5).
+
 ---
 
 ### E15: Data foundations (N35: F1–F10)
