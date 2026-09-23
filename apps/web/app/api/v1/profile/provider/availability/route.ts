@@ -13,6 +13,20 @@ import { revalidateProviderCatalog } from '@/lib/catalog/revalidate'
  * fan-out never read these (a separate decision).
  */
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+/** GET (E13, the mobile provider profile) — the caller's OWN current values, the shape PATCH takes. */
+export async function GET() {
+  const { userId } = await getAuthedSupabase()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const admin = await createAdminClient()
+  const { data: p } = await admin.from('provider_profiles').select('next_available_on, capacity_slots, display_name, status').eq('user_id', userId).maybeSingle()
+  if (!p) return NextResponse.json({ error: 'No provider profile' }, { status: 404 })
+  return NextResponse.json(
+    { nextAvailableOn: (p.next_available_on as string | null) ?? null, capacitySlots: Number(p.capacity_slots ?? 5), displayName: (p.display_name as string | null) ?? null, status: (p.status as string | null) ?? null },
+    { headers: { 'Cache-Control': 'private, no-store' } },
+  )
+}
 
 export async function PATCH(request: NextRequest) {
   const { userId } = await getAuthedSupabase()

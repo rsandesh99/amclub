@@ -334,12 +334,66 @@
     "invoices": "ఇన్‌వాయిస్‌లు",
     "notifications": "నోటిఫికేషన్‌లు",
     "help": "సహాయం",
-    "language": "భాష"
+    "language": "భాష",
+    "provider_profile": "ప్రొఫైల్ & లభ్యత",
+    "reviews": "సమీక్షలు",
+    "insights": "విశ్లేషణలు"
   },
   "invoices_v3": {
     "title": "ఇన్‌వాయిస్‌లు",
     "empty": "ఇంకా ఇన్‌వాయిస్‌లు లేవు. చెల్లించిన ప్రతి ఆర్డర్‌కు GST ఇన్‌వాయిస్ ఇక్కడ వస్తుంది.",
     "download": "PDF",
     "pending": "సిద్ధమవుతోంది…"
+  },
+  "reviews_v3": {
+    "title": "సమీక్షలు",
+    "summary": "{n} సమీక్షల నుండి సగటు {rating}",
+    "empty": "ఇంకా సమీక్షలు లేవు.",
+    "reply_placeholder": "పబ్లిక్ సమాధానం రాయండి…",
+    "reply": "సమాధానం ఇవ్వండి"
+  },
+  "insights_v3": {
+    "title": "విశ్లేషణలు",
+    "range_7d": "7 రోజులు",
+    "range_30d": "30 రోజులు",
+    "weeks": "గత 8 వారాలు",
+    "week_line": "{matched} సరిపోలినవి · {quoted} కోట్ చేసినవి · {won} గెలిచినవి",
+    "lost_title": "కోట్‌లు ఎందుకు ఎంపిక కాలేదు",
+    "lost_price": "{of}లో {n} సార్లు ఎంపికైన కోట్ కంటే ఎక్కువ ధర",
+    "lost_price_median": "{of}లో {n} సార్లు ఎక్కువ ధర, మధ్యస్థంగా {pct}%",
+    "lost_days": "{of}లో {n} సార్లు ఎంపికైన కోట్ కంటే ఆలస్యం",
+    "lost_days_median": "{of}లో {n} సార్లు ఆలస్యం, మధ్యస్థంగా {days} రోజులు",
+    "decline_reasons": "కొనుగోలుదారుల కారణాలు",
+    "reason_price_high": "ధర ఎక్కువ",
+    "reason_delivery_slow": "డెలివరీ ఆలస్యం",
+    "reason_details_unclear": "వివరాలు స్పష్టంగా లేవు",
+    "reason_terms_unacceptable": "నిబంధనలు ఆమోదయోగ్యం కావు",
+    "reason_other": "ఇతర",
+    "reason_another_quote_accepted": "మరో కోట్ ఎంపికైంది",
+    "listings": "మీ లిస్టింగ్‌లు",
+    "listing_line": "{views} వీక్షణలు · {checkouts} చెక్అవుట్‌లు · {orders} ఆర్డర్లు"
+  },
+  "provider_profile_v3": {
+    "title": "ప్రొఫైల్ & లభ్యత",
+    "next_available": "తదుపరి లభ్యత",
+    "now": "ఇప్పుడు అందుబాటులో",
+    "pick_now": "ఇప్పుడు",
+    "pick_in_3": "3 రోజుల్లో",
+    "pick_in_7": "ఒక వారంలో",
+    "pick_in_14": "2 వారాల్లో",
+    "capacity": "ఒకేసారి తీసుకోగల పనులు",
+    "fewer": "తక్కువ",
+    "more": "ఎక్కువ",
+    "saved": "సేవ్ అయింది ✓",
+    "reviews": "సమీక్షలు",
+    "insights": "విశ్లేషణలు",
+    "edit_on_web": "పూర్తి ప్రొఫైల్‌ను వెబ్‌లో మార్చండి"
+  },
+  "orders_v3": {
+    "deliverable_title": "పని అందించండి",
+    "deliverable_hint": "మీరు అందిస్తున్న ఫైల్‌ను జోడించి, ఆపై క్రింద అందించినట్లు గుర్తించండి.",
+    "attach_deliverable": "ఫైల్ జోడించండి",
+    "uploaded": "అప్‌లోడ్ అయింది: {name}",
+    "upload_failed": "ఫైల్ అప్‌లోడ్ కాలేదు. మళ్లీ ప్రయత్నించండి."
   }
 }

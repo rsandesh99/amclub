@@ -2188,7 +2188,13 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 - **FR-13.3.** Profile sheet (name, the side switch, invoices, notifications, help, language, sign out) and Invoices (the web rows; 15-minute signed PDF links fetched on each visit).
 - **API.** Thin GETs over the web's own loaders, 404 while the flag is off: `/api/v1/partner/packages`, `/api/v1/partner/payouts`, `/api/v1/me/invoices`.
 - **Tests.** The screens' logic is shared and unit-tested; `verify-experience` e13 drives the routes with Bearer tokens as the app does. RN component tests need a mobile test runner (E13b).
-- **E13b.** Provider reviews, profile + availability (N11), read-only insights, deliver-with-upload, native onboarding (D-PRD3), native feel (haptics, sheets) and deep links.
+
+**As built (E13b: the rest of the provider phone kit, deep links, haptics, component tests).**
+- **Screens.** Reviews (one public reply each, the web's reply route), Insights (read-only; the web's payload with its n-gates), Profile & availability (N11: next available + capacity through the web's route, now with a GET for the current values), reached from Today and the profile sheet. The order screen's provider side attaches a deliverable (expo-document-picker → the web's documents route, kind `deliverable`).
+- **FR-13.6.** Shared `mobileRouteFor(link, { v3 })` is the deep-link contract: every notification link the server sends today maps to its screen, tab and query kept; admin and unknown links stay on the list; unit-tested per link shape.
+- **FR-13.5 (part).** `confirmHaptic()` (expo-haptics, light) on pay, accept (quote and order actions) and send quote, only while `mobile` is on.
+- **Component tests.** `apps/mobile` now runs jest-expo + React Native Testing Library (`pnpm --filter @amclub/mobile test`, a CI step): Listings, Earnings, Invoices, Profile sheet, Reviews, Insights, Profile & availability. The Jest babel env drops the NativeWind JSX transform.
+- **E13c.** Native provider onboarding (D-PRD3), sheets with detents, and the native Gold Stamp / Paisa Moment.
 
 ---
 

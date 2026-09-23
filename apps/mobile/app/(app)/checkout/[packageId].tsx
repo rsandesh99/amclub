@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
 import { fetchPackage, createCheckout, simulatePay } from '@/lib/api'
 import { pickI18n, formatINR, formatINRExact } from '@/lib/format'
+import { confirmHaptic } from '@/lib/haptics'
 
  
 export default function CheckoutScreen() {
@@ -28,6 +29,7 @@ export default function CheckoutScreen() {
   async function pay() {
     setPaying(true)
     try {
+      confirmHaptic()
       const { ok, data } = await createCheckout(packageId)
       if (!ok) throw new Error(data.error ?? 'Checkout failed')
       if (data.simulated) {

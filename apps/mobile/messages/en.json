@@ -911,12 +911,66 @@
     "invoices": "Invoices",
     "notifications": "Notifications",
     "help": "Help",
-    "language": "Language"
+    "language": "Language",
+    "provider_profile": "Profile & availability",
+    "reviews": "Reviews",
+    "insights": "Insights"
   },
   "invoices_v3": {
     "title": "Invoices",
     "empty": "No invoices yet. Each paid order gets a GST invoice here.",
     "download": "PDF",
     "pending": "Preparing…"
+  },
+  "reviews_v3": {
+    "title": "Reviews",
+    "summary": "{rating} average from {n} reviews",
+    "empty": "No reviews yet.",
+    "reply_placeholder": "Write a public reply…",
+    "reply": "Reply"
+  },
+  "insights_v3": {
+    "title": "Insights",
+    "range_7d": "7 days",
+    "range_30d": "30 days",
+    "weeks": "Last 8 weeks",
+    "week_line": "{matched} matched · {quoted} quoted · {won} won",
+    "lost_title": "Why quotes were lost",
+    "lost_price": "Dearer than the chosen quote in {n} of {of}",
+    "lost_price_median": "Dearer in {n} of {of}, by a median of {pct}%",
+    "lost_days": "Slower than the chosen quote in {n} of {of}",
+    "lost_days_median": "Slower in {n} of {of}, by a median of {days} days",
+    "decline_reasons": "Buyers’ reasons",
+    "reason_price_high": "Price too high",
+    "reason_delivery_slow": "Delivery too slow",
+    "reason_details_unclear": "Details unclear",
+    "reason_terms_unacceptable": "Terms not acceptable",
+    "reason_other": "Other",
+    "reason_another_quote_accepted": "Another quote chosen",
+    "listings": "Your listings",
+    "listing_line": "{views} views · {checkouts} checkouts · {orders} orders"
+  },
+  "provider_profile_v3": {
+    "title": "Profile & availability",
+    "next_available": "Next available",
+    "now": "Available now",
+    "pick_now": "Now",
+    "pick_in_3": "In 3 days",
+    "pick_in_7": "In a week",
+    "pick_in_14": "In 2 weeks",
+    "capacity": "Jobs you can take at once",
+    "fewer": "Fewer",
+    "more": "More",
+    "saved": "Saved ✓",
+    "reviews": "Reviews",
+    "insights": "Insights",
+    "edit_on_web": "Edit your full profile on the web"
+  },
+  "orders_v3": {
+    "deliverable_title": "Deliver the work",
+    "deliverable_hint": "Attach the file you are delivering, then mark it delivered below.",
+    "attach_deliverable": "Attach a file",
+    "uploaded": "Uploaded: {name}",
+    "upload_failed": "Couldn’t upload that file. Try again."
   }
 }

@@ -1016,3 +1016,71 @@ export async function fetchMyInvoices(): Promise<{ ok: boolean; invoices: MyInvo
     return { ok: false, invoices: [] }
   }
 }
+
+// ── E13b — provider reviews, insights, profile / availability, order deliverables ──
+
+export interface MyReview { id: string; rating: number; text: string | null; provider_reply: string | null; status: string; created_at: string; order: { order_number: string; title: string } | null }
+
+export async function fetchMyReviews(): Promise<{ ok: boolean; reviews: MyReview[]; avgRating: number; reviewCount: number }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/reviews`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, reviews: [], avgRating: 0, reviewCount: 0 }
+    const d = (await res.json().catch(() => ({}))) as { reviews?: MyReview[]; avgRating?: number; reviewCount?: number }
+    return { ok: true, reviews: d.reviews ?? [], avgRating: Number(d.avgRating ?? 0), reviewCount: Number(d.reviewCount ?? 0) }
+  } catch {
+    return { ok: false, reviews: [], avgRating: 0, reviewCount: 0 }
+  }
+}
+
+export interface PartnerInsightsView {
+  range: '7d' | '30d'
+  weeks: { week: string; views: number; matched: number; quoted: number; won: number }[]
+  loss: { price: { n: number; of: number; medianPct: number | null }; delivery: { n: number; of: number; medianDays: number | null } }
+  declineReasons: { reason: string; n: number }[]
+  listings: { packageId: string; title: string; views: number; checkouts: number; orders: number }[]
+}
+
+export async function fetchPartnerInsights(range: '7d' | '30d'): Promise<PartnerInsightsView | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/insights?range=${range}`, { headers: await authHeaders() })
+    return res.ok ? ((await res.json()) as PartnerInsightsView) : null
+  } catch {
+    return null
+  }
+}
+
+export interface MyAvailability { nextAvailableOn: string | null; capacitySlots: number; displayName: string | null; status: string | null }
+
+export async function fetchMyAvailability(): Promise<MyAvailability | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/profile/provider/availability`, { headers: await authHeaders() })
+    return res.ok ? ((await res.json()) as MyAvailability) : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveMyAvailability(input: { nextAvailableOn: string | null; capacitySlots: number }): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/profile/provider/availability`, { method: 'PATCH', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+/** Upload a file to the order (the web's documents route: kind 'deliverable' for the provider's delivery). */
+export async function uploadOrderDocument(orderId: string, kind: string, file: { uri: string; name: string; mimeType: string }): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const fd = new FormData()
+    // React Native's FormData takes { uri, name, type } for a file part.
+    fd.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob)
+    fd.append('kind', kind)
+    const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/documents`, { method: 'POST', headers: await authHeaders(), body: fd })
+    if (res.ok) return { ok: true }
+    const d = (await res.json().catch(() => ({}))) as { error?: string }
+    return { ok: false, error: typeof d.error === 'string' ? d.error : 'upload_failed' }
+  } catch {
+    return { ok: false, error: 'upload_failed' }
+  }
+}

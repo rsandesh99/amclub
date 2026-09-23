@@ -45,6 +45,7 @@ const ALL_ROUTES = [
   'orders/[id]', 'rfq/index', 'rfq/new', 'rfq/[id]', 'partner-rfqs', 'partner-rfq/[id]', 'partner-munshi',
   'support', 'assistant', 'notifications',
   'partner-listings', 'partner-earnings', 'profile', 'invoices',
+  'partner-reviews', 'partner-insights', 'partner-profile',
 ] as const
 
 export default function AppLayout() {
@@ -194,6 +195,9 @@ export default function AppLayout() {
       <Tabs.Screen name="partner-earnings" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="profile" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="invoices" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="partner-reviews" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="partner-insights" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="partner-profile" options={{ href: null, headerShown: false }} />
     </Tabs>
     </>
   )

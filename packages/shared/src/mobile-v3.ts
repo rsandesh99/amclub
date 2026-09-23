@@ -56,3 +56,44 @@ export function groupPayoutsForEarnings<T extends { status: string }>(rows: read
 export function listingToggleTarget(status: string): 'active' | 'paused' | null {
   return status === 'active' ? 'paused' : status === 'paused' ? 'active' : null
 }
+
+// ── FR-13.6 the deep-link contract: a notification's web link → the exact mobile screen ─
+const UUIDISH = /^[0-9a-f-]{8,}$/i
+
+/**
+ * Map a notification's web app-relative link (with its query) to the mobile
+ * route that shows the same thing. `v3` adds the E13 screens; without it the
+ * v2 mapping stands (earnings → the provider home). Unknown links → null (the
+ * caller stays on the notification list, or opens the web).
+ */
+export function mobileRouteFor(link: string | null | undefined, opts: { v3: boolean }): string | null {
+  if (!link || !link.startsWith('/')) return null
+  const [path = '', query = ''] = link.split('?')
+  const parts = path.replace(/\/+$/, '').split('/').filter(Boolean)
+  const q = query ? `?${query}` : ''
+  const id = (i: number) => (parts[i] && UUIDISH.test(parts[i]!) ? parts[i]! : null)
+  const [a, b, c] = parts
+  if ((a === 'app' || a === 'partner') && b === 'orders') return id(2) ? `/orders/${id(2)}${q}` : '/orders'
+  if (a === 'app' && b === 'rfq') {
+    if (c === 'new') return `/rfq/new${q}`
+    return id(2) ? `/rfq/${id(2)}${q}` : '/rfq'
+  }
+  if (a === 'partner' && b === 'rfqs') return id(2) ? `/partner-rfq/${id(2)}${q}` : '/partner-rfqs'
+  if (a === 'partner' && b === 'munshi') return '/partner-munshi'
+  if (a === 'app' && b === 'assistant') return '/assistant'
+  if ((a === 'app' || a === 'mart') && (b === 'mart' || b === 'pools')) {
+    const poolId = a === 'mart' ? id(2) : c === 'pools' ? id(3) : null
+    return poolId ? `/mart/pool/${poolId}` : '/mart/pools'
+  }
+  if (a === 'partner' && b === 'earnings') return opts.v3 ? '/partner-earnings' : '/partner'
+  if (opts.v3) {
+    if (a === 'partner' && b === 'listings') return '/partner-listings'
+    if (a === 'partner' && b === 'reviews') return '/partner-reviews'
+    if (a === 'partner' && b === 'insights') return '/partner-insights'
+    if (a === 'partner' && b === 'profile') return '/partner-profile'
+    if (a === 'app' && b === 'invoices') return '/invoices'
+  }
+  if (a === 'partner' && (b === undefined || b === 'actions')) return '/partner'
+  if (a === 'app' && (b === undefined || b === 'actions')) return '/home'
+  return null
+}

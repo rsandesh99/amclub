@@ -50,6 +50,9 @@ jobs:
       - name: Unit tests (agent-core — runner, confirm gate, budget, envelope)
         run: pnpm --filter @amclub/agent-core test
 
+      - name: Component tests (mobile — Experience v3 E13 screens, jest-expo)
+        run: pnpm --filter @amclub/mobile test
+
       - name: Prompt golden eval (agent-core — STUB mode, no key; includes the injection red-team set)
         run: pnpm --filter @amclub/agent-core eval
 

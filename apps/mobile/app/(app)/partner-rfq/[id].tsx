@@ -10,6 +10,7 @@ import { GST_RATE_BPS_OPTIONS } from '@amclub/shared'
 import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
 import { BenchmarkBlock } from '@/components/BenchmarkBlock'
 import { VoiceRfqRecorder } from '@/components/VoiceRfqRecorder'
+import { confirmHaptic } from '@/lib/haptics'
 
 
 type ExtractField = 'price' | 'unit_price' | 'delivery_days' | 'gst_included' | 'transport_included' | 'valid_until' | 'advance_percent' | 'gst_rate_bps' | 'hsn_code'
@@ -142,6 +143,7 @@ export default function ProviderRfqScreen() {
       ...(goodsTerms ? { goods: goodsTerms } : {}),
     }
     // S1.3 — revise = PATCH in place (never an extraction_id); submit = POST.
+    confirmHaptic()
     const res = revising ? await reviseQuote(id, body) : await submitQuote(id, { ...body, ...(extractionId ? { extraction_id: extractionId } : {}) })
     setBusy(false)
     if (!res.ok) {

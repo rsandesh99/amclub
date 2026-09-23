@@ -911,12 +911,66 @@
     "invoices": "चालान",
     "notifications": "सूचनाएँ",
     "help": "सहायता",
-    "language": "भाषा"
+    "language": "भाषा",
+    "provider_profile": "प्रोफ़ाइल और उपलब्धता",
+    "reviews": "समीक्षाएँ",
+    "insights": "जानकारी"
   },
   "invoices_v3": {
     "title": "चालान",
     "empty": "अभी कोई चालान नहीं। हर भुगतान वाले ऑर्डर का GST चालान यहाँ मिलेगा।",
     "download": "PDF",
     "pending": "तैयार हो रहा है…"
+  },
+  "reviews_v3": {
+    "title": "समीक्षाएँ",
+    "summary": "{n} समीक्षाओं से औसत {rating}",
+    "empty": "अभी कोई समीक्षा नहीं।",
+    "reply_placeholder": "सार्वजनिक जवाब लिखें…",
+    "reply": "जवाब दें"
+  },
+  "insights_v3": {
+    "title": "जानकारी",
+    "range_7d": "7 दिन",
+    "range_30d": "30 दिन",
+    "weeks": "पिछले 8 सप्ताह",
+    "week_line": "{matched} मिले · {quoted} कोटेशन · {won} जीते",
+    "lost_title": "कोटेशन क्यों नहीं चुने गए",
+    "lost_price": "{of} में से {n} बार चुने गए कोटेशन से महँगा",
+    "lost_price_median": "{of} में से {n} बार महँगा, औसतन {pct}%",
+    "lost_days": "{of} में से {n} बार चुने गए कोटेशन से धीमा",
+    "lost_days_median": "{of} में से {n} बार धीमा, औसतन {days} दिन",
+    "decline_reasons": "खरीदारों के कारण",
+    "reason_price_high": "कीमत ज़्यादा",
+    "reason_delivery_slow": "डिलीवरी धीमी",
+    "reason_details_unclear": "विवरण स्पष्ट नहीं",
+    "reason_terms_unacceptable": "शर्तें स्वीकार्य नहीं",
+    "reason_other": "अन्य",
+    "reason_another_quote_accepted": "दूसरा कोटेशन चुना गया",
+    "listings": "आपकी लिस्टिंग",
+    "listing_line": "{views} बार देखा · {checkouts} चेकआउट · {orders} ऑर्डर"
+  },
+  "provider_profile_v3": {
+    "title": "प्रोफ़ाइल और उपलब्धता",
+    "next_available": "अगली उपलब्धता",
+    "now": "अभी उपलब्ध",
+    "pick_now": "अभी",
+    "pick_in_3": "3 दिन में",
+    "pick_in_7": "एक सप्ताह में",
+    "pick_in_14": "2 सप्ताह में",
+    "capacity": "एक साथ कितने काम ले सकते हैं",
+    "fewer": "कम",
+    "more": "ज़्यादा",
+    "saved": "सहेजा गया ✓",
+    "reviews": "समीक्षाएँ",
+    "insights": "जानकारी",
+    "edit_on_web": "पूरी प्रोफ़ाइल वेब पर बदलें"
+  },
+  "orders_v3": {
+    "deliverable_title": "काम सौंपें",
+    "deliverable_hint": "जो फ़ाइल सौंप रहे हैं उसे जोड़ें, फिर नीचे सौंपा गया चुनें।",
+    "attach_deliverable": "फ़ाइल जोड़ें",
+    "uploaded": "अपलोड हुआ: {name}",
+    "upload_failed": "फ़ाइल अपलोड नहीं हो सकी। फिर कोशिश करें।"
   }
 }

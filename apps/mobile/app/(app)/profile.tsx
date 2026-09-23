@@ -68,6 +68,9 @@ export default function ProfileScreen() {
         )}
         <View className="border-t border-gray-100 bg-surface">
           {role !== 'provider' && me.hasMsmeProfile && <Row icon="receipt-outline" label={t('profile_v3.invoices')} onPress={() => router.push('/invoices' as never)} testID="profile-invoices" />}
+          {role === 'provider' && <Row icon="calendar-outline" label={t('profile_v3.provider_profile')} onPress={() => router.push('/partner-profile' as never)} testID="profile-provider" />}
+          {role === 'provider' && <Row icon="star-outline" label={t('profile_v3.reviews')} onPress={() => router.push('/partner-reviews' as never)} />}
+          {role === 'provider' && <Row icon="stats-chart-outline" label={t('profile_v3.insights')} onPress={() => router.push('/partner-insights' as never)} />}
           <Row icon="notifications-outline" label={t('profile_v3.notifications')} onPress={() => router.push('/notifications' as never)} />
           {me.supportEnabled && <Row icon="help-circle-outline" label={t('profile_v3.help')} onPress={() => router.push('/support' as never)} />}
         </View>

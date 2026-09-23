@@ -164,6 +164,21 @@ export default function PartnerScreen() {
               </TouchableOpacity>
             )}
 
+            {/* E13 — the rest of the provider's phone toolkit (reviews, insights, availability) while `mobile` is on */}
+            {mobileV3 && (
+              <View className="flex-row gap-2" testID="today-v3-links">
+                {[
+                  { k: 'reviews', to: '/partner-reviews' },
+                  { k: 'insights', to: '/partner-insights' },
+                  { k: 'provider_profile', to: '/partner-profile' },
+                ].map((l) => (
+                  <TouchableOpacity key={l.k} onPress={() => router.push(l.to as never)} className="flex-1 items-center rounded-xl border border-gray-200 bg-surface px-2 py-3" accessibilityRole="button">
+                    <Text className="text-center text-xs font-medium text-foreground">{t(`profile_v3.${l.k}`)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             {/* S2.2 — Digital Munshi (only for an enabled, cohorted provider; the server decides) */}
             {munshiEnabled && (
               <TouchableOpacity onPress={() => router.push('/partner-munshi' as never)} className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-surface p-5" testID="munshi-tile">

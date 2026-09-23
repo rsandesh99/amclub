@@ -17,6 +17,7 @@ import { groupBySeller, useMartCart, type MartCartLine } from '@/lib/mart-cart'
 import { formatINR, formatINRExact } from '@/lib/format'
 import { colors } from '@/lib/theme'
 import { Select } from '@/components/ui/Select'
+import { confirmHaptic } from '@/lib/haptics'
 
 type FormErrors = Partial<Record<keyof GoodsDelivery, string>>
 
@@ -83,6 +84,7 @@ export default function MartCartScreen() {
     if (!validate()) return
     setSubmitting(true)
     setServerError(null)
+    confirmHaptic()
     const r = await createGoodsCheckout({
       items: activeLines.map((l) => ({ product_id: l.productId, qty: l.qty })),
       delivery: {
