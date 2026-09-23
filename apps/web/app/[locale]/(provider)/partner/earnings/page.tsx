@@ -7,6 +7,7 @@ import { getProviderReadiness } from '@/lib/payments/readiness-server'
 import { listMyOrders, listMyPayouts } from '@/lib/orders/queries'
 import { Badge } from '@/components/ui/badge'
 import { formatINR } from '@/lib/format'
+import type { PayoutStatus } from '@amclub/shared'
 
 const ACTIVE_STATUSES = ['placed', 'accepted', 'requirements_submitted', 'in_progress', 'delivered', 'revision_requested']
 
@@ -19,6 +20,7 @@ const PAYOUT_BADGE: Record<string, BadgeMeta> = {
   held: { key: 'payout_held', variant: 'warning' },
 }
 const DEFAULT_BADGE: BadgeMeta = { key: 'payout_scheduled', variant: 'default' }
+const HELD = 'held' satisfies PayoutStatus
 
 export default async function PartnerEarningsPage() {
   const user = await getSessionUser()
@@ -96,6 +98,18 @@ export default async function PartnerEarningsPage() {
                         {formatINR(p.amountPaise)}
                         {when ? ` · ${dateFmt.format(new Date(when))}` : ''}
                       </p>
+                      {/* Plain-language reason per hold (payout_held event payload). */}
+                      {p.status === HELD && (
+                        <ul className="mt-1 space-y-0.5 text-xs text-warning" data-testid="payout-hold-reasons">
+                          {(p.holdReasons.length > 0 ? [...new Set(p.holdReasons)] : ['unknown']).map((r) => (
+                            <li key={r}>
+                              {t.has(`hold_reason_${r}` as 'hold_reason_unknown')
+                                ? t(`hold_reason_${r}` as 'hold_reason_unknown')
+                                : t('hold_reason_unknown')}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     <Badge variant={badge.variant}>{t(badge.key as 'payout_paid')}</Badge>
                   </Link>
