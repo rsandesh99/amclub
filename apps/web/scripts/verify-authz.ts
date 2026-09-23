@@ -567,6 +567,54 @@ async function main() {
     eq('after escalation attempts: buyerB roles unchanged', JSON.stringify((bRow as { roles: string[] } | null)?.roles ?? null), JSON.stringify(['msme']))
     denied('buyerB GET admin API after attempts', (await api(buyerB.token, '/api/v1/admin/kpi', undefined, 'GET')).status)
 
+    // ── 7c. RLS hardening (0043) — messages / order_events / audit_logs ──────
+    console.log('RLS hardening (0043, direct PostgREST):')
+    {
+      const aBuyer = asUser(buyerA.token)
+      const aProv = asUser(provA.token)
+      // messages: parties are read-only — no edit / un-redact / delete of the
+      // other side's message, and no insert that skips the masking route.
+      const { data: cv } = quoteId
+        ? await admin.from('conversations').select('id').eq('context_type', 'quote').eq('context_id', quoteId).maybeSingle()
+        : { data: null }
+      if (cv) {
+        const { data: mRows } = await admin.from('messages').select('id, body, sender_id').eq('conversation_id', cv.id).limit(1)
+        const m = mRows?.[0]
+        eq('buyerA direct-reads OWN thread messages → ≥1 row (control)', ((await aBuyer.from('messages').select('id').eq('conversation_id', cv.id)).data ?? []).length > 0, true)
+        if (m) {
+          deniedRows('provA UPDATEs buyerA’s message (un-redact)', await aProv.from('messages').update({ body: 'call me on 9876543210', redacted: false }).eq('id', m.id).select('id'))
+          deniedRows('buyerA UPDATEs OWN message', await aBuyer.from('messages').update({ body: 'edited' }).eq('id', m.id).select('id'))
+          deniedRows('provA DELETEs buyerA’s message', await aProv.from('messages').delete().eq('id', m.id).select('id'))
+          const { data: mAfter } = await admin.from('messages').select('body').eq('id', m.id).maybeSingle()
+          eq('message unchanged after tamper attempts', mAfter?.body, m.body)
+        }
+        deniedRows('provA INSERTs a message directly (skips masking)', await aProv.from('messages').insert({ conversation_id: cv.id, sender_id: provA.uid, body: 'call 9876543210', redacted: false }).select('id'))
+      } else {
+        console.log('  (skipped messages checks — no quote thread)')
+      }
+      // order_events: no client insert at all — a party cannot forge a
+      // payout/refund row or someone else's actor_id in its own timeline.
+      const evBefore = ((await admin.from('order_events').select('id').eq('order_id', orderA)).data ?? []).length
+      deniedRows('buyerA INSERTs forged payout_paid on OWN order', await aBuyer.from('order_events').insert({ order_id: orderA, actor_id: provA.uid, event: 'payout_paid', payload: { forged: true } }).select('id'))
+      deniedRows('provA INSERTs forged manual_refund on OWN order', await aProv.from('order_events').insert({ order_id: orderA, actor_id: adminUser.uid, event: 'manual_refund', payload: { forged: true } }).select('id'))
+      eq('order_events count unchanged after forgery attempts', ((await admin.from('order_events').select('id').eq('order_id', orderA)).data ?? []).length, evBefore)
+      // audit_logs: client roles cannot write; even the service role cannot UPDATE.
+      deniedRows('buyerB INSERTs an audit_logs row', await bClient.from('audit_logs').insert({ actor_id: buyerB.uid, action: 'forged', entity: 'users', entity_id: buyerB.uid }).select('id'))
+      const { data: aRows } = await admin.from('audit_logs').select('id, action').eq('actor_id', adminUser.uid).limit(1)
+      const a = aRows?.[0]
+      if (a) {
+        const asAdmin = asUser(adminUser.token)
+        deniedRows('admin (client JWT) UPDATEs an audit_logs row', await asAdmin.from('audit_logs').update({ action: 'tampered' }).eq('id', a.id).select('id'))
+        deniedRows('admin (client JWT) DELETEs an audit_logs row', await asAdmin.from('audit_logs').delete().eq('id', a.id).select('id'))
+        const svcUpd = await admin.from('audit_logs').update({ action: 'tampered' }).eq('id', a.id).select('id')
+        eq('service-role UPDATE on audit_logs raises (append-only trigger)', Boolean(svcUpd.error), true)
+        const { data: aAfter } = await admin.from('audit_logs').select('action').eq('id', a.id).maybeSingle()
+        eq('audit row unchanged after tamper attempts', aAfter?.action, a.action)
+      } else {
+        console.log('  (skipped audit_logs update checks — no admin audit row)')
+      }
+    }
+
     // ── 8. Phase 2: terms_acceptances (append-only, self-read) + signup gate ──
     console.log('Phase 2 — terms_acceptances + signup gate:')
     const buyerC = await mkUser('buyerC', ['msme'])
