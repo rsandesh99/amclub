@@ -367,6 +367,11 @@ const MANIFEST: Entry[] = [
     tables: [],
     note: "E8b / N24: order threads reuse conversations (context_type 'order'); conversations parties read-only + writes revoked; admin read on conversations + messages; messages_conversation_created_idx",
   },
+  {
+    file: '0064_server_written_money.sql',
+    tables: [],
+    note: 'ADR 018 security hotfix: EXECUTE on materialize_order / claim_quote_slot / release_quote_slot / increment_coupon_usage for service_role only; no client INSERT/UPDATE/DELETE on orders, checkout_sessions, payments, payouts, refunds, invoices, disputes, order_documents, rfqs, quotes, rfq_matches, coupons, coupon_redemptions, provider_bank_accounts, reviews',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

@@ -312,7 +312,11 @@ export async function POST(request: NextRequest) {
   const { amounts } = prep
 
   // Create the checkout session (frozen). ON CONFLICT guards a racing double-submit.
-  const { data: session, error: insErr } = await supabase
+  // ADR 018 — sessions are server-written only: the buyer is authorised above
+  // (their own msme profile, their own RFQ), and clients hold no write grant on
+  // checkout_sessions, so nothing frozen here can be rewritten from the client.
+  const writer = await createAdminClient()
+  const { data: session, error: insErr } = await writer
     .from('checkout_sessions')
     .upsert(
       {
@@ -370,7 +374,7 @@ export async function POST(request: NextRequest) {
     idempotencyKey,
   })
 
-  await supabase
+  await writer
     .from('checkout_sessions')
     .update({ razorpay_order_id: order.razorpayOrderId })
     .eq('id', bound.id)

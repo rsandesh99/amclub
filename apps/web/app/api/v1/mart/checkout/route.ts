@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
   const { prep } = prepared
   const deliveryDays = Number(await getMartSetting<number | string>(admin, 'goods_delivery_days', 3))
 
-  const { data: session, error: insErr } = await supabase
+  // ADR 018 — sessions are server-written only (the buyer is authorised above).
+  const { data: session, error: insErr } = await admin
     .from('checkout_sessions')
     .upsert(
       {
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
     notes: { checkout_session_id: session.id, source: 'catalog', msme_id: msme.id, kind: 'goods' },
     idempotencyKey,
   })
-  await supabase
+  await admin
     .from('checkout_sessions')
     .update({ razorpay_order_id: order.razorpayOrderId })
     .eq('id', session.id)

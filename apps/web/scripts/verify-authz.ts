@@ -557,6 +557,34 @@ async function main() {
     deniedRows('buyerB direct-reads bank_account_verifications', await bClient.from('bank_account_verifications').select('id'))
     deniedRows('provA direct-reads bank_account_verifications', await asUser(provA.token).from('bank_account_verifications').select('id'))
 
+    // ── 7a. ADR 018 (0064) — money + order-state rows are server-written only ──
+    console.log('money + order-state rows (ADR 018, direct PostgREST):')
+    {
+      const uBuyer = asUser(buyerA.token)
+      const uProv = asUser(provA.token)
+      const { data: ordBefore } = await admin.from('orders').select('status, total_paise, provider_earning_paise').eq('id', orderA).single()
+      eq('buyerA direct-reads OWN order → 1 row (control)', ((await uBuyer.from('orders').select('id').eq('id', orderA)).data ?? []).length, 1)
+      deniedRows('provA sets OWN order completed + raises its earning', await uProv.from('orders').update({ status: 'completed', provider_earning_paise: Number(ordBefore!.total_paise) }).eq('id', orderA).select('id'))
+      deniedRows('buyerA rewrites OWN order total', await uBuyer.from('orders').update({ total_paise: 1 }).eq('id', orderA).select('id'))
+      const { data: ordAfter } = await admin.from('orders').select('status, total_paise, provider_earning_paise').eq('id', orderA).single()
+      eq('order A unchanged after the tamper attempts', JSON.stringify(ordAfter), JSON.stringify(ordBefore))
+      // A fresh unpaid session: the buyer holds its razorpay order id, and must not be able to materialise it.
+      const fresh = (await (await api(buyerA.token, '/api/v1/checkout', { packageId: pkgA!.id, idempotencyKey: crypto.randomUUID() })).json().catch(() => ({}))) as { checkoutSessionId?: string; razorpayOrderId?: string }
+      if (fresh.checkoutSessionId && fresh.razorpayOrderId) {
+        deniedRows('buyerA rewrites OWN unpaid session (earning split)', await uBuyer.from('checkout_sessions').update({ provider_earning_paise: 1, commission_paise: 0 }).eq('id', fresh.checkoutSessionId).select('id'))
+        deniedRows('buyerA INSERTs a checkout session', await uBuyer.from('checkout_sessions').insert({ msme_id: msmeA!.id, provider_id: provAId, source: 'package', package_id: pkgA!.id, title: 'forged', scope_snapshot: {}, price_paise: 1, gst_paise: 0, total_paise: 1, commission_bps: 0, commission_paise: 0, provider_earning_paise: 1, delivery_days: 1, idempotency_key: crypto.randomUUID() }).select('id'))
+        const rpc = await uBuyer.rpc('materialize_order', { p_razorpay_order_id: fresh.razorpayOrderId, p_razorpay_payment_id: `pay_forged_${tag}`, p_amount_paise: 1, p_method: 'upi', p_payload: {} })
+        const { data: sess } = await admin.from('checkout_sessions').select('order_id, status, provider_earning_paise').eq('id', fresh.checkoutSessionId).single()
+        eq('buyerA cannot call materialize_order (no order, session untouched)', Boolean(rpc.error) && !sess?.order_id && sess?.status === 'created' && Number(sess?.provider_earning_paise) > 1, true)
+      } else {
+        console.log('  (skipped session checks — checkout did not return a session)')
+      }
+      deniedRows('buyerA closes OWN rfq directly', await uBuyer.from('rfqs').update({ status: 'cancelled' }).eq('id', rfqA).select('id'))
+      if (quoteId) deniedRows('provA rewrites OWN quote price directly', await uProv.from('quotes').update({ price_paise: 1 }).eq('id', quoteId).select('id'))
+      deniedRows('buyerA INSERTs a review directly', await uBuyer.from('reviews').insert({ order_id: orderA, msme_id: msmeA!.id, provider_id: provAId, rating: 5 }).select('id'))
+      deniedRows('provA INSERTs a payout row', await uProv.from('payouts').insert({ provider_id: provAId, order_id: orderA, amount_paise: 1, status: 'scheduled' }).select('id'))
+    }
+
     // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
     console.log('users privilege guard (0042, direct PostgREST):')
     eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)
