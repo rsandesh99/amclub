@@ -13,6 +13,11 @@ import { SearchResultsV3 } from '@/components/search-v3/SearchResultsV3'
 import { ServicePageViewed } from '@/components/search-v3/ServicePageViewed'
 import type { CatalogResult } from '@/lib/catalog/types'
 
+// Only the 40 real (category, service) pairs exist: anything else is a real
+// 404 before rendering (a page-level notFound() would stream a 200 behind
+// the group's loading boundary).
+export const dynamicParams = false
+
 export function generateStaticParams() {
   return CATEGORY_SLUGS.flatMap((category) => SPECIALIZATIONS[category].map((service) => ({ category, service })))
 }

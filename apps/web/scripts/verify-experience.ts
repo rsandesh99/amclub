@@ -554,9 +554,11 @@ async function e2b(fx: { word: string; A: string; B: string; C: string; D: strin
   created.providerIds.push(pp!.id)
   await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: tax!.id })
   const pkgBody = { category_slug: 'tax-accounting', title: `${word} audit package`, scope_included: ['Audit'], deliverables: ['Report'], price_paise: 4000_00, delivery_days: 9, status: 'active' }
-  const bad = await api(prov.token, '/api/v1/partner/packages', { ...pkgBody, service_slug: 'trademark' })
+  // The package routes read the web session (cookie), like the wizard.
+  const asProv = (body: unknown) => fetch(`${BASE}/api/v1/partner/packages`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie: prov.cookie }, body: JSON.stringify(body) })
+  const bad = await asProv({ ...pkgBody, service_slug: 'trademark' })
   check('FR-2.3: a service from another category → 422', bad.status === 422 && ((await bad.json()) as { error: string }).error === 'invalid_service')
-  const good = await api(prov.token, '/api/v1/partner/packages', { ...pkgBody, service_slug: 'audit' })
+  const good = await asProv({ ...pkgBody, service_slug: 'audit' })
   const gid = ((await good.json()) as { id?: string }).id
   if (gid) created.packageIds.push(gid)
   const { data: gRow } = await admin.from('packages').select('service_slug').eq('id', gid ?? '').maybeSingle()
