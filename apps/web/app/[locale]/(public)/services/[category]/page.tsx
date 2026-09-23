@@ -8,7 +8,9 @@ import { CatalogResults } from '@/components/catalog/CatalogResults'
 import { getCategoryBySlug, getCategories } from '@/lib/catalog/queries'
 import { parseFilters } from '@/lib/catalog/filters'
 import { pickI18n } from '@/lib/format'
-import { CATEGORY_SLUGS } from '@amclub/shared'
+import { CATEGORY_SLUGS, parseSearchV2 } from '@amclub/shared'
+import { isOnForEveryone } from '@/lib/experiments'
+import { SearchResultsV3 } from '@/components/search-v3/SearchResultsV3'
 
 // ISR: category pages revalidate hourly (§ Phase 3 SEO).
 export const revalidate = 3600
@@ -51,9 +53,11 @@ export default async function CategoryListingPage({
   const locale = await getLocale()
   const allCategories = await getCategories()
   const stateLabel = sp['state']
+  // Experience v3 E2 (flag `search`): filters show before a query (FR-2.2).
+  const v3 = isOnForEveryone('search')
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className={v3 ? 'mx-auto max-w-[1280px] px-4 py-8' : 'mx-auto max-w-6xl px-4 py-8'}>
       {/* Breadcrumb */}
       <nav className="mb-4 text-xs text-foreground-secondary">
         <Link href="/services" className="hover:text-primary">
@@ -94,18 +98,24 @@ export default async function CategoryListingPage({
           ))}
       </div>
 
-      {/* Filters */}
-      <div className="mb-6">
-        <ListingControls />
-      </div>
+      {v3 ? (
+        <SearchResultsV3 search={parseSearchV2(sp)} basePath={`/services/${category}`} fixedCategory={category} />
+      ) : (
+        <>
+          {/* Filters */}
+          <div className="mb-6">
+            <ListingControls />
+          </div>
 
-      {/* Results */}
-      <CatalogResults
-        filters={parseFilters(sp, { categorySlug: category })}
-        basePath={`/services/${category}`}
-        searchParams={sp}
-        {...(stateLabel ? { stateLabel } : {})}
-      />
+          {/* Results */}
+          <CatalogResults
+            filters={parseFilters(sp, { categorySlug: category })}
+            basePath={`/services/${category}`}
+            searchParams={sp}
+            {...(stateLabel ? { stateLabel } : {})}
+          />
+        </>
+      )}
     </div>
   )
 }

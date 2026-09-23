@@ -7,6 +7,9 @@ import { ListingControls } from '@/components/catalog/ListingControls'
 import { CatalogResults } from '@/components/catalog/CatalogResults'
 import { getCategories } from '@/lib/catalog/queries'
 import { parseFilters, hasActiveFilters } from '@/lib/catalog/filters'
+import { hasNarrowingV2, parseSearchV2 } from '@amclub/shared'
+import { isOnForEveryone } from '@/lib/experiments'
+import { SearchResultsV3 } from '@/components/search-v3/SearchResultsV3'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('catalog')
@@ -21,10 +24,13 @@ export default async function ServicesPage({
   const sp = await searchParams
   const t = await getTranslations('catalog')
   const categories = await getCategories()
-  const searching = hasActiveFilters(sp)
+  // Experience v3 E2 (flag `search`): search v2 with facets, list view, feedback.
+  const v3 = isOnForEveryone('search')
+  const search = parseSearchV2(sp)
+  const searching = v3 ? Boolean(search.query || search.category || search.sort || hasNarrowingV2(search)) : hasActiveFilters(sp)
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className={v3 ? 'mx-auto max-w-[1280px] px-4 py-8' : 'mx-auto max-w-6xl px-4 py-8'}>
       {/* CMS hero slot — the gateway replaced the old landing page, so /services
           is now the public home for campaign banners. */}
       <BannerSlot slot="hero" className="mb-6 space-y-3" />
@@ -37,7 +43,9 @@ export default async function ServicesPage({
         <SearchBar defaultValue={sp['query'] ?? ''} />
       </div>
 
-      {searching ? (
+      {searching && v3 ? (
+        <SearchResultsV3 search={search} basePath="/services" />
+      ) : searching ? (
         <div className="space-y-5">
           <ListingControls />
           <CatalogResults

@@ -58,6 +58,9 @@ export interface CatalogResult {
   verified: boolean
   /** Headline professional credential KIND (e.g. 'icai'), never the number. */
   headlineCredential: string | null
+  /** Search v2 (E2): the level-2 service and the text relevance of this row. */
+  serviceSlug?: string | null
+  textRank?: number | null
 }
 
 export interface SearchResponse {

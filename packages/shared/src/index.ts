@@ -44,6 +44,7 @@ export * from './experiments'
 // N16 — server price display ("₹X + 18 % GST = ₹Y")
 export * from './price-display'
 export * from './packages-v3'
+export * from './search-v2'
 
 // N9 — public measured stats (gated; never the composite score)
 export * from './public-stats'
