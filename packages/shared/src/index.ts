@@ -97,6 +97,8 @@ export * from './data-capture'
 export * from './addons'
 // Experience v3 E12b (ADR 020) — quote speed options (Economy / Standard / Express): coherence, choices, extremes
 export * from './quote-options'
+// Experience v3 E12c (ADR 021) — compliance bundles: milestones, the exact per-child split, the frozen plan
+export * from './bundles'
 
 // Agentic assistant contract: task classes → tiers, personas, tool allowlists,
 // confirm gates, event kinds (H0 groundwork, DESIGN.md §8.6 / ADR-008)

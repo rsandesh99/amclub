@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Clock, RefreshCw, Landmark, RotateCcw } from 'lucide-react'
 import { totalBucket } from '@amclub/shared'
@@ -22,7 +23,8 @@ const buyHref = (packageId: string, addons: string[] = []) => `/app/checkout/${p
 export function AddOnList() {
   const tv = useTranslations('packages_v3')
   const { selected, chosen, toggleAddon, quoteBusy, addonNote } = useTierState()
-  const addons = selected.addons ?? []
+  // E12c — add-ons are not offered on a plan.
+  const addons = selected.plan?.length ? [] : (selected.addons ?? [])
   if (addons.length === 0) return null
   return (
     <fieldset className="mt-4 border-t border-border pt-4" data-testid="addon-list">
@@ -107,6 +109,39 @@ export function GovtLine({ className }: { className?: string }) {
 }
 
 /**
+ * E12c / ADR 021 — "Pay once · N milestones": each milestone becomes its own
+ * order, due by its day, and is paid out only when it is done. The amounts are
+ * the server's exact split (they add up to the total above).
+ */
+export function PlanSteps() {
+  const tv = useTranslations('packages_v3')
+  const analytics = useAnalytics()
+  const { selected } = useTierState()
+  const plan = selected.plan ?? []
+  const seen = useRef<string | null>(null)
+  useEffect(() => {
+    if (!plan.length || seen.current === selected.packageId) return
+    seen.current = selected.packageId
+    analytics.capture('bundle_viewed', { device: 'web', milestones: plan.length })
+  }, [plan.length, selected.packageId, analytics])
+  if (plan.length === 0) return null
+  return (
+    <div className="mt-4 border-t border-border pt-4" data-testid="plan-steps">
+      <p className="text-sm font-semibold">{tv('plan_title', { n: plan.length, days: plan[plan.length - 1]!.dueOffsetDays })}</p>
+      <ol className="mt-2 space-y-1.5 text-sm">
+        {plan.map((s, i) => (
+          <li key={i} className="flex items-baseline justify-between gap-3">
+            <span className="min-w-0"><span className="text-foreground-secondary tabular-nums">{i + 1}.</span> {s.label} <span className="text-xs text-foreground-secondary">· {tv('plan_by_day', { day: s.dueOffsetDays })}</span></span>
+            <span className="shrink-0 tabular-nums">{formatINRExact(s.totalPaise)}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-xs text-foreground-secondary">{tv('plan_escrow_note')}</p>
+    </div>
+  )
+}
+
+/**
  * FR-4.2 sticky buy box: tier tabs · price equation · delivery / revisions ·
  * "Choose this if…" · Buy now · the escrow note · refund line · government
  * line. Every figure is the selected option's server `display`.
@@ -149,6 +184,7 @@ export function BuyBox({ buyNote }: { buyNote: string }) {
           {selected.idealForOriginal ? <TranslatedText key={selected.packageId} text={selected.idealFor} original={selected.idealForOriginal} lang={locale} /> : selected.idealFor}
         </p>
       )}
+      <PlanSteps />
       <AddOnList />
       <Link
         href={buyHref(selected.packageId, quote ? chosen : [])}

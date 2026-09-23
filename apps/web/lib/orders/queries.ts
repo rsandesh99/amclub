@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { disputeWindowEndsAt, PAYOUT_STATUS, type OrderPayoutFacts, type PayoutStatus } from '@amclub/shared'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { resolveActor } from './actor'
+import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
 
 const PAYOUT_HELD = PAYOUT_STATUS.held
 
@@ -107,15 +108,13 @@ export async function getOrderDetail(userId: string, orderId: string): Promise<O
       .select('id, event, payload, created_at, actor_id')
       .eq('order_id', orderId)
       .order('created_at', { ascending: true }),
-    admin.from('payments').select('id').eq('order_id', orderId).maybeSingle(),
+    paymentForOrder<{ id: string }>(admin, order, 'id').then((data) => ({ data })),
     orderDisputeWindowEndsAt(admin, order),
     isProvider
       ? admin.from('payouts').select('status, scheduled_for, paid_at').eq('order_id', orderId).order('created_at', { ascending: false }).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
   ])
-  const { data: refund } = payment
-    ? await admin.from('refunds').select('amount_paise, status, created_at').eq('payment_id', payment.id).maybeSingle()
-    : { data: null }
+  const refund = payment ? await refundForOrder<{ amount_paise: number; status: string; created_at: string }>(admin, order, payment.id, 'amount_paise, status, created_at') : null
 
   const all = events ?? []
   const latest = (name: string) => [...all].reverse().find((e) => e.event === name)

@@ -4,6 +4,7 @@ import { finalizeQuoteAcceptance, type FinalizeResult } from '@/lib/rfq/finalize
 import { notifyOrderPlaced } from '@/lib/notifications/events'
 import { recordCouponRedemption } from '@/lib/coupons/redeem'
 import { copyAttributionToOrder } from '@/lib/search/attribution'
+import { captureServerEvent } from '@/lib/analytics/server'
 
 export interface CaptureInput {
   razorpayOrderId: string
@@ -82,6 +83,14 @@ export async function materializeFromCapture(
       await admin.from('order_events').insert({ order_id: orderId, event: 'placed_side_effects' })
       // E15 F5 — the search that led to this order (best-effort; never affects the order).
       await copyAttributionToOrder(admin, orderId)
+      // E12c — a bundle's children were created with the order (trigger); count the purchase once.
+      try {
+        const { data: carrier } = await admin.from('orders').select('*').eq('id', orderId).maybeSingle()
+        const bp = (carrier as { bundle_purchase_id?: string | null; msme_id?: string } | null)?.bundle_purchase_id
+        if (bp) captureServerEvent('system', 'bundle_purchased', { bundle_purchase_id: bp })
+      } catch {
+        /* telemetry only */
+      }
       if (finalized !== 'duplicate_flagged') {
         try {
           await recordCouponRedemption(admin, orderId)

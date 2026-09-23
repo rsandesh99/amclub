@@ -3090,7 +3090,10 @@
     "addon_revisions": "{count, plural, one {+# revision} other {+# revisions}}",
     "addons_updating": "Updating the total…",
     "addons_changed": "An add-on changed since the page loaded. Choose again to see the new total.",
-    "addons_failed": "Couldn't update the total. Please try again."
+    "addons_failed": "Couldn't update the total. Please try again.",
+    "plan_title": "Pay once · {n} milestones over {days} days",
+    "plan_by_day": "by day {day}",
+    "plan_escrow_note": "Each milestone is its own order: the provider is paid for it only when it's done, and milestones not yet started can be cancelled for a full refund."
   },
   "tier_editor": {
     "title": "Offer tiers",
@@ -3286,7 +3289,10 @@
     "err_details": "Enter your name and business name.",
     "err_save": "Couldn't save your details. Please try again.",
     "addon_included": "Includes: {label}",
-    "addons_dropped": "An add-on you picked is no longer offered, so it isn't included. The total below is what you'll pay."
+    "addons_dropped": "An add-on you picked is no longer offered, so it isn't included. The total below is what you'll pay.",
+    "plan_title": "Paid once, delivered in {n} milestones",
+    "plan_by_day": "by day {day}",
+    "plan_note": "Each milestone becomes its own order. You can cancel milestones that haven't started for a full refund."
   },
   "rfq_v3": {
     "or_type": "or type",
@@ -3611,7 +3617,10 @@
     "msg_placeholder": "Write a message…",
     "msg_attach": "Attach order documents (up to {max})",
     "msg_send": "Send",
-    "addons_title": "Add-ons bought"
+    "addons_title": "Add-ons bought",
+    "milestone_line": "Milestone {seq} of your plan",
+    "milestone_starts": "starts {date}",
+    "milestone_view_plan": "View plan"
   },
   "notify": {
     "your_request": "your request",
@@ -3819,5 +3828,40 @@
     "err_fields": "Add a short description and a price above ₹0.",
     "err_limit": "You can have 3 active add-ons. Pause one first.",
     "err_save": "Couldn't save. Please try again."
+  },
+  "bundles": {
+    "editor_title": "Sell as a plan",
+    "editor_body": "Split this package into 2–6 milestones due within {days} days. The buyer pays once; each milestone becomes its own order and is paid out when it's done. Shares must add up to 100 %.",
+    "label": "Milestone {n}",
+    "label_hi": "In Hindi (optional)",
+    "due_day": "Due by day",
+    "share_pct": "Share %",
+    "add": "Add a milestone",
+    "remove": "Remove",
+    "save": "Save plan",
+    "clear": "Sell as a single order",
+    "saved": "Plan saved. New purchases use it.",
+    "cleared": "This package sells as a single order again.",
+    "err_shares": "Shares must add up to exactly 100 %.",
+    "err_order": "Each milestone must be due after the one before it.",
+    "err_save": "Couldn't save the plan. Check the milestones and try again."
+  },
+  "plans": {
+    "title": "Your plans",
+    "subtitle": "Paid once, delivered in milestones. Each milestone is its own order.",
+    "empty": "You don't have any plans yet.",
+    "purchased_on": "Bought {date}",
+    "paid": "Paid",
+    "held": "Still held for you",
+    "next_due": "Next milestone",
+    "next_line": "Milestone {seq}, due {date}",
+    "next_line_nodate": "Milestone {seq}",
+    "due_on": "due {date}",
+    "cancel_remaining": "{count, plural, one {Cancel the # remaining milestone} other {Cancel the # remaining milestones}}",
+    "cancel_title": "Cancel the remaining milestones?",
+    "cancel_body": "{count, plural, one {The # milestone that hasn't started is cancelled and refunded in full.} other {The # milestones that haven't started are cancelled and refunded in full.}} Milestones already in progress or done stay as they are.",
+    "cancel_confirm": "Cancel and refund",
+    "cancel_keep": "Keep my plan",
+    "cancel_error": "Couldn't cancel. Please try again."
   }
 }

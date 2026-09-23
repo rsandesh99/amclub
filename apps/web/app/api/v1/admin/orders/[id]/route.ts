@@ -11,6 +11,7 @@ import { processRefund } from '@/lib/orders/transitions'
 import { serverError } from '@/lib/api/errors'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { getLatestDossierForOrder } from '@/lib/agent/dossiers'
+import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
 
 /** GET — full order detail: timeline, payment, payout, refund, documents. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,13 +25,12 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
   const [{ data: events }, { data: payment }, { data: payout }, { data: docs }] = await Promise.all([
     admin.from('order_events').select('id, event, payload, created_at').eq('order_id', id).order('created_at', { ascending: true }),
-    admin.from('payments').select('id, status, amount_paise, razorpay_payment_id').eq('order_id', id).maybeSingle(),
+    // E12c — a bundle child shows its purchase's payment and its OWN refund row.
+    paymentForOrder<{ id: string; status: string; amount_paise: number; razorpay_payment_id: string | null }>(admin, order, 'id, status, amount_paise, razorpay_payment_id').then((data) => ({ data })),
     admin.from('payouts').select('id, status, amount_paise, scheduled_for, paid_at').eq('order_id', id).maybeSingle(),
     admin.from('order_documents').select('id, file_name, kind, created_at').eq('order_id', id),
   ])
-  const { data: refund } = payment
-    ? await admin.from('refunds').select('id, status, amount_paise, created_at').eq('payment_id', payment.id).maybeSingle()
-    : { data: null }
+  const refund = payment ? await refundForOrder(admin, order, payment.id, 'id, status, amount_paise, created_at') : null
 
   // S1.4 — the latest payout dossier for the Dossier panel (agent surface: flag-gated, inert otherwise).
   const dossier = AGENT_ENABLED ? await getLatestDossierForOrder(admin, id).catch(() => null) : null
@@ -75,9 +75,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const amountPaise = parsed.data.amountPaise
       const totalPaise = Number(order.total_paise)
       if (amountPaise > totalPaise) return NextResponse.json({ error: 'refund_over_total', totalPaise }, { status: 422 })
-      const { data: payment } = await admin.from('payments').select('id').eq('order_id', id).maybeSingle()
+      const payment = await paymentForOrder<{ id: string }>(admin, order, 'id')
       if (!payment) return NextResponse.json({ error: 'no_payment' }, { status: 409 })
-      const { data: existing } = await admin.from('refunds').select('amount_paise').eq('payment_id', payment.id).maybeSingle()
+      const existing = await refundForOrder<{ amount_paise: number }>(admin, order, payment.id, 'amount_paise')
       if (existing) return NextResponse.json({ error: 'refund_exists', existingPaise: Number(existing.amount_paise) }, { status: 409 })
       const refunded = await processRefund(admin, order, order.status, 'refund_partial', amountPaise)
       if (refunded !== amountPaise) {

@@ -119,6 +119,18 @@ export const packageAddons = pgTable('package_addons', {
   check('package_addons_extra_revisions', sql`extra_revisions BETWEEN 0 AND 5`),
 ])
 
+// E12c / ADR 021 (0067) — a package is a bundle when it has 2..6 milestones (shares sum to 10,000 bps, ≤ 92 days).
+export const bundleMilestones = pgTable('bundle_milestones', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  packageId: uuid('package_id').notNull().references(() => packages.id, { onDelete: 'cascade' }),
+  seq: integer('seq').notNull(),
+  labelI18n: jsonb('label_i18n').notNull(),
+  dueOffsetDays: integer('due_offset_days').notNull(),
+  shareBps: integer('share_bps').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [unique('bundle_milestones_package_id_seq_key').on(t.packageId, t.seq)])
+
 export const searchFeedback = pgTable('search_feedback', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid('user_id'),

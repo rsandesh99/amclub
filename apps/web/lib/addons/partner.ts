@@ -21,8 +21,13 @@ export interface OwnedPackage {
  * Writes then go through the service role (clients hold no write grant).
  */
 export async function ownPackageForAddons(packageId: string, route: string): Promise<OwnedPackage | NextResponse> {
+  return ownPackageFor(packageId, route, addonsOn)
+}
+
+/** The same guard for any package-level money feature behind its own switch (add-ons, E12c milestones). */
+export async function ownPackageFor(packageId: string, route: string, switchOn: (admin: Admin) => Promise<boolean>): Promise<OwnedPackage | NextResponse> {
   const admin = await createAdminClient()
-  if (!(await addonsOn(admin))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!(await switchOn(admin))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const delegated = await requireNotDelegated(route)

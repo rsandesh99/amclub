@@ -2,12 +2,13 @@ import { redirect, notFound } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
 import { createAdminClient, createClient, createPublicClient } from '@/lib/supabase/server'
 import { activeAddonsFor, addonsOn } from '@/lib/addons'
+import { offeredMilestones } from '@/lib/bundles'
 import { getSessionUser, getMsmeProfile, type SessionUser } from '@/lib/auth/session'
-import { addonIdsSchema, computeOrderAmounts, isValidGstin, ORDER_ACCEPT_WINDOW_HOURS, packageCharge, packageChargeDisplay, priceDisplay, resolveAddonSelection, rfqFieldLabel } from '@amclub/shared'
+import { addonIdsSchema, bundlePlan, computeOrderAmounts, isValidGstin, ORDER_ACCEPT_WINDOW_HOURS, packageCharge, packageChargeDisplay, priceDisplay, resolveAddonSelection, rfqFieldLabel } from '@amclub/shared'
 import { pickI18n } from '@/lib/format'
 import { COUPONS_ENABLED } from '@/lib/flags'
 import { isOnFor, isOnForEveryone } from '@/lib/experiments'
-import { CheckoutV3, type CheckoutAddonLine, type CheckoutMode } from '@/components/checkout-v3/CheckoutV3'
+import { CheckoutV3, type CheckoutAddonLine, type CheckoutMode, type CheckoutPlanLine } from '@/components/checkout-v3/CheckoutV3'
 import { CheckoutClient } from './CheckoutClient'
 
 interface RequirementField {
@@ -48,7 +49,9 @@ async function CheckoutV3Page({ packageId, user, addonParam }: { packageId: stri
   // E12a / ADR 019 — add-ons chosen in the buy box (`?addons=`), re-read and
   // priced here with the SAME packageCharge checkout freezes. Anything that is
   // no longer an active add-on of this package is dropped with a note.
-  const wanted = addonIdsSchema.safeParse((addonParam ?? '').split(',').filter(Boolean))
+  // E12c / ADR 021 — a plan: one payment, one order per milestone (add-ons are not offered on plans).
+  const milestones = await offeredMilestones(await createAdminClient(), p.id)
+  const wanted = addonIdsSchema.safeParse(milestones.length ? [] : (addonParam ?? '').split(',').filter(Boolean))
   let addonLines: CheckoutAddonLine[] = []
   let addonIds: string[] = []
   let addonsDropped = false
@@ -66,6 +69,10 @@ async function CheckoutV3Page({ packageId, user, addonParam }: { packageId: stri
   } else if (addonParam) {
     addonsDropped = true
   }
+  const planLines: CheckoutPlanLine[] = milestones.length
+    ? bundlePlan((charge ?? packageCharge({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, commissionBps: 0, deliveryDays: p.delivery_days, revisionCount: p.revision_count ?? null, addons: [] })).amounts, milestones)
+        .map((c) => ({ label: pickI18n(c.label, locale), dueOffsetDays: c.dueOffsetDays, totalPaise: c.amounts.totalPaise }))
+    : []
   // Exactly what checkout charges (no coupon, no member price) — N16.
   const display = charge
     ? packageChargeDisplay(charge, { discountBps: p.discount_bps, buyerHasGstin: itc })
@@ -93,6 +100,7 @@ async function CheckoutV3Page({ packageId, user, addonParam }: { packageId: stri
         addonIds={addonIds}
         addonLines={addonLines}
         addonsDropped={addonsDropped}
+        planLines={planLines}
         itcGstinMasked={itc ? `${profileGstin!.slice(0, 4)}…${profileGstin!.slice(-2)}` : null}
         profileGstin={profileGstin}
         providerPaused={!!p.provider.capacity_paused}

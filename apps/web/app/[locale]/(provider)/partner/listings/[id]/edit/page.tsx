@@ -9,6 +9,8 @@ import { isOnFor } from '@/lib/experiments'
 import { addonsOn } from '@/lib/addons'
 import { PARTNER_ADDON_COLS } from '@/lib/addons/partner'
 import { AddOnsEditor, type EditorAddon } from '@/components/partner/AddOnsEditor'
+import { MilestonesEditor, type EditorMilestone } from '@/components/partner/MilestonesEditor'
+import { MILESTONE_COLS, bundlesOn } from '@/lib/bundles'
 
 interface RequirementField {
   label_en?: string
@@ -73,6 +75,10 @@ export default async function EditListingPage({
   const addons: EditorAddon[] | null = mine && (await addonsOn(admin))
     ? (((await admin.from('package_addons').select(PARTNER_ADDON_COLS).eq('package_id', pk.id).is('deleted_at', null).order('sort').order('created_at')).data ?? []) as EditorAddon[]).map((a) => ({ ...a, price_paise: Number(a.price_paise) }))
     : null
+  // E12c / ADR 021 — the plan (milestones), only while the switch is on, own package only.
+  const milestones: EditorMilestone[] | null = mine && (await bundlesOn(admin))
+    ? (((await admin.from('bundle_milestones').select(MILESTONE_COLS).eq('package_id', pk.id).order('seq')).data ?? []) as EditorMilestone[])
+    : null
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -82,6 +88,7 @@ export default async function EditListingPage({
       <h1 className="mb-6 font-display text-2xl font-bold">{t('edit_listing')}</h1>
       <PackageWizard mode="edit" initial={initial} allowedCategorySlugs={[]} offerServices={offerServices} />
       {addons && <AddOnsEditor packageId={pk.id} initial={addons} />}
+      {milestones && <MilestonesEditor packageId={pk.id} initial={milestones} />}
     </div>
   )
 }

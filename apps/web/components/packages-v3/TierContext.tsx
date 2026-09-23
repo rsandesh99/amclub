@@ -24,6 +24,15 @@ export interface BuyOption {
   govtDependent: boolean
   /** E12a / ADR 019 — this option's active add-ons (server-localized; empty while the switch is off). */
   addons?: BuyAddon[]
+  /** E12c / ADR 021 — a plan: one payment, one order per milestone (server-split; absent = a single order). */
+  plan?: BuyPlanStep[]
+}
+
+/** One milestone of a plan as the buy box shows it (the amount is the server's exact split). */
+export interface BuyPlanStep {
+  label: string
+  dueOffsetDays: number
+  totalPaise: number
 }
 
 /** One add-on as the buy box shows it. The price is the server's; the client never adds it up. */

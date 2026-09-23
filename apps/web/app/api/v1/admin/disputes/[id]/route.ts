@@ -6,6 +6,7 @@ import { requireToolScope } from '@/lib/agent/scope'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { listStatements, loadQuoteThread } from '@/lib/disputes/statements'
 import { getLatestTriageForDispute, triageHistory } from '@/lib/agent/triages'
+import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
 
 /**
  * GET — full dispute detail: order, timeline, payment, payout, refund, documents,
@@ -28,13 +29,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { data: order } = await admin.from('orders').select('*').eq('id', dispute.order_id).maybeSingle()
   const [{ data: events }, { data: payment }, { data: payout }, { data: docs }] = await Promise.all([
     admin.from('order_events').select('id, event, payload, created_at, actor_id').eq('order_id', dispute.order_id).order('created_at', { ascending: true }),
-    admin.from('payments').select('id, status, amount_paise, razorpay_payment_id').eq('order_id', dispute.order_id).maybeSingle(),
+    order ? paymentForOrder<{ id: string; status: string; amount_paise: number; razorpay_payment_id: string | null }>(admin, order, 'id, status, amount_paise, razorpay_payment_id').then((data) => ({ data })) : Promise.resolve({ data: null }),
     admin.from('payouts').select('id, status, amount_paise, paid_at').eq('order_id', dispute.order_id).maybeSingle(),
     admin.from('order_documents').select('id, file_name, kind, created_at').eq('order_id', dispute.order_id),
   ])
-  const { data: refund } = payment
-    ? await admin.from('refunds').select('id, status, amount_paise, created_at').eq('payment_id', payment.id).maybeSingle()
-    : { data: null }
+  const refund = payment && order ? await refundForOrder(admin, order, payment.id, 'id, status, amount_paise, created_at') : null
 
   // S1.7 — statements (spine) + the quote thread always; the triage only while the agent surface exists.
   const [statements, thread, triage, history] = await Promise.all([

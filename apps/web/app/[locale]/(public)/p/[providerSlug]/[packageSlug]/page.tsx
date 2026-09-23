@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getTranslations, getLocale } from 'next-intl/server'
 import { Check, X, Clock, RefreshCw, BadgeCheck, FileText, ChevronRight } from 'lucide-react'
-import { rfqFieldLabel } from '@amclub/shared'
+import { bundlePlan, computeOrderAmounts, rfqFieldLabel } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { Stars } from '@/components/catalog/Stars'
@@ -11,13 +11,14 @@ import { getPackageDetail } from '@/lib/catalog/queries'
 import { packageI18nSources } from '@/lib/translations/content'
 import { createAdminClient, createPublicClient } from '@/lib/supabase/server'
 import { activeAddonsFor, addonsOn } from '@/lib/addons'
+import { bundlesOn, milestonesFor } from '@/lib/bundles'
 import { TranslatedText } from '@/components/catalog/TranslatedText'
 import { deliverableLabel, isMachineTranslated } from '@amclub/shared'
 import { getPackageExtras } from '@/lib/catalog/package-groups'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatINR } from '@/lib/format'
 import { isExperienceLive, isOnForEveryone } from '@/lib/experiments'
-import { TierProvider, type BuyAddon, type BuyOption } from '@/components/packages-v3/TierContext'
+import { TierProvider, type BuyAddon, type BuyOption, type BuyPlanStep } from '@/components/packages-v3/TierContext'
 import { BuyBox, StickyBuyBar, TierTabs } from '@/components/packages-v3/BuyBox'
 import { PackageTierMatrix } from '@/components/packages-v3/TierMatrix'
 import { RecentViewTracker } from '@/components/recent-v3/RecentViewTracker'
@@ -116,6 +117,22 @@ export default async function PackageDetailPage({
     }
   }
 
+  // E12c / ADR 021 — a plan per option (the exact split of the option's display total; switch on only).
+  const planBy = new Map<string, BuyPlanStep[]>()
+  if (v3) {
+    const admin = await createAdminClient()
+    if (await bundlesOn(admin)) {
+      const priced = extras?.tiers ? extras.tiers.tiers.map((o) => ({ id: o.packageId, display: o.display })) : [{ id: pkg.id, display: pkg.display }]
+      for (const o of priced) {
+        const ms = await milestonesFor(admin, o.id)
+        if (!ms.length) continue
+        // The display's own figures (list − discount + GST) split exactly as checkout will split the charge.
+        const whole = computeOrderAmounts({ pricePaise: o.display.listPaise, discountBps: 0, commissionBps: 0, extraDiscountPaise: o.display.discountPaise })
+        planBy.set(o.id, bundlePlan(whole, ms).map((c) => ({ label: pickI18n(c.label, locale), dueOffsetDays: c.dueOffsetDays, totalPaise: c.amounts.totalPaise })))
+      }
+    }
+  }
+
   // One purchasable option per tier (or just this package), priced on the server.
   const options: BuyOption[] = extras?.tiers
     ? extras.tiers.tiers.map((o) => ({
@@ -131,6 +148,7 @@ export default async function PackageDetailPage({
         display: o.display,
         govtDependent: o.govtDependent,
         addons: addonsBy.get(o.packageId) ?? [],
+        ...(planBy.has(o.packageId) ? { plan: planBy.get(o.packageId)! } : {}),
       }))
     : [{
         packageId: pkg.id,
@@ -144,6 +162,7 @@ export default async function PackageDetailPage({
         display: pkg.display,
         govtDependent: extras?.govtDependent ?? false,
         addons: addonsBy.get(pkg.id) ?? [],
+        ...(planBy.has(pkg.id) ? { plan: planBy.get(pkg.id)! } : {}),
       }]
 
   const body = (

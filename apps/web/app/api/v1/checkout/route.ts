@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { addonIdsSchema, addonSelectionKey, couponBasePaise, isValidGstin, packageCharge, quoteChargeAmounts, resolveAddonSelection, type AddonSnapshot, type OrderAmounts, type PackageAddonRow } from '@amclub/shared'
+import { addonIdsSchema, addonSelectionKey, bundlePlan, bundlePlanSnapshot, couponBasePaise, isValidGstin, packageCharge, quoteChargeAmounts, resolveAddonSelection, type AddonSnapshot, type BundleMilestoneRow, type BundlePlanSnapshot, type OrderAmounts, type PackageAddonRow } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
@@ -15,6 +15,7 @@ import { searchAttributionSchema } from '@amclub/shared'
 import { storeCheckoutAttribution } from '@/lib/search/attribution'
 import { activeAddonsFor, addonsOn } from '@/lib/addons'
 import { optionForCheckout, quoteOptionsOn } from '@/lib/rfq/quote-options'
+import { offeredMilestones } from '@/lib/bundles'
 
 const bodySchema = z
   .object({
@@ -125,6 +126,8 @@ interface Prep {
   addons: AddonSnapshot
   /** E12b — the quote option the session is frozen on (quote branch; null = Standard). */
   quoteOptionId?: string | null
+  /** E12c — the frozen per-milestone plan (a bundle package; null = a single order). */
+  bundlePlan?: BundlePlanSnapshot | null
 }
 
 export async function POST(request: NextRequest) {
@@ -212,6 +215,10 @@ export async function POST(request: NextRequest) {
     // add-ons (client prices, if any were sent, are never read). An id that is
     // not one of them — removed since the preview, another package's, or the
     // switch is off — is refused, never silently dropped.
+    // E12c / ADR 021 — a package with milestones (switch on) sells as ONE payment for N child orders.
+    const milestones: BundleMilestoneRow[] = await offeredMilestones(await createAdminClient(), p.id)
+    if (milestones.length && addonIds.length) return fail(409, 'addon_changed', 'Add-ons are not offered on plans')
+
     let addonRows: PackageAddonRow[] = []
     if (addonIds.length) {
       const admin = await createAdminClient()
@@ -237,6 +244,9 @@ export async function POST(request: NextRequest) {
       addons: addonRows,
       couponDiscountPaise: extraDiscountPaise,
     })
+    // The split is computed ONCE here (every column sums exactly to the whole) and frozen on the session;
+    // the materialisation trigger copies it, never recomputes.
+    const plan = milestones.length ? bundlePlan(charge.amounts, milestones) : null
 
     prep = {
       providerId: p.provider_id,
@@ -251,10 +261,11 @@ export async function POST(request: NextRequest) {
         deliverables: p.deliverables ?? [],
         requirementsTemplate: p.requirements_template ?? null,
       },
-      deliveryDays: charge.deliveryDays,
+      deliveryDays: plan ? plan[0]!.deliveryDays : charge.deliveryDays,
       revisionMax: charge.revisionMax,
       amounts: charge.amounts,
       addons: charge.addons,
+      bundlePlan: plan ? bundlePlanSnapshot(plan) : null,
     }
   } else {
     // Quote branch — accepting a submitted quote on the buyer's own RFQ.
@@ -413,6 +424,8 @@ export async function POST(request: NextRequest) {
         ...(prep.addons.length ? { addons: prep.addons } : {}),
         // E12b — only an option session names the column (0066).
         ...(prep.quoteOptionId ? { quote_option_id: prep.quoteOptionId } : {}),
+        // E12c — only a bundle session names the column (0067).
+        ...(prep.bundlePlan ? { bundle_plan: prep.bundlePlan } : {}),
         idempotency_key: idempotencyKey,
         status: 'created',
         expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),

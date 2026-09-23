@@ -234,6 +234,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E11c / N30 (D9): /partner/tenders — tender ALERTS matched by category + state for verified government-licensing providers (Save / Not relevant; the official portal link) and the reviewed GeM checklist. No bidding, applying or submitting inside AMClub. Turn on only after D9 and the mini-PRD settle the data source and its licence.',
   },
+  // ── Experience v3 E12c — compliance bundles with milestone escrow (ADR 021; money) ──
+  bundles_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E12c / ADR 021: a package with 2–6 milestones (≤ 92 days, shares summing to 100 %) sells as ONE payment that becomes one ordinary child order per milestone; unstarted children refund in full ("Cancel remaining" on /app/plans). Off: the milestone editor, the plan display and /app/plans are hidden and checkout sells the package as a single order. Apply migration 0067 first; counsel + Razorpay must clear holding buyer money for the plan length.',
+  },
   // ── Experience v3 E12b — quote speed options (ADR 020; money) ──
   quote_options_enabled: {
     schema: z.boolean(),

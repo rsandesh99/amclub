@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { addonSnapshotSchema, nextAction, nextStepTarget, orderIsActive, parseOrderTab, pickI18n, providerMoneyLine, REFUND_POLICY_BPS, visibleOrderTabs, type OrderStatus, type OrderTab } from '@amclub/shared'
 import { NudgeButton } from '@/components/orders/NudgeButton'
-import { useRouter } from '@/i18n/navigation'
+import { Link, useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -213,6 +213,9 @@ function ServicesOrderWorkspace({
   const locale = useLocale()
   const addonSnap = addonSnapshotSchema.safeParse(order['addons'] ?? [])
   const boughtAddons = addonSnap.success ? addonSnap.data : []
+  // E12c — a milestone of a plan: its number, and when it becomes actionable (absent = not a plan).
+  const bundleSeq = order['bundle_seq'] == null ? null : Number(order['bundle_seq'])
+  const startsAt = typeof order['available_at'] === 'string' && new Date(order['available_at'] as string).getTime() > Date.now() ? (order['available_at'] as string) : null
 
   const disputeEndsAt = extras.disputeWindowEndsAt
   const actions = actionsFor(viewerRole, status, { revisionsLeft, disputeWindowEndsAt: disputeEndsAt })
@@ -604,6 +607,13 @@ function ServicesOrderWorkspace({
                 {viewerRole === 'provider' && <div><dt className="text-foreground-secondary">{t('you_earn')}</dt><dd className="font-medium tabular-nums">{formatINR(earningPaise)}</dd></div>}
                 {revisionMax != null && <div><dt className="text-foreground-secondary">{t('revisions')}</dt><dd className="font-medium">{t('revisions_used', { used: revisionUsed, max: revisionMax })}</dd></div>}
               </dl>
+              {bundleSeq != null && (
+                <p className="border-t border-border pt-3 text-sm" data-testid="order-milestone">
+                  {to('milestone_line', { seq: bundleSeq })}
+                  {startsAt && <span className="text-foreground-secondary"> · {to('milestone_starts', { date: istDateTime(startsAt) })}</span>}
+                  {viewerRole === 'msme' && <> · <Link href="/app/plans" className="font-medium text-primary hover:underline">{to('milestone_view_plan')}</Link></>}
+                </p>
+              )}
               {boughtAddons.length > 0 && (
                 <div className="border-t border-border pt-3 text-sm" data-testid="order-addons">
                   <p className="text-foreground-secondary">{to('addons_title')}</p>

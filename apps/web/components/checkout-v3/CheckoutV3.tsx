@@ -22,6 +22,13 @@ const PaisaMoment = dynamic(() => import('@/components/mart/PaisaMoment').then((
 
 export type CheckoutMode = 'guest' | 'profile' | 'pay'
 
+/** E12c — one milestone of a plan as checkout lists it (the server's exact split). */
+export interface CheckoutPlanLine {
+  label: string
+  dueOffsetDays: number
+  totalPaise: number
+}
+
 /** E12a — one chosen add-on as checkout lists it (the price is the server's). */
 export interface CheckoutAddonLine {
   id: string
@@ -55,6 +62,7 @@ export function CheckoutV3({
   addonIds = [],
   addonLines = [],
   addonsDropped = false,
+  planLines = [],
 }: {
   mode: CheckoutMode
   locale: string
@@ -74,6 +82,8 @@ export function CheckoutV3({
   addonLines?: CheckoutAddonLine[]
   /** A chosen add-on is no longer offered, so it was left out. */
   addonsDropped?: boolean
+  /** E12c / ADR 021 — the plan's milestones (one payment now, one order per milestone). */
+  planLines?: CheckoutPlanLine[]
 }) {
   const t = useTranslations('checkout')
   const tv = useTranslations('checkout_v3')
@@ -228,6 +238,20 @@ export function CheckoutV3({
           {row(tv('gst_line', { pct: gstPercent(shown.gstBps) }), formatINRExact(shown.gstPaise))}
           {row(t('total'), formatINRExact(shown.totalPaise), true)}
         </dl>
+        {planLines.length > 0 && (
+          <div className="mt-4 border-t border-separator pt-3 text-sm" data-testid="checkout-plan">
+            <p className="font-medium">{tv('plan_title', { n: planLines.length })}</p>
+            <ol className="mt-2 space-y-1">
+              {planLines.map((l, i) => (
+                <li key={i} className="flex justify-between gap-3 text-xs">
+                  <span>{i + 1}. {l.label} · {tv('plan_by_day', { day: l.dueOffsetDays })}</span>
+                  <span className="tabular-nums">{formatINRExact(l.totalPaise)}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-2 text-xs text-foreground-secondary">{tv('plan_note')}</p>
+          </div>
+        )}
         {itcOn && (
           <p className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-button bg-success/10 px-3 py-2 text-sm text-success" data-testid="checkout-itc">
             <span>{tv('itc_line', { amount: formatINRExact(shown.gstPaise), gstin: itcGstinMasked! })}</span>

@@ -2195,6 +2195,44 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.2 · I 2 · C 0.5 · E 2.5 → **0.08**.
 
+**As built (E12c: ADR 021, migration 0067; dark behind `bundles_enabled`; enabling waits on counsel + Razorpay).**
+- **Model.**
+  - A package with 2–6 `bundle_milestones` is a bundle: `seq`, label, due offset ≤ 92 days, `share_bps` summing to 10,000, offsets strictly increasing. Shared `bundleMilestonesSchema` enforces it; the partner route is the only writer.
+  - `bundle_purchases`: one per paid plan, carrying the ONE payment. Parties read their own; no client writes.
+  - `orders.bundle_purchase_id` / `bundle_seq` / `available_at`.
+  - `checkout_sessions.bundle_plan`.
+- **The split.**
+  - Shared `bundlePlan`, computed once at checkout: floor split of price, discount, GST and commission per share, the last milestone taking the remainder; taxable, total and earning derived per child.
+  - Every column sums exactly to the whole, and Σ children = the captured payment (unit-pinned).
+  - Add-ons are not offered on plans (409); a coupon applies to the whole.
+- **Materialisation.**
+  - The trigger `checkout_sessions_materialize_bundle` runs in the same transaction that links the session: it records the purchase, turns the materialised order into child 1, and inserts children 2..N from the frozen plan.
+  - A replayed webhook creates nothing.
+  - Later children become actionable at `available_at`. Auto-cancel's 24 hours count from then (`staleOrdersForAutoCancel`, with a fallback before 0067, plus a guard in `autoCancelOrder`).
+- **Refunds per child on one payment.**
+  - `paymentForOrder` / `refundForOrder` run byte-identical queries for ordinary orders.
+  - A child resolves its purchase's payment and its OWN refund row (`rfnd_<order id>`).
+  - Used by `processRefund`, dispute resolve, and the admin order / dispute views.
+- **Cancel remaining.** `POST /api/v1/bundles/[id]/cancel-remaining` (the buyer's own session) sends every unstarted child (`placed` / `accepted`) through the ordinary `cancel` transition: 100 % back, one refund row each. Started or finished children are untouched.
+- **UI.**
+  - Provider: a "Sell as a plan" milestones editor.
+  - Buy box: "Pay once · N milestones over D days" with the exact split.
+  - Checkout: the plan lines.
+  - `/app/plans`: timeline, next due, money still held, "Cancel remaining" behind a confirm sheet.
+  - Each child's order page: "Milestone k of your plan · starts …".
+- **Events.**
+  - Client: `bundle_viewed { milestones }`, `plan_cancel_requested { remaining }`.
+  - Server: `bundle_purchased`, `bundle_milestone_completed { seq }`, `plan_cancelled`, `bundle_milestones_saved { n }`.
+- **Tests.**
+  - Shared `bundles` tests: exact sums across prices, consistency, offsets, schema.
+  - `verify-money-loop` E12c:
+    - one capture → 3 children equal to the frozen split, Σ = the payment;
+    - a replayed `materialize_order` creates nothing;
+    - a future child older than 24 h is not auto-cancelled;
+    - milestone 1 under way, then cancel remaining → 2 and 3 refunded in full, one row each, 1 untouched;
+    - a second cancel refunds nothing more.
+  - `verify-authz` 7a4: routes 404 while off; no direct client writes.
+
 **E12 events**
 
 | Event | Properties |

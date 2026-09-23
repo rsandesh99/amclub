@@ -623,6 +623,13 @@ async function main() {
     deniedRows('provA direct-reads quote_options', await asUser(provA.token).from('quote_options').select('id'))
     if (quoteId) deniedRows('provA INSERTs a quote option directly', await asUser(provA.token).from('quote_options').insert({ quote_id: quoteId, revision: 1, label: 'express', price_paise: 1, delivery_days: 1 }).select('id'))
 
+    // ── 7a4. E12c / ADR 021 — bundles: server-written only; routes dark while off ──
+    console.log('bundles (E12c / ADR 021):')
+    denied('switch off → the partner milestones route is 404', (await api(provA.token, `/api/v1/partner/packages/${pkgA!.id}/milestones`, undefined, 'GET')).status)
+    denied('switch off → /api/v1/me/plans is 404', (await api(buyerA.token, '/api/v1/me/plans', undefined, 'GET')).status)
+    deniedRows('provA INSERTs a milestone directly', await asUser(provA.token).from('bundle_milestones').insert({ package_id: pkgA!.id, seq: 1, label_i18n: { en: 'x' }, due_offset_days: 10, share_bps: 5000 }).select('id'))
+    deniedRows('buyerA INSERTs a bundle purchase directly', await asUser(buyerA.token).from('bundle_purchases').insert({ msme_id: msmeA!.id, provider_id: provAId, checkout_session_id: crypto.randomUUID(), total_paise: 1, title: 'forged' }).select('id'))
+
     // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
     console.log('users privilege guard (0042, direct PostgREST):')
     eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)

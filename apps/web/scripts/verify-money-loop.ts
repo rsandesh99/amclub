@@ -17,7 +17,7 @@ import { randomUUID } from 'crypto'
 config({ path: path.resolve(__dirname, '../.env.local') })
 
 import { createClient } from '@supabase/supabase-js'
-import { computeOrderAmounts, packageCharge, type PackageAddonRow } from '@amclub/shared'
+import { bundlePlan, computeOrderAmounts, packageCharge, type BundleMilestoneRow, type PackageAddonRow } from '@amclub/shared'
 
 const URL = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -274,6 +274,89 @@ async function main() {
       await admin.from('package_addons').delete().eq('package_id', packageId)
       if (before) await admin.from('agent_settings').upsert({ key: 'addons_enabled', value: before.value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
       else await admin.from('agent_settings').delete().eq('key', 'addons_enabled')
+    }
+  }
+
+  // ── E12c / ADR 021: bundles — one payment → one child order per milestone; cancel remaining refunds exactly the rest ──
+  console.log('\nE12c — bundles: 3 children from one capture (exact sums), replay creates nothing, future children never auto-cancel, cancel remaining refunds exactly 2 and 3:')
+  {
+    const { data: before } = await admin.from('agent_settings').select('value').eq('key', 'bundles_enabled').maybeSingle()
+    await admin.from('agent_settings').upsert({ key: 'bundles_enabled', value: true, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    const auth = { 'content-type': 'application/json', authorization: `Bearer ${buyerToken}` }
+    const post = async (path: string, body?: unknown) => {
+      const res = await fetch(`${BASE}${path}`, { method: 'POST', headers: auth, ...(body ? { body: JSON.stringify(body) } : {}) })
+      return { status: res.status, body: (await res.json().catch(() => ({}))) as Record<string, unknown> }
+    }
+    let purchaseId: string | null = null
+    try {
+      const ms: BundleMilestoneRow[] = [
+        { seq: 1, label_i18n: { en: 'Registration' }, due_offset_days: 15, share_bps: 4000 },
+        { seq: 2, label_i18n: { en: 'Month 1 returns' }, due_offset_days: 45, share_bps: 3000 },
+        { seq: 3, label_i18n: { en: 'Month 2 returns' }, due_offset_days: 75, share_bps: 3000 },
+      ]
+      const { error: msErr } = await admin.from('bundle_milestones').insert(ms.map((m) => ({ package_id: packageId, ...m })))
+      if (msErr) {
+        console.log(`  ⏭ bundle legs SKIPPED (bundle_milestones unavailable: ${msErr.message})`)
+      } else {
+        const co = await post('/api/v1/checkout', { packageId, idempotencyKey: randomUUID() })
+        const whole = computeOrderAmounts({ pricePaise: 500000, discountBps: 1000, commissionBps })
+        const plan = bundlePlan(whole, ms)
+        if (co.body['simulated'] && co.body['checkoutSessionId']) {
+          const sid = co.body['checkoutSessionId'] as string
+          const sim = await post('/api/v1/checkout/simulate', { checkoutSessionId: sid })
+          const carrier = sim.body['orderId'] as string | undefined
+          const { data: bp } = await admin.from('bundle_purchases').select('id, total_paise, payment_id').eq('checkout_session_id', sid).maybeSingle()
+          purchaseId = (bp?.id as string | undefined) ?? null
+          const { data: kids } = await admin.from('orders').select('id, bundle_seq, status, total_paise, provider_earning_paise, delivery_days, available_at').eq('bundle_purchase_id', purchaseId ?? '').order('bundle_seq')
+          for (const k of kids ?? []) createdOrders.push(k.id as string)
+          const { data: pay } = await admin.from('payments').select('amount_paise').eq('id', (bp?.payment_id as string | undefined) ?? '').maybeSingle()
+          const sum = (kids ?? []).reduce((a, k) => a + Number(k.total_paise), 0)
+          check(`one capture → 3 child orders; Σ totals = the captured ${whole.totalPaise} paise, each = the frozen split`,
+            co.body['amountPaise'] === whole.totalPaise && (kids ?? []).length === 3 && sum === Number(pay?.amount_paise) && sum === whole.totalPaise &&
+            (kids ?? []).every((k, i) => Number(k.total_paise) === plan[i]!.amounts.totalPaise && Number(k.provider_earning_paise) === plan[i]!.amounts.providerEarningPaise && k.delivery_days === plan[i]!.deliveryDays) &&
+            (kids ?? [])[0]?.id === carrier)
+          const { data: sess } = await admin.from('checkout_sessions').select('razorpay_order_id, total_paise').eq('id', sid).single()
+          const { data: again } = await admin.rpc('materialize_order', { p_razorpay_order_id: sess!.razorpay_order_id, p_razorpay_payment_id: `pay_sim_${sid}`, p_amount_paise: sess!.total_paise, p_method: 'upi', p_payload: {} })
+          const { count: afterReplay } = await admin.from('orders').select('id', { count: 'exact', head: true }).eq('bundle_purchase_id', purchaseId ?? '')
+          check('a replayed capture creates nothing (same carrier, still 3 children, one purchase)', again === carrier && afterReplay === 3)
+          // A future milestone older than 24 h since purchase is NOT auto-cancelled: its clock starts when it becomes actionable.
+          const k2 = (kids ?? [])[1]
+          if (k2 && cronSecret) {
+            await admin.from('orders').update({ created_at: new Date(Date.now() - 2 * 86_400_000).toISOString() }).eq('id', k2.id)
+            await fetch(`${BASE}/api/v1/cron/auto-cancel`, { headers: cronHeaders })
+            const { data: k2after } = await admin.from('orders').select('status').eq('id', k2.id).single()
+            check('auto-cancel skips a milestone that is not actionable yet', k2after?.status === 'placed')
+          }
+          // Milestone 1 under way, then "cancel remaining": exactly children 2 and 3 are refunded in full, one row each.
+          await transition(carrier!, 'accept', providerToken)
+          await transition(carrier!, 'submit_requirements', buyerToken)
+          await transition(carrier!, 'start', providerToken)
+          const cr = await post(`/api/v1/bundles/${purchaseId}/cancel-remaining`)
+          const ids = (kids ?? []).map((k) => k.id as string)
+          const { data: after } = await admin.from('orders').select('id, status').in('id', ids)
+          const status = new Map((after ?? []).map((o) => [o.id as string, o.status as string]))
+          const { data: rfs } = await admin.from('refunds').select('idempotency_key, amount_paise, status').eq('payment_id', (bp?.payment_id as string | undefined) ?? '')
+          const byKey = new Map((rfs ?? []).map((r) => [r.idempotency_key as string, r]))
+          check('cancel remaining after milestone 1: 2 and 3 refunded in full (one row each), 1 untouched',
+            cr.status === 200 && status.get(ids[0]!) === 'in_progress' && status.get(ids[1]!) === 'refunded' && status.get(ids[2]!) === 'refunded' &&
+            (rfs ?? []).length === 2 && !byKey.has(`rfnd_${ids[0]}`) &&
+            Number(byKey.get(`rfnd_${ids[1]}`)?.amount_paise) === plan[1]!.amounts.totalPaise && Number(byKey.get(`rfnd_${ids[2]}`)?.amount_paise) === plan[2]!.amounts.totalPaise)
+          const cr2 = await post(`/api/v1/bundles/${purchaseId}/cancel-remaining`)
+          const { count: rfCount } = await admin.from('refunds').select('id', { count: 'exact', head: true }).eq('payment_id', (bp?.payment_id as string | undefined) ?? '')
+          check('a second cancel remaining refunds nothing more', cr2.status === 200 && rfCount === 2)
+        } else {
+          console.log('  ⏭ bundle capture legs SKIPPED (real gateway: no simulate)')
+        }
+      }
+    } finally {
+      await admin.from('bundle_milestones').delete().eq('package_id', packageId)
+      if (purchaseId) {
+        // Children point at the purchase; unlink them so the global cleanup can remove orders and sessions.
+        await admin.from('orders').update({ bundle_purchase_id: null }).eq('bundle_purchase_id', purchaseId)
+        await admin.from('bundle_purchases').delete().eq('id', purchaseId)
+      }
+      if (before) await admin.from('agent_settings').upsert({ key: 'bundles_enabled', value: before.value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      else await admin.from('agent_settings').delete().eq('key', 'bundles_enabled')
     }
   }
 

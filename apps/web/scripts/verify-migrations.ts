@@ -407,6 +407,13 @@ const MANIFEST: Entry[] = [
     tables: ['quote_options'],
     note: 'E12b / ADR 020: quote_options (economy / express per quote revision, immutable, service role only); quotes.selected_option_id; checkout_sessions.quote_option_id',
   },
+  {
+    file: '0067_bundles.sql',
+    tables: ['bundle_milestones', 'bundle_purchases'],
+    functions: ['checkout_sessions_materialize_bundle'],
+    triggers: [['checkout_sessions', 'checkout_sessions_materialize_bundle']],
+    note: 'E12c / ADR 021: bundle_milestones + bundle_purchases (no client writes); orders.bundle_purchase_id / bundle_seq / available_at; checkout_sessions.bundle_plan; trigger turns the materialised order into child 1 and inserts children 2..N from the frozen plan',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]
