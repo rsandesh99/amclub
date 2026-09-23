@@ -13,20 +13,24 @@
  *                 MOQ when there is no history — the schedule case)
  *   min qty     = the tier's min_qty (the quantity that unlocks the price)
  *   closes_at   = +7 days
- * The optional model call (OpenRouter, temperature 0) only polishes the
- * title and writes the pitch in en/hi/te; without OPENROUTER_API_KEY the
- * stub templates are used and the draft is marked stub.
+ * The optional model call (the shared agent-core gateway, temperature 0 —
+ * Track F: no direct model-host fetch outside agent-core/src/llm) only polishes
+ * the title and writes the pitch in en/hi/te; without a gateway key the stub
+ * templates are used and the draft is marked stub. Task class 'translation'
+ * (routine tier, 'any' residency: the input is public catalogue copy only); the
+ * explicit model (GROUP_BUY_AGENT_MODEL → CATALOG_AGENT_MODEL → flash-lite) is
+ * unchanged.
  */
 import 'server-only'
+import { z } from 'zod'
+import { createGateway, envelope, type PromptRef } from '@amclub/agent-core'
 import { resolveTier, poolSaving, type PoolDraft } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
-import { VendorHttpError } from '@/lib/voice/types'
 import { getPoolCategories, listPools } from './pools'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite'
 const SIGNAL_DAYS = 30
 const OPEN_DAYS = 7
@@ -131,26 +135,35 @@ function stubCard(title: string, savingPct: number): { en: string; hi: string; t
 }
 
 async function polish(title: string, savingPct: number, unit: string): Promise<{ title: string; card: { en: string; hi: string; te: string }; stub: boolean; vendor: string }> {
-  const key = process.env['OPENROUTER_API_KEY']
   const model = process.env['GROUP_BUY_AGENT_MODEL'] ?? process.env['CATALOG_AGENT_MODEL'] ?? DEFAULT_MODEL
-  if (!key) return { title, card: stubCard(title, savingPct), stub: true, vendor: 'stub' }
-  const prompt = `You write one-line WhatsApp pitches for an Indian MSME group-buy of industrial consumables. Return ONLY JSON: {"title": string, "en": string, "hi": string, "te": string}. title ≤ 60 chars, product-first. Each pitch ≤ 110 chars, plain, no emoji, no prices (numbers are added separately), mention the saving "${savingPct}%" if > 0. hi = Hindi in Devanagari, te = Telugu script. Product: "${title}" sold per ${unit}.`
+  const prompt: PromptRef = {
+    id: 'mart_pool_pitch',
+    version: 'v1',
+    taskClass: 'translation',
+    schemaRef: 'poolPitchSchema',
+    maxTokens: 600,
+    text: `You write one-line WhatsApp pitches for an Indian MSME group-buy of industrial consumables. Return ONLY JSON: {"title": string, "en": string, "hi": string, "te": string}. title ≤ 60 chars, product-first. Each pitch ≤ 110 chars, plain, no emoji, no prices (numbers are added separately), mention the saving "${savingPct}%" if > 0. hi = Hindi in Devanagari, te = Telugu script. The product name is given inside the untrusted block.`,
+  }
   try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, temperature: 0, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } }),
+    const res = await createGateway().chatJson({
+      taskClass: 'translation',
+      prompt,
+      schema: z.record(z.unknown()),
+      model,
+      temperature: 0,
+      // The seller-entered product name is third-party text → an Envelope; the unit is a closed vocabulary.
+      parts: { trusted: [`Sold per: ${unit}`], untrusted: [envelope(title, { kind: 'product_name', id: 'pool_product' })] },
+      stub: () => ({}),
     })
-    if (!res.ok) throw new VendorHttpError('openrouter', res.status, await res.text().catch(() => ''))
-    const d = await res.json()
-    const raw = JSON.parse(d.choices?.[0]?.message?.content ?? '{}')
+    if (res.stub) return { title, card: stubCard(title, savingPct), stub: true, vendor: 'stub' }
+    const raw = res.data as Record<string, unknown>
     const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
     const fallback = stubCard(title, savingPct)
     return {
-      title: clean(raw.title, 140) ?? title,
-      card: { en: clean(raw.en, 160) ?? fallback.en, hi: clean(raw.hi, 160) ?? fallback.hi, te: clean(raw.te, 160) ?? fallback.te },
+      title: clean(raw['title'], 140) ?? title,
+      card: { en: clean(raw['en'], 160) ?? fallback.en, hi: clean(raw['hi'], 160) ?? fallback.hi, te: clean(raw['te'], 160) ?? fallback.te },
       stub: false,
-      vendor: `openrouter:${model}`,
+      vendor: `gateway:${model}`,
     }
   } catch (e) {
     console.error('[group-buy-agent polish]', e instanceof Error ? e.message : e)

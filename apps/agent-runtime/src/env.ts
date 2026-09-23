@@ -3,6 +3,13 @@
  * check even when unconfigured (dark build); real work needs the secrets set.
  * The runtime is a CLIENT of /api/v1 (API_URL) and holds the service role only
  * to write its OWN telemetry (SUPABASE_URL + SERVICE_ROLE_KEY).
+ *
+ * Read directly by agent-core (not listed here): UPSTASH_REDIS_REST_URL/TOKEN
+ * (budget counters — without them model calls FAIL CLOSED when NODE_ENV is
+ * production and AGENT_ENABLED=true), AGENT_LLM_BASE_URL[_<TIER>],
+ * AGENT_RESIDENCY_ENFORCE + AGENT_IN_RESIDENCY_HOSTS (opt-in residency guard),
+ * AGENT_MODEL_RATES (cost estimate when the vendor reports none),
+ * AGENT_MAX_TOKENS_<TIER> (output caps).
  */
 export const RUNTIME_ENV = {
   /** The AMClub web app (API of record) the runtime calls back into. */

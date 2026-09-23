@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { AGENT_TOOLS, agentTool, isValidAgentRunTransition } from '@amclub/shared'
-import type { Gateway } from '../llm/gateway'
+import { GatewayValidationError, type Gateway } from '../llm/gateway'
 import type { Budget } from '../budget'
 import type { Ledger, RunRow } from '../ledger/types'
 import type { PromptRef } from '../prompts/registry'
@@ -328,7 +328,7 @@ describe('S2.1 injection_suspected + tainted_by', () => {
     return { ...base, ledger, full }
   }
 
-  it('a suspected envelope writes ONE injection_suspected event with provenance, score, hits and prompt; the model still runs', async () => {
+  it('a suspected envelope writes ONE injection_suspected event with a boolean, a coarse band, the source kind and prompt (no score / hits); the model still runs', async () => {
     const L = payloadLedger()
     const { id } = await L.ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
     const run = new AgentRun(ctxWith(L.ledger, id))
@@ -338,9 +338,12 @@ describe('S2.1 injection_suspected + tainted_by', () => {
     expect(out.ok).toBe(true)
     const ev = L.full.filter((e) => e.kind === 'injection_suspected')
     expect(ev).toHaveLength(1)
-    expect(ev[0]!.payload).toMatchObject({ provenance: { kind: 'quote_text', id: 'q-bad' }, prompt: `${PROMPT.id}@${PROMPT.version}` })
-    expect((ev[0]!.payload!['score'] as number)).toBeGreaterThanOrEqual(40)
-    expect(Array.isArray(ev[0]!.payload!['hits'])).toBe(true)
+    expect(ev[0]!.payload).toMatchObject({ suspected: true, source: 'quote_text', prompt: `${PROMPT.id}@${PROMPT.version}` })
+    expect(['low', 'med', 'high']).toContain(ev[0]!.payload!['band'])
+    // Track F — detector internals never reach a user-readable event.
+    expect(ev[0]!.payload).not.toHaveProperty('score')
+    expect(ev[0]!.payload).not.toHaveProperty('hits')
+    expect(ev[0]!.payload).not.toHaveProperty('provenance')
     expect(L.full.filter((e) => e.kind === 'model_call')).toHaveLength(1)
   })
 
@@ -372,5 +375,93 @@ describe('S2.1 injection_suspected + tainted_by', () => {
     await run.proposeTool('create_rfq', { title: 'x' })
     const proposed = L.full.find((e) => e.kind === 'tool_proposed')
     expect(proposed?.payload).not.toHaveProperty('tainted_by')
+  })
+})
+
+// ── Track F: cost accounting for failed / unpriced calls ──────────────────────
+
+describe('Track F — paid-but-rejected and unpriced calls are never free', () => {
+  function spyBudget(): Budget & { added: number[] } {
+    const added: number[] = []
+    return {
+      added,
+      async check() {
+        return { ok: true, spent: { run: 0, userDay: 0, month: 0 } }
+      },
+      async add(p) {
+        added.push(p)
+      },
+    }
+  }
+
+  it('a GatewayValidationError logs an error row with the billed cost, charges budget + run, then rethrows', async () => {
+    const L = makeFakeLedger()
+    const { id } = await L.ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const b = spyBudget()
+    const gateway: Gateway = {
+      ...fakeGateway,
+      async chatJson() {
+        throw new GatewayValidationError('schema', { inputTokens: 1000, outputTokens: 500, costUsd: 0.01, raw: null }, 'vendor/m', 42)
+      },
+    }
+    const run = new AgentRun({ ...ctxWith(L.ledger, id), gateway, budget: b })
+    await expect(run.callModel({ taskClass: 'rfq_parse', prompt: PROMPT, schema: SCHEMA })).rejects.toBeInstanceOf(GatewayValidationError)
+    expect(L.invocations).toHaveLength(1)
+    const row = L.invocations[0] as Record<string, unknown>
+    expect(row['status']).toBe('error')
+    expect(row['costEstPaise']).toBe(88) // 0.01 USD × 8800 paise/USD
+    expect(row['inputTokens']).toBe(1000)
+    expect(b.added).toEqual([88])
+    expect(L.runs.get(id)?.costEstPaise).toBe(88)
+  })
+
+  it('a transport failure logs an error row with no cost and charges nothing', async () => {
+    const L = makeFakeLedger()
+    const { id } = await L.ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const b = spyBudget()
+    const gateway: Gateway = {
+      ...fakeGateway,
+      async chatJson() {
+        throw new Error('gateway 502')
+      },
+    }
+    const run = new AgentRun({ ...ctxWith(L.ledger, id), gateway, budget: b })
+    await expect(run.callModel({ taskClass: 'rfq_parse', prompt: PROMPT, schema: SCHEMA })).rejects.toThrow('gateway 502')
+    expect((L.invocations[0] as Record<string, unknown>)['costEstPaise']).toBeNull()
+    expect(b.added).toEqual([])
+  })
+
+  it('a live call with no vendor cost is estimated from tokens (never ₹0)', async () => {
+    const L = makeFakeLedger()
+    const { id } = await L.ledger.openRun({ userId: 'u1', persona: 'buyer', surface: 'system' })
+    const b = spyBudget()
+    const gateway: Gateway = {
+      ...fakeGateway,
+      async chatJson({ schema, stub }) {
+        return { data: schema.parse(stub ? stub() : {}), usage: { inputTokens: 1000, outputTokens: 1000, costUsd: null, raw: null }, model: 'unpriced/model', latencyMs: 1, stub: false }
+      },
+    }
+    const run = new AgentRun({ ...ctxWith(L.ledger, id), gateway, budget: b })
+    await run.callModel({ taskClass: 'rfq_parse', prompt: PROMPT, schema: SCHEMA, stub: () => ({ ok: true as const }) })
+    const row = L.invocations[0] as Record<string, unknown>
+    expect(row['costEstPaise'] as number).toBeGreaterThan(0)
+    expect(b.added[0]).toBe(row['costEstPaise'])
+  })
+
+  it('runAgent reports a gateway error by its code', async () => {
+    const L = makeFakeLedger()
+    const gateway: Gateway = {
+      ...fakeGateway,
+      async chatJson() {
+        throw new GatewayValidationError('non_json', { inputTokens: 1, outputTokens: 1, costUsd: 0.0001, raw: null }, 'm', 1)
+      },
+    }
+    const out = await runAgent(
+      { name: 't', persona: 'buyer', run: (r) => r.callModel({ taskClass: 'rfq_parse', prompt: PROMPT, schema: SCHEMA }) },
+      { ledger: L.ledger, gateway, makeBudget: () => spyBudget(), apiBaseUrl: 'http://local', makeToken: () => 't' },
+      { userId: 'u1', surface: 'system' },
+      {},
+    )
+    expect(out).toMatchObject({ status: 'failed', error: 'model_output_invalid' })
   })
 })

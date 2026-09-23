@@ -8,10 +8,10 @@ import {
   type AgentToolName,
   type AgentToolSpec,
 } from '@amclub/shared'
-import type { ChatParts, Gateway } from '../llm/gateway'
+import { GatewayError, GatewayValidationError, type ChatParts, type ChatResult, type Gateway } from '../llm/gateway'
 import type { Budget, BudgetBreach } from '../budget'
 import type { Ledger } from '../ledger/types'
-import { usdToPaise } from '../ledger/invocations'
+import { costPaiseFor } from '../ledger/invocations'
 import { assertEnvelope, type Provenance } from '../untrusted/envelope'
 import { INJECTION_SUSPECT_THRESHOLD } from '../untrusted/injection'
 import type { PromptRef } from '../prompts/registry'
@@ -88,6 +88,19 @@ export interface ModelCallOptions<T> {
   temperature?: number
   stub?: () => T
   feature?: string
+  /** Output cap override (else prompt front-matter, else the tier default). */
+  maxTokens?: number
+}
+
+/**
+ * S2.1 / Track F — the coarse band a user may see for a suspected envelope. The
+ * score and detector hits are NEVER written to agent_events (users can read their
+ * own events, so the rule set would leak); they go to server logs only.
+ */
+export function injectionBand(score: number): 'low' | 'med' | 'high' {
+  if (score >= 80) return 'high'
+  if (score >= 60) return 'med'
+  return 'low'
 }
 
 export interface ToolCallResult {
@@ -221,12 +234,15 @@ export class AgentRun {
       if (this.taintedBy.length < 20 && !this.taintedBy.some((p) => `${p.kind}:${p.id}` === key)) this.taintedBy.push({ ...e.provenance })
       if (e.injection.score >= INJECTION_SUSPECT_THRESHOLD && suspected < 5) {
         suspected += 1
+        const promptKey = `${opts.prompt.id}@${opts.prompt.version}`
+        // Full detector detail → server log only.
+        console.warn('[runner] injection_suspected', { runId: this.ctx.runId, provenance: e.provenance, score: e.injection.score, hits: e.injection.hits, prompt: promptKey })
         try {
           await this.ctx.ledger.appendEvent({
             runId: this.ctx.runId,
             kind: 'injection_suspected',
             actor: 'system',
-            payload: { provenance: { ...e.provenance }, score: e.injection.score, hits: e.injection.hits, prompt: `${opts.prompt.id}@${opts.prompt.version}` },
+            payload: { suspected: true, band: injectionBand(e.injection.score), source: e.provenance.kind, prompt: promptKey },
           })
         } catch (err) {
           console.error('[runner] injection_suspected event failed', (err as Error).message)
@@ -242,16 +258,30 @@ export class AgentRun {
       payload: { taskClass: opts.taskClass, prompt: `${opts.prompt.id}@${opts.prompt.version}`, tainted: this.tainted },
     })
 
-    const res = await this.ctx.gateway.chatJson({
-      taskClass: opts.taskClass,
-      prompt: opts.prompt,
-      schema: opts.schema,
-      ...(opts.parts !== undefined ? { parts: opts.parts } : {}),
-      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-      ...(opts.stub !== undefined ? { stub: opts.stub } : {}),
-    })
+    const started = Date.now()
+    let res: ChatResult<T>
+    try {
+      res = await this.ctx.gateway.chatJson({
+        taskClass: opts.taskClass,
+        prompt: opts.prompt,
+        schema: opts.schema,
+        ...(opts.parts !== undefined ? { parts: opts.parts } : {}),
+        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        ...(opts.stub !== undefined ? { stub: opts.stub } : {}),
+        ...(opts.maxTokens !== undefined ? { maxTokens: opts.maxTokens } : {}),
+      })
+    } catch (e) {
+      await this.recordFailedCall(opts, e, Date.now() - started)
+      throw e
+    }
 
-    const costPaise = res.usage.costUsd != null ? usdToPaise(res.usage.costUsd) ?? 0 : 0
+    const { paise: costPaise, source: costSource } = costPaiseFor({
+      stub: res.stub,
+      costUsd: res.usage.costUsd,
+      model: res.model,
+      inputTokens: res.usage.inputTokens,
+      outputTokens: res.usage.outputTokens,
+    })
     await this.ctx.ledger.logInvocation({
       runId: this.ctx.runId,
       userId: this.ctx.userId,
@@ -264,6 +294,7 @@ export class AgentRun {
       inputTokens: res.usage.inputTokens,
       outputTokens: res.usage.outputTokens,
       ...(opts.feature !== undefined ? { feature: opts.feature } : {}),
+      meta: { model: res.model, cost_source: costSource },
     })
     await this.ctx.budget.add(costPaise)
     await this.ctx.ledger.addRunCost(this.ctx.runId, {
@@ -272,6 +303,48 @@ export class AgentRun {
       outputTokens: res.usage.outputTokens ?? 0,
     })
     return res.data
+  }
+
+  /**
+   * A failed model call still leaves a ledger row. A billed-but-invalid response
+   * (GatewayValidationError) is charged to the budget and the run; a transport /
+   * residency failure is logged with no cost (nothing was billed). Never throws.
+   */
+  private async recordFailedCall<T>(opts: ModelCallOptions<T>, e: unknown, latencyMs: number): Promise<void> {
+    try {
+      const billed = e instanceof GatewayValidationError
+      const cost = billed
+        ? costPaiseFor({ stub: false, costUsd: e.usage.costUsd, model: e.model, inputTokens: e.usage.inputTokens, outputTokens: e.usage.outputTokens })
+        : null
+      await this.ctx.ledger.logInvocation({
+        runId: this.ctx.runId,
+        userId: this.ctx.userId,
+        taskClass: opts.taskClass,
+        tier: tierFor(opts.taskClass),
+        vendor: 'gateway',
+        status: 'error',
+        latencyMs: billed ? e.latencyMs : latencyMs,
+        costEstPaise: cost ? cost.paise : null,
+        inputTokens: billed ? e.usage.inputTokens : null,
+        outputTokens: billed ? e.usage.outputTokens : null,
+        ...(opts.feature !== undefined ? { feature: opts.feature } : {}),
+        meta: {
+          error: (e as Error)?.message?.slice(0, 300) ?? String(e),
+          ...(e instanceof GatewayError ? { error_code: e.code } : {}),
+          ...(billed ? { reason: e.reason, model: e.model, cost_source: cost?.source } : {}),
+        },
+      })
+      if (billed && cost) {
+        await this.ctx.budget.add(cost.paise)
+        await this.ctx.ledger.addRunCost(this.ctx.runId, {
+          costPaise: cost.paise,
+          inputTokens: e.usage.inputTokens ?? 0,
+          outputTokens: e.usage.outputTokens ?? 0,
+        })
+      }
+    } catch (err) {
+      console.error('[runner] failed-call accounting failed', (err as Error).message)
+    }
   }
 
   /**
@@ -435,7 +508,7 @@ export async function runAgent<I, O>(
   } catch (e) {
     // An AgentRunError reports its CODE (budget_run_cap, step_budget, tool_out_of_scope, …) so workers' no-retry
     // rules match what agent_runs.error already holds; anything else reports its message.
-    const message = e instanceof AgentRunError ? e.code : e instanceof Error ? e.message : String(e)
+    const message = e instanceof AgentRunError || e instanceof GatewayError ? e.code : e instanceof Error ? e.message : String(e)
     await run.fail(message)
     return { runId, status: 'failed', error: message }
   }
