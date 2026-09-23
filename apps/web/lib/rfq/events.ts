@@ -12,6 +12,8 @@ export type QuoteEventType =
   | 'auto_declined'
   // S1.3 — in-place revision of a submitted quote (payload carries before/after + revision).
   | 'revised'
+  // E7 (0058) — written only by labelLostQuotes (one per quote; hidden from the losing provider).
+  | 'lost'
 
 export interface QuoteEventInput {
   quoteId: string

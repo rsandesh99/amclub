@@ -9,6 +9,7 @@ import { QualityQuestionsBlock } from '@/components/QualityQuestionsBlock'
 import { formatINR } from '@/lib/format'
 import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
 import { BenchmarkBlock } from '@/components/BenchmarkBlock'
+import { track } from '@/lib/analytics'
 
 
 const CARD_W = Math.min(Dimensions.get('window').width - 48, 340)
@@ -29,6 +30,8 @@ export default function BuyerRfqScreen() {
   const [compare, setCompare] = useState<Record<string, { normalizedTotalPaise: number; flags: string[] }>>({})
   const [pointers, setPointers] = useState<Record<string, string[]>>({})
   const [pointersEnabled, setPointersEnabled] = useState(false)
+  // PRD Experience v3 E7 (flag `compare`, delivered as /profile/me.compareV3Enabled): the cards carry the web's groups.
+  const [v3, setV3] = useState(false)
   // S2.4 — the server's order (mode + ids; never a score). 'price' keeps the old order exactly.
   const [ordering, setOrdering] = useState<{ mode: 'price' | 'reliability'; ids: string[] } | null>(null)
   const [byPrice, setByPrice] = useState(false)
@@ -45,6 +48,9 @@ export default function BuyerRfqScreen() {
     setBenchmark(d?.benchmark ?? null)
     setActive(!!d?.rfq && (d.rfq.status === 'open' || d.rfq.status === 'quoted') && new Date(d.rfq.expiresAt).getTime() > Date.now())
     setPointersEnabled(me?.comparePointersEnabled === true)
+    const cmpV3 = me?.compareV3Enabled === true
+    setV3(cmpV3)
+    if (cmpV3 && d?.rfq?.quotes?.length) track('compare_viewed', { quotes: d.rfq.quotes.length })
     setLoading(false)
     if (d?.rfq?.quotes?.length) {
       const c = await fetchCompare(id, locale ?? 'en')
@@ -162,7 +168,12 @@ export default function BuyerRfqScreen() {
                     <Text className="flex-1 text-sm font-semibold text-foreground">{q.provider.displayName}</Text>
                     <TouchableOpacity onPress={() => toggleShortlist(q.id)} hitSlop={8}><Text className={`text-base ${shortlist.has(q.id) ? 'text-accent' : 'text-foreground-secondary'}`}>{shortlist.has(q.id) ? '★' : '☆'}</Text></TouchableOpacity>
                   </View>
-                  <Text className="text-xs text-foreground-secondary">{q.provider.avgRating > 0 ? `★ ${q.provider.avgRating.toFixed(1)} (${q.provider.reviewCount})` : t('rfq.status_open')} · {t('rfq.delivery_days', { days: q.deliveryDays })}</Text>
+                  {v3 ? (
+                    <Text className="text-xs text-foreground-secondary">{q.provider.avgRating > 0 ? `★ ${q.provider.avgRating.toFixed(1)} (${q.provider.reviewCount})` : t('rfq.new_label')} · {t('rfq.compare_completed_orders')} {q.provider.completedOrders ?? 0}</Text>
+                  ) : (
+                    <Text className="text-xs text-foreground-secondary">{q.provider.avgRating > 0 ? `★ ${q.provider.avgRating.toFixed(1)} (${q.provider.reviewCount})` : t('rfq.status_open')} · {t('rfq.delivery_days', { days: q.deliveryDays })}</Text>
+                  )}
+                  {v3 && <GroupLabel title={t('rfq.cmp3_group_price')} />}
                   {goods && q.goods ? (
                     <>
                       <Text className="mt-2 font-bold text-primary" style={{ fontSize: 20 }}>{formatINR(q.goods.unitPricePaise)} <Text className="text-xs font-normal text-foreground-secondary">/ {goods.unit}</Text></Text>
@@ -187,6 +198,13 @@ export default function BuyerRfqScreen() {
                   )}
                   {pointersEnabled && lines.length > 0 && (
                     <View className="mt-1">{lines.map((l, i) => <Text key={i} className="text-xs text-foreground">· {l}</Text>)}</View>
+                  )}
+                  {v3 && (
+                    <>
+                      <GroupLabel title={t('rfq.cmp3_group_time')} />
+                      <Text className="text-xs text-foreground">{t('rfq.delivery_days', { days: q.deliveryDays })}</Text>
+                      <GroupLabel title={t('rfq.cmp3_group_terms')} />
+                    </>
                   )}
                   <Text className="mt-2 text-sm text-foreground" numberOfLines={6}>{q.scope}</Text>
                   <TermsBlock q={q} t={t} />
@@ -267,6 +285,10 @@ function DeclineSheet({ t, quote, rfqId, onClose, onDeclined }: { t: (k: string,
       </View>
     </Modal>
   )
+}
+
+function GroupLabel({ title }: { title: string }) {
+  return <Text className="mt-3 border-t border-border pt-2 text-[10px] font-semibold uppercase tracking-wide text-foreground-secondary">{title}</Text>
 }
 
 function TermsBlock({ q, t }: { q: any; t: (k: string, p?: Record<string, string | number>) => string }) {

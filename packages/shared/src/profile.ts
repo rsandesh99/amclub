@@ -40,6 +40,8 @@ export interface ProfileMeResponse {
   procurementEnabled?: boolean
   /** Experience v3 E9 — the buyer home v3 for THIS user (flag `home`): "Needs your action" + "Buy again". */
   homeV3Enabled?: boolean
+  /** PRD Experience v3 E7 — `compare` is on for this user (the mobile compare cards carry the web's groups). */
+  compareV3Enabled?: boolean
   /**
    * S2.4 — the caller's OWN provider listing facts, for Munshi's weekly growth nudge (read under the provider's
    * delegated token, so the runtime never reads provider_profiles with the service role). null for non-providers.

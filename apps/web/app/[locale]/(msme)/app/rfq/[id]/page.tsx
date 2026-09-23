@@ -19,6 +19,7 @@ import { compareOrderingFor } from '@/lib/score/ordering'
 import { verifyChooseDecision } from '@/lib/agent/procurement'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { getBenchmarkFor } from '@/lib/benchmarks/view'
+import { isOnFor } from '@/lib/experiments'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
@@ -52,6 +53,9 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
     ? await getComparePointers(admin, { rfqId: rfq.id, kind: rfq.kind, quotes: rfq.quotes, results: compare, userId: user.id, locale: toPointerLocale(locale), allowModel: false })
     : null
 
+  // E7 — compare v3 (grouped table, scope on desktop); the page widens so the table has room.
+  const compareV3 = isOnFor('compare', user.id)
+
   const details = Object.entries(rfq.details).filter(([, v]) => v != null && String(v).trim() !== '')
   // S1.3 — derived, never a status: active RFQ with an unanswered provider question.
   const active = rfqIsActive(rfq.status) && new Date(rfq.expiresAt).getTime() > Date.now()
@@ -60,7 +64,7 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
   const answeredCount = (rfq.quality.report?.missing ?? []).filter((m) => { const v = rfq.details[m.field]; return typeof v === 'string' && v.trim().length > 0 }).length
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
+    <div className={`mx-auto ${compareV3 ? 'max-w-5xl' : 'max-w-2xl'} px-4 py-6 space-y-6`}>
       <div className="rounded-card border border-border bg-surface p-5 shadow-card">
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-xl font-bold">{rfq.title}</h1>
@@ -137,7 +141,7 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
           {/* S1.3 — questions from providers, above the compare table; answers are visible to every matched provider. */}
           <ClarificationsCard rfqId={rfq.id} role="buyer" initial={rfq.clarifications} canWrite={active} closed={!active} />
 
-          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} payQuoteId={payQuoteId} benchmark={benchmark} />
+          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} payQuoteId={payQuoteId} benchmark={benchmark} v3={compareV3} />
         </>
       )}
     </div>

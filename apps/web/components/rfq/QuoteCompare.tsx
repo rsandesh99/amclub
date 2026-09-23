@@ -10,6 +10,7 @@ import {
   COMPARE_ATTENTION_FLAGS,
   QUOTE_STATUS,
   COMPARE_FACT_FLAGS,
+  DEFAULT_GST_BPS,
   compareLabel,
   declineMessageTemplate,
   type CompareFlag,
@@ -28,6 +29,7 @@ import { QuoteTermsRow } from './QuoteTermsRow'
 import { useAnalytics } from '@/components/providers/posthog'
 import type { BenchmarkView } from '@amclub/shared'
 import { BenchmarkLine } from './BenchmarkLine'
+import { SegmentedControl } from '@/components/ui-v3/SegmentedControl'
 
 type Sort = 'price' | 'delivery' | 'rating' | 'response' | 'reliability'
 
@@ -52,6 +54,11 @@ export interface QuoteCompareProps {
   payQuoteId?: string | null
   /** S3.2 — the fair price range for this request (services, display switch on, a row passed the gates), or null = nothing. */
   benchmark?: BenchmarkView | null
+  /**
+   * PRD Experience v3 E7 (flag `compare`) — grouped rows (Price · Time · Terms · Provider · Flags), a sticky header,
+   * scope on desktop, Compact by default, grouped cards below md. Same data, money and actions as v2.
+   */
+  v3?: boolean
 }
 
 /**
@@ -62,7 +69,7 @@ export interface QuoteCompareProps {
  * Decline opens a sheet: reason, optional private note, the template preview
  * in the provider's language, no undo (the quote machine has no way back).
  */
-export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering, payQuoteId = null, benchmark = null }: QuoteCompareProps) {
+export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering, payQuoteId = null, benchmark = null, v3 = false }: QuoteCompareProps) {
   const t = useTranslations('rfq')
   const tc = useTranslations('checkout')
   const locale = useLocale()
@@ -71,9 +78,14 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
   const reliability = ordering?.mode === 'reliability'
   const [sort, setSortState] = useState<Sort>(reliability ? 'reliability' : 'price')
   const setSort = (next: Sort) => {
-    if (next !== sort) posthog.capture('compare_sort_changed', { locale, device: 'web', from: sort, to: next })
+    if (next !== sort) {
+      if (v3) posthog.capture('compare_sorted', { key: next, device: 'web' })
+      else posthog.capture('compare_sort_changed', { locale, device: 'web', from: sort, to: next })
+    }
     setSortState(next)
   }
+  // E7 — v3 density: Compact by default on desktop.
+  const [density, setDensity] = useState<'compact' | 'comfortable'>('compact')
   const rank = useMemo(() => new Map((ordering?.ids ?? []).map((id, i) => [id, i])), [ordering])
   const [threadFor, setThreadFor] = useState<string | null>(null)
   const [accepting, setAccepting] = useState<string | null>(null)
@@ -123,6 +135,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     } catch { /* storage unavailable — fine */ }
   }, [storageKey])
   const toggleShortlist = useCallback((id: string) => {
+    if (v3 && !shortlist.has(id)) posthog.capture('quote_shortlisted', { device: 'web' })
     setShortlist((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -130,7 +143,15 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
       try { sessionStorage.setItem(storageKey, JSON.stringify([...next])) } catch { /* ignore */ }
       return next
     })
-  }, [storageKey])
+  }, [storageKey, v3, shortlist, posthog])
+
+  // E7 — one page view per mount (the S1.2 server compare_viewed fires only from the pointers route).
+  const viewed = useRef(false)
+  useEffect(() => {
+    if (!v3 || viewed.current || rfq.quotes.length === 0) return
+    viewed.current = true
+    posthog.capture('compare_viewed', { quotes: rfq.quotes.length, device: 'web' })
+  }, [v3, rfq.quotes.length, posthog])
 
   // Pointers load after mount when enabled and not cached — the table never waits on the model.
   useEffect(() => {
@@ -200,6 +221,8 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
   // now; real keys open the Razorpay sheet. The WEBHOOK creates the order (and
   // finalizeQuoteAcceptance closes the RFQ); the redirect is cosmetic.
   async function accept(q: QuoteForBuyer) {
+    // E7 — the buyer's confirm tap (intent only; payment truth stays the webhook).
+    if (v3) posthog.capture('quote_accepted', { device: 'web' })
     setAccepting(q.id)
     setConfirmErr('')
     try {
@@ -327,15 +350,102 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     { key: 'actions', label: t('compare_actions'), cell: (q) => <Actions q={q} /> },
   ]
 
+  // ── E7 v3: the same cells, grouped (FR-7.1) ──────────────────────────────────
+  const has = (q: QuoteForBuyer, f: CompareFlag) => flagsOf(q).includes(f)
+  const Tag = ({ tone, children }: { tone: 'fact' | 'attention'; children: React.ReactNode }) => (
+    <span className={`ml-1.5 inline-block rounded-chip px-1.5 py-0.5 align-middle text-[10px] font-medium ${tone === 'fact' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'}`}>{children}</span>
+  )
+  const gstCell = (q: QuoteForBuyer) => {
+    if (goods && q.goods) return <span>{q.goods.gstRateBps / 100}%</span>
+    if (q.gstIncluded === true) return <span>{t('cmp3_gst_included')}</span>
+    if (q.gstIncluded === false) return <span>{t('cmp3_gst_extra', { pct: DEFAULT_GST_BPS / 100 })}</span>
+    return <span className="text-warning" title={t('flag_gst_unstated_meaning')}>{t('cmp3_gst_unstated')} <span aria-hidden>⚠</span></span>
+  }
+  const Scope = ({ q }: { q: QuoteForBuyer }) => (
+    q.scope.length > 140 ? (
+      <details className="text-xs">
+        <summary className="cursor-pointer list-none"><span className={density === 'compact' ? 'line-clamp-3 whitespace-pre-wrap' : 'whitespace-pre-wrap'}>{q.scope}</span><span className="mt-0.5 block text-[11px] font-medium text-primary">{t('cmp3_scope_more')}</span></summary>
+        <p className="mt-1 whitespace-pre-wrap">{q.scope}</p>
+      </details>
+    ) : <p className="whitespace-pre-wrap text-xs">{q.scope}</p>
+  )
+  const ratingCell = (q: QuoteForBuyer) => (q.provider.avgRating > 0
+    ? <span className="inline-flex items-center gap-0.5 tabular-nums"><Star className="h-3 w-3 fill-accent text-accent" aria-hidden />{q.provider.avgRating.toFixed(1)} ({q.provider.reviewCount})</span>
+    : <span>{t('new_label')}</span>)
+  type V3Row = { key: string; label: string; cell: (q: QuoteForBuyer) => React.ReactNode }
+  const v3Groups: { key: string; label: string; rows: V3Row[] }[] = [
+    {
+      key: 'price', label: t('cmp3_group_price'), rows: [
+        { key: 'as_quoted', label: t('compare_table_price'), cell: (q) => <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-display text-base font-bold text-primary tabular-nums">{price(q)}</span><RevChip q={q} /></span> },
+        { key: 'gst', label: t('term_gst'), cell: gstCell },
+        ...(goods ? [{ key: 'goods', label: t('goods_col_incl'), cell: (q: QuoteForBuyer) => (q.goods ? <span className="text-xs tabular-nums">{q.goods.qty} {specUnit}{specQty && q.goods.qty !== specQty ? ' *' : ''} · {formatINRExact(q.goods.totalInclGstPaise)} · {t('goods_col_after_itc')} {formatINRExact(q.goods.afterItcPaise)}</span> : null) }] : []),
+        { key: 'total', label: t('compare_normalized'), cell: (q) => <span className="font-semibold tabular-nums" title={notesOf(q).length ? `${t('compare_normalized_why')}: ${notesOf(q).map(noteText).join('; ')}` : t('compare_normalized_why_none')}>{formatINRExact(totalOf(q))}{notesOf(q).length > 0 && <span className="ml-1 text-[11px] font-normal text-foreground-secondary" aria-hidden>ⓘ</span>}{has(q, 'cheapest_after_normalization') && <Tag tone="fact">{t('cmp3_lowest')}</Tag>}</span> },
+      ],
+    },
+    {
+      key: 'time', label: t('cmp3_group_time'), rows: [
+        { key: 'delivery', label: t('compare_delivery'), cell: (q) => <span>{t('delivery_days', { days: q.deliveryDays })}{has(q, 'fastest') && <Tag tone="fact">{t('cmp3_fastest')}</Tag>}</span> },
+        { key: 'valid', label: t('term_valid_until'), cell: (q) => <span>{dateOrUnstated(q.validUntil)}{has(q, 'validity_short') && <Tag tone="attention">{t('cmp3_soon')}</Tag>}{has(q, 'validity_expired') && <Tag tone="attention">{t('flag_validity_expired_label')}</Tag>}</span> },
+      ],
+    },
+    {
+      key: 'terms', label: t('cmp3_group_terms'), rows: [
+        { key: 'advance', label: t('term_advance'), cell: (q) => <span>{q.advancePercent == null ? t('term_not_stated') : t('term_advance_value', { pct: q.advancePercent })}{has(q, 'advance_high') && <Tag tone="attention">{t('cmp3_high')}</Tag>}</span> },
+        { key: 'transport', label: t('term_transport'), cell: (q) => <span>{yesNoUnstated(q.transportIncluded)}</span> },
+        { key: 'scope', label: t('cmp3_scope'), cell: (q) => <Scope q={q} /> },
+      ],
+    },
+    {
+      key: 'provider', label: t('cmp3_group_provider'), rows: [
+        { key: 'rating', label: t('cmp3_rating'), cell: ratingCell },
+        { key: 'orders', label: t('compare_completed_orders'), cell: (q) => <span className="tabular-nums">{q.provider.completedOrders}</span> },
+        { key: 'response', label: t('compare_responds'), cell: (q) => <span>{formatResponseTime(q.provider.medianResponseMinutes) ?? '—'}</span> },
+      ],
+    },
+    {
+      key: 'flags', label: t('compare_flags'), rows: [
+        { key: 'flags', label: t('compare_flags'), cell: (q) => <Chips q={q} /> },
+        ...(pointersEnabled && rfq.quotes.length >= 2 ? [{ key: 'pointers', label: t('compare_pointers'), cell: (q: QuoteForBuyer) => <Pointers q={q} /> }] : []),
+      ],
+    },
+  ]
+  const pad = density === 'compact' ? 'px-3 py-1.5' : 'px-3 py-3'
+  const cellTone = (q: QuoteForBuyer) => `${statusOf(q) === 'declined' ? 'opacity-60' : ''} ${statusOf(q) === 'accepted' ? 'bg-success-soft/40' : ''}`
+  const shortlistOnlyToggle = (
+    <label className="flex items-center gap-1.5">
+      <input type="checkbox" checked={shortlistOnly} onChange={(e) => setShortlistOnly(e.target.checked)} disabled={shortlist.size === 0} />
+      {t('compare_shortlisted_only')} ({shortlist.size})
+    </label>
+  )
+  const sortOptions = [
+    ...(reliability ? [{ value: 'reliability' as const, label: t('cmp3_sort_reliability') }] : []),
+    { value: 'price' as const, label: t('cmp3_sort_total') },
+    { value: 'delivery' as const, label: t('sort_delivery') },
+    { value: 'rating' as const, label: t('sort_rating') },
+    { value: 'response' as const, label: t('cmp3_sort_response') },
+  ]
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{t('compare_title')}</h2>
+        {v3 ? (
+          <div className="flex w-full flex-wrap items-center gap-3 text-xs text-foreground-secondary md:w-auto" data-testid="compare-v3-controls">
+            {shortlistOnlyToggle}
+            <span id="cmp3-sort-label">{t('sort_label')}</span>
+            <SegmentedControl size="sm" ariaLabelledBy="cmp3-sort-label" value={sort} onChange={setSort} options={sortOptions} className="w-full md:w-auto" />
+            <SegmentedControl
+              size="sm"
+              ariaLabel={t('cmp3_density_label')}
+              value={density}
+              onChange={setDensity}
+              options={[{ value: 'compact', label: t('cmp3_density_compact') }, { value: 'comfortable', label: t('cmp3_density_comfortable') }]}
+              className="hidden md:grid"
+            />
+          </div>
+        ) : (
         <div className="flex flex-wrap items-center gap-3 text-xs text-foreground-secondary">
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={shortlistOnly} onChange={(e) => setShortlistOnly(e.target.checked)} disabled={shortlist.size === 0} />
-            {t('compare_shortlisted_only')} ({shortlist.size})
-          </label>
+          {shortlistOnlyToggle}
           <label className="flex items-center gap-2">
             {t('sort_label')}
             <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="rounded-button border border-border bg-surface px-2 py-1 text-foreground">
@@ -347,6 +457,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
             </select>
           </label>
         </div>
+        )}
       </div>
 
       {/* S3.2 — the fair price range above the table (the same line the matched providers see); nothing when there is none */}
@@ -363,6 +474,83 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
       {error && <p className="text-sm text-danger">{error}</p>}
       {pointersEnabled && pointersState === 'unavailable' && <p className="text-xs text-foreground-secondary">{t('compare_pointers_unavailable')}</p>}
 
+      {v3 ? (
+        <>
+          {/* E7 ≥ md: grouped rows, sticky quote header + label column, scroll inside the container only; scope on desktop. */}
+          <div className="hidden max-h-[75vh] overflow-auto rounded-card border border-border bg-surface shadow-card md:block" data-testid="compare-v3-table">
+            <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
+              <caption className="sr-only">{t('compare_title')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="sticky left-0 top-0 z-30 w-40 border-b border-border bg-surface"><span className="sr-only">{t('cmp3_row_col')}</span></th>
+                  {quotes.map((q) => (
+                    <th key={q.id} scope="col" className={`sticky top-0 z-20 min-w-[14rem] max-w-xs border-b border-border bg-surface px-3 py-2 text-left align-bottom font-normal ${statusOf(q) === 'declined' ? 'opacity-60' : ''}`}>
+                      <Provider q={q} />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              {v3Groups.map((g) => (
+                <tbody key={g.key} data-group={g.key}>
+                  <tr>
+                    <th colSpan={quotes.length + 1} scope="colgroup" className="bg-muted/60 px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-foreground-secondary"><span className="sticky left-3">{g.label}</span></th>
+                  </tr>
+                  {g.rows.map((row) => (
+                    <tr key={row.key} className="align-top" data-row={row.key}>
+                      <th scope="row" className={`sticky left-0 z-10 w-40 border-b border-border bg-surface text-left text-xs font-normal text-foreground-secondary ${pad}`}>{row.label}</th>
+                      {quotes.map((q) => (
+                        <td key={q.id} className={`min-w-[14rem] max-w-xs border-b border-border ${pad} ${cellTone(q)}`}>{row.cell(q)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
+              <tbody>
+                <tr className="align-top">
+                  <th scope="row" className={`sticky left-0 z-10 w-40 bg-surface text-left text-[11px] font-semibold uppercase tracking-wide text-foreground-secondary ${pad}`}>{t('compare_actions')}</th>
+                  {quotes.map((q) => (
+                    <td key={q.id} className={`min-w-[14rem] max-w-xs ${pad} ${cellTone(q)}`}><Actions q={q} /></td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* E7 < md: cards with the same groups. */}
+          <ul className="space-y-3 md:hidden" data-testid="compare-v3-cards">
+            {quotes.map((q) => (
+              <li key={q.id} className={`rounded-card border bg-surface p-4 shadow-card ${statusOf(q) === 'accepted' ? 'border-success' : statusOf(q) === 'declined' ? 'border-border opacity-60' : 'border-border'}`}>
+                <Provider q={q} />
+                {v3Groups.filter((g) => g.key !== 'flags').map((g) => (
+                  <section key={g.key} className="mt-3 border-t border-border pt-2" aria-label={g.label}>
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground-secondary">{g.label}</h3>
+                    {g.key === 'terms' ? (
+                      <div className="mt-1.5 space-y-2">
+                        <QuoteTermsRow terms={q} compact />
+                        <Scope q={q} />
+                      </div>
+                    ) : (
+                      <dl className="mt-1 space-y-1">
+                        {g.rows.map((row) => (
+                          <div key={row.key} className="flex items-start justify-between gap-3 text-sm">
+                            <dt className="text-xs text-foreground-secondary">{row.label}</dt>
+                            <dd className="text-right">{row.cell(q)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                  </section>
+                ))}
+                <div className="mt-3 border-t border-border pt-2"><Chips q={q} /></div>
+                <div className="mt-2"><Pointers q={q} /></div>
+                <div className="mt-3"><Actions q={q} /></div>
+                {threadFor === q.id && <MessageThread quote={q} />}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+      <>
       {/* ≥ md: side-by-side table, sticky label column, horizontal scroll inside the container only. */}
       <div className="hidden overflow-x-auto rounded-card border border-border bg-surface shadow-card md:block">
         <table className="w-max min-w-full text-sm">
@@ -405,6 +593,8 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
           </li>
         ))}
       </ul>
+      </>
+      )}
 
       {/* Thread panel for the table view (cards render it inline). */}
       {threadFor && quotes.some((q) => q.id === threadFor) && (

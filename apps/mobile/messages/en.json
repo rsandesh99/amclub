@@ -346,7 +346,12 @@
     "reliability_line": "Ordered by price, adjusted for each provider's delivery and dispute record on AMClub.",
     "reliability_switch": "Sort by price instead",
     "benchmark_how_title": "How is this calculated?",
-    "benchmark_how_body": "Built only from jobs that were paid for on AMClub in the last 180 days — never from quotes. A range appears only when there are at least 30 such jobs from at least 8 providers and 8 buyers, and no single provider makes up more than a quarter of them. Figures are rounded, and no individual price is ever shown. It is information, not a recommendation."
+    "benchmark_how_body": "Built only from jobs that were paid for on AMClub in the last 180 days — never from quotes. A range appears only when there are at least 30 such jobs from at least 8 providers and 8 buyers, and no single provider makes up more than a quarter of them. Figures are rounded, and no individual price is ever shown. It is information, not a recommendation.",
+    "cmp3_group_price": "Price",
+    "cmp3_group_time": "Time",
+    "cmp3_group_terms": "Terms",
+    "new_label": "New",
+    "compare_completed_orders": "Completed orders"
   },
   "checkout": {
     "title": "Checkout",
