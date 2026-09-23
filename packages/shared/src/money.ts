@@ -61,6 +61,37 @@ export function computeOrderAmounts(input: {
   }
 }
 
+/**
+ * ADR-015 — order money for a services quote whose price the provider marked
+ * "GST included". The quoted figure IS what the buyer pays: GST is carved out
+ * of it rather than added on top, so `totalPaise === grossPaise` always.
+ *   taxable = round(gross × 10000 / (10000 + gstBps)); gst = gross − taxable
+ * Commission and the provider's earning are on the taxable value, as for every
+ * other order. `pricePaise` is the pre-GST price (= taxable, no discount), so the
+ * order columns mean the same thing whichever way the provider quoted.
+ */
+export function computeGstInclusiveOrderAmounts(input: {
+  grossPaise: number
+  commissionBps: number
+  gstBps?: number
+}): OrderAmounts {
+  const gstBps = input.gstBps ?? DEFAULT_GST_BPS
+  const grossPaise = Math.max(0, Math.round(input.grossPaise))
+  const taxablePaise = Math.round((grossPaise * 10000) / (10000 + gstBps))
+  const gstPaise = grossPaise - taxablePaise
+  const commissionPaise = Math.round((taxablePaise * input.commissionBps) / 10000)
+  return {
+    pricePaise: taxablePaise,
+    discountPaise: 0,
+    taxablePaise,
+    gstPaise,
+    totalPaise: grossPaise,
+    commissionBps: input.commissionBps,
+    commissionPaise,
+    providerEarningPaise: taxablePaise - commissionPaise,
+  }
+}
+
 // ── Refund policy matrix (§9.2) ────────────────────────────────────────────────
 //
 // "pre-accept 100%, in-progress per-policy, disputed per-resolution" — encoded

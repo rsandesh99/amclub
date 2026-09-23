@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  computeGstInclusiveOrderAmounts,
   computeOrderAmounts,
   computeRefundPaise,
   DEFAULT_GST_BPS,
@@ -122,5 +123,51 @@ describe('computeRefundPaise — policy matrix (§9.2)', () => {
 
   it('unknown/terminal status refunds nothing by default', () => {
     expect(computeRefundPaise({ totalPaise: total, fromStatus: 'completed' })).toBe(0)
+  })
+})
+
+describe('computeGstInclusiveOrderAmounts — ADR-015 (quotes marked "GST included")', () => {
+  it('₹11,800 incl. GST at 18 % → taxable ₹10,000, GST ₹1,800, buyer pays exactly ₹11,800', () => {
+    const a = computeGstInclusiveOrderAmounts({ grossPaise: 11_800_00, commissionBps: 1000 })
+    expect(a).toEqual({
+      pricePaise: 10_000_00,
+      discountPaise: 0,
+      taxablePaise: 10_000_00,
+      gstPaise: 1_800_00,
+      totalPaise: 11_800_00,
+      commissionBps: 1000,
+      commissionPaise: 1_000_00,
+      providerEarningPaise: 9_000_00,
+    })
+  })
+
+  it('never charges more than the quoted figure (the bug: exclusive math on an inclusive price)', () => {
+    const exclusive = computeOrderAmounts({ pricePaise: 11_800_00, discountBps: 0, commissionBps: 1000 })
+    const inclusive = computeGstInclusiveOrderAmounts({ grossPaise: 11_800_00, commissionBps: 1000 })
+    expect(exclusive.totalPaise).toBe(13_924_00)
+    expect(inclusive.totalPaise).toBe(11_800_00)
+  })
+
+  it('an exclusive price and its inclusive gross give the same order', () => {
+    const excl = computeOrderAmounts({ pricePaise: 10_000_00, discountBps: 0, commissionBps: 1200 })
+    const incl = computeGstInclusiveOrderAmounts({ grossPaise: excl.totalPaise, commissionBps: 1200 })
+    expect(incl).toEqual(excl)
+  })
+
+  it('invariants hold over a grid of odd amounts, rates and commissions', () => {
+    for (const gross of [0, 1, 2, 99, 118, 12_345, 99_999, 2_35_882, 1_00_00_001]) {
+      for (const gstBps of [0, 500, 1200, 1800, 2800]) {
+        for (const commissionBps of [0, 500, 1000, 1500]) {
+          const a = computeGstInclusiveOrderAmounts({ grossPaise: gross, commissionBps, gstBps })
+          expect(a.totalPaise).toBe(gross)
+          expect(a.taxablePaise + a.gstPaise).toBe(gross)
+          expect(a.pricePaise).toBe(a.taxablePaise)
+          expect(a.gstPaise).toBeGreaterThanOrEqual(0)
+          expect(Math.abs(a.gstPaise - Math.round((a.taxablePaise * gstBps) / 10000))).toBeLessThanOrEqual(1)
+          expect(a.commissionPaise + a.providerEarningPaise).toBe(a.taxablePaise)
+          for (const v of Object.values(a)) expect(Number.isInteger(v)).toBe(true)
+        }
+      }
+    }
   })
 })
