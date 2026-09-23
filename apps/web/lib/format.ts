@@ -27,45 +27,8 @@ export function formatINRExact(paise: number): string {
   return paise % 100 === 0 ? inr0.format(paise / 100) : inr2.format(paise / 100)
 }
 
-export interface Pricing {
-  listPaise: number
-  /** After the public discount. */
-  discountedPaise: number
-  /** After the public discount AND the member-only extra discount. */
-  memberPaise: number
-  hasDiscount: boolean
-  hasMemberExtra: boolean
-  /** Public discount as whole percent, e.g. 10. */
-  discountPct: number
-  /** Member extra discount as whole percent. */
-  memberExtraPct: number
-  /** Rupees-off paise from list → discounted (public). */
-  savingsPaise: number
-}
-
-/**
- * Compute the price block from a package's stored fields.
- * discount_bps / member_extra_discount_bps are basis points (1000 = 10%).
- */
-export function computePricing(input: {
-  pricePaise: number
-  discountBps: number
-  memberExtraDiscountBps: number
-}): Pricing {
-  const { pricePaise, discountBps, memberExtraDiscountBps } = input
-  const discountedPaise = Math.round(pricePaise * (1 - discountBps / 10000))
-  const memberPaise = Math.round(discountedPaise * (1 - memberExtraDiscountBps / 10000))
-  return {
-    listPaise: pricePaise,
-    discountedPaise,
-    memberPaise,
-    hasDiscount: discountBps > 0,
-    hasMemberExtra: memberExtraDiscountBps > 0,
-    discountPct: Math.round(discountBps / 100),
-    memberExtraPct: Math.round(memberExtraDiscountBps / 100),
-    savingsPaise: pricePaise - discountedPaise,
-  }
-}
+// Experience v3 N16: package prices are the server's `display` (shared
+// priceDisplay); the client-side computePricing was removed.
 
 /** "Responds in ~3h" style label from median response minutes. */
 export function formatResponseTime(minutes: number | null | undefined): string | null {
@@ -79,7 +42,7 @@ export function formatResponseTime(minutes: number | null | undefined): string |
 
 /** Pick a localized string from an {en, hi} map, falling back to en. */
 export function pickI18n(
-  map: { en: string; hi?: string } | null | undefined,
+  map: { en: string; hi?: string | undefined } | null | undefined,
   locale: string,
 ): string {
   if (!map) return ''

@@ -5,7 +5,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
 import { fetchPackage, createCheckout, simulatePay } from '@/lib/api'
-import { pickI18n, computePricing, formatINR } from '@/lib/format'
+import { pickI18n, formatINR, formatINRExact } from '@/lib/format'
 
  
 export default function CheckoutScreen() {
@@ -49,7 +49,8 @@ export default function CheckoutScreen() {
     return <SafeAreaView className="flex-1 items-center justify-center bg-background"><ActivityIndicator size="large" color="#1B4D3E" /></SafeAreaView>
   }
 
-  const pricing = pkg ? computePricing(pkg) : null
+  // N16 — the server's display: exactly what checkout will charge (no "~").
+  const d = pkg?.display ?? null
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -59,16 +60,16 @@ export default function CheckoutScreen() {
       </View>
 
       <ScrollView contentContainerClassName="px-4 py-4 gap-4">
-        {pkg && pricing && (
+        {pkg && d && (
           <View className="rounded-xl border border-gray-200 bg-surface p-4">
             <Text className="font-medium text-foreground">{pickI18n(pkg.titleI18n, locale)}</Text>
             <View className="mt-3 gap-1 border-t border-gray-100 pt-3">
-              <Row label={t('checkout.price')} value={formatINR(pricing.listPaise)} />
-              {pricing.hasDiscount && <Row label={t('checkout.discount')} value={'- ' + formatINR(pricing.listPaise - pricing.discountedPaise)} />}
-              <Row label={t('checkout.gst')} value={t('checkout.included') /* approx */} />
+              <Row label={t('checkout.price')} value={formatINR(d.listPaise)} />
+              {d.discountPaise > 0 && <Row label={t('checkout.discount')} value={'- ' + formatINRExact(d.discountPaise)} />}
+              <Row label={t('checkout.gst')} value={formatINRExact(d.gstPaise)} />
               <View className="mt-1 flex-row justify-between border-t border-gray-100 pt-2">
                 <Text className="text-base font-bold text-foreground">{t('checkout.total')}</Text>
-                <Text className="text-base font-bold text-primary">~{formatINR(Math.round(pricing.discountedPaise * 1.18))}</Text>
+                <Text className="text-base font-bold text-primary">{formatINRExact(d.totalPaise)}</Text>
               </View>
             </View>
           </View>

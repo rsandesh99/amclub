@@ -62,11 +62,7 @@ export function ResultCard({ result }: { result: CatalogResult }) {
       </View>
 
       <View className="border-t border-border pt-3">
-        <PriceBlock
-          pricePaise={result.pricePaise}
-          discountBps={result.discountBps}
-          memberExtraDiscountBps={result.memberExtraDiscountBps}
-        />
+        <PriceBlock display={result.display} />
       </View>
     </PressableCard>
   )

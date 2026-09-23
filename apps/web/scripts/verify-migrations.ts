@@ -305,6 +305,12 @@ const MANIFEST: Entry[] = [
     triggers: [['provider_public_stats', 'provider_public_stats_set_updated_at']],
     note: 'E3: provider_public_stats (service role only), provider_verifications expires_at/evidence_hash, provider_profiles next_available_on/capacity_slots/logo_status/logo_pending_url',
   },
+  {
+    file: '0050_packages_v3.sql',
+    tables: ['package_groups'],
+    triggers: [['package_groups', 'package_groups_set_updated_at']],
+    note: 'E4: package_groups (tiers), packages group_id/tier/ideal_for_i18n/compare_values/govt_dependent_override, categories.govt_dependent',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

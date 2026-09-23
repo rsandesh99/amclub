@@ -331,6 +331,10 @@ async function main() {
     categoryIds[cat.slug] = row!['id']
   }
   console.log(`  ✓ ${CATEGORIES.length} categories upserted`)
+  // Experience v3 N17 (0050): registrations and licences wait on government
+  // portals. Migration 0050 sets this on existing rows; a fresh database is
+  // seeded after the migrations, so the seed sets it too.
+  await db`UPDATE categories SET govt_dependent = true WHERE slug IN ('company-registrations', 'government-licensing')`
 
   // ── 2. Create providers ──────────────────────────────────────────────────────
   console.log('\n2/4 Creating providers...')

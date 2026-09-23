@@ -11,7 +11,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { scoreFieldPaths, summarizeProviderOrders } from '@amclub/shared'
+import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts } from '@amclub/shared'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -339,12 +339,131 @@ async function e3() {
   for (const id of orderIds) await admin.from('reviews').delete().eq('order_id', id)
 }
 
+async function e4() {
+  console.log('\nE4 — packages and honest pricing')
+  // company-registrations is government-dependent (0050 + seed).
+  const { data: cat } = await admin.from('categories').select('id, govt_dependent').eq('slug', 'company-registrations').single()
+  const { data: other } = await admin.from('categories').select('id').eq('slug', 'legal').single()
+  check('N17: registrations category is government-dependent', cat?.govt_dependent === true)
+  const prov = await mkUser('e4prov', ['provider'])
+  const slug = `${tag}-e4prov`
+  const { data: pp } = await admin.from('provider_profiles').insert({
+    user_id: prov.uid, legal_name: 'E4 Prov', display_name: 'E4 Prov', slug, state: 'TS', status: 'active', languages: ['en'],
+  }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: cat!.id })
+  const mk = async (s: string, price: number, days: number, discountBps = 0, categoryId = cat!.id) => {
+    const { data } = await admin.from('packages').insert({
+      provider_id: pp!.id, category_id: categoryId, slug: `${tag}-${s}`, title_i18n: { en: `E4 GST registration ${s}` },
+      scope_included: ['GSTIN'], deliverables: ['Certificate'], price_paise: price, discount_bps: discountBps, delivery_days: days, status: 'active',
+    }).select('id').single()
+    created.packageIds.push(data!.id)
+    return data!.id as string
+  }
+  const basic = await mk('basic', 1499_00, 3)
+  const standard = await mk('standard', 2999_00, 2, 1000)
+  const premium = await mk('premium', 5499_00, 2)
+  const stray = await mk('stray', 999_00, 2, 0, other!.id)
+
+  // N16 — every payload carries the server display, equal to what checkout charges.
+  type Disp = { taxablePaise: number; gstPaise: number; totalPaise: number; discountPaise: number; itcPaise: number | null }
+  const det = (await (await fetch(`${BASE}/api/v1/catalog/package/${slug}/${tag}-standard?_=${Date.now()}`)).json()) as { pkg: { display: Disp } }
+  const a = computeOrderAmounts({ pricePaise: 2999_00, discountBps: 1000, commissionBps: 0 })
+  check('N16: package payload display = computeOrderAmounts (no coupon)', det.pkg.display.taxablePaise === a.taxablePaise && det.pkg.display.gstPaise === a.gstPaise && det.pkg.display.totalPaise === a.totalPaise && det.pkg.display.itcPaise === null, JSON.stringify(det.pkg.display))
+  const provPayload = (await (await fetch(`${BASE}/api/v1/catalog/provider/${slug}?_=${Date.now()}`)).json()) as { packages: { slug: string; display: Disp }[] }
+  check('N16: provider payload packages carry display', provPayload.packages.length === 4 && provPayload.packages.every((p) => typeof p.display?.totalPaise === 'number'))
+
+  // FR-4.3 / 4.4 / 4.5 — a single package: equation, refund line, government line.
+  const single = visible(await (await fetch(`${BASE}/p/${slug}/${tag}-basic`)).text())
+  check('FR-4.3: detail reads "₹1,499 + 18 % GST = ₹1,768.82"', single.includes('₹1,499 + 18 % GST = ₹1,768.82'))
+  check('FR-4.4: refund line + policy link on the buy box', single.includes('Full refund before work starts') && single.includes('href="/refund-policy"'))
+  check('FR-4.5: government line for a registrations package', single.includes('Approval depends on the government portal') && single.includes('href="/help#government-portal"'))
+  check('FR-4.1: a package with no group shows no tier matrix', !single.includes('data-testid="tier-matrix"'))
+
+  // FR-4.1 — the tier editor route.
+  const group = {
+    titleI18n: { en: 'GST registration' },
+    compareRows: [
+      { key: 'gstin', labelI18n: { en: 'GSTIN + certificate' } },
+      { key: 'udyam', labelI18n: { en: 'Udyam registration' } },
+      { key: 'filing', labelI18n: { en: '12 months of filing' } },
+    ],
+    tiers: [
+      { packageId: basic, tier: 'basic', idealForI18n: null, compareValues: { gstin: true } },
+      { packageId: standard, tier: 'standard', idealForI18n: { en: 'you also need Udyam this week' }, compareValues: { gstin: true, udyam: true } },
+      { packageId: premium, tier: 'premium', idealForI18n: null, compareValues: { gstin: true, udyam: true, filing: '12 months' } },
+    ],
+  }
+  const buyer = await mkUser('e4buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E4 Buyer Co', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  check('FR-4.1: a buyer cannot create tier groups', (await api(buyer.token, '/api/v1/partner/package-groups', group)).status === 403)
+  const rival = await mkUser('e4rival', ['provider'])
+  const { data: rp } = await admin.from('provider_profiles').insert({ user_id: rival.uid, legal_name: 'E4 Rival', display_name: 'E4 Rival', slug: `${tag}-e4rival`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(rp!.id)
+  check("FR-4.1: another provider's packages are not found", (await api(rival.token, '/api/v1/partner/package-groups', group)).status === 404)
+  const rows13 = Array.from({ length: 13 }, (_, i) => ({ key: `r${i}`, labelI18n: { en: `Row ${i}` } }))
+  check('FR-4.1: more than 12 comparison rows → 422', (await api(prov.token, '/api/v1/partner/package-groups', { ...group, compareRows: rows13 })).status === 422)
+  const mixed = { ...group, tiers: [group.tiers[0], { ...group.tiers[1]!, packageId: stray }] }
+  const mixedRes = await api(prov.token, '/api/v1/partner/package-groups', mixed)
+  check('FR-4.1: tiers across categories → 422 mixed_categories', mixedRes.status === 422 && ((await mixedRes.json()) as { error: string }).error === 'mixed_categories')
+  const save = await api(prov.token, '/api/v1/partner/package-groups', group)
+  const saved = (await save.json()) as { id: string }
+  check('FR-4.1: provider saves a three-tier group', save.status === 201 && !!saved.id, `status ${save.status}`)
+  const { data: members } = await admin.from('packages').select('id, tier').eq('group_id', saved.id)
+  check('FR-4.1: each package carries its tier', members?.length === 3 && members.find((m) => m.id === standard)?.tier === 'standard')
+
+  // FR-4.2 — the package page with tiers (EXP_V3_PACKAGES=on in this job).
+  const tiered = visible(await (await fetch(`${BASE}/p/${slug}/${tag}-standard`)).text())
+  check('FR-4.2: tier matrix + tier tabs render', tiered.includes('data-testid="tier-matrix"') && tiered.includes('Compare tiers') && ['Basic', 'Standard', 'Premium'].every((w) => tiered.includes(w)))
+  check('FR-4.2: matrix prices come from the server display', tiered.includes('₹1,499 + GST') && tiered.includes('₹2,699 + GST') && tiered.includes('₹5,499 + GST'))
+  check('FR-4.2: buy box opens on this page’s tier (Buy now → its checkout, "Choose this if…")', tiered.includes(`href="/app/checkout/${standard}"`) && tiered.includes('you also need Udyam this week'))
+  check('FR-4.6: no "Most chosen" without paid orders', !tiered.includes('Most chosen'))
+
+  // FR-4.6 — "Most chosen" only from paid orders: ≥ 50 % share with n ≥ 10.
+  const mkOrder = async (packageId: string, status = 'completed') => {
+    const { data: o } = await admin.from('orders').insert({
+      msme_id: msme!.id, provider_id: pp!.id, package_id: packageId, source: 'package', title: 'E4 order', scope_snapshot: {},
+      price_paise: 1000_00, gst_paise: 180_00, total_paise: 1180_00, commission_bps: 500, commission_paise: 50_00,
+      provider_earning_paise: 950_00, delivery_days: 3, status,
+    }).select('id').single()
+    created.orderIds.push(o!.id)
+  }
+  for (let i = 0; i < 5; i++) await mkOrder(standard)
+  for (let i = 0; i < 2; i++) await mkOrder(basic)
+  for (let i = 0; i < 2; i++) await mkOrder(premium)
+  await mkOrder(standard, 'refunded') // a refunded order is not a lasting choice
+  await api(prov.token, '/api/v1/partner/package-groups', { ...group, id: saved.id }) // re-save → revalidate
+  const nine = visible(await (await fetch(`${BASE}/p/${slug}/${tag}-standard`)).text())
+  check('FR-4.6: n = 9 paid orders → no label (refunded ignored)', !nine.includes('Most chosen'))
+  await mkOrder(standard)
+  await api(prov.token, '/api/v1/partner/package-groups', { ...group, id: saved.id })
+  const ten = visible(await (await fetch(`${BASE}/p/${slug}/${tag}-standard`)).text())
+  check('FR-4.6: 6 of 10 paid orders → "Most chosen" on Standard', ten.includes('data-testid="most-chosen"'))
+
+  // N16 — ITC eligibility is a yes/no for a verified GSTIN, never the GSTIN.
+  const itc = async (token?: string) => ((await (await fetch(`${BASE}/api/v1/me/itc`, token ? { headers: { Authorization: `Bearer ${token}` } } : {})).json()) as { eligible: boolean }).eligible
+  const anonItc = await itc()
+  const before = await itc(buyer.token)
+  await admin.from('msme_profiles').update({ gstin: '36AAAAA0000A1Z5', gstin_verified: true }).eq('id', msme!.id)
+  const after = await itc(buyer.token)
+  check('N16: ITC only for a buyer with a verified GSTIN', anonItc === false && before === false && after === true)
+
+  // Ungroup — the packages stay live as single packages.
+  const del = await api(prov.token, `/api/v1/partner/package-groups/${saved.id}`, undefined, 'DELETE')
+  const { data: freed } = await admin.from('packages').select('group_id, tier').in('id', [basic, standard, premium])
+  check('FR-4.1: ungroup releases every package (still active)', del.ok && (freed ?? []).every((p) => p.group_id === null && p.tier === null))
+  const back = visible(await (await fetch(`${BASE}/p/${slug}/${tag}-standard`)).text())
+  check('FR-4.1: after ungrouping the page has no matrix', !back.includes('data-testid="tier-matrix"') && back.includes('₹2,699.10 + 18 % GST = ₹3,184.94'))
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
     await e0()
     await e1()
     await e3()
+    await e4()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

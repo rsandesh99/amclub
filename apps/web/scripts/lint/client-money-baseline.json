@@ -1,0 +1,19 @@
+[
+  "app/[locale]/(admin)/admin/coupons/CouponsClient.tsx :: c.max_discount_paise / 100",
+  "app/[locale]/(agent-admin)/admin/agents/AgentsConsoleClient.tsx :: munshi.cost_per_approved_paise / 100",
+  "app/[locale]/(mart-admin)/admin/mart/PoolsAdmin.tsx :: (p.list_price_paise - p.unit_price_paise) / p.list_price_paise",
+  "app/[locale]/(mart-admin)/admin/mart/PoolsAdmin.tsx :: m.qty * p.unit_price_paise",
+  "app/[locale]/(mart-admin)/admin/mart/PoolsAdmin.tsx :: p.list_price_paise - p.unit_price_paise",
+  "app/[locale]/(msme)/app/checkout/[packageId]/CheckoutClient.tsx :: amounts.gstPaise / amounts.taxablePaise",
+  "app/[locale]/(msme)/app/checkout/[packageId]/CheckoutClient.tsx :: amounts.taxablePaise - couponDiscount",
+  "components/mart/CatalogWizard.tsx :: x.unit_price_paise / 100",
+  "components/mart/PaisaMoment.tsx :: amountPaise * eased",
+  "components/mart/PoolJoin.tsx :: member.qty * pool.unit_price_paise",
+  "components/mart/PoolJoin.tsx :: qtyN * pool.unit_price_paise",
+  "components/rfq/QuoteCompare.tsx :: a.goods.unitPricePaise - b.goods.unitPricePaise",
+  "components/rfq/QuoteComposer.tsx :: f.price_paise / 100",
+  "components/rfq/QuoteComposer.tsx :: f.unit_price_paise / 100",
+  "components/rfq/QuoteComposer.tsx :: initial.goods.unitPricePaise / 100",
+  "components/rfq/QuoteComposer.tsx :: initial.pricePaise / 100",
+  "components/rfq/QuoteComposer.tsx :: unitPaise * qtyNum"
+]

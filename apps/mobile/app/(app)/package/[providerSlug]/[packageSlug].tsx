@@ -61,12 +61,7 @@ export default function PackageScreen() {
         </TouchableOpacity>
 
         <View className="rounded-xl border border-gray-200 bg-surface p-4">
-          <PriceBlock
-            pricePaise={pkg.pricePaise}
-            discountBps={pkg.discountBps}
-            memberExtraDiscountBps={pkg.memberExtraDiscountBps}
-            large
-          />
+          <PriceBlock display={pkg.display} large />
           <Text className="mt-2 text-xs text-foreground-secondary">
             {pkg.deliveryDays} {t('catalog.days')}
           </Text>

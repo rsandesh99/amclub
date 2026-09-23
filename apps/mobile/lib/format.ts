@@ -23,34 +23,8 @@ export function formatINRExact(paise: number): string {
   return paise % 100 === 0 ? inr0.format(paise / 100) : inr2.format(paise / 100)
 }
 
-export interface Pricing {
-  listPaise: number
-  discountedPaise: number
-  memberPaise: number
-  hasDiscount: boolean
-  hasMemberExtra: boolean
-  discountPct: number
-  memberExtraPct: number
-}
-
-export function computePricing(input: {
-  pricePaise: number
-  discountBps: number
-  memberExtraDiscountBps: number
-}): Pricing {
-  const { pricePaise, discountBps, memberExtraDiscountBps } = input
-  const discountedPaise = Math.round(pricePaise * (1 - discountBps / 10000))
-  const memberPaise = Math.round(discountedPaise * (1 - memberExtraDiscountBps / 10000))
-  return {
-    listPaise: pricePaise,
-    discountedPaise,
-    memberPaise,
-    hasDiscount: discountBps > 0,
-    hasMemberExtra: memberExtraDiscountBps > 0,
-    discountPct: Math.round(discountBps / 100),
-    memberExtraPct: Math.round(memberExtraDiscountBps / 100),
-  }
-}
+// Experience v3 N16: package prices are the server's `display` (shared
+// priceDisplay); the client-side computePricing was removed.
 
 export function pickI18n(map: { en: string; hi?: string } | null | undefined, locale: string): string {
   if (!map) return ''

@@ -102,6 +102,8 @@ export async function CatalogResults({
   // re-run the original (empty) filtered search, so suppress them.
   // Experience v3 E3 (FR-3.1): the one measured stat + "active this week" per card.
   const trust: Map<string, CardTrust> | null = isOnForEveryone('trust') ? await cardTrustFor(results.map((r) => r.providerId)) : null
+  // Experience v3 E4 (N16): cards read "₹1,499 + GST" from the server display.
+  const equation = isOnForEveryone('packages')
 
   const hasPrev = !widened && offset > 0
   const hasNext = !widened && offset + results.length < total
@@ -116,7 +118,7 @@ export async function CatalogResults({
       <p className="text-sm text-foreground-secondary">{t('results_count', { count: total })}</p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {results.map((r) => (
-          <ResultCard key={r.packageId} result={r} trust={trust ? (trust.get(r.providerId) ?? { stat: null, activeThisWeek: false }) : undefined} />
+          <ResultCard key={r.packageId} result={r} equation={equation} trust={trust ? (trust.get(r.providerId) ?? { stat: null, activeThisWeek: false }) : undefined} />
         ))}
       </div>
 

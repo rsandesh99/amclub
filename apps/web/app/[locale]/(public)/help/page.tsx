@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { Mail, MessageCircle, Clock, ShieldCheck, Wallet, RotateCcw, ArrowDownUp } from 'lucide-react'
+import { Mail, MessageCircle, Clock, ShieldCheck, Wallet, RotateCcw, ArrowDownUp, Landmark } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { GRIEVANCE_OFFICER, GRIEVANCE_SLA, SUPPORT_CONTACT, whatsappHref } from '@/lib/legal/grievance'
 
@@ -23,6 +23,9 @@ export default async function HelpPage() {
     // S2.4 / ADR-010 §9 (e) — the main parameters that can order quotes, named without weights (Consumer Protection
     // (E-Commerce) Rules 2020 disclosure; counsel to confirm the clause). Factors only: the formula is not published.
     { icon: ArrowDownUp, body: t('faq_ranking') },
+    // Experience v3 FR-4.5 — what "waiting on the government portal" means
+    // (the external_wait pause); the package page's government line links here.
+    { icon: Landmark, body: t('faq_govt_wait'), id: 'government-portal' },
   ]
 
   return (
@@ -62,7 +65,7 @@ export default async function HelpPage() {
         <h2 className="text-lg font-semibold">{t('faq_title')}</h2>
         <div className="space-y-3">
           {faqs.map((f, i) => (
-            <div key={i} className="flex gap-3 rounded-card border border-border bg-surface p-4">
+            <div key={i} id={'id' in f ? f.id : undefined} className="flex scroll-mt-24 gap-3 rounded-card border border-border bg-surface p-4">
               <f.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
               <p className="text-sm text-foreground">{f.body}</p>
             </div>

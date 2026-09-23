@@ -1072,6 +1072,14 @@ What's included · What you'll get · What we'll need · FAQ        └───
 
 **RICE:** R 0.8 · I 2 · C 0.7 · E 3 → **0.37**.
 
+**As built (E4).**
+- The tier editor is its own page, `/partner/listings/tiers`. Listings shows an "Offer tiers?" card once two listings share a category, and publishing from the wizard returns the provider to Listings. It uses the same three-column editor and live matrix preview.
+- Each tier stays an ordinary package with its own price and checkout. A group only arranges packages.
+- "Most chosen" counts a group's orders that were not cancelled or refunded (`ORDER_UNCHOSEN_STATUSES`). A tie never labels two tiers.
+- ITC on public pages: the page is cached for everyone, so a small island asks `GET /api/v1/me/itc` (yes/no only, verified GSTIN). The figure it shows is the server's GST amount.
+- The "no client money math" rule runs as `scripts/lint/client-money.ts` inside `pnpm lint` (a TypeScript-AST ratchet over `'use client'` files), not as a custom ESLint plugin.
+- `computePricing` was removed from web and mobile.
+
 ---
 
 ### E5: Checkout v3

@@ -19,7 +19,7 @@ import { reviewExtras } from '@/lib/trust/reviews'
 import { ReviewHistogram } from '@/components/trust/ReviewHistogram'
 import { getProviderBySlug, getPackagesForProvider, getReviews } from '@/lib/catalog/queries'
 import { getSiteUrl } from '@/lib/site-url'
-import { pickI18n, initials, formatResponseTime, computePricing, formatINR } from '@/lib/format'
+import { pickI18n, initials, formatResponseTime, formatINR } from '@/lib/format'
 import { INDIAN_STATES } from '@/lib/constants/india'
 import { MART_ENABLED } from '@/lib/flags'
 import { listPublicProducts } from '@/lib/mart/queries'
@@ -139,7 +139,9 @@ export default async function ProviderProfilePage({
   // Experience v3 E3 — the trust header (flag `trust`; static page → "on" only).
   const trust = isOnForEveryone('trust') ? await getProviderTrust(provider.id) : null
   const extras = trust ? await reviewExtras(provider.id, reviews.map((r) => r.id)).catch(() => null) : null
-  const fromPaise = packages.length ? Math.min(...packages.map((pk) => computePricing(pk).discountedPaise)) : null
+  const fromPaise = packages.length ? Math.min(...packages.map((pk) => pk.display.taxablePaise)) : null
+  // Experience v3 E4 (N16): "₹1,499 + GST" on the package cards.
+  const equation = isOnForEveryone('packages')
 
   return (
     <div className={trust ? 'mx-auto max-w-5xl px-4 pb-28 pt-6 lg:pb-8' : 'mx-auto max-w-5xl px-4 py-8'}>
@@ -252,11 +254,7 @@ export default async function ProviderProfilePage({
                   </span>
                 </div>
                 <div className="mt-auto border-t border-border pt-3">
-                  <PriceBlock
-                    pricePaise={pk.pricePaise}
-                    discountBps={pk.discountBps}
-                    memberExtraDiscountBps={pk.memberExtraDiscountBps}
-                  />
+                  <PriceBlock display={pk.display} equation={equation} />
                 </div>
               </Link>
             ))}

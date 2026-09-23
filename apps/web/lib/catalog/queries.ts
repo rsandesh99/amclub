@@ -6,6 +6,7 @@
  * (never the underlying value — no GSTIN/PAN/bank leak). §2.5 rule 1.
  */
 import 'server-only'
+import { priceDisplay } from '@amclub/shared'
 import { createPublicClient, createAdminClient } from '@/lib/supabase/server'
 import type {
   CatalogResult,
@@ -18,6 +19,7 @@ import type {
   VerificationBadge,
   I18nText,
 } from './types'
+import type { PriceDisplay } from '@amclub/shared'
 
 // ─── Row mappers ──────────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ function mapSearchRow(r: any): CatalogResult {
     pricePaise: Number(r.price_paise),
     discountBps: r.discount_bps,
     memberExtraDiscountBps: r.member_extra_discount_bps,
+    display: priceDisplay({ pricePaise: Number(r.price_paise), discountBps: r.discount_bps, memberExtraDiscountBps: r.member_extra_discount_bps }),
     deliveryDays: r.delivery_days,
     revisionCount: r.revision_count,
     categoryId: r.category_id,
@@ -252,6 +255,8 @@ export interface ProviderPackage {
   pricePaise: number
   discountBps: number
   memberExtraDiscountBps: number
+  /** N16 — the server-computed price every client renders. */
+  display: PriceDisplay
   deliveryDays: number
   revisionCount: number
   categorySlug: string
@@ -276,6 +281,7 @@ export async function getPackagesForProvider(providerId: string): Promise<Provid
     pricePaise: Number(pk.price_paise),
     discountBps: pk.discount_bps,
     memberExtraDiscountBps: pk.member_extra_discount_bps,
+    display: priceDisplay({ pricePaise: Number(pk.price_paise), discountBps: pk.discount_bps, memberExtraDiscountBps: pk.member_extra_discount_bps }),
     deliveryDays: pk.delivery_days,
     revisionCount: pk.revision_count,
     categorySlug: pk.category?.slug ?? '',
@@ -317,6 +323,7 @@ export async function getPackageDetail(
     pricePaise: Number(pk.price_paise),
     discountBps: pk.discount_bps,
     memberExtraDiscountBps: pk.member_extra_discount_bps,
+    display: priceDisplay({ pricePaise: Number(pk.price_paise), discountBps: pk.discount_bps, memberExtraDiscountBps: pk.member_extra_discount_bps }),
     deliveryDays: pk.delivery_days,
     revisionCount: pk.revision_count,
     faqs: (pk.faqs as { q: string; a: string }[]) ?? [],

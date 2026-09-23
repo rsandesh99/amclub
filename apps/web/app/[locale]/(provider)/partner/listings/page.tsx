@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
-import { Plus, PackageOpen } from 'lucide-react'
+import { Plus, PackageOpen, Layers } from 'lucide-react'
+import { priceDisplay } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
@@ -8,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { ListingActions } from '@/components/partner/ListingActions'
 import { pickI18n } from '@/lib/format'
+import { isOnFor } from '@/lib/experiments'
 
 const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'default' | 'danger'> = {
   active: 'success',
@@ -39,6 +41,13 @@ export default async function ListingsPage() {
     .order('created_at', { ascending: false })
 
   const list = packages ?? []
+  // Experience v3 E4 (FR-4.1): "Offer tiers?" once two listings share a category.
+  const catCounts = new Map<string, number>()
+  for (const pk of list) {
+    const slug = (pk.category as { slug?: string } | null)?.slug
+    if (slug) catCounts.set(slug, (catCounts.get(slug) ?? 0) + 1)
+  }
+  const canOfferTiers = isOnFor('packages', user.id) && [...catCounts.values()].some((n) => n >= 2)
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -54,6 +63,20 @@ export default async function ListingsPage() {
           <Plus className="h-4 w-4" /> {t('new_listing')}
         </Link>
       </div>
+
+      {canOfferTiers && (
+        <Link
+          href="/partner/listings/tiers"
+          className="mb-6 flex items-center gap-3 rounded-card border border-primary/30 bg-primary/5 p-4 text-sm hover:bg-primary/10"
+          data-testid="offer-tiers"
+        >
+          <Layers className="h-5 w-5 shrink-0 text-primary" />
+          <span>
+            <span className="block font-semibold text-foreground">{t('offer_tiers_title')}</span>
+            <span className="block text-foreground-secondary">{t('offer_tiers_body')}</span>
+          </span>
+        </Link>
+      )}
 
       {provider.status !== 'active' && (
         <div className="mb-6 rounded-card border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
@@ -94,9 +117,11 @@ export default async function ListingsPage() {
                   </p>
                   <div className="mt-2">
                     <PriceBlock
-                      pricePaise={Number(pk.price_paise)}
-                      discountBps={pk.discount_bps}
-                      memberExtraDiscountBps={pk.member_extra_discount_bps}
+                      display={priceDisplay({
+                        pricePaise: Number(pk.price_paise),
+                        discountBps: pk.discount_bps,
+                        memberExtraDiscountBps: pk.member_extra_discount_bps,
+                      })}
                     />
                   </div>
                 </div>

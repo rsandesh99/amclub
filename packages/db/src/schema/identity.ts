@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, boolean, integer, timestamp, jsonb, index,
+  pgTable, uuid, text, boolean, integer, timestamp, jsonb, index, date, numeric,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
@@ -69,6 +69,13 @@ export const providerProfiles = pgTable('provider_profiles', {
   // AMC Mart (0022) — goods selling activated; gated on a verified GSTIN
   // (gstin_verifications, non-stub). Sellers ARE providers: no second entity.
   sellsGoods: boolean('sells_goods').default(false).notNull(),
+  // Experience v3 E3 (0049): provider-set availability, capacity for the derived
+  // "Can start" line, and logo moderation (a new logo waits in logo_pending_url).
+  nextAvailableOn: date('next_available_on'),
+  capacitySlots: integer('capacity_slots').default(5).notNull(),
+  // none | pending | approved | rejected
+  logoStatus: text('logo_status').default('none').notNull(),
+  logoPendingUrl: text('logo_pending_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -87,6 +94,26 @@ export const providerVerifications = pgTable('provider_verifications', {
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   rejectionReason: text('rejection_reason'),
   apiResponse: jsonb('api_response'),
+  // Experience v3 E3 (0049): evidence expiry + hash shown in the trust panel.
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  evidenceHash: text('evidence_hash'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+})
+
+// Experience v3 E3 (0049) — N9 public stats, one row per provider, written
+// nightly by cron/provider-stats. Service role only: buyers get the gated view
+// (publicStatsView in @amclub/shared), never the raw row or the AMC Score.
+export const providerPublicStats = pgTable('provider_public_stats', {
+  providerId: uuid('provider_id').primaryKey().references(() => providerProfiles.id, { onDelete: 'cascade' }),
+  completedOrders: integer('completed_orders').default(0).notNull(),
+  onTimePct: numeric('on_time_pct', { precision: 5, scale: 2 }),
+  onTimeN: integer('on_time_n').default(0).notNull(),
+  repeatBuyerPct: numeric('repeat_buyer_pct', { precision: 5, scale: 2 }),
+  repeatN: integer('repeat_n').default(0).notNull(),
+  responseRatePct: numeric('response_rate_pct', { precision: 5, scale: 2 }),
+  responseN: integer('response_n').default(0).notNull(),
+  computedAt: timestamp('computed_at', { withTimezone: true }).default(sql`now()`).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })

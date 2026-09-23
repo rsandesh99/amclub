@@ -17,7 +17,7 @@ const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
  * package title, the canonical PriceBlock, and delivery/state/response chips.
  * One result = one package shown with its provider's trust signals.
  */
-export function ResultCard({ result, trust }: { result: CatalogResult; trust?: CardTrust | undefined }) {
+export function ResultCard({ result, trust, equation = false }: { result: CatalogResult; trust?: CardTrust | undefined; equation?: boolean }) {
   const locale = useLocale()
   const t = useTranslations('catalog')
   const title = pickI18n(result.titleI18n, locale)
@@ -85,11 +85,7 @@ export function ResultCard({ result, trust }: { result: CatalogResult; trust?: C
 
       {/* Price */}
       <div className="mt-auto border-t border-border pt-3">
-        <PriceBlock
-          pricePaise={result.pricePaise}
-          discountBps={result.discountBps}
-          memberExtraDiscountBps={result.memberExtraDiscountBps}
-        />
+        <PriceBlock display={result.display} equation={equation} />
       </div>
     </Link>
   )
