@@ -300,7 +300,7 @@
   "catalog": {
     "off": "OFF",
     "member_price": "{price} for members (extra {pct}% off)",
-    "price_incl_note": "Price shown is what you pay. GST invoice included.",
+    "price_incl_note": "Plus 18% GST at checkout. GST invoice included.",
     "verified": "Verified",
     "top_rated": "Top Rated",
     "view_all": "View all",
