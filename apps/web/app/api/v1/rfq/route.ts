@@ -12,6 +12,7 @@ import { serverError } from '@/lib/api/errors'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { MART_ENABLED } from '@/lib/flags'
 import { checkIntakeExtractions, linkIntakeExtractions, type IntakeRow } from '@/lib/agent/intake'
+import { writeConsentedCorpus } from '@/lib/corpus'
 import { getMartCategory } from '@/lib/mart/config'
 import { isRfqQualityEnabledFor, runRfqQualityCheck, toQualityLocale } from '@/lib/agent/rfq-quality'
 
@@ -153,6 +154,8 @@ export async function POST(request: NextRequest) {
     const { error: cadErr } = await admin.from('rfqs').update({ cad_features: cadFeaturesFromDrawing(cad.data) }).eq('id', rfq.id)
     if (cadErr) console.warn('[rfq cad_features]', cadErr.message)
   }
+  // E15 F6 — consented corpora (the buyer's explicit opt-in only; text only; best-effort).
+  await writeConsentedCorpus(admin, { userId, rfqId: rfq.id, voiceMeta: d.voice_meta, intakeRows, final: { title: d.title, categorySlug: d.category_slug ?? null, details: (d.details ?? {}) as Record<string, unknown> } })
 
   if (!twoPhase) {
     // Fan-out (match + notify). Best-effort — the RFQ exists regardless.

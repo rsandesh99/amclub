@@ -20,6 +20,7 @@ import { TierProvider, type BuyOption } from '@/components/packages-v3/TierConte
 import { BuyBox, StickyBuyBar, TierTabs } from '@/components/packages-v3/BuyBox'
 import { PackageTierMatrix } from '@/components/packages-v3/TierMatrix'
 import { RecentViewTracker } from '@/components/recent-v3/RecentViewTracker'
+import { SearchAttributionCapture } from '@/components/search-v3/SearchAttributionCapture'
 import { ViewBeacon } from '@/components/partner-v3/ViewBeacon'
 import { TrackedLink } from '@/components/analytics/TrackedLink'
 
@@ -136,6 +137,8 @@ export default async function PackageDetailPage({
       <JsonLd data={jsonLd} />
       {/* Experience v3 E11 (N29): the provider funnel's view count. */}
       {isExperienceLive('partner') && <ViewBeacon kind="package" id={pkg.id} />}
+      {/* E15 F5 — the search that led here rides to checkout (tiers: any of this group's packages). */}
+      <SearchAttributionCapture packageIds={[pkg.id, ...(extras?.tiers?.tiers.map((o) => o.packageId) ?? [])]} />
       {isOnForEveryone('search') && <RecentViewTracker kind="package" id={pkg.id} title={title} href={`/p/${provider.slug}/${pkg.slug}`} />}
 
       {/* Breadcrumb */}

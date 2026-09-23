@@ -7,6 +7,7 @@ import {
   SEARCH_MORE_MAX_PAGES,
   SEARCH_PAGE_SIZE,
   SEARCH_V2_NARROWING,
+  searchV2Window,
   type SearchV2,
   type SearchView,
 } from '@amclub/shared'
@@ -14,6 +15,7 @@ import { Link } from '@/i18n/navigation'
 import { ResultCard } from '@/components/catalog/ResultCard'
 import { isOnForEveryone } from '@/lib/experiments'
 import { searchCatalogV2 } from '@/lib/catalog/search-v2'
+import { recordSearchPage, reviewedSynonymFor } from '@/lib/search/telemetry'
 import { cardTrustFor, type CardTrust } from '@/lib/trust/card-trust'
 import { FacetRail, FilterChipBar, SortControl, ViewToggle } from './FilterControls'
 import { ResultRow } from './ResultRow'
@@ -35,7 +37,10 @@ import { RecentlyViewed } from '@/components/recent-v3/RecentlyViewed'
 export async function SearchResultsV3({ search, basePath, fixedCategory, fixedService, youSaid }: { search: SearchV2; basePath: string; fixedCategory?: string; fixedService?: string; youSaid?: string | undefined }) {
   const t = await getTranslations('filters_v3')
   const tc = await getTranslations('catalog')
-  const s: SearchV2 = { ...search, ...(fixedCategory ? { category: fixedCategory } : {}), ...(fixedService ? { service: fixedService } : {}) }
+  const base: SearchV2 = { ...search, ...(fixedCategory ? { category: fixedCategory } : {}), ...(fixedService ? { service: fixedService } : {}) }
+  // E15 F6 — a reviewed synonym for the whole query narrows to what it means (curated rows only; none → unchanged).
+  const syn = !base.category && base.query ? await reviewedSynonymFor(base.query) : null
+  const s: SearchV2 = syn ? { ...base, category: syn.category, ...(syn.service ? { service: syn.service } : {}) } : base
   const jar = await cookies()
   const remembered = jar.get('amc_search_view')?.value
   const view: SearchView = s.view ?? (remembered === 'list' || remembered === 'grid' ? remembered : 'grid')
@@ -57,6 +62,9 @@ export async function SearchResultsV3({ search, basePath, fixedCategory, fixedSe
     }
   }
   const { results, total, facets } = res
+  // E15 F5 — this page's search id (a sample is recorded after the response; the id rides the result links).
+  const sid = recordSearchPage(s, total)
+  const posBase = widened ? 0 : searchV2Window(s).offset
   const trust: Map<string, CardTrust> | null = isOnForEveryone('trust') ? await cardTrustFor(results.map((r) => r.providerId)) : null
   const equation = isOnForEveryone('packages')
   const cardTrust = (id: string) => (trust ? (trust.get(id) ?? { stat: null, activeThisWeek: false }) : undefined)
@@ -118,12 +126,12 @@ export async function SearchResultsV3({ search, basePath, fixedCategory, fixedSe
                 <span className="text-right">{t('col_price')}</span>
               </div>
               <ul className="divide-y divide-separator" data-density="compact">
-                {results.map((r) => <ResultRow key={r.packageId} result={r} trust={cardTrust(r.providerId)} compare />)}
+                {results.map((r, i) => <ResultRow key={r.packageId} result={r} trust={cardTrust(r.providerId)} compare sid={sid} position={posBase + i + 1} />)}
               </ul>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {results.map((r) => <ResultCard key={r.packageId} result={r} equation={equation} trust={cardTrust(r.providerId)} compare />)}
+              {results.map((r, i) => <ResultCard key={r.packageId} result={r} equation={equation} trust={cardTrust(r.providerId)} compare sid={sid} position={posBase + i + 1} />)}
             </div>
           ))}
 

@@ -18,7 +18,7 @@ const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
  * package title, the canonical PriceBlock, and delivery/state/response chips.
  * One result = one package shown with its provider's trust signals.
  */
-export function ResultCard({ result, trust, equation = false, compare = false }: { result: CatalogResult; trust?: CardTrust | undefined; equation?: boolean; compare?: boolean }) {
+export function ResultCard({ result, trust, equation = false, compare = false, sid, position }: { result: CatalogResult; trust?: CardTrust | undefined; equation?: boolean; compare?: boolean; sid?: string; position?: number }) {
   const locale = useLocale()
   const t = useTranslations('catalog')
   const title = pickI18n(result.titleI18n, locale)
@@ -27,7 +27,7 @@ export function ResultCard({ result, trust, equation = false, compare = false }:
 
   const card = (
     <Link
-      href={`/p/${result.providerSlug}/${result.packageSlug}`}
+      href={`/p/${result.providerSlug}/${result.packageSlug}${sid ? `?sid=${sid}${position ? `&pos=${position}` : ''}` : ''}`}
       className="card-interactive group flex h-full flex-col gap-3 p-4"
     >
       {/* Provider row — credential-first (§4.3): credential leads, rating secondary */}

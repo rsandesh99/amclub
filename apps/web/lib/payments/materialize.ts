@@ -3,6 +3,7 @@ import type { PaymentGateway, GatewayPayment } from './types'
 import { finalizeQuoteAcceptance, type FinalizeResult } from '@/lib/rfq/finalize'
 import { notifyOrderPlaced } from '@/lib/notifications/events'
 import { recordCouponRedemption } from '@/lib/coupons/redeem'
+import { copyAttributionToOrder } from '@/lib/search/attribution'
 
 export interface CaptureInput {
   razorpayOrderId: string
@@ -79,6 +80,8 @@ export async function materializeFromCapture(
       .maybeSingle()
     if (!already) {
       await admin.from('order_events').insert({ order_id: orderId, event: 'placed_side_effects' })
+      // E15 F5 — the search that led to this order (best-effort; never affects the order).
+      await copyAttributionToOrder(admin, orderId)
       if (finalized !== 'duplicate_flagged') {
         try {
           await recordCouponRedemption(admin, orderId)

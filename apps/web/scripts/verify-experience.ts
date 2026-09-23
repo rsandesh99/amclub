@@ -1677,6 +1677,116 @@ async function e15a() {
   }
 }
 
+async function e15b() {
+  console.log('\nE15b — data foundations: search telemetry + attribution, declared vs actual, consented corpora, synonyms')
+  const cronSecret = process.env['CRON_SECRET']
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const { data: legal } = await admin.from('categories').select('id').eq('slug', 'legal').single()
+  const buyer = await mkUser('e15bbuyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E15b Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const prov = await mkUser('e15bprov', ['provider'])
+  const provSlug = `${tag.replace(/_/g, '-')}-e15bprov`
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E15b Prov', display_name: 'E15b Prov', slug: provSlug, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: tax!.id })
+  const word = `Vexmora${Date.now() % 100000}`
+  const { data: pk } = await admin.from('packages').insert({ provider_id: pp!.id, category_id: tax!.id, slug: `${tag.replace(/_/g, '-')}-e15bpkg`, title_i18n: { en: `${word} GST filing` }, scope_included: ['x'], deliverables: ['y'], price_paise: 2000_00, delivery_days: 3, status: 'active' }).select('id').single()
+  created.packageIds.push(pk!.id)
+  const restores = [await setSetting('search_telemetry_sample_pct', 100)]
+  const extraOrders: string[] = []
+  try {
+    // F5 — the search page mints a search id on the result links; the (100 %) sample records it, with no user id.
+    const html = visible(await (await fetch(`${BASE}/services?query=${word}`, { headers: { cookie: buyer.cookie } })).text())
+    const sid = /[?&]sid=([0-9a-f-]{36})/.exec(html)?.[1] ?? null
+    type SearchRow = { query_norm: string | null; result_count: number; params: unknown }
+    let row = null as SearchRow | null
+    for (let i = 0; i < 10 && sid && !row; i++) {
+      row = ((await admin.from('search_queries').select('query_norm, result_count, params').eq('id', sid).maybeSingle()).data as SearchRow | null) ?? null
+      if (!row) await new Promise((r) => setTimeout(r, 300))
+    }
+    const found = row as SearchRow | null
+    check('FR-15.3: a results page carries a search id and the sample records it (normalised query + count, no user id)', !!sid && found?.query_norm === word.toLowerCase() && (found?.result_count ?? 0) >= 1 && !JSON.stringify(found).includes(buyer.uid), JSON.stringify(found))
+    // … and it rides package → checkout → the order.
+    const co = (await (await api(buyer.token, '/api/v1/checkout', { packageId: pk!.id, idempotencyKey: crypto.randomUUID(), attribution: { search_id: sid, position: 1 } })).json().catch(() => ({}))) as { simulated?: boolean; checkoutSessionId?: string }
+    let orderId = ''
+    if (co.simulated) orderId = ((await (await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: co.checkoutSessionId })).json().catch(() => ({}))) as { orderId?: string }).orderId ?? ''
+    if (orderId) created.orderIds.push(orderId)
+    const { data: ord } = await admin.from('orders').select('attribution').eq('id', orderId).maybeSingle()
+    check('FR-15.3: the order carries the search that produced it (orders.attribution)', (ord?.attribution as { search_id?: string; position?: number } | null)?.search_id === sid && (ord?.attribution as { position?: number }).position === 1, JSON.stringify(ord?.attribution))
+    const bad = await api(buyer.token, '/api/v1/checkout', { packageId: pk!.id, idempotencyKey: crypto.randomUUID(), attribution: { search_id: 'nope' } })
+    check('FR-15.3: a malformed attribution is refused (422) — never stored', bad.status === 422, String(bad.status))
+
+    // F4 — five paid orders in a category the provider did not declare → one flag for ops.
+    const { data: lp } = await admin.from('packages').insert({ provider_id: pp!.id, category_id: legal!.id, slug: `${tag.replace(/_/g, '-')}-e15blegal`, title_i18n: { en: 'E15b legal notice' }, scope_included: ['x'], deliverables: ['y'], price_paise: 1000_00, delivery_days: 3, status: 'paused' }).select('id').single()
+    created.packageIds.push(lp!.id)
+    for (let i = 0; i < 5; i++) {
+      const { data: o } = await admin.from('orders').insert({ msme_id: msme!.id, provider_id: pp!.id, package_id: lp!.id, source: 'package', title: `E15b legal ${i}`, scope_snapshot: {}, price_paise: 1000_00, gst_paise: 180_00, total_paise: 1180_00, commission_bps: 1000, commission_paise: 100_00, provider_earning_paise: 900_00, delivery_days: 3, status: 'completed' }).select('id').single()
+      if (o) { extraOrders.push(o.id as string); created.orderIds.push(o.id as string) }
+    }
+    const cron = await fetch(`${BASE}/api/v1/cron/data-foundations`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })
+    const again = await fetch(`${BASE}/api/v1/cron/data-foundations`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })
+    const { data: flags } = await admin.from('audit_logs').select('after').eq('action', 'category_mismatch_flagged').eq('entity_id', pp!.id)
+    check('FR-15.2: > 50 % of ≥ 5 paid orders outside the declared categories → ONE ops flag (a re-run adds none)', cron.ok && again.ok && (flags ?? []).length === 1 && (flags![0]!.after as { n?: number }).n === 6, JSON.stringify(flags))
+    const ops = await mkUser('e15bops', ['admin'])
+    const q = visible(await (await fetch(`${BASE}/admin/verifications`, { headers: { cookie: ops.cookie } })).text())
+    const pub = visible(await (await fetch(`${BASE}/p/${provSlug}`)).text())
+    check('FR-15.2: the flag is on the admin verification queue — never the public profile', q.includes(`data-flag="${pp!.id}"`) && !pub.includes('data-testid="category-flags"'))
+
+    // F6 — consent: off by default, on keeps text-only pairs, off deletes them.
+    const docExtract = { doc_type: 'gst_notice', facts: [{ k: 'notice', v: 'ASMT-10', confidence: 'high' }], suggested_category_slug: 'legal', description_english: 'A GST scrutiny notice', uncertain: false }
+    const mkIntake = async () => (await admin.from('rfq_intake_extractions').insert({ user_id: buyer.uid, kind: 'document', input_refs: { attachment_path: `${buyer.uid}/e15b-notice.jpg`, mime: 'image/jpeg' }, proposed: docExtract, model: null, stub: true, cost_est_paise: 0 }).select('id').single()).data!.id as string
+    const rfqBody = (intakeId: string) => ({ category_slug: 'tax-accounting', title: 'E15b reply to a GST notice', details: { notes: 'ASMT-10 reply' }, intake_extraction_ids: [intakeId] })
+    const r0 = (await (await api(buyer.token, '/api/v1/rfq', rfqBody(await mkIntake()))).json().catch(() => ({}))) as { rfqId?: string }
+    if (r0.rfqId) created.rfqIds.push(r0.rfqId)
+    const { count: none } = await admin.from('corpus_image_pairs').select('id', { count: 'exact', head: true }).eq('user_id', buyer.uid)
+    check('FR-15.4: no consent → nothing kept', none === 0)
+    const dark = await api(buyer.token, '/api/v1/me/corpus-consent', { on: true })
+    const prof = visible(await (await fetch(`${BASE}/app/profile`, { headers: { cookie: buyer.cookie } })).text())
+    check('FR-15.4: the switch off → no opt-in on the profile and opting in 404s', dark.status === 404 && !prof.includes('data-testid="corpus-consent"'), String(dark.status))
+    restores.push(await setSetting('corpus_consent_enabled', true))
+    const profOn = visible(await (await fetch(`${BASE}/app/profile`, { headers: { cookie: buyer.cookie } })).text())
+    check('FR-15.4: the switch on → the profile offers the opt-in, off by default', profOn.includes('data-testid="corpus-consent"'))
+    const on = await api(buyer.token, '/api/v1/me/corpus-consent', { on: true })
+    const r1 = (await (await api(buyer.token, '/api/v1/rfq', rfqBody(await mkIntake()))).json().catch(() => ({}))) as { rfqId?: string }
+    if (r1.rfqId) created.rfqIds.push(r1.rfqId)
+    const { data: pairs } = await admin.from('corpus_image_pairs').select('storage_key, corrections, final').eq('user_id', buyer.uid)
+    check('FR-15.4: with consent, the image → final-request pair is kept by key with the corrected fields', on.ok && (pairs ?? []).length === 1 && pairs![0]!.storage_key === `${buyer.uid}/e15b-notice.jpg` && JSON.stringify(pairs![0]!.corrections) === '["category"]', JSON.stringify(pairs))
+    const asBuyer = createClient(URL_, ANON, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${buyer.token}` } } })
+    check('FR-15.4: the buyer cannot read the corpus rows directly (service role only)', ((await asBuyer.from('corpus_image_pairs').select('id')).data ?? []).length === 0)
+    const off = await api(buyer.token, '/api/v1/me/corpus-consent', { on: false })
+    const { count: afterOff } = await admin.from('corpus_image_pairs').select('id', { count: 'exact', head: true }).eq('user_id', buyer.uid)
+    check('FR-15.4: revoking consent deletes that user\'s rows', off.ok && afterOff === 0 && ((await off.json()) as { deleted?: number }).deleted === 1)
+
+    // F6 — service_synonyms: anyone reads reviewed rows only.
+    await admin.from('service_synonyms').insert([
+      { term: `${word} reviewed`, term_key: `${word.toLowerCase()} reviewed`, lang: 'en', category_slug: 'tax-accounting', service_slug: 'gst-filing', source: 'curated', reviewed: true },
+      { term: `${word} draft`, term_key: `${word.toLowerCase()} draft`, lang: 'en', category_slug: 'legal', service_slug: null, source: 'search_log', reviewed: false },
+    ])
+    const { data: syn } = await createClient(URL_, ANON, { auth: { persistSession: false } }).from('service_synonyms').select('term_key').like('term_key', `${word.toLowerCase()}%`)
+    check('FR-15.4: service_synonyms — anon reads the reviewed row, never the unreviewed one', (syn ?? []).length === 1 && syn![0]!.term_key.endsWith('reviewed'), JSON.stringify(syn))
+  } finally {
+    for (const restore of restores.reverse()) await restore()
+    await admin.from('service_synonyms').delete().like('term_key', `${word.toLowerCase()}%`)
+    await admin.from('audit_logs').delete().eq('action', 'category_mismatch_flagged').eq('entity_id', pp!.id)
+    await admin.from('corpus_image_pairs').delete().eq('user_id', buyer.uid)
+    await admin.from('rfq_intake_extractions').delete().eq('user_id', buyer.uid)
+    await admin.from('ai_decisions').delete().eq('decided_by', buyer.uid)
+    const { data: ords } = await admin.from('orders').select('id').eq('msme_id', msme!.id)
+    for (const o of ords ?? []) {
+      await admin.from('payouts').delete().eq('order_id', o.id)
+      const { data: pays } = await admin.from('payments').select('id').eq('order_id', o.id)
+      for (const pay of pays ?? []) await admin.from('refunds').delete().eq('payment_id', pay.id)
+      await admin.from('payments').delete().eq('order_id', o.id)
+      await admin.from('invoices').delete().eq('order_id', o.id)
+      if (!created.orderIds.includes(o.id as string)) created.orderIds.push(o.id as string)
+    }
+    await admin.from('checkout_sessions').delete().eq('msme_id', msme!.id)
+    await admin.from('search_queries').delete().eq('query_norm', word.toLowerCase())
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1702,6 +1812,7 @@ async function main() {
     await e14b()
     await e14c()
     await e15a()
+    await e15b()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

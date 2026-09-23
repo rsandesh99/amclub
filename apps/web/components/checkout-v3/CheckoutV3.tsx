@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { ConsentCheckbox } from '@/components/auth/ConsentCheckbox'
 import { RefundLine } from '@/components/packages-v3/BuyBox'
 import { useAnalytics } from '@/components/providers/posthog'
+import { readSearchAttribution } from '@/components/search-v3/SearchAttributionCapture'
 import { acceptLegalDocs } from '@/lib/legal/client'
 import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 
@@ -158,12 +159,15 @@ export function CheckoutV3({
     const couponCode = applied ? applied.code : ''
     const gst = gstin.trim().toUpperCase()
     analytics.capture('payment_initiated', { device: 'web', coupon: !!couponCode, gst_invoice: !!gst })
+    const attribution = readSearchAttribution(packageId)
     try {
       const data = await startCheckout('/api/v1/checkout', {
         packageId,
         idempotencyKey: keyFor(`${couponCode}|${gst}`),
         ...(couponCode ? { couponCode } : {}),
         ...(gst ? { gstInvoice: { gstin: gst } } : {}),
+        // E15 F5 — the search that led here (never part of the charge).
+        ...(attribution ? { attribution } : {}),
       })
       await payCheckout(data, {
         description: title,

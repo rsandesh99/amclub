@@ -198,6 +198,18 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E15 / F10: at fan-out, log a rules-v1 fit % per matched provider; resolved at acceptance (quoted / won). Shadow only — never ranks, filters or shows anything.',
   },
+  // ── Experience v3 E15 — search telemetry sample (FR-15.3, F5) ──
+  search_telemetry_sample_pct: {
+    schema: z.number().int().min(0).max(100),
+    default: 20,
+    hint: 'E15 / F5: the share of search result pages recorded in search_queries (normalised parameters + result count; no user id; kept 180 days). 0 = off. Attribution (search → order) rides every search regardless.',
+  },
+  // ── Experience v3 E15 — consented corpora opt-in (FR-15.4, F6) ──
+  corpus_consent_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E15 / F6: show the buyer profile opt-in "Help improve AMClub\'s Hindi and Telugu understanding" and keep text-only voice triples / image pairs for buyers who opt in. Off: the toggle is hidden, opting in 404s and nothing new is kept; revoking (which deletes the rows) always works. Apply migration 0063 first.',
+  },
   // ── Experience v3 E6 — document suggestions on the requirement form (FR-6.3) ──
   document_suggestions_enabled: {
     schema: z.boolean(),

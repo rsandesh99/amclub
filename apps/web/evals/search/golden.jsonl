@@ -1,0 +1,200 @@
+{"id": "pvt-ltd-incorporation-1", "query": "private limited incorporation", "expect": {"category_slug": "company-registrations", "service_slug": "pvt-ltd-incorporation"}}
+{"id": "pvt-ltd-incorporation-2", "query": "private limited incorporation for my business", "expect": {"category_slug": "company-registrations", "service_slug": "pvt-ltd-incorporation"}}
+{"id": "pvt-ltd-incorporation-3", "query": "need private limited incorporation", "expect": {"category_slug": "company-registrations", "service_slug": "pvt-ltd-incorporation"}}
+{"id": "pvt-ltd-incorporation-4", "query": "private limited incorporation service", "expect": {"category_slug": "company-registrations", "service_slug": "pvt-ltd-incorporation"}}
+{"id": "pvt-ltd-incorporation-5", "query": "help with private limited incorporation", "expect": {"category_slug": "company-registrations", "service_slug": "pvt-ltd-incorporation"}}
+{"id": "llp-incorporation-1", "query": "llp incorporation", "expect": {"category_slug": "company-registrations", "service_slug": "llp-incorporation"}}
+{"id": "llp-incorporation-2", "query": "llp incorporation for my business", "expect": {"category_slug": "company-registrations", "service_slug": "llp-incorporation"}}
+{"id": "llp-incorporation-3", "query": "need llp incorporation", "expect": {"category_slug": "company-registrations", "service_slug": "llp-incorporation"}}
+{"id": "llp-incorporation-4", "query": "llp incorporation service", "expect": {"category_slug": "company-registrations", "service_slug": "llp-incorporation"}}
+{"id": "llp-incorporation-5", "query": "help with llp incorporation", "expect": {"category_slug": "company-registrations", "service_slug": "llp-incorporation"}}
+{"id": "opc-incorporation-1", "query": "one-person company", "expect": {"category_slug": "company-registrations", "service_slug": "opc-incorporation"}}
+{"id": "opc-incorporation-2", "query": "one-person company for my business", "expect": {"category_slug": "company-registrations", "service_slug": "opc-incorporation"}}
+{"id": "opc-incorporation-3", "query": "need one-person company", "expect": {"category_slug": "company-registrations", "service_slug": "opc-incorporation"}}
+{"id": "opc-incorporation-4", "query": "one-person company service", "expect": {"category_slug": "company-registrations", "service_slug": "opc-incorporation"}}
+{"id": "opc-incorporation-5", "query": "help with one-person company", "expect": {"category_slug": "company-registrations", "service_slug": "opc-incorporation"}}
+{"id": "udyam-registration-1", "query": "udyam registration", "expect": {"category_slug": "company-registrations", "service_slug": "udyam-registration"}}
+{"id": "udyam-registration-2", "query": "udyam registration for my business", "expect": {"category_slug": "company-registrations", "service_slug": "udyam-registration"}}
+{"id": "udyam-registration-3", "query": "need udyam registration", "expect": {"category_slug": "company-registrations", "service_slug": "udyam-registration"}}
+{"id": "udyam-registration-4", "query": "udyam registration service", "expect": {"category_slug": "company-registrations", "service_slug": "udyam-registration"}}
+{"id": "udyam-registration-5", "query": "help with udyam registration", "expect": {"category_slug": "company-registrations", "service_slug": "udyam-registration"}}
+{"id": "gst-registration-1", "query": "gst registration", "expect": {"category_slug": "company-registrations", "service_slug": "gst-registration"}}
+{"id": "gst-registration-2", "query": "gst registration for my business", "expect": {"category_slug": "company-registrations", "service_slug": "gst-registration"}}
+{"id": "gst-registration-3", "query": "need gst registration", "expect": {"category_slug": "company-registrations", "service_slug": "gst-registration"}}
+{"id": "gst-registration-4", "query": "gst registration service", "expect": {"category_slug": "company-registrations", "service_slug": "gst-registration"}}
+{"id": "gst-registration-5", "query": "help with gst registration", "expect": {"category_slug": "company-registrations", "service_slug": "gst-registration"}}
+{"id": "fssai-license-1", "query": "fssai licence", "expect": {"category_slug": "company-registrations", "service_slug": "fssai-license"}}
+{"id": "fssai-license-2", "query": "fssai licence for my business", "expect": {"category_slug": "company-registrations", "service_slug": "fssai-license"}}
+{"id": "fssai-license-3", "query": "need fssai licence", "expect": {"category_slug": "company-registrations", "service_slug": "fssai-license"}}
+{"id": "fssai-license-4", "query": "fssai licence service", "expect": {"category_slug": "company-registrations", "service_slug": "fssai-license"}}
+{"id": "fssai-license-5", "query": "help with fssai licence", "expect": {"category_slug": "company-registrations", "service_slug": "fssai-license"}}
+{"id": "iec-code-1", "query": "import-export code (iec)", "expect": {"category_slug": "company-registrations", "service_slug": "iec-code"}}
+{"id": "iec-code-2", "query": "import-export code (iec) for my business", "expect": {"category_slug": "company-registrations", "service_slug": "iec-code"}}
+{"id": "iec-code-3", "query": "need import-export code (iec)", "expect": {"category_slug": "company-registrations", "service_slug": "iec-code"}}
+{"id": "iec-code-4", "query": "import-export code (iec) service", "expect": {"category_slug": "company-registrations", "service_slug": "iec-code"}}
+{"id": "iec-code-5", "query": "help with import-export code (iec)", "expect": {"category_slug": "company-registrations", "service_slug": "iec-code"}}
+{"id": "msme-certificate-1", "query": "msme certificate", "expect": {"category_slug": "company-registrations", "service_slug": "msme-certificate"}}
+{"id": "msme-certificate-2", "query": "msme certificate for my business", "expect": {"category_slug": "company-registrations", "service_slug": "msme-certificate"}}
+{"id": "msme-certificate-3", "query": "need msme certificate", "expect": {"category_slug": "company-registrations", "service_slug": "msme-certificate"}}
+{"id": "msme-certificate-4", "query": "msme certificate service", "expect": {"category_slug": "company-registrations", "service_slug": "msme-certificate"}}
+{"id": "msme-certificate-5", "query": "help with msme certificate", "expect": {"category_slug": "company-registrations", "service_slug": "msme-certificate"}}
+{"id": "gst-filing-1", "query": "gst return filing", "expect": {"category_slug": "tax-accounting", "service_slug": "gst-filing"}}
+{"id": "gst-filing-2", "query": "gst return filing for my business", "expect": {"category_slug": "tax-accounting", "service_slug": "gst-filing"}}
+{"id": "gst-filing-3", "query": "need gst return filing", "expect": {"category_slug": "tax-accounting", "service_slug": "gst-filing"}}
+{"id": "gst-filing-4", "query": "gst return filing service", "expect": {"category_slug": "tax-accounting", "service_slug": "gst-filing"}}
+{"id": "gst-filing-5", "query": "help with gst return filing", "expect": {"category_slug": "tax-accounting", "service_slug": "gst-filing"}}
+{"id": "itr-filing-1", "query": "income tax return", "expect": {"category_slug": "tax-accounting", "service_slug": "itr-filing"}}
+{"id": "itr-filing-2", "query": "income tax return for my business", "expect": {"category_slug": "tax-accounting", "service_slug": "itr-filing"}}
+{"id": "itr-filing-3", "query": "need income tax return", "expect": {"category_slug": "tax-accounting", "service_slug": "itr-filing"}}
+{"id": "itr-filing-4", "query": "income tax return service", "expect": {"category_slug": "tax-accounting", "service_slug": "itr-filing"}}
+{"id": "itr-filing-5", "query": "help with income tax return", "expect": {"category_slug": "tax-accounting", "service_slug": "itr-filing"}}
+{"id": "bookkeeping-1", "query": "bookkeeping", "expect": {"category_slug": "tax-accounting", "service_slug": "bookkeeping"}}
+{"id": "bookkeeping-2", "query": "bookkeeping for my business", "expect": {"category_slug": "tax-accounting", "service_slug": "bookkeeping"}}
+{"id": "bookkeeping-3", "query": "need bookkeeping", "expect": {"category_slug": "tax-accounting", "service_slug": "bookkeeping"}}
+{"id": "bookkeeping-4", "query": "bookkeeping service", "expect": {"category_slug": "tax-accounting", "service_slug": "bookkeeping"}}
+{"id": "bookkeeping-5", "query": "help with bookkeeping", "expect": {"category_slug": "tax-accounting", "service_slug": "bookkeeping"}}
+{"id": "audit-1", "query": "audit", "expect": {"category_slug": "tax-accounting", "service_slug": "audit"}}
+{"id": "audit-2", "query": "audit for my business", "expect": {"category_slug": "tax-accounting", "service_slug": "audit"}}
+{"id": "audit-3", "query": "need audit", "expect": {"category_slug": "tax-accounting", "service_slug": "audit"}}
+{"id": "audit-4", "query": "audit service", "expect": {"category_slug": "tax-accounting", "service_slug": "audit"}}
+{"id": "audit-5", "query": "help with audit", "expect": {"category_slug": "tax-accounting", "service_slug": "audit"}}
+{"id": "tds-compliance-1", "query": "tds compliance", "expect": {"category_slug": "tax-accounting", "service_slug": "tds-compliance"}}
+{"id": "tds-compliance-2", "query": "tds compliance for my business", "expect": {"category_slug": "tax-accounting", "service_slug": "tds-compliance"}}
+{"id": "tds-compliance-3", "query": "need tds compliance", "expect": {"category_slug": "tax-accounting", "service_slug": "tds-compliance"}}
+{"id": "tds-compliance-4", "query": "tds compliance service", "expect": {"category_slug": "tax-accounting", "service_slug": "tds-compliance"}}
+{"id": "tds-compliance-5", "query": "help with tds compliance", "expect": {"category_slug": "tax-accounting", "service_slug": "tds-compliance"}}
+{"id": "contract-drafting-1", "query": "contract drafting", "expect": {"category_slug": "legal", "service_slug": "contract-drafting"}}
+{"id": "contract-drafting-2", "query": "contract drafting for my business", "expect": {"category_slug": "legal", "service_slug": "contract-drafting"}}
+{"id": "contract-drafting-3", "query": "need contract drafting", "expect": {"category_slug": "legal", "service_slug": "contract-drafting"}}
+{"id": "contract-drafting-4", "query": "contract drafting service", "expect": {"category_slug": "legal", "service_slug": "contract-drafting"}}
+{"id": "contract-drafting-5", "query": "help with contract drafting", "expect": {"category_slug": "legal", "service_slug": "contract-drafting"}}
+{"id": "trademark-1", "query": "trademark registration", "expect": {"category_slug": "legal", "service_slug": "trademark"}}
+{"id": "trademark-2", "query": "trademark registration for my business", "expect": {"category_slug": "legal", "service_slug": "trademark"}}
+{"id": "trademark-3", "query": "need trademark registration", "expect": {"category_slug": "legal", "service_slug": "trademark"}}
+{"id": "trademark-4", "query": "trademark registration service", "expect": {"category_slug": "legal", "service_slug": "trademark"}}
+{"id": "trademark-5", "query": "help with trademark registration", "expect": {"category_slug": "legal", "service_slug": "trademark"}}
+{"id": "ip-protection-1", "query": "ip protection", "expect": {"category_slug": "legal", "service_slug": "ip-protection"}}
+{"id": "ip-protection-2", "query": "ip protection for my business", "expect": {"category_slug": "legal", "service_slug": "ip-protection"}}
+{"id": "ip-protection-3", "query": "need ip protection", "expect": {"category_slug": "legal", "service_slug": "ip-protection"}}
+{"id": "ip-protection-4", "query": "ip protection service", "expect": {"category_slug": "legal", "service_slug": "ip-protection"}}
+{"id": "ip-protection-5", "query": "help with ip protection", "expect": {"category_slug": "legal", "service_slug": "ip-protection"}}
+{"id": "legal-notice-1", "query": "legal notice", "expect": {"category_slug": "legal", "service_slug": "legal-notice"}}
+{"id": "legal-notice-2", "query": "legal notice for my business", "expect": {"category_slug": "legal", "service_slug": "legal-notice"}}
+{"id": "legal-notice-3", "query": "need legal notice", "expect": {"category_slug": "legal", "service_slug": "legal-notice"}}
+{"id": "legal-notice-4", "query": "legal notice service", "expect": {"category_slug": "legal", "service_slug": "legal-notice"}}
+{"id": "legal-notice-5", "query": "help with legal notice", "expect": {"category_slug": "legal", "service_slug": "legal-notice"}}
+{"id": "labour-law-compliance-1", "query": "labour law compliance", "expect": {"category_slug": "legal", "service_slug": "labour-law-compliance"}}
+{"id": "labour-law-compliance-2", "query": "labour law compliance for my business", "expect": {"category_slug": "legal", "service_slug": "labour-law-compliance"}}
+{"id": "labour-law-compliance-3", "query": "need labour law compliance", "expect": {"category_slug": "legal", "service_slug": "labour-law-compliance"}}
+{"id": "labour-law-compliance-4", "query": "labour law compliance service", "expect": {"category_slug": "legal", "service_slug": "labour-law-compliance"}}
+{"id": "labour-law-compliance-5", "query": "help with labour law compliance", "expect": {"category_slug": "legal", "service_slug": "labour-law-compliance"}}
+{"id": "recruitment-1", "query": "recruitment", "expect": {"category_slug": "hr-staffing", "service_slug": "recruitment"}}
+{"id": "recruitment-2", "query": "recruitment for my business", "expect": {"category_slug": "hr-staffing", "service_slug": "recruitment"}}
+{"id": "recruitment-3", "query": "need recruitment", "expect": {"category_slug": "hr-staffing", "service_slug": "recruitment"}}
+{"id": "recruitment-4", "query": "recruitment service", "expect": {"category_slug": "hr-staffing", "service_slug": "recruitment"}}
+{"id": "recruitment-5", "query": "help with recruitment", "expect": {"category_slug": "hr-staffing", "service_slug": "recruitment"}}
+{"id": "payroll-1", "query": "payroll", "expect": {"category_slug": "hr-staffing", "service_slug": "payroll"}}
+{"id": "payroll-2", "query": "payroll for my business", "expect": {"category_slug": "hr-staffing", "service_slug": "payroll"}}
+{"id": "payroll-3", "query": "need payroll", "expect": {"category_slug": "hr-staffing", "service_slug": "payroll"}}
+{"id": "payroll-4", "query": "payroll service", "expect": {"category_slug": "hr-staffing", "service_slug": "payroll"}}
+{"id": "payroll-5", "query": "help with payroll", "expect": {"category_slug": "hr-staffing", "service_slug": "payroll"}}
+{"id": "hr-policy-setup-1", "query": "hr policy setup", "expect": {"category_slug": "hr-staffing", "service_slug": "hr-policy-setup"}}
+{"id": "hr-policy-setup-2", "query": "hr policy setup for my business", "expect": {"category_slug": "hr-staffing", "service_slug": "hr-policy-setup"}}
+{"id": "hr-policy-setup-3", "query": "need hr policy setup", "expect": {"category_slug": "hr-staffing", "service_slug": "hr-policy-setup"}}
+{"id": "hr-policy-setup-4", "query": "hr policy setup service", "expect": {"category_slug": "hr-staffing", "service_slug": "hr-policy-setup"}}
+{"id": "hr-policy-setup-5", "query": "help with hr policy setup", "expect": {"category_slug": "hr-staffing", "service_slug": "hr-policy-setup"}}
+{"id": "loan-documentation-1", "query": "loan documentation", "expect": {"category_slug": "finance-facilitation", "service_slug": "loan-documentation"}}
+{"id": "loan-documentation-2", "query": "loan documentation for my business", "expect": {"category_slug": "finance-facilitation", "service_slug": "loan-documentation"}}
+{"id": "loan-documentation-3", "query": "need loan documentation", "expect": {"category_slug": "finance-facilitation", "service_slug": "loan-documentation"}}
+{"id": "loan-documentation-4", "query": "loan documentation service", "expect": {"category_slug": "finance-facilitation", "service_slug": "loan-documentation"}}
+{"id": "loan-documentation-5", "query": "help with loan documentation", "expect": {"category_slug": "finance-facilitation", "service_slug": "loan-documentation"}}
+{"id": "dsa-services-1", "query": "dsa services", "expect": {"category_slug": "finance-facilitation", "service_slug": "dsa-services"}}
+{"id": "dsa-services-2", "query": "dsa services for my business", "expect": {"category_slug": "finance-facilitation", "service_slug": "dsa-services"}}
+{"id": "dsa-services-3", "query": "need dsa services", "expect": {"category_slug": "finance-facilitation", "service_slug": "dsa-services"}}
+{"id": "dsa-services-4", "query": "dsa services service", "expect": {"category_slug": "finance-facilitation", "service_slug": "dsa-services"}}
+{"id": "dsa-services-5", "query": "help with dsa services", "expect": {"category_slug": "finance-facilitation", "service_slug": "dsa-services"}}
+{"id": "cgtmse-application-1", "query": "cgtmse application", "expect": {"category_slug": "finance-facilitation", "service_slug": "cgtmse-application"}}
+{"id": "cgtmse-application-2", "query": "cgtmse application for my business", "expect": {"category_slug": "finance-facilitation", "service_slug": "cgtmse-application"}}
+{"id": "cgtmse-application-3", "query": "need cgtmse application", "expect": {"category_slug": "finance-facilitation", "service_slug": "cgtmse-application"}}
+{"id": "cgtmse-application-4", "query": "cgtmse application service", "expect": {"category_slug": "finance-facilitation", "service_slug": "cgtmse-application"}}
+{"id": "cgtmse-application-5", "query": "help with cgtmse application", "expect": {"category_slug": "finance-facilitation", "service_slug": "cgtmse-application"}}
+{"id": "mudra-application-1", "query": "mudra loan application", "expect": {"category_slug": "finance-facilitation", "service_slug": "mudra-application"}}
+{"id": "mudra-application-2", "query": "mudra loan application for my business", "expect": {"category_slug": "finance-facilitation", "service_slug": "mudra-application"}}
+{"id": "mudra-application-3", "query": "need mudra loan application", "expect": {"category_slug": "finance-facilitation", "service_slug": "mudra-application"}}
+{"id": "mudra-application-4", "query": "mudra loan application service", "expect": {"category_slug": "finance-facilitation", "service_slug": "mudra-application"}}
+{"id": "mudra-application-5", "query": "help with mudra loan application", "expect": {"category_slug": "finance-facilitation", "service_slug": "mudra-application"}}
+{"id": "project-report-1", "query": "project report", "expect": {"category_slug": "finance-facilitation", "service_slug": "project-report"}}
+{"id": "project-report-2", "query": "project report for my business", "expect": {"category_slug": "finance-facilitation", "service_slug": "project-report"}}
+{"id": "project-report-3", "query": "need project report", "expect": {"category_slug": "finance-facilitation", "service_slug": "project-report"}}
+{"id": "project-report-4", "query": "project report service", "expect": {"category_slug": "finance-facilitation", "service_slug": "project-report"}}
+{"id": "project-report-5", "query": "help with project report", "expect": {"category_slug": "finance-facilitation", "service_slug": "project-report"}}
+{"id": "social-media-1", "query": "social media", "expect": {"category_slug": "digital-marketing", "service_slug": "social-media"}}
+{"id": "social-media-2", "query": "social media for my business", "expect": {"category_slug": "digital-marketing", "service_slug": "social-media"}}
+{"id": "social-media-3", "query": "need social media", "expect": {"category_slug": "digital-marketing", "service_slug": "social-media"}}
+{"id": "social-media-4", "query": "social media service", "expect": {"category_slug": "digital-marketing", "service_slug": "social-media"}}
+{"id": "social-media-5", "query": "help with social media", "expect": {"category_slug": "digital-marketing", "service_slug": "social-media"}}
+{"id": "seo-1", "query": "seo", "expect": {"category_slug": "digital-marketing", "service_slug": "seo"}}
+{"id": "seo-2", "query": "seo for my business", "expect": {"category_slug": "digital-marketing", "service_slug": "seo"}}
+{"id": "seo-3", "query": "need seo", "expect": {"category_slug": "digital-marketing", "service_slug": "seo"}}
+{"id": "seo-4", "query": "seo service", "expect": {"category_slug": "digital-marketing", "service_slug": "seo"}}
+{"id": "seo-5", "query": "help with seo", "expect": {"category_slug": "digital-marketing", "service_slug": "seo"}}
+{"id": "performance-ads-1", "query": "performance ads", "expect": {"category_slug": "digital-marketing", "service_slug": "performance-ads"}}
+{"id": "performance-ads-2", "query": "performance ads for my business", "expect": {"category_slug": "digital-marketing", "service_slug": "performance-ads"}}
+{"id": "performance-ads-3", "query": "need performance ads", "expect": {"category_slug": "digital-marketing", "service_slug": "performance-ads"}}
+{"id": "performance-ads-4", "query": "performance ads service", "expect": {"category_slug": "digital-marketing", "service_slug": "performance-ads"}}
+{"id": "performance-ads-5", "query": "help with performance ads", "expect": {"category_slug": "digital-marketing", "service_slug": "performance-ads"}}
+{"id": "branding-1", "query": "branding", "expect": {"category_slug": "digital-marketing", "service_slug": "branding"}}
+{"id": "branding-2", "query": "branding for my business", "expect": {"category_slug": "digital-marketing", "service_slug": "branding"}}
+{"id": "branding-3", "query": "need branding", "expect": {"category_slug": "digital-marketing", "service_slug": "branding"}}
+{"id": "branding-4", "query": "branding service", "expect": {"category_slug": "digital-marketing", "service_slug": "branding"}}
+{"id": "branding-5", "query": "help with branding", "expect": {"category_slug": "digital-marketing", "service_slug": "branding"}}
+{"id": "website-development-1", "query": "website development", "expect": {"category_slug": "web-tech", "service_slug": "website-development"}}
+{"id": "website-development-2", "query": "website development for my business", "expect": {"category_slug": "web-tech", "service_slug": "website-development"}}
+{"id": "website-development-3", "query": "need website development", "expect": {"category_slug": "web-tech", "service_slug": "website-development"}}
+{"id": "website-development-4", "query": "website development service", "expect": {"category_slug": "web-tech", "service_slug": "website-development"}}
+{"id": "website-development-5", "query": "help with website development", "expect": {"category_slug": "web-tech", "service_slug": "website-development"}}
+{"id": "ecommerce-setup-1", "query": "e-commerce setup", "expect": {"category_slug": "web-tech", "service_slug": "ecommerce-setup"}}
+{"id": "ecommerce-setup-2", "query": "e-commerce setup for my business", "expect": {"category_slug": "web-tech", "service_slug": "ecommerce-setup"}}
+{"id": "ecommerce-setup-3", "query": "need e-commerce setup", "expect": {"category_slug": "web-tech", "service_slug": "ecommerce-setup"}}
+{"id": "ecommerce-setup-4", "query": "e-commerce setup service", "expect": {"category_slug": "web-tech", "service_slug": "ecommerce-setup"}}
+{"id": "ecommerce-setup-5", "query": "help with e-commerce setup", "expect": {"category_slug": "web-tech", "service_slug": "ecommerce-setup"}}
+{"id": "ondc-onboarding-1", "query": "ondc onboarding", "expect": {"category_slug": "web-tech", "service_slug": "ondc-onboarding"}}
+{"id": "ondc-onboarding-2", "query": "ondc onboarding for my business", "expect": {"category_slug": "web-tech", "service_slug": "ondc-onboarding"}}
+{"id": "ondc-onboarding-3", "query": "need ondc onboarding", "expect": {"category_slug": "web-tech", "service_slug": "ondc-onboarding"}}
+{"id": "ondc-onboarding-4", "query": "ondc onboarding service", "expect": {"category_slug": "web-tech", "service_slug": "ondc-onboarding"}}
+{"id": "ondc-onboarding-5", "query": "help with ondc onboarding", "expect": {"category_slug": "web-tech", "service_slug": "ondc-onboarding"}}
+{"id": "app-development-1", "query": "app development", "expect": {"category_slug": "web-tech", "service_slug": "app-development"}}
+{"id": "app-development-2", "query": "app development for my business", "expect": {"category_slug": "web-tech", "service_slug": "app-development"}}
+{"id": "app-development-3", "query": "need app development", "expect": {"category_slug": "web-tech", "service_slug": "app-development"}}
+{"id": "app-development-4", "query": "app development service", "expect": {"category_slug": "web-tech", "service_slug": "app-development"}}
+{"id": "app-development-5", "query": "help with app development", "expect": {"category_slug": "web-tech", "service_slug": "app-development"}}
+{"id": "factory-license-1", "query": "factory licence", "expect": {"category_slug": "government-licensing", "service_slug": "factory-license"}}
+{"id": "factory-license-2", "query": "factory licence for my business", "expect": {"category_slug": "government-licensing", "service_slug": "factory-license"}}
+{"id": "factory-license-3", "query": "need factory licence", "expect": {"category_slug": "government-licensing", "service_slug": "factory-license"}}
+{"id": "factory-license-4", "query": "factory licence service", "expect": {"category_slug": "government-licensing", "service_slug": "factory-license"}}
+{"id": "factory-license-5", "query": "help with factory licence", "expect": {"category_slug": "government-licensing", "service_slug": "factory-license"}}
+{"id": "pollution-noc-1", "query": "pollution noc", "expect": {"category_slug": "government-licensing", "service_slug": "pollution-noc"}}
+{"id": "pollution-noc-2", "query": "pollution noc for my business", "expect": {"category_slug": "government-licensing", "service_slug": "pollution-noc"}}
+{"id": "pollution-noc-3", "query": "need pollution noc", "expect": {"category_slug": "government-licensing", "service_slug": "pollution-noc"}}
+{"id": "pollution-noc-4", "query": "pollution noc service", "expect": {"category_slug": "government-licensing", "service_slug": "pollution-noc"}}
+{"id": "pollution-noc-5", "query": "help with pollution noc", "expect": {"category_slug": "government-licensing", "service_slug": "pollution-noc"}}
+{"id": "subsidy-application-1", "query": "subsidy application", "expect": {"category_slug": "government-licensing", "service_slug": "subsidy-application"}}
+{"id": "subsidy-application-2", "query": "subsidy application for my business", "expect": {"category_slug": "government-licensing", "service_slug": "subsidy-application"}}
+{"id": "subsidy-application-3", "query": "need subsidy application", "expect": {"category_slug": "government-licensing", "service_slug": "subsidy-application"}}
+{"id": "subsidy-application-4", "query": "subsidy application service", "expect": {"category_slug": "government-licensing", "service_slug": "subsidy-application"}}
+{"id": "subsidy-application-5", "query": "help with subsidy application", "expect": {"category_slug": "government-licensing", "service_slug": "subsidy-application"}}
+{"id": "pmegp-application-1", "query": "pmegp application", "expect": {"category_slug": "government-licensing", "service_slug": "pmegp-application"}}
+{"id": "pmegp-application-2", "query": "pmegp application for my business", "expect": {"category_slug": "government-licensing", "service_slug": "pmegp-application"}}
+{"id": "pmegp-application-3", "query": "need pmegp application", "expect": {"category_slug": "government-licensing", "service_slug": "pmegp-application"}}
+{"id": "pmegp-application-4", "query": "pmegp application service", "expect": {"category_slug": "government-licensing", "service_slug": "pmegp-application"}}
+{"id": "pmegp-application-5", "query": "help with pmegp application", "expect": {"category_slug": "government-licensing", "service_slug": "pmegp-application"}}
+{"id": "gem-onboarding-1", "query": "gem onboarding", "expect": {"category_slug": "government-licensing", "service_slug": "gem-onboarding"}}
+{"id": "gem-onboarding-2", "query": "gem onboarding for my business", "expect": {"category_slug": "government-licensing", "service_slug": "gem-onboarding"}}
+{"id": "gem-onboarding-3", "query": "need gem onboarding", "expect": {"category_slug": "government-licensing", "service_slug": "gem-onboarding"}}
+{"id": "gem-onboarding-4", "query": "gem onboarding service", "expect": {"category_slug": "government-licensing", "service_slug": "gem-onboarding"}}
+{"id": "gem-onboarding-5", "query": "help with gem onboarding", "expect": {"category_slug": "government-licensing", "service_slug": "gem-onboarding"}}
+{"id": "tender-support-1", "query": "tender support", "expect": {"category_slug": "government-licensing", "service_slug": "tender-support"}}
+{"id": "tender-support-2", "query": "tender support for my business", "expect": {"category_slug": "government-licensing", "service_slug": "tender-support"}}
+{"id": "tender-support-3", "query": "need tender support", "expect": {"category_slug": "government-licensing", "service_slug": "tender-support"}}
+{"id": "tender-support-4", "query": "tender support service", "expect": {"category_slug": "government-licensing", "service_slug": "tender-support"}}
+{"id": "tender-support-5", "query": "help with tender support", "expect": {"category_slug": "government-licensing", "service_slug": "tender-support"}}

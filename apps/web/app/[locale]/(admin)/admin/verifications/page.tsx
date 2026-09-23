@@ -93,9 +93,23 @@ async function getGstinFlags(): Promise<{ id: string; name: string; at: string }
   return ids.map((id) => ({ id, name: name.get(id) ?? id, at: firstAt.get(id) ?? '' }))
 }
 
+/** E15 F4 — declared vs actual: providers whose paid orders sit mostly outside their declared categories (last 30 days of flags; ops decide). */
+async function getCategoryFlags(): Promise<{ id: string; name: string; share: number | null; n: number | null }[]> {
+  const supabase = await createAdminClient()
+  const since = new Date(Date.now() - 30 * 86400e3).toISOString()
+  const { data } = await supabase.from('audit_logs').select('entity_id, after, created_at').eq('action', 'category_mismatch_flagged').gte('created_at', since).order('created_at', { ascending: false }).limit(50)
+  const latest = new Map<string, { share: number | null; n: number | null }>()
+  for (const r of data ?? []) if (!latest.has(r.entity_id as string)) latest.set(r.entity_id as string, { share: ((r.after as { share?: number } | null)?.share) ?? null, n: ((r.after as { n?: number } | null)?.n) ?? null })
+  const ids = [...latest.keys()]
+  if (ids.length === 0) return []
+  const { data: provs } = await supabase.from('provider_profiles').select('id, display_name').in('id', ids)
+  const name = new Map((provs ?? []).map((p) => [p.id as string, p.display_name as string]))
+  return ids.map((id) => ({ id, name: name.get(id) ?? id, ...latest.get(id)! }))
+}
+
 export default async function VerificationsPage() {
   const t = await getTranslations('admin')
-  const [providers, notReady, logos, gstinFlags] = await Promise.all([getPendingProviders(), getApprovedNotReady(), getPendingLogos(), getGstinFlags()])
+  const [providers, notReady, logos, gstinFlags, categoryFlags] = await Promise.all([getPendingProviders(), getApprovedNotReady(), getPendingLogos(), getGstinFlags(), getCategoryFlags()])
   // E10 (FR-10.3) — which fields came from the GST record, and any state-code mismatch (a flag, never a block).
   const sources: Map<string, AutofillSource> = await autofillSources(await createAdminClient(), providers)
   const tv = await getTranslations('onboarding_v3')
@@ -116,6 +130,21 @@ export default async function VerificationsPage() {
             {gstinFlags.map((f) => (
               <li key={f.id}>
                 <Link href={`/admin/providers/${f.id}` as '/admin/providers'} className="font-medium text-primary hover:underline">{f.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {categoryFlags.length > 0 && (
+        <section className="rounded-card border border-warning/40 bg-warning/5 p-4" data-testid="category-flags">
+          <h2 className="text-sm font-semibold text-warning">{tt('category_flags', { count: categoryFlags.length })}</h2>
+          <p className="mt-1 text-xs text-foreground-secondary">{tt('category_flags_body')}</p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {categoryFlags.map((f) => (
+              <li key={f.id} data-flag={f.id}>
+                <Link href={`/admin/providers/${f.id}` as '/admin/providers'} className="font-medium text-primary hover:underline">{f.name}</Link>
+                {f.share !== null && f.n !== null && <span className="ml-2 text-xs text-foreground-secondary">{tt('category_flag_line', { pct: Math.round(f.share * 100), n: f.n })}</span>}
               </li>
             ))}
           </ul>

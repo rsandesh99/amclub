@@ -694,7 +694,12 @@
     "capacity_pause_label": "Pause new orders",
     "capacity_pause_hint": "Your listings stay visible but buyers can't place new orders while paused.",
     "kyc_locked_note": "Legal name, GSTIN, PAN and bank details are locked after verification. Contact support to change them.",
-    "view_public_page": "View public page"
+    "view_public_page": "View public page",
+    "corpus_title": "Help improve AMClub's Hindi and Telugu understanding",
+    "corpus_body": "When you describe a need by voice or send a document, we keep the words (never the audio) and your final request to teach AMClub your language. Off by default; turning it off deletes everything kept.",
+    "corpus_on_note": "Thank you — you can turn this off any time.",
+    "corpus_off_note": "Off. Everything kept under it has been deleted.",
+    "corpus_error": "Couldn't save that. Try again."
   },
   "msme_home": {
     "greeting_morning": "Good morning",
@@ -3044,7 +3049,10 @@
     "approve": "Approve",
     "reject": "Reject",
     "gstin_flags": "GSTINs reported inactive ({count})",
-    "gstin_flags_body": "The nightly re-check found these GSTINs cancelled or suspended. Nothing was changed automatically — review each provider."
+    "gstin_flags_body": "The nightly re-check found these GSTINs cancelled or suspended. Nothing was changed automatically — review each provider.",
+    "category_flags": "{count, plural, one {# provider works mostly outside their declared categories} other {# providers work mostly outside their declared categories}}",
+    "category_flags_body": "From the nightly check: more than half of their paid orders in the last 180 days (at least 5) are in categories they did not declare. Review their categories; nothing changes for the provider until you act.",
+    "category_flag_line": "{pct} % of {n} paid orders outside"
   },
   "packages_v3": {
     "included": "Included",

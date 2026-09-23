@@ -11,6 +11,8 @@ import { evaluateCoupon } from '@/lib/coupons/apply'
 import { COUPONS_ENABLED } from '@/lib/flags'
 import { createAdminClient } from '@/lib/supabase/server'
 import { prepareGoodsQuoteCheckout, type GoodsQuotePrep } from '@/lib/mart/goods-rfq'
+import { searchAttributionSchema } from '@amclub/shared'
+import { storeCheckoutAttribution } from '@/lib/search/attribution'
 
 const bodySchema = z
   .object({
@@ -26,6 +28,8 @@ const bodySchema = z
       .optional(),
     // Client-generated; dedupes a double-submit into one checkout session + order.
     idempotencyKey: z.string().uuid(),
+    // E15 F5 — the search that led here; stored best-effort, never part of the charge.
+    attribution: searchAttributionSchema.optional(),
   })
   // Exactly one source — package (Buy Now) OR quote (accepted RFQ quote).
   .refine((d) => !!d.packageId !== !!d.quoteId, {
@@ -363,6 +367,7 @@ export async function POST(request: NextRequest) {
     console.error('[checkout] session insert', insErr)
     return fail(500, 'checkout_failed', 'Checkout failed')
   }
+  if (parsed.data.attribution) await storeCheckoutAttribution(bound.id, parsed.data.attribution)
 
   // Create the Razorpay order (TEST mode or simulation) and bind it to the
   // session. The amount is the session's FROZEN total.

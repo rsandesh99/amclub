@@ -385,6 +385,12 @@ const MANIFEST: Entry[] = [
     note: 'E15 / F3 + F10: rfqs.cad_features (deterministic CAD parse); shadow_predictions (service role only; subject ids only; 24-month retention)',
   },
   {
+    file: '0063_search_telemetry_corpora.sql',
+    tables: ['search_queries', 'corpus_voice_triples', 'corpus_image_pairs', 'service_synonyms'],
+    triggers: [['service_synonyms', 'service_synonyms_set_updated_at']],
+    note: 'E15 / F4-F6: search_queries (sample, no user id, 180 days); checkout_sessions / orders .attribution; users.corpus_consent_at; consented text-only corpora (service role); service_synonyms (anyone reads reviewed rows)',
+  },
+  {
     file: '0064_server_written_money.sql',
     tables: [],
     note: 'ADR 018 security hotfix: EXECUTE on materialize_order / claim_quote_slot / release_quote_slot / increment_coupon_usage for service_role only; no client INSERT/UPDATE/DELETE on orders, checkout_sessions, payments, payouts, refunds, invoices, disputes, order_documents, rfqs, quotes, rfq_matches, coupons, coupon_redemptions, provider_bank_accounts, reviews',

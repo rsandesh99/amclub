@@ -16,6 +16,8 @@ export const orders = pgTable('orders', {
   source: text('source').notNull(),
   packageId: uuid('package_id').references(() => packages.id),
   quoteId: uuid('quote_id').references(() => quotes.id),
+  // E15 F5 (0063): { search_id, position } — the search that led here; written best-effort after the money writes.
+  attribution: jsonb('attribution'),
   title: text('title').notNull(),
   scopeSnapshot: jsonb('scope_snapshot').notNull(),
   pricePaise: bigint('price_paise', { mode: 'number' }).notNull(),
@@ -116,6 +118,8 @@ export const payments = pgTable('payments', {
 // Order intent — frozen amounts locked at checkout; the webhook materialises the
 // order from this row (checkout never creates the order). §2.5 webhook-as-truth.
 export const checkoutSessions = pgTable('checkout_sessions', {
+  // E15 F5 (0063): { search_id, position } carried from search → package → checkout.
+  attribution: jsonb('attribution'),
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   razorpayOrderId: text('razorpay_order_id').unique(),
   msmeId: uuid('msme_id').references(() => msmeProfiles.id).notNull(),

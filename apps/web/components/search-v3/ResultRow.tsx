@@ -14,14 +14,14 @@ const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
  * rating (n) · stat · delivery · replies · price + GST (the server display).
  * Compact density; the desktop header row labels the columns.
  */
-export function ResultRow({ result, trust, compare = false }: { result: CatalogResult; trust?: CardTrust | undefined; compare?: boolean }) {
+export function ResultRow({ result, trust, compare = false, sid, position }: { result: CatalogResult; trust?: CardTrust | undefined; compare?: boolean; sid?: string; position?: number }) {
   const locale = useLocale()
   const t = useTranslations('catalog')
   const reply = formatResponseTime(result.medianResponseMinutes)
   return (
     <li className="flex items-center">
       <Link
-        href={`/p/${result.providerSlug}/${result.packageSlug}`}
+        href={`/p/${result.providerSlug}/${result.packageSlug}${sid ? `?sid=${sid}${position ? `&pos=${position}` : ''}` : ''}`}
         className="grid min-w-0 flex-1 grid-cols-[2.25rem_1fr_auto] items-center gap-x-3 gap-y-1 px-3 py-2.5 hover:bg-sunken md:grid-cols-[2.25rem_minmax(0,2.4fr)_6rem_6rem_5rem_4.5rem_8rem]"
         data-testid="result-row"
       >

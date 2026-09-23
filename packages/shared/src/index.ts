@@ -92,6 +92,7 @@ export * from './voice-languages'
 export * from './content-translation'
 export * from './shadow'
 export * from './specs'
+export * from './data-capture'
 
 // Agentic assistant contract: task classes → tiers, personas, tool allowlists,
 // confirm gates, event kinds (H0 groundwork, DESIGN.md §8.6 / ADR-008)

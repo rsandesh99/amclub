@@ -766,6 +766,33 @@ async function main() {
     } finally {
       await admin.from('shadow_predictions').delete().eq('subject_id', shadowSubject)
     }
+    // ── E15 (F5 / F6): search telemetry and the consented corpora are service-role only; synonyms are readable only when reviewed ──
+    console.log('\nsearch_queries + corpora + service_synonyms (E15 F5 / F6):')
+    const sqId = crypto.randomUUID()
+    const synKey = `authz-probe-${sqId.slice(0, 8)}`
+    await admin.from('search_queries').insert({ id: sqId, query_norm: 'authz probe', params: {}, result_count: 1 })
+    await admin.from('corpus_voice_triples').insert({ user_id: buyerA.uid, transcript: 'authz probe', parsed: {}, final: {} })
+    await admin.from('corpus_image_pairs').insert({ user_id: buyerA.uid, proposed: {}, final: {} })
+    await admin.from('service_synonyms').insert([
+      { term: `${synKey} ok`, term_key: `${synKey} ok`, lang: 'en', category_slug: 'legal', source: 'curated', reviewed: true },
+      { term: `${synKey} draft`, term_key: `${synKey} draft`, lang: 'en', category_slug: 'legal', source: 'search_log', reviewed: false },
+    ])
+    try {
+      const asUser = (token: string | null) => createClient(URL_, ANON, { auth: { persistSession: false }, ...(token ? { global: { headers: { Authorization: `Bearer ${token}` } } } : {}) })
+      for (const [who, token] of [['buyerA (the corpus owner)', buyerA.token], ['provA', provA.token], ['anon', null]] as const) {
+        eq(`${who} reads no search_queries`, ((await asUser(token).from('search_queries').select('id').eq('id', sqId)).data ?? []).length, 0)
+        eq(`${who} reads no corpus_voice_triples`, ((await asUser(token).from('corpus_voice_triples').select('id').eq('user_id', buyerA.uid)).data ?? []).length, 0)
+        eq(`${who} reads no corpus_image_pairs`, ((await asUser(token).from('corpus_image_pairs').select('id').eq('user_id', buyerA.uid)).data ?? []).length, 0)
+        eq(`${who} reads only the reviewed synonym`, ((await asUser(token).from('service_synonyms').select('term_key').like('term_key', `${synKey}%`)).data ?? []).map((r) => r.term_key).join(), `${synKey} ok`)
+      }
+      eq('a client cannot write a synonym', !!(await asUser(provA.token).from('service_synonyms').insert({ term: 'x', term_key: `${synKey} forged`, lang: 'en', category_slug: 'legal', source: 'curated', reviewed: true })).error, true)
+      eq('a client cannot write search_queries', !!(await asUser(buyerA.token).from('search_queries').insert({ id: crypto.randomUUID(), params: {}, result_count: 0 })).error, true)
+    } finally {
+      await admin.from('search_queries').delete().eq('id', sqId)
+      await admin.from('corpus_voice_triples').delete().eq('user_id', buyerA.uid)
+      await admin.from('corpus_image_pairs').delete().eq('user_id', buyerA.uid)
+      await admin.from('service_synonyms').delete().like('term_key', `${synKey}%`)
+    }
   } finally {
     // Cleanup — children before parents; loud on error.
     const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {
