@@ -859,11 +859,11 @@ Runbook `docs/agents/SCORE.md`.
   AGENT_ENABLED legs against a dark server.
 - **Live evals not run** (no LLM key): `score_note` ≥ 90 % and 0 policy violations; the injection set (now 276 pairs,
   36 of them `score_note`) — the cohort gate for the note.
-- **Migration renumbered 0042 → 0044** for PR #15 (which reserves 0042 users privilege guard + 0043 RLS hardening).
-  When #15 is on master, before this PR merges: merge master; add `score_note: 'in'` to `TASK_CLASS_RESIDENCY` (a
-  named provider's own score — derived, but personal); switch the rig's quote-status fixture literals to
-  `QUOTE_STATUS`. The note prompt already carries `maxTokens: 400`; its caller falls back to the tips AFTER the bounded
-  helper has logged and charged a failed paid call (never swallowed before it).
+- **Migration renumbered 0042 → 0044** for PR #15 (0042 users privilege guard + 0043 RLS hardening, both applied to prod
+  2026-09-23). Master merged in: `score_note: 'in'` in `TASK_CLASS_RESIDENCY` (a named provider's own score —
+  derived, but personal); the rig uses `QUOTE_STATUS` and the shared order / RFQ status types; the note prompt sends
+  `maxTokens: 400`, and a failed paid note call is logged and charged by the bounded helper before the card falls back
+  to the tips.
 
 ## Agent S2.3 — Support agent (logged 2026-09-22)
 
