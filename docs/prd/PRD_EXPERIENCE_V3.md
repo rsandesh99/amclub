@@ -1982,6 +1982,19 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
   - "What's included" starts from a scaffold, and the preview updates under the price.
 - **Munshi.** The inline draft keeps S2.2's path (`munshi_draft_id`, `ai_decisions`).
 
+**As built (E11c: insights, listing performance, tenders + GeM checklist).**
+- **Insights** (`/partner/insights`, `GET /api/v1/partner/insights?range=7d|30d`; flag `partner`).
+  - An 8-week IST funnel with static bars (shared `weeklyBuckets`).
+  - "Why you lost" (shared `lossInsight`): the winning quote on each RFQ the provider lost is read on the server, and totals use the one quote rule (ADR-017). Only counts and medians leave the server, and a median only with n ≥ 5. The rig checks that no other provider's name or price is in the payload.
+  - Decline reasons show only with n ≥ 3 (`buildFunnel`).
+  - Listing performance per package: views (`view_counts_daily`), checkouts started (`checkout_sessions`, the Buy-now clicks that reached payment) and orders.
+  - It never includes the composite AMC Score.
+- **Tenders (D9, dark).**
+  - Behind `agent_settings.tenders_enabled`. Migration 0057 adds `tender_alerts` and `tender_feedback` (service role). The feed is filled by the D9 mini-PRD's import; the data source and its licence are decided there.
+  - `/partner/tenders` is for active government-and-licensing providers. Alerts match on category overlap and state (an empty state list = national), and only open ones show.
+  - Each alert has the official portal link, Save and Not relevant. There is **no** form, bid, apply or submit control, and the rig asserts it.
+- **GeM checklist.** `cms_pages` (0057) holds it, seeded unreviewed. RLS and `isReviewFresh` show a page only within 180 days of its last review, so it hides itself when stale.
+
 ---
 
 ### E12: Order-value extensions (the ADR track)

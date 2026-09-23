@@ -351,6 +351,12 @@ const MANIFEST: Entry[] = [
     triggers: [['view_counts_daily', 'view_counts_daily_set_updated_at']],
     note: 'E11 / N29: view_counts_daily (provider reads own; written only by bump_view_count(), service role, from the rate-limited beacon)',
   },
+  {
+    file: '0057_tenders_cms_pages.sql',
+    tables: ['tender_alerts', 'tender_feedback', 'cms_pages'],
+    triggers: [['tender_alerts', 'tender_alerts_set_updated_at'], ['tender_feedback', 'tender_feedback_set_updated_at'], ['cms_pages', 'cms_pages_set_updated_at']],
+    note: 'E11c / N30 (D9, dark): tender_alerts + tender_feedback (service role; alerts only, no bidding), cms_pages (fresh reviewed rows readable; GeM checklist seeded unreviewed)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]
