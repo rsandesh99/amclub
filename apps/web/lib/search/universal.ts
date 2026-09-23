@@ -3,7 +3,7 @@ import { escapeLike, type UniversalHit, type UniversalSearchResult } from '@amcl
 import { createAdminClient, createPublicClient } from '@/lib/supabase/server'
 import { searchPackages } from '@/lib/catalog/queries'
 import { resolveActor } from '@/lib/orders/actor'
-import { pickI18n, computePricing } from '@/lib/format'
+import { pickI18n } from '@/lib/format'
 
 const PER_GROUP = 5
 
@@ -48,8 +48,8 @@ export async function universalSearch(q: string, userId: string | null, locale: 
     title: pickI18n(r.titleI18n, locale),
     subtitle: r.displayName,
     href: `/p/${r.providerSlug}/${r.packageSlug}`,
-    // The catalog's own price rule (lib/format computePricing) — never re-derived here.
-    pricePaise: computePricing(r).discountedPaise,
+    // N16 — the catalog's server-computed display, never re-derived here.
+    pricePaise: r.display.taxablePaise,
   }))
 
   let mine: UniversalSearchResult['mine'] = null

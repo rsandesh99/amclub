@@ -23,6 +23,8 @@ export const categories = pgTable('categories', {
   rfqTemplate: jsonb('rfq_template'),
   sortOrder: integer('sort_order'),
   isActive: boolean('is_active').default(true).notNull(),
+  // Experience v3 N17 (0050): delivery waits on a government portal.
+  govtDependent: boolean('govt_dependent').default(false).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
@@ -32,6 +34,23 @@ export const providerCategories = pgTable('provider_categories', {
   categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'cascade' }).notNull(),
 }, (table) => [
   primaryKey({ columns: [table.providerId, table.categoryId] }),
+])
+
+// Experience v3 N14 (0050): up to three packages of one provider shown as
+// Basic / Standard / Premium with a comparison matrix (≤ 12 rows). Writes go
+// through /api/v1/partner/package-groups (service role) only.
+export const packageGroups = pgTable('package_groups', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  providerId: uuid('provider_id').references(() => providerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  categoryId: uuid('category_id').references(() => categories.id).notNull(),
+  serviceSlug: text('service_slug'),
+  titleI18n: jsonb('title_i18n').notNull(),
+  compareRows: jsonb('compare_rows').default(sql`'[]'::jsonb`).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => [
+  index('package_groups_provider_idx').on(table.providerId),
 ])
 
 export const packages = pgTable('packages', {
@@ -53,6 +72,14 @@ export const packages = pgTable('packages', {
   // draft | active | paused | removed
   status: text('status').default('active').notNull(),
   searchTsv: tsvector('search_tsv'), // trigger-maintained; GIN index added in migration
+  // Experience v3 N14 / N17 (0050): tier group membership, the "Choose this
+  // if…" line, per-row comparison values, and the government override.
+  groupId: uuid('group_id').references(() => packageGroups.id, { onDelete: 'set null' }),
+  // basic | standard | premium
+  tier: text('tier'),
+  idealForI18n: jsonb('ideal_for_i18n'),
+  compareValues: jsonb('compare_values'),
+  govtDependentOverride: boolean('govt_dependent_override'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

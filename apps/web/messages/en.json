@@ -93,7 +93,9 @@
     "save_draft": "Save as draft",
     "publish": "Publish",
     "update_publish": "Update & publish",
-    "save_failed": "Couldn't save the listing. Please try again."
+    "save_failed": "Couldn't save the listing. Please try again.",
+    "offer_tiers_title": "Offer tiers?",
+    "offer_tiers_body": "Show two or three of your packages in one category as Basic, Standard and Premium, side by side."
   },
   "checkout": {
     "title": "Checkout",
@@ -396,7 +398,9 @@
     "stat_on_time_short": "{pct}% on time · {n}",
     "stat_repeat_short": "{pct}% repeat buyers · {n}",
     "active_this_week": "Active this week",
-    "repeat_buyer": "Repeat buyer"
+    "repeat_buyer": "Repeat buyer",
+    "price_equation": "{price} + {pct} % GST = {total}",
+    "itc_claim": " · claim {amount} as ITC"
   },
   "landing": {
     "hero_title": "Every service your business needs. Verified. Transparent.",
@@ -855,7 +859,8 @@
     "grievance_body": "For unresolved complaints, write to our Grievance Officer. We acknowledge within {hours} hours and aim to resolve within {days} days.",
     "grievance_link": "Grievance page & officer details →",
     "faq_fees": "Providers receive their full amount minus only AMC’s 5% commission. All payment gateway charges are borne by AMC.",
-    "faq_ranking": "How are quotes ordered? On larger requests, AMClub may list quotes by price adjusted for each provider's track record on the platform: how quickly they respond to requests (including declining ones they cannot take), on-time delivery, completion confirmations by buyers, and dispute outcomes. Reviews, location and a provider's price level are not used, and no provider can pay to move up. Buyers never see a provider's score, and you can always sort by price or delivery time instead."
+    "faq_ranking": "How are quotes ordered? On larger requests, AMClub may list quotes by price adjusted for each provider's track record on the platform: how quickly they respond to requests (including declining ones they cannot take), on-time delivery, completion confirmations by buyers, and dispute outcomes. Reviews, location and a provider's price level are not used, and no provider can pay to move up. Buyers never see a provider's score, and you can always sort by price or delivery time instead.",
+    "faq_govt_wait": "Some services (registrations, licences) wait on a government portal. While an order is marked \"Waiting on government portal\", that time is shown separately and doesn't count against your provider's delivery time — the portal's decision isn't in their control or ours."
   },
   "not_found": {
     "title": "Page not found",
@@ -3003,5 +3008,61 @@
     "reject": "Reject",
     "gstin_flags": "GSTINs reported inactive ({count})",
     "gstin_flags_body": "The nightly re-check found these GSTINs cancelled or suspended. Nothing was changed automatically — review each provider."
+  },
+  "packages_v3": {
+    "included": "Included",
+    "not_included": "Not included",
+    "feature": "Feature",
+    "most_chosen": "Most chosen",
+    "tier_basic": "Basic",
+    "tier_standard": "Standard",
+    "tier_premium": "Premium",
+    "tiers_label": "Package tier",
+    "row_delivery": "Delivery",
+    "row_price": "Price",
+    "days": "{days, plural, one {# day} other {# days}}",
+    "price_plus_gst": "{price} + GST",
+    "total_incl_gst": "{total} incl. GST",
+    "compare_tiers": "Compare tiers",
+    "ideal_for_label": "Choose this if:",
+    "refund_line": "Full refund before work starts · 50 % while in progress · disputes after delivery.",
+    "refund_policy_link": "Refund policy",
+    "govt_line": "Approval depends on the government portal. We can't guarantee it, and your provider's clock pauses while the portal is processing.",
+    "govt_link": "How this works"
+  },
+  "tier_editor": {
+    "title": "Offer tiers",
+    "subtitle": "Group two or three of your packages in one category. Buyers compare them side by side; each keeps its own price.",
+    "back": "Listings",
+    "empty_title": "No tier groups yet",
+    "empty_body": "Pick a Basic and a Standard package (Premium is optional) from the same category.",
+    "new_group": "New tier group",
+    "edit": "Edit",
+    "group_title": "Group title",
+    "group_title_ph": "e.g. GST registration",
+    "group_title_hi": "Title in Hindi (optional)",
+    "tiers_heading": "Tiers",
+    "tiers_help": "Each tier is one of your live packages. Its price, delivery and scope stay as you set them.",
+    "optional": "(optional)",
+    "pick_package": "Package",
+    "none": "None",
+    "ideal_for_ph": "e.g. you also need Udyam this week",
+    "rows_heading": "Comparison rows",
+    "rows_help": "Up to {max} rows. Delivery and price are added for you.",
+    "row_label": "Row label",
+    "row_label_ph": "e.g. Udyam registration",
+    "remove_row": "Remove row",
+    "cell_text": "Text",
+    "add_row": "Add row",
+    "preview": "What buyers see",
+    "incomplete": "Add a title, at least two tiers and a label for every row to save.",
+    "cancel": "Cancel",
+    "ungroup": "Ungroup",
+    "save": "Save tiers",
+    "err_save_failed": "Couldn't save. Please try again.",
+    "err_package_not_found": "One of these packages is no longer available.",
+    "err_mixed_categories": "All tiers must be in the same category.",
+    "err_package_in_other_group": "A package can be in one tier group only.",
+    "err_group_not_found": "This tier group no longer exists."
   }
 }

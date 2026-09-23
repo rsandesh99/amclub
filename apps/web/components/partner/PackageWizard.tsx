@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { MEMBER_PRICING_ENABLED } from '@/lib/public-flags'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
-import { CATEGORY_LIST } from '@amclub/shared'
+import { CATEGORY_LIST, priceDisplay } from '@amclub/shared'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -158,6 +158,8 @@ export function PackageWizard({
   const priceP = Math.round(Number(draft.priceRupees || '0') * 100)
   const discountB = Math.round(Number(draft.discountPct || '0') * 100)
   const memberB = Math.round(Number(draft.memberPct || '0') * 100)
+  // N16 — the preview runs the SAME shared priceDisplay the server sends buyers.
+  const previewDisplay = priceDisplay({ pricePaise: priceP, discountBps: discountB, memberExtraDiscountBps: memberB })
 
   // Platform commission for the selected category (bps → %), shown wherever the
   // provider sets or reviews their rate. Falls back to the 5% launch default.
@@ -321,12 +323,7 @@ export function PackageWizard({
             {priceP > 0 && (
               <div className="rounded-button border border-border bg-background p-3">
                 <p className="mb-1 text-xs text-foreground-secondary">{t('preview_price')}</p>
-                <PriceBlock
-                  pricePaise={priceP}
-                  discountBps={discountB}
-                  memberExtraDiscountBps={memberB}
-                  size="detail"
-                />
+                <PriceBlock display={previewDisplay} size="detail" />
               </div>
             )}
           </div>
@@ -378,7 +375,7 @@ export function PackageWizard({
         {step === 'preview' && (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-bold">{draft.title || t('untitled')}</h3>
-            <PriceBlock pricePaise={priceP} discountBps={discountB} memberExtraDiscountBps={memberB} size="detail" />
+            <PriceBlock display={previewDisplay} size="detail" />
             <div>
               <p className="text-sm font-semibold">{t('scope_included')}</p>
               <ul className="mt-1 list-inside list-disc text-sm text-foreground-secondary">

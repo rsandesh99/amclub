@@ -5,7 +5,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
 import { fetchProvider, getSavedProviderIds, toggleSaved } from '@/lib/api'
-import { pickI18n, initials, formatINR, computePricing } from '@/lib/format'
+import { pickI18n, initials, formatINR } from '@/lib/format'
 
  
 export default function ProviderScreen() {
@@ -116,7 +116,8 @@ export default function ProviderScreen() {
           ) : (
             <View className="gap-3">
               {packages.map((pk: any) => {
-                const pricing = computePricing(pk)
+                // N16 — the server's display (never recomputed on the device).
+                const d = pk.display
                 return (
                   <TouchableOpacity
                     key={pk.slug}
@@ -126,9 +127,9 @@ export default function ProviderScreen() {
                   >
                     <Text className="text-sm font-medium text-foreground">{pickI18n(pk.titleI18n, locale)}</Text>
                     <View className="flex-row items-baseline gap-2">
-                      <Text className="text-lg font-bold text-foreground">{formatINR(pricing.discountedPaise)}</Text>
-                      {pricing.hasDiscount && (
-                        <Text className="text-sm text-foreground-secondary line-through">{formatINR(pricing.listPaise)}</Text>
+                      <Text className="text-lg font-bold text-foreground">{formatINR(d.taxablePaise)}</Text>
+                      {d.discountPct > 0 && (
+                        <Text className="text-sm text-foreground-secondary line-through">{formatINR(d.listPaise)}</Text>
                       )}
                     </View>
                   </TouchableOpacity>

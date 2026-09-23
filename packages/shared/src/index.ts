@@ -41,6 +41,10 @@ export * from './gstin'
 // Experience v3 rollout flags (closed registry, server-evaluated)
 export * from './experiments'
 
+// N16 — server price display ("₹X + 18 % GST = ₹Y")
+export * from './price-display'
+export * from './packages-v3'
+
 // N9 — public measured stats (gated; never the composite score)
 export * from './public-stats'
 

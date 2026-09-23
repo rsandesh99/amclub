@@ -55,6 +55,7 @@ jobs:
       # default (off) and scans the v2 public pages.
       EXP_V3_SHELL: "on"
       EXP_V3_TRUST: "on"
+      EXP_V3_PACKAGES: "on"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -84,6 +84,10 @@ export const ORDER_IN_FLIGHT_STATUSES: readonly OrderStatus[] = [
 /** Finished by acceptance: `reviewed` is a completed order the buyer went on to review. */
 export const ORDER_DONE_STATUSES: readonly OrderStatus[] = ['completed', 'reviewed']
 
+/** Paid orders that were cancelled or refunded before delivery — not a buyer's
+ *  lasting choice (Experience v3 FR-4.6 "Most chosen" leaves them out). */
+export const ORDER_UNCHOSEN_STATUSES: readonly OrderStatus[] = ['auto_cancelled', 'cancelled_by_buyer', 'cancelled_duplicate', 'refunded']
+
 /** Statuses from which a payout is permitted (§3.7). */
 export const PAYOUT_RELEASE_STATUSES: readonly OrderStatus[] = [
   'completed',

@@ -1,3 +1,5 @@
+import type { PriceDisplay } from '@amclub/shared'
+
 /**
  * Shared catalog DTOs. These are the shapes the search RPC and query helpers
  * return and that ProviderCard / PackageCard / PriceBlock consume.
@@ -34,6 +36,8 @@ export interface CatalogResult {
   pricePaise: number
   discountBps: number
   memberExtraDiscountBps: number
+  /** N16 — the server-computed price every client renders (never re-derived). */
+  display: PriceDisplay
   deliveryDays: number
   revisionCount: number
   categoryId: string
@@ -107,6 +111,8 @@ export interface PackageDetail {
   pricePaise: number
   discountBps: number
   memberExtraDiscountBps: number
+  /** N16 — the server-computed price every client renders (never re-derived). */
+  display: PriceDisplay
   deliveryDays: number
   revisionCount: number
   faqs: { q: string; a: string }[]

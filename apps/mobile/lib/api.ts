@@ -2,7 +2,7 @@
  *  API as web (§ Phase 3). Auth'd calls attach the Supabase access token. */
 import Constants from 'expo-constants'
 import { supabase } from './supabase'
-import type { ProfileMeResponse, QuoteExtractResponse } from '@amclub/shared'
+import type { PriceDisplay, ProfileMeResponse, QuoteExtractResponse } from '@amclub/shared'
 
 const API_URL =
   (Constants.expoConfig?.extra?.['apiUrl'] as string | undefined) ??
@@ -16,6 +16,8 @@ export interface CatalogResult {
   pricePaise: number
   discountBps: number
   memberExtraDiscountBps: number
+  /** N16 — the server-computed price; render it, never recompute it. */
+  display: PriceDisplay
   deliveryDays: number
   revisionCount: number
   categorySlug: string
