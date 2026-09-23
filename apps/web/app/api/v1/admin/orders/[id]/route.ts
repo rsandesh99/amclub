@@ -68,9 +68,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const result = await runPayouts(admin, getPaymentGateway(), { orderId: id })
       after = { retried: true, processed: result.processed }
     } else {
-      // manual_refund — explicit amount via the proven refund engine (idempotent
-      // on the existing refunds row).
-      const refunded = await processRefund(admin, order, order.status, 'refund_partial', parsed.data.amountPaise)
+      // manual_refund — explicit amount via the proven refund engine. ADR-014:
+      // one refund row per order, so an existing refund is a 409 (processRefund
+      // would return the old row's amount and move nothing), and the amount the
+      // engine reports is read back before anything is recorded.
+      const amountPaise = parsed.data.amountPaise
+      const totalPaise = Number(order.total_paise)
+      if (amountPaise > totalPaise) return NextResponse.json({ error: 'refund_over_total', totalPaise }, { status: 422 })
+      const { data: payment } = await admin.from('payments').select('id').eq('order_id', id).maybeSingle()
+      if (!payment) return NextResponse.json({ error: 'no_payment' }, { status: 409 })
+      const { data: existing } = await admin.from('refunds').select('amount_paise').eq('payment_id', payment.id).maybeSingle()
+      if (existing) return NextResponse.json({ error: 'refund_exists', existingPaise: Number(existing.amount_paise) }, { status: 409 })
+      const refunded = await processRefund(admin, order, order.status, 'refund_partial', amountPaise)
+      if (refunded !== amountPaise) {
+        console.error('[admin/orders manual_refund] refund mismatch', { orderId: id, expected: amountPaise, refunded })
+        return NextResponse.json({ error: 'refund_mismatch', existingPaise: refunded, refundPaise: amountPaise }, { status: 409 })
+      }
       await admin.from('order_events').insert({ order_id: id, actor_id: gate.userId, event: 'manual_refund', payload: { amount_paise: refunded, reason: parsed.data.reason ?? null } })
       after = { refundedPaise: refunded }
     }

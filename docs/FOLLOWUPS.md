@@ -4,6 +4,39 @@ Items deliberately deferred during pre-cutover hardening. Each entry says what
 exists today, what is missing, and what would unblock it. Remove an entry when
 it ships.
 
+## ADR-014 — dispute settlement safety, H3 + H4 (2026-09-23)
+
+Landed: shared `planDisputeSettlement` decides what a resolution may do to the
+payout and refund rows before anything is written. A `paid` or `processing`
+payout is never rewritten or re-sent (409 `provider_already_paid` /
+`payout_in_flight`). An earlier refund refuses a refunding resolution and a
+second manual refund (409 `refund_exists`), and every refund amount is read back
+(`refund_mismatch`). The claim is atomic, and an interrupted resolve can be
+finished after 10 minutes.
+
+Deferred / notes:
+- **Run the new rig criteria.** `verify-phase7.ts` criteria 3b and 3c are written
+  and typechecked but not yet run. They need a test database: the disposable-DB
+  CI harness (S3.3 prompt H1) or a test project, never production.
+- **H2 and H6 are still open** in ADR-014 (dispute reachability from `accepted` /
+  `requirements_submitted`, a post-completion dispute window, what a review does
+  to dispute rights; the duplicate-RFQ-order refund state). Both must be decided
+  before ADR-011 approval.
+- **Clawback.** A dispute on an already-paid order cannot refund through the
+  resolution. The interim path is a manual refund, then release (the platform
+  bears it). A Razorpay Route transfer reversal needs its own ADR and a recorded
+  test-mode run (H7).
+- **Voided payouts** are still `failed` with amount 0, and `held → failed` is not
+  in `PAYOUT_TRANSITIONS`. Add a `cancelled` payout state (an extension) and move
+  the void there. `retry_payout` on such a row would try to transfer ₹0.
+- **`processRefund` pending-row race.** Two callers completing the same pending
+  row can both reach `createRefund` before either records the refund id. Rare
+  (it needs a concurrent retry). Fix with a claim on the pending row, or a
+  gateway idempotency key.
+- **`createTransfer` has no idempotency key** at the gateway. The status claim in
+  `runPayouts` prevents a double run; a gateway-side key would make a crash
+  between the transfer and the `paid` write safe too.
+
 ## Agent S0.3 — services evidence engine (2026-09-20)
 
 Services orders now record staged milestones with photo proof

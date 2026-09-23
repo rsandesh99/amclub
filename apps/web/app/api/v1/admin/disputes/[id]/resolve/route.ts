@@ -55,7 +55,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } catch (e) {
     return serverError('[dispute resolve]', e)
   }
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 400 })
+  // ADR-014 — a 409 carries a stable code + the amounts behind it; the console translates it.
+  if (!result.ok) return NextResponse.json({ error: result.error, ...(result.details ?? {}) }, { status: result.status ?? 400 })
 
   // S1.7 — link the click to the triage AFTER settlement; a failed write logs and never rolls back money.
   let triageDecisionId: string | null = null
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       entity: 'disputes',
       entityId: id,
       before,
-      after: { status: 'resolved', resolution: parsed.data.resolution, refund_paise: result.refundPaise, provider_paid_paise: result.providerPaidPaise, ...(triage ? { triage_id: triage.id, triage_decision_id: triageDecisionId } : {}) },
+      after: { status: 'resolved', resolution: parsed.data.resolution, refund_paise: result.refundPaise, provider_paid_paise: result.providerPaidPaise, ...(result.resumed ? { resumed: true } : {}), ...(triage ? { triage_id: triage.id, triage_decision_id: triageDecisionId } : {}) },
     })
   }
 

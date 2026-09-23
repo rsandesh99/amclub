@@ -147,6 +147,57 @@ async function main() {
     ok3,
     `held=${payoutHeld?.status} refund=${refundsA?.[0]?.amount_paise}(×${refundsA?.length}) providerPaid=${payoutA?.amount_paise}(exp ${expProviderPaid},${payoutA?.status}) order=${ordA?.status} | reResolve already=${r2d.already} refunds=${refundsB?.length} payout=${payoutB?.amount_paise}/${payoutB?.status}`)
 
+  // ── Criterion 3b (ADR-014 H3): a dispute after the payout is PAID never pays twice ──
+  const o4 = await placeOrder(buyer.token, pkg!.id); created.orderIds.push(o4)
+  await completeOrder(buyer, prov, o4)
+  const { data: ord4 } = await admin.from('orders').select('provider_earning_paise').eq('id', o4).single()
+  const earning4 = Number(ord4!.provider_earning_paise)
+  const { data: payout4 } = await admin.from('payouts').select('id').eq('order_id', o4).single()
+  const rel4 = await api(adminUser.token, `/api/v1/admin/payouts/${payout4!.id}`, { action: 'retry' })
+  const { data: paid4 } = await admin.from('payouts').select('status, amount_paise, razorpay_transfer_id').eq('order_id', o4).single()
+  await api(buyer.token, `/api/v1/orders/${o4}/transition`, { action: 'raise_dispute', disputeReason: 'quality' })
+  const { data: disp4 } = await admin.from('disputes').select('id').eq('order_id', o4).single()
+  const partial4 = await api(adminUser.token, `/api/v1/admin/disputes/${disp4!.id}/resolve`, { resolution: 'refund_partial', amountPaise: 200_000 })
+  const partial4d = await partial4.json()
+  const { data: ord4a } = await admin.from('orders').select('status').eq('id', o4).single()
+  const release4 = await api(adminUser.token, `/api/v1/admin/disputes/${disp4!.id}/resolve`, { resolution: 'release' })
+  const { data: payout4b } = await admin.from('payouts').select('status, amount_paise, razorpay_transfer_id').eq('order_id', o4).single()
+  const { data: pay4 } = await admin.from('payments').select('id').eq('order_id', o4).single()
+  const { data: refunds4 } = await admin.from('refunds').select('id').eq('payment_id', pay4!.id)
+  const { count: sched4 } = await admin.from('order_events').select('id', { count: 'exact', head: true }).eq('order_id', o4).eq('event', 'payout_scheduled').eq('payload->>reason', 'dispute_resolution')
+  const { data: ord4b } = await admin.from('orders').select('status').eq('id', o4).single()
+  check('3b. Dispute on an already-PAID order: partial refused (409), release moves no money, no second transfer',
+    rel4.ok && paid4?.status === 'paid' &&
+    partial4.status === 409 && partial4d.error === 'provider_already_paid' && Number(partial4d.existingPaise) === earning4 && ord4a!.status === 'disputed' &&
+    release4.ok && ord4b!.status === 'resolved_release' &&
+    payout4b!.status === 'paid' && Number(payout4b!.amount_paise) === earning4 && payout4b!.razorpay_transfer_id === paid4!.razorpay_transfer_id &&
+    (sched4 ?? 0) === 0 && (refunds4 ?? []).length === 0,
+    `released=${rel4.status}/${paid4?.status} partial=${partial4.status}:${partial4d.error} order=${ord4a!.status} release=${release4.status}→${ord4b!.status} payout=${payout4b!.status}/${payout4b!.amount_paise}(exp ${earning4}) transferSame=${payout4b!.razorpay_transfer_id === paid4!.razorpay_transfer_id} reschedules=${sched4} refunds=${refunds4?.length}`)
+
+  // ── Criterion 3c (ADR-014 H4): an earlier refund is a 409, never a silent no-op ──
+  const o5 = await placeOrder(buyer.token, pkg!.id); created.orderIds.push(o5)
+  await completeOrder(buyer, prov, o5)
+  await api(buyer.token, `/api/v1/orders/${o5}/transition`, { action: 'raise_dispute', disputeReason: 'quality' })
+  const { data: disp5 } = await admin.from('disputes').select('id').eq('order_id', o5).single()
+  const man5 = await api(adminUser.token, `/api/v1/admin/orders/${o5}`, { action: 'manual_refund', amountPaise: 100_000 })
+  const man5b = await api(adminUser.token, `/api/v1/admin/orders/${o5}`, { action: 'manual_refund', amountPaise: 50_000 })
+  const man5bd = await man5b.json()
+  const partial5 = await api(adminUser.token, `/api/v1/admin/disputes/${disp5!.id}/resolve`, { resolution: 'refund_partial', amountPaise: 200_000 })
+  const partial5d = await partial5.json()
+  const { data: ord5a } = await admin.from('orders').select('status').eq('id', o5).single()
+  const release5 = await api(adminUser.token, `/api/v1/admin/disputes/${disp5!.id}/resolve`, { resolution: 'release' })
+  const { data: pay5 } = await admin.from('payments').select('id').eq('order_id', o5).single()
+  const { data: refunds5 } = await admin.from('refunds').select('amount_paise').eq('payment_id', pay5!.id)
+  const { data: ord5b } = await admin.from('orders').select('status, provider_earning_paise').eq('id', o5).single()
+  const { data: payout5 } = await admin.from('payouts').select('status, amount_paise').eq('order_id', o5).single()
+  check('3c. Earlier refund: 2nd manual refund + refunding resolution refused (409 refund_exists); release closes it',
+    man5.ok && man5b.status === 409 && man5bd.error === 'refund_exists' &&
+    partial5.status === 409 && partial5d.error === 'refund_exists' && Number(partial5d.existingPaise) === 100_000 && ord5a!.status === 'disputed' &&
+    release5.ok && ord5b!.status === 'resolved_release' &&
+    (refunds5 ?? []).length === 1 && Number(refunds5![0]!.amount_paise) === 100_000 &&
+    payout5!.status === 'paid' && Number(payout5!.amount_paise) === Number(ord5b!.provider_earning_paise),
+    `manual=${man5.status} manual2=${man5b.status}:${man5bd.error} partial=${partial5.status}:${partial5d.error}(${partial5d.existingPaise}) order=${ord5a!.status} release=${release5.status}→${ord5b!.status} refunds=${(refunds5 ?? []).map((r) => r.amount_paise).join(',')} payout=${payout5!.status}/${payout5!.amount_paise}`)
+
   // ── Criterion 4: commission change affects NEW orders only ──────────────────
   const { data: existingOrd } = await admin.from('orders').select('commission_bps').eq('id', o2).single()
   await api(adminUser.token, '/api/v1/admin/categories', { id: catId, commissionBps: 1500 }, 'PATCH')
