@@ -44,6 +44,9 @@ async function mkUser(label: string, roles: string[] = ['msme']): Promise<{ uid:
   return { uid: data.user.id, token: s.session!.access_token, cookie: Object.entries(jar).map(([n, v]) => `${n}=${v}`).join('; ') }
 }
 
+/** Visible markup only: drops <script> bodies (the i18n messages ride in the RSC payload). */
+const visible = (html: string) => html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+
 const api = (token: string, p: string, body?: unknown, method = 'POST') =>
   fetch(`${BASE}${p}`, {
     method,
@@ -132,14 +135,14 @@ async function e0() {
   if (pkg) created.packageIds.push(pkg.id)
   const page = await fetch(`${BASE}/p/${tag}-prov`)
   const ph = await page.text()
-  check('U9: the provider page shows no "Top Rated"', page.ok && !/Top Rated/i.test(ph), `status ${page.status}`)
+  check('U9: the provider page shows no "Top Rated"', page.ok && !/Top Rated/i.test(visible(ph)), `status ${page.status}`)
   check('U4: the provider page links a requirement in its category', page.ok && ph.includes('/app/rfq/new?category=tax-accounting'))
   check('U4: the provider page links its packages above the fold', page.ok && ph.includes(`/p/${tag}-prov#packages`))
   const reviews = await fetch(`${BASE}/p/${tag}-prov/reviews`)
   check('U11: /p/[slug]/reviews renders', reviews.ok, `status ${reviews.status}`)
   const pkgPage = await fetch(`${BASE}/p/${tag}-prov/${tag}-pkg`)
   const pkgHtml = await pkgPage.text()
-  check('U2: no member-price line while NEXT_PUBLIC_MEMBER_PRICING_ENABLED is off', pkgPage.ok && !/for members/i.test(pkgHtml), `status ${pkgPage.status}`)
+  check('U2: no member-price line while NEXT_PUBLIC_MEMBER_PRICING_ENABLED is off', pkgPage.ok && !/for members/i.test(visible(pkgHtml)), `status ${pkgPage.status}`)
   check('U3: the package page has the sticky buy bar', pkgPage.ok && pkgHtml.includes('lg:hidden') && pkgHtml.includes(`/app/checkout/${pkg?.id}`))
 }
 
