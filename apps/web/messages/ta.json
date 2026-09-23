@@ -273,7 +273,8 @@
     "wa_card_no_number": "அமைத்தவுடன் எங்கள் WhatsApp எண் இங்கே தோன்றும்.",
     "wa_card_failed": "WhatsApp நேர்காணலைத் தொடங்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
     "wa_prefill_chip": "உங்கள் WhatsApp நேர்காணலிலிருந்து",
-    "wa_prefill_notice": "உங்கள் WhatsApp நேர்காணலிலிருந்து இந்தப் படிவத்தை முன்கூட்டியே நிரப்பினோம். தொடரும் முன் ஒவ்வொரு புலத்தையும் சரிபார்க்கவும்."
+    "wa_prefill_notice": "உங்கள் WhatsApp நேர்காணலிலிருந்து இந்தப் படிவத்தை முன்கூட்டியே நிரப்பினோம். தொடரும் முன் ஒவ்வொரு புலத்தையும் சரிபார்க்கவும்.",
+    "continue_to_next": "நிறுத்திய இடத்திலிருந்து தொடரவும்"
   },
   "partner_munshi": {
     "title": "முன்ஷி — உங்கள் விற்பனை எழுத்தர்",
@@ -510,5 +511,18 @@
     "tile_last_run": "last run",
     "tile_run_summary": "{keys} keys, {written} written, {gated} gated",
     "national": "India"
+  },
+  "catalog": {
+    "price_plus_gst": "{price} + ஜிஎஸ்டி",
+    "see_packages": "{count, plural, =1 {1 தொகுப்பு} other {# தொகுப்புகள்}} காண்க",
+    "post_requirement_in": "{category} இல் தேவையைப் பதிவிடுங்கள்",
+    "show_all_reviews": "அனைத்து {count} மதிப்புரைகளையும் காண்க",
+    "reviews_pagination": "மதிப்புரை பக்கங்கள்",
+    "page_prev": "← புதியவை",
+    "page_next": "பழையவை →",
+    "page_of": "பக்கம் {page} / {pages}"
+  },
+  "shell": {
+    "search": "சேவைகளைத் தேடுங்கள்"
   }
 }

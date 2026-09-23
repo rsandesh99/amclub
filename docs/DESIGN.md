@@ -874,6 +874,32 @@ now matches this document.
 
 ---
 
+## 8.7 Experience v3 "Precision" — approved bundle (founder, 2026-09-23)
+
+**What.** `docs/prd/PRD_EXPERIENCE_V3.md` — the §8.1 bundle built from the
+September 2026 market survey (19 portals): the 12 UX defects fixed first (E0),
+a restrained, dense design language (E1), and every missing UI/UX element
+paired with the feature that feeds it (P1–P67, N1–N45), in epics E0–E17 with
+RICE, flags, acceptance and a wave plan (PRD §8).
+
+**Approval.** Approved by the founder on 2026-09-23 ("continue the building
+based on the V3 PRD … until it's completely done"), including D-PRD2
+(buyers see "Requirements"; providers keep "RFQs").
+
+**Displacement.** The agent programme (§8.6) pauses after S3.2 — see CLAUDE.md
+and `BUILD_PROMPTS.md` for the resume rules.
+
+**What approval does NOT change.**
+- Every epic ships dark behind its own flag and is enabled per cohort.
+- Items that wait on a decision in PRD §10 (D1 public stats, D2 buyer-verified
+  badge, D3 PAN path, D9 tenders, D-PRD5 obligations/renewals, D-UX2 consent)
+  are built dark and stay off until that decision. Renewal reminders are the
+  "compliance calendar" of the V1.5 → V2 gate (§8.2): built dark, enabled only
+  at that gate.
+- Money items (add-ons, speed tiers, bundles, the PAN path) each need an ADR
+  first (§8.4) and add money-rig criteria.
+- The NOT-NOW register (§8.3) is unchanged.
+
 # §9 — RISKS, COMPLIANCE & TRUST
 
 ## 9.1 Legal & regulatory (India)

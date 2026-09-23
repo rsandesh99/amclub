@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield } from 'lucide-react'
+import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield, Search } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { cn } from '@/lib/utils'
 
@@ -99,6 +99,10 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: Ac
 
           {context !== 'admin' && (
             <MenuLink href={profileHref} icon={User} label={t('profile')} onClick={() => setOpen(false)} />
+          )}
+          {/* E0 / U6 — /app/search was unreachable from the logged-in shell (interim until the E1 nav). */}
+          {context === 'msme' && (
+            <MenuLink href="/app/search" icon={Search} label={t('search')} onClick={() => setOpen(false)} />
           )}
 
           {/* Role switching / become a provider — driven by PROFILE existence. */}

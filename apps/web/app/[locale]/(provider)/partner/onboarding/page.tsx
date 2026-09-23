@@ -2,15 +2,21 @@ import { getTranslations } from 'next-intl/server'
 import { getSessionUser, getProviderProfile } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import { ProviderWizard } from '@/components/wizard/ProviderWizard'
+import { safeNext, withNext } from '@/lib/auth/safe-next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createAdminClient } from '@/lib/supabase/server'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { isOnboardingEnabledFor, onboardingDraftView } from '@/lib/agent/onboarding'
 
-export default async function ProviderOnboardingPage() {
+export default async function ProviderOnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>
+}) {
+  const { next } = await searchParams
   const t = await getTranslations('provider_signup')
   const user = await getSessionUser()
-  if (!user) redirect('/login?next=/partner/onboarding')
+  if (!user) redirect(`/login?next=${encodeURIComponent(withNext('/partner/onboarding', next))}`)
 
   // An existing provider must never re-run onboarding — resubmitting would
   // reset an approved profile to under_review and wipe verification badges.
@@ -36,7 +42,7 @@ export default async function ProviderOnboardingPage() {
             <CardTitle>{t('page_title')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <ProviderWizard skipAuth waEnabled={waEnabled} waDraft={waDraft} />
+            <ProviderWizard skipAuth waEnabled={waEnabled} waDraft={waDraft} next={safeNext(next)} />
           </CardContent>
         </Card>
       </div>

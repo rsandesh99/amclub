@@ -2,6 +2,10 @@ import { View, Text } from 'react-native'
 import { useI18n } from '@/lib/i18n'
 import { computePricing, formatINR } from '@/lib/format'
 
+// E0 / U2 — memberships don't exist and checkout never applies the member
+// discount, so the member line stays hidden until this is switched on.
+const MEMBER_PRICING_ENABLED = process.env['EXPO_PUBLIC_MEMBER_PRICING_ENABLED'] === 'true'
+
 /** Mobile price block — mirrors the web PriceBlock (§4.3 price transparency). */
 export function PriceBlock({
   pricePaise,
@@ -36,7 +40,7 @@ export function PriceBlock({
           </>
         )}
       </View>
-      {p.hasMemberExtra && (
+      {MEMBER_PRICING_ENABLED && p.hasMemberExtra && (
         <Text className="text-xs font-medium text-primary">
           {formatINR(p.memberPaise)} · {t('catalog.members')} (+{p.memberExtraPct}%)
         </Text>

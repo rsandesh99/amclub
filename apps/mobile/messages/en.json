@@ -17,7 +17,6 @@
     "view_all": "View all",
     "verified": "Verified",
     "promoted": "Promoted",
-    "top_rated": "Top Rated",
     "sign_out": "Sign out",
     "not_found": "Not found"
   },
@@ -90,7 +89,6 @@
     "off": "OFF",
     "members": "members",
     "new": "New",
-    "top_rated": "Top Rated",
     "days": "days",
     "verified": "Verified",
     "search_placeholder": "Search services…",

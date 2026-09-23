@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Link, useRouter } from '@/i18n/navigation'
 import { AuthPanel } from '@/components/auth/AuthPanel'
 import { resolvePostAuthRoute } from '@/lib/auth/post-auth'
-import { safeNext } from '@/lib/auth/safe-next'
+import { safeNext, withNext } from '@/lib/auth/safe-next'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export default function LoginPage() {
@@ -33,7 +33,9 @@ function LoginInner() {
     if (isNew) {
       // Honor provider intent: someone auth-walled on their way to /partner/*
       // gets the PROVIDER wizard, not the buyer one (mirrors the OAuth callback).
-      router.push(next?.startsWith('/partner') ? '/partner/onboarding' : '/signup?complete=1')
+      // E0 (U1): the wizard carries `next`, so a buyer auth-walled on the way to
+      // checkout lands back on that checkout once the profile is saved.
+      router.push(withNext(next?.startsWith('/partner') ? '/partner/onboarding' : '/signup?complete=1', next))
     } else {
       router.push(next ?? destination)
     }

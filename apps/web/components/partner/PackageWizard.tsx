@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { MEMBER_PRICING_ENABLED } from '@/lib/public-flags'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { CATEGORY_LIST } from '@amclub/shared'
@@ -278,16 +279,20 @@ export function PackageWizard({
                   onChange={(e) => set({ discountPct: e.target.value })}
                 />
               </div>
-              <div>
-                <Label htmlFor="member">{t('member_label')}</Label>
-                <Input
-                  id="member"
-                  type="number"
-                  inputMode="numeric"
-                  value={draft.memberPct}
-                  onChange={(e) => set({ memberPct: e.target.value })}
-                />
-              </div>
+              {/* Memberships don't exist yet (E0 / U2): the field stays hidden and
+                  any saved value is sent back unchanged. */}
+              {MEMBER_PRICING_ENABLED && (
+                <div>
+                  <Label htmlFor="member">{t('member_label')}</Label>
+                  <Input
+                    id="member"
+                    type="number"
+                    inputMode="numeric"
+                    value={draft.memberPct}
+                    onChange={(e) => set({ memberPct: e.target.value })}
+                  />
+                </div>
+              )}
               <div>
                 <Label htmlFor="delivery">{t('delivery_label')}</Label>
                 <Input

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
+import { formatINR } from '@/lib/format'
 import type { ProfileMeResponse } from '@amclub/shared'
 
 interface ProviderStatus {
@@ -20,6 +21,8 @@ export default function PartnerScreen() {
   // S2.4 — the provider's OWN AMC Score (the route 404s unless score_card_enabled → no card)
   const [scoreCard, setScoreCard] = useState<ScoreCardView | null>(null)
   const [loading, setLoading] = useState(true)
+  // E0 / U8 — real numbers from GET /partner/stats (were hard-coded "0" / "₹0").
+  const [stats, setStats] = useState<{ openRfqCount: number; activeCount: number; earningsPaise: number } | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -36,6 +39,10 @@ export default function PartnerScreen() {
         setMunshiEnabled(data.munshiEnabled === true)
         setSupportEnabled(data.supportEnabled === true)
         setPayoutReadiness(data.payoutReadiness ?? null)
+        if (data.providerStatus === 'active') {
+          const st = await fetch(`${process.env['EXPO_PUBLIC_API_URL'] ?? ''}/api/v1/partner/stats`, { headers: { Authorization: `Bearer ${session.access_token}` } })
+          if (st.ok) setStats((await st.json()) as { openRfqCount: number; activeCount: number; earningsPaise: number })
+        }
         const sc = await fetch(`${process.env['EXPO_PUBLIC_API_URL'] ?? ''}/api/v1/partner/score?locale=${locale}`, { headers: { Authorization: `Bearer ${session.access_token}` } })
         if (sc.ok) setScoreCard((await sc.json()) as ScoreCardView)
       } catch {
@@ -109,9 +116,9 @@ export default function PartnerScreen() {
             {/* Stats */}
             <View className="flex-row gap-3">
               {[
-                { label: t('partner_home.stat_rfqs'), value: '0' },
-                { label: t('partner_home.stat_orders'), value: '0' },
-                { label: t('partner_home.stat_earnings'), value: '₹0' },
+                { label: t('partner_home.stat_rfqs'), value: stats ? String(stats.openRfqCount) : '—' },
+                { label: t('partner_home.stat_orders'), value: stats ? String(stats.activeCount) : '—' },
+                { label: t('partner_home.stat_earnings'), value: stats ? formatINR(stats.earningsPaise) : '—' },
               ].map((s) => (
                 <View
                   key={s.label}

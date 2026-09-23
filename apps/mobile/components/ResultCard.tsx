@@ -44,11 +44,6 @@ export function ResultCard({ result }: { result: CatalogResult }) {
             {result.avgRating > 0 ? `★ ${result.avgRating.toFixed(1)} (${result.reviewCount})` : t('catalog.new')}
           </Text>
         </View>
-        {result.topRated && (
-          <View className="rounded-full bg-accent/15 px-2 py-0.5">
-            <Text className="text-xs font-semibold text-foreground">{t('catalog.top_rated')}</Text>
-          </View>
-        )}
       </View>
 
       <Text className="text-sm font-medium leading-snug text-foreground" numberOfLines={2}>

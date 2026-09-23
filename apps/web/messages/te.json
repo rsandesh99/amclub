@@ -910,7 +910,8 @@
     "city_placeholder": "ఉదా. హైదరాబాద్",
     "bank_holder_placeholder": "మీ చెక్ లేదా పాస్‌బుక్‌పై ఉన్నట్లుగా",
     "bank_account_placeholder": "9–18 అంకెలు",
-    "bank_verify_failed": "ఈ బ్యాంక్ ఖాతాను ధృవీకరించలేకపోయాము. ఖాతా సంఖ్య, IFSC, ఖాతాదారు పేరు తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి."
+    "bank_verify_failed": "ఈ బ్యాంక్ ఖాతాను ధృవీకరించలేకపోయాము. ఖాతా సంఖ్య, IFSC, ఖాతాదారు పేరు తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి.",
+    "continue_to_next": "మీరు ఆపిన చోట నుండి కొనసాగించండి"
   },
   "partner_munshi": {
     "title": "మున్షీ — మీ సేల్స్ క్లర్క్",
@@ -1147,5 +1148,18 @@
     "tile_last_run": "last run",
     "tile_run_summary": "{keys} keys, {written} written, {gated} gated",
     "national": "India"
+  },
+  "catalog": {
+    "price_plus_gst": "{price} + జీఎస్టీ",
+    "see_packages": "{count, plural, =1 {1 ప్యాకేజీ} other {# ప్యాకేజీలు}} చూడండి",
+    "post_requirement_in": "{category}లో అవసరాన్ని పోస్ట్ చేయండి",
+    "show_all_reviews": "మొత్తం {count} సమీక్షలు చూడండి",
+    "reviews_pagination": "సమీక్ష పేజీలు",
+    "page_prev": "← కొత్తవి",
+    "page_next": "పాతవి →",
+    "page_of": "పేజీ {page} / {pages}"
+  },
+  "shell": {
+    "search": "సేవలను వెతకండి"
   }
 }

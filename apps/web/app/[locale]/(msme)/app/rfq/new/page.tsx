@@ -12,10 +12,18 @@ import { RfqForm, type RfqCategoryOption, type RfqPrefill } from '@/components/r
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export default async function NewRfqPage({ searchParams }: { searchParams: Promise<{ from?: string; assistant?: string }> }) {
-  const { from, assistant } = await searchParams
+export default async function NewRfqPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; assistant?: string; category?: string; q?: string }>
+}) {
+  const { from, assistant, category, q } = await searchParams
   const user = await getSessionUser()
-  if (!user) redirect('/login?next=/app/rfq/new')
+  if (!user) {
+    // Keep the prefill (?category= / ?q=) through sign-in (E0 / U1).
+    const qs = new URLSearchParams(Object.entries({ category, q }).filter((e): e is [string, string] => !!e[1])).toString()
+    redirect(`/login?next=${encodeURIComponent(`/app/rfq/new${qs ? `?${qs}` : ''}`)}`)
+  }
   const t = await getTranslations('rfq')
   const locale = await getLocale()
 
@@ -97,6 +105,15 @@ export default async function NewRfqPage({ searchParams }: { searchParams: Promi
       const details = Object.fromEntries(Object.entries(payload.details ?? {}).filter(([, v]) => typeof v === 'string')) as Record<string, string>
       prefill = { categorySlug: categories.some((c) => c.slug === slug) ? slug : '', title: typeof payload.title === 'string' ? payload.title : '', details, budgetMin: '', budgetMax: '' }
     }
+  }
+
+  // E0 / U4 — "Post a requirement in <category>" from a provider page (and, in
+  // E6, every other entry point): prefill the category, and the title from a
+  // search query. Only a known slug is accepted; the query is trimmed and capped.
+  if (!prefill && (category || q)) {
+    const slug = category && categories.some((c) => c.slug === category) ? category : ''
+    const title = (q ?? '').trim().slice(0, 120)
+    if (slug || title) prefill = { categorySlug: slug, title, details: {}, budgetMin: '', budgetMax: '' }
   }
 
   // S1.8 — document intake button only for cohorted buyers (flag off: no setting is read, nothing renders).

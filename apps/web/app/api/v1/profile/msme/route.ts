@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { SUPPORTED_LOCALES } from '@amclub/shared'
+import { SUPPORTED_LOCALES, employeeBandSchema } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { upsertUserRow } from '@/lib/auth/session'
@@ -19,6 +19,8 @@ const bodySchema = z.object({
   udyamNumber: z.string().trim().optional(),
   gstin: z.string().trim().optional(),
   preferredLocale: z.enum(SUPPORTED_LOCALES).default('en'),
+  // E0 / U12 — the size band the gateway wizard asked for (was collected, then dropped).
+  employeeBand: employeeBandSchema.optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -36,7 +38,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   }
 
-  const { fullName, businessName, sector, state, city, udyamNumber, gstin, preferredLocale } = parsed.data
+  const { fullName, businessName, sector, state, city, udyamNumber, gstin, preferredLocale, employeeBand } = parsed.data
 
   const admin = await createAdminClient()
 
@@ -71,6 +73,8 @@ export async function POST(request: NextRequest) {
         city: city ?? null,
         udyam_number: udyamNumber ?? null,
         gstin: gstin ?? null,
+        // Only when sent: a later profile edit without it keeps the stored band.
+        ...(employeeBand ? { employee_band: employeeBand } : {}),
         profile_completeness: calculateCompleteness({
           ...(sector ? { sector } : {}),
           ...(state ? { state } : {}),

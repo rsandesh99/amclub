@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { INDIAN_STATES } from '@/lib/constants/india'
 
 const PRICE_BUCKETS: Record<string, { min?: number; max?: number }> = {
   any: {},
@@ -14,8 +15,6 @@ const PRICE_BUCKETS: Record<string, { min?: number; max?: number }> = {
   over10k: { min: 1000000 },
 }
 
-// Subset of states present in seed data + common ones.
-const STATES = ['AP', 'TS', 'KA', 'TN', 'MH', 'GJ', 'RJ', 'UP', 'DL', 'WB']
 const LANGS = ['en', 'hi', 'te', 'ta', 'mr']
 
 export function ListingControls() {
@@ -66,9 +65,10 @@ export function ListingControls() {
         aria-label={t('filter_state')}
       >
         <option value="">{t('all_states')}</option>
-        {STATES.map((s) => (
-          <option key={s} value={s}>
-            {s}
+        {/* E0 / U5 — every state and UT by name (was 10 raw codes). */}
+        {INDIAN_STATES.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
           </option>
         ))}
       </select>
