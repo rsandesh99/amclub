@@ -671,7 +671,7 @@ async function e5() {
   check('FR-5.2: ITC line with a valid GSTIN, masked', itcHtml.includes('Claim ₹539.82 as input tax credit (GSTIN 27AA…ZV)') && !itcHtml.includes(good))
 
   // The server charges exactly what the page showed.
-  const start = await api(fresh.token, '/api/v1/checkout', { packageId: pkg!.id, idempotencyKey: `e5-${tag}` })
+  const start = await api(fresh.token, '/api/v1/checkout', { packageId: pkg!.id, idempotencyKey: crypto.randomUUID() })
   const sj = (await start.json()) as { amountPaise?: number; checkoutSessionId?: string }
   check('FR-5.2: checkout charges the displayed total', start.ok && sj.amountPaise === expected.totalPaise, `status ${start.status}, amount ${sj.amountPaise}`)
   if (sj.checkoutSessionId) await admin.from('checkout_sessions').delete().eq('id', sj.checkoutSessionId)
