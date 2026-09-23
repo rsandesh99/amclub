@@ -1251,7 +1251,8 @@ async function e11c() {
       rfqs.push(r!.id)
       created.rfqIds.push(r!.id)
       await admin.from('quotes').insert([
-        { rfq_id: r!.id, provider_id: me.providerId, price_paise: 12_000_00, delivery_days: 5, scope: 'E11c my quote scope text here', gst_included: false, status: i < 3 ? 'declined' : 'submitted', ...(i < 3 ? { decline_reason: 'price_high' } : {}) },
+        // A buyer decline as the decline route writes it (status, reason, who, when — the funnel reads updated_at).
+        { rfq_id: r!.id, provider_id: me.providerId, price_paise: 12_000_00, delivery_days: 5, scope: 'E11c my quote scope text here', gst_included: false, status: i < 3 ? 'declined' : 'submitted', ...(i < 3 ? { decline_reason: 'price_high', declined_by: 'buyer', declined_at: new Date().toISOString(), updated_at: new Date().toISOString() } : {}) },
         { rfq_id: r!.id, provider_id: rival.providerId, price_paise: 10_000_00, delivery_days: 5, scope: 'E11c rival quote scope text', gst_included: false, status: 'accepted' },
       ])
     }
@@ -1263,7 +1264,7 @@ async function e11c() {
     const raw = await ins.text()
     const j = JSON.parse(raw) as { loss?: { price?: { n: number; of: number; medianPct: number | null } }; declineReasons?: { reason: string; n: number }[]; listings?: { views: number }[] }
     check('FR-11.5: "lost on price by a median of 20 %" from n = 5', ins.ok && j.loss?.price?.n === 5 && j.loss.price.medianPct === 20, JSON.stringify(j.loss))
-    check('FR-11.5: decline reasons show at n ≥ 3', (j.declineReasons ?? []).some((d) => d.reason === 'price_high' && d.n === 3))
+    check('FR-11.5: decline reasons show at n ≥ 3', (j.declineReasons ?? []).some((d) => d.reason === 'price_high' && d.n === 3), JSON.stringify(j.declineReasons))
     check('FR-11.5: deltas only — no other provider’s name or price, no composite score', !raw.includes('Rival Secret') && !raw.includes('1180000') && !raw.includes('1000000') && !/score/i.test(raw))
     check('FR-11.5: listing performance counts views', (j.listings ?? []).some((l) => l.views === 3))
     // Below the gate: drop to four losses and the median disappears (the count stays).
