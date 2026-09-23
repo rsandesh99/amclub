@@ -1357,6 +1357,62 @@ async function e7() {
   }
 }
 
+async function e8() {
+  console.log('\nE8a — order workspace v3: NextStepBar, section tabs, Gold Thread, provider money line')
+  const buyer = await mkUser('e8buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E8 Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const prov = await mkUser('e8prov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E8 Prov', display_name: 'E8 Prov', slug: `${tag.replace(/_/g, '-')}-e8prov`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  const payouts: string[] = []
+  const mkOrder = async (status: string, extra: Record<string, unknown> = {}) => {
+    const { data: o, error } = await admin.from('orders').insert({
+      msme_id: msme!.id, provider_id: pp!.id, source: 'package', title: `E8 ${status}`, scope_snapshot: {},
+      price_paise: 300_000, gst_paise: 54_000, total_paise: 354_000, commission_bps: 1000, commission_paise: 30_000,
+      provider_earning_paise: 270_000, delivery_days: 5, revision_max: 2, status, ...extra,
+    }).select('id').single()
+    if (error || !o) throw new Error(`e8 order ${status}: ${error?.message}`)
+    created.orderIds.push(o.id)
+    return o.id as string
+  }
+  const due = new Date(Date.now() + 3 * 86400e3).toISOString()
+  const oWork = await mkOrder('in_progress', { due_at: due })
+  const oDelivered = await mkOrder('delivered', { auto_accept_at: new Date(Date.now() + 72 * 3600e3).toISOString() })
+  const oDone = await mkOrder('completed', { completed_at: new Date().toISOString() })
+  const oDisputed = await mkOrder('disputed')
+  for (const [oid, ev] of [[oWork, ['placed', 'accept', 'submit_requirements', 'start']], [oDelivered, ['placed', 'accept', 'submit_requirements', 'start', 'deliver']]] as const) {
+    await admin.from('order_events').insert(ev.map((e) => ({ order_id: oid, event: e })))
+  }
+  const { data: p1 } = await admin.from('payouts').insert({ provider_id: pp!.id, order_id: oDone, amount_paise: 270_000, status: 'scheduled', scheduled_for: '2026-10-05' }).select('id').single()
+  const { data: p2 } = await admin.from('payouts').insert({ provider_id: pp!.id, order_id: oDisputed, amount_paise: 270_000, status: 'held' }).select('id').single()
+  for (const p of [p1, p2]) if (p) payouts.push(p.id as string)
+  await admin.from('order_events').insert({ order_id: oDisputed, event: 'payout_held', payload: { reasons: ['dispute_open'] } })
+  const page = async (who: { cookie: string }, path: string) => visible(await (await fetch(`${BASE}${path}`, { headers: { cookie: who.cookie } })).text())
+  const panelHidden = (html: string, v: string) => { const m = html.match(new RegExp(`<div[^>]*data-panel="${v}"[^>]*>`)); return m ? / hidden=""/.test(m[0]) : null }
+  try {
+    const bWork = await page(buyer, `/app/orders/${oWork}`)
+    check('FR-8.2: the buyer sees the one next step from the shared rule (waiting on delivery, with the deadline)', bWork.includes('data-testid="order-v3"') && bWork.includes('data-next="wait_delivery"') && bWork.includes('Work in progress'))
+    check('FR-8.3: five tabs (messages stays off until E8b), every panel in the page, overview open', ['overview', 'requirements', 'work', 'documents', 'timeline'].every((v) => bWork.includes(`data-panel="${v}"`)) && !bWork.includes('data-panel="messages"') && panelHidden(bWork, 'overview') === false && panelHidden(bWork, 'timeline') === true)
+    check('FR-8.3: ?tab= opens that section', panelHidden(await page(buyer, `/app/orders/${oWork}?tab=timeline`), 'timeline') === false)
+    check('Gold Thread: in progress reaches Work', /data-testid="gold-thread" data-reached="2"/.test(bWork))
+    check('the buyer money line: paid and held until acceptance (server paise)', bWork.includes('data-testid="buyer-money-line"') && bWork.includes('₹3,540 paid · held by AMClub until you accept'))
+    const pWork = await page(prov, `/partner/orders/${oWork}`)
+    check('FR-8.2: the provider must deliver — the bar opens the Work tab', pWork.includes('data-next="deliver_work"') && pWork.includes('Upload &amp; deliver'))
+    check('FR-8.5 (N37): "Payment secured ✓ ₹X held by AMClub" while active', pWork.includes('data-kind="secured"') && pWork.includes('Payment secured ✓ ₹3,540 held by AMClub'))
+    const bDel = await page(buyer, `/app/orders/${oDelivered}`)
+    check('FR-8.2: a delivered order — Accept delivery is the one primary action, the rest in the overflow; the auto-accept consequence shows', bDel.includes('data-next="review_delivery"') && bDel.includes('Accept delivery') && bDel.includes('aria-label="More actions"') && bDel.includes('accepted for you'))
+    const pDone = await page(prov, `/partner/orders/${oDone}`)
+    check('FR-8.5: after completion "Payout scheduled for <date>" from the payout row', pDone.includes('data-kind="scheduled"') && pDone.includes('Payout scheduled for'))
+    const pDisp = await page(prov, `/partner/orders/${oDisputed}`)
+    check('FR-8.5: on hold "Payout on hold: <reason>" from the existing hold reasons', pDisp.includes('data-kind="held"') && pDisp.includes('Payout on hold: A dispute is open on this order.'))
+    check('the buyer never sees the provider money line', !bWork.includes('provider-money-line') && !(await page(buyer, `/app/orders/${oDisputed}`)).includes('provider-money-line'))
+  } finally {
+    for (const id of payouts) await admin.from('payouts').delete().eq('id', id)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1375,6 +1431,7 @@ async function main() {
     await e11b()
     await e11c()
     await e7()
+    await e8()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

@@ -46,7 +46,7 @@ export default async function MsmeOrderPage({ params, searchParams }: { params: 
           {licenceFacts.added ? <span className="t-footnote font-medium text-success">{tLic('added')}</span> : <AddFromOrderButton orderId={id} />}
         </div>
       )}
-      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} firstView={sp['first'] === '1'} extras={detail.extras} />
+      <OrderWorkspace order={detail.order} events={detail.events} viewerRole={detail.viewerRole} documents={documents} goods={goods} firstView={sp['first'] === '1'} extras={detail.extras} v3={isOnFor('orders', user.id)} initialTab={sp['tab']} />
     </div>
   )
 }
