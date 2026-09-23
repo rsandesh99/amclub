@@ -47,7 +47,7 @@ export const munshiProviderState = pgTable('munshi_provider_state', {
   providerId: uuid('provider_id').primaryKey().references(() => providerProfiles.id),
   userId: uuid('user_id').references(() => users.id).notNull(),
   lastScanAt: timestamp('last_scan_at', { withTimezone: true }),
-  lastGrowthAt: timestamp('last_growth_at', { withTimezone: true }), // S2.4: the weekly growth nudge cursor (0042)
+  lastGrowthAt: timestamp('last_growth_at', { withTimezone: true }), // S2.4: the weekly growth nudge cursor (0044)
   lastScanRunId: uuid('last_scan_run_id').references(() => agentRuns.id, { onDelete: 'set null' }),
   draftsToday: integer('drafts_today').default(0).notNull(),
   draftsTodayDate: date('drafts_today_date'),

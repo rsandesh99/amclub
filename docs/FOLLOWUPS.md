@@ -826,7 +826,7 @@ code, 90-day window, sample gates, null = the neutral prior); nightly `cron/scor
 score_inputs_buyer` SQL functions → `provider_scores` / `buyer_scores` / `score_history` / append-only `score_events`);
 the provider's own card (`score_card_enabled`), buyers never see a number, admins see both; reliability-adjusted
 compare ordering server-side (`reliability_rank_enabled`, off until the founder confirms ADR-010 §9 (e)); the coaching
-note (`score_note@v1`, numbers in, output-policed); the weekly Munshi growth nudge (fixed copy); migration **0042**.
+note (`score_note@v1`, numbers in, output-policed); the weekly Munshi growth nudge (fixed copy); migration **0044**.
 Runbook `docs/agents/SCORE.md`.
 
 - **Prompt vs tree — the ranking formula.** The prompt's `total × (10000 + k × (100 − s)) ÷ 10000` with the default
@@ -859,6 +859,11 @@ Runbook `docs/agents/SCORE.md`.
   AGENT_ENABLED legs against a dark server.
 - **Live evals not run** (no LLM key): `score_note` ≥ 90 % and 0 policy violations; the injection set (now 276 pairs,
   36 of them `score_note`) — the cohort gate for the note.
+- **Migration renumbered 0042 → 0044** for PR #15 (which reserves 0042 users privilege guard + 0043 RLS hardening).
+  When #15 is on master, before this PR merges: merge master; add `score_note: 'in'` to `TASK_CLASS_RESIDENCY` (a
+  named provider's own score — derived, but personal); switch the rig's quote-status fixture literals to
+  `QUOTE_STATUS`. The note prompt already carries `maxTokens: 400`; its caller falls back to the tips AFTER the bounded
+  helper has logged and charged a failed paid call (never swallowed before it).
 
 ## Agent S2.3 — Support agent (logged 2026-09-22)
 

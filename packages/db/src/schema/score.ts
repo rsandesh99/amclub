@@ -2,7 +2,7 @@ import { pgTable, uuid, text, timestamp, jsonb, boolean, integer, date, primaryK
 import { sql } from 'drizzle-orm'
 import { providerProfiles, msmeProfiles } from './identity'
 
-// AMC Score v1 (0042, S2.4, ADR-010). Snapshots are the latest per (subject, version), upserted nightly by
+// AMC Score v1 (0044, S2.4, ADR-010). Snapshots are the latest per (subject, version), upserted nightly by
 // cron/score-compute from the score_inputs_provider / score_inputs_buyer SQL functions and the pure formula in
 // @amclub/shared score.ts. A provider reads their OWN provider rows; buyer rows are admin / ops only; no client
 // writes. score_events is APPEND-ONLY (raise_append_only trigger, RULES 3).

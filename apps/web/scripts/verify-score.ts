@@ -15,7 +15,7 @@
  *              can reach; the admin block + stats; the Munshi growth nudge (one a week, priority order, STOP stops
  *              WhatsApp, disable stops everything).
  *
- * Needs migration 0042 for everything but the offline laws, the 404 and the price-order legs — recorded skips until
+ * Needs migration 0044 for everything but the offline laws, the 404 and the price-order legs — recorded skips until
  * applied. Legs that need AGENT_ENABLED on the server (the note, the stats tile, the growth nudge) are recorded skips
  * against a dark server. The cron route is NOT called with the compute switch on: it would score every real
  * provider; the compute library is driven in-process restricted to the fixtures (`only`) and the route is proven as a
@@ -173,12 +173,12 @@ async function http() {
   }
   const agentOn = probe.status !== 404
   // a real select (a head count on a missing table returns an EMPTY error message — it would read as present)
-  const t42 = await admin.from('provider_scores').select('provider_id').limit(1)
-  const has0042 = !t42.error
-  if (t42.error && !missingRelation(t42.error)) console.warn('  (provider_scores probe error:', t42.error.message, ')')
-  const NEEDS_0042 = '0042 not applied on this DB yet — runs at the gate (after the migration, before the push)'
+  const t44 = await admin.from('provider_scores').select('provider_id').limit(1)
+  const has0044 = !t44.error
+  if (t44.error && !missingRelation(t44.error)) console.warn('  (provider_scores probe error:', t44.error.message, ')')
+  const NEEDS_0044 = '0044 not applied on this DB yet — runs at the gate (after the migration, before the push)'
   const NEEDS_AGENT = 'the server is dark (AGENT_ENABLED off) — runs against the flag-on server'
-  const compute = has0042 ? await loadCompute() : null
+  const compute = has0044 ? await loadCompute() : null
 
   try {
     const { data: cats } = await admin.from('categories').select('id, slug').in('slug', ['tax-accounting', 'legal'])
@@ -314,10 +314,10 @@ async function http() {
     // ── flag OFF (every score switch off — the prod default) ────────────────
     for (const k of ['score_compute_enabled', 'score_card_enabled', 'reliability_rank_enabled', 'growth_nudge_enabled']) await setSetting(k, false)
     if (CRON_SECRET) {
-      const before = has0042 ? (await admin.from('provider_scores').select('provider_id', { count: 'exact', head: true })).count ?? 0 : 0
+      const before = has0044 ? (await admin.from('provider_scores').select('provider_id', { count: 'exact', head: true })).count ?? 0 : 0
       const r = await fetch(`${BASE}/api/v1/cron/score-compute`, { headers: { Authorization: `Bearer ${CRON_SECRET}` } })
       const b = await json(r)
-      const after = has0042 ? (await admin.from('provider_scores').select('provider_id', { count: 'exact', head: true })).count ?? 0 : 0
+      const after = has0044 ? (await admin.from('provider_scores').select('provider_id', { count: 'exact', head: true })).count ?? 0 : 0
       const { data: hb } = await admin.from('cron_heartbeats').select('last_result').eq('name', 'score-compute').maybeSingle()
       check('flag OFF: cron/score-compute → 200 { enabled: false }, writes no snapshot, records the no-op heartbeat', r.status === 200 && b['enabled'] === false && after === before && (hb as any)?.last_result?.enabled === false, `status ${r.status} ${JSON.stringify(b)} rows ${before}→${after}`)
     } else skip('flag OFF: cron/score-compute no-op', 'set VERIFY_CRON_SECRET (= the server CRON_SECRET)')
@@ -336,8 +336,8 @@ async function http() {
     await privacySweep('flag OFF')
 
     // ── flag ON ─────────────────────────────────────────────────────────────
-    if (!has0042 || !compute) {
-      skip('flag ON: compute, RLS, card, note, compare, admin, growth', !has0042 ? NEEDS_0042 : 'lib/score/compute could not be imported')
+    if (!has0044 || !compute) {
+      skip('flag ON: compute, RLS, card, note, compare, admin, growth', !has0044 ? NEEDS_0044 : 'lib/score/compute could not be imported')
       return
     }
     await setSetting('score_compute_enabled', true)

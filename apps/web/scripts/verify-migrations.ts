@@ -254,7 +254,7 @@ const MANIFEST: Entry[] = [
     note: 'S2.3 Support agent: support_tickets (escalations a human resolves; the agent halts on an open one), support_threads + support_messages (web / mobile chat; user text masked, assistant text = the template), nudges (the counterparty nudge ledger written by the spine routes); wa_conversations support_ticket_id / support_last_intents / support_unclear_streak; ai_decisions feature CHECK gains support_nudge',
   },
   {
-    file: '0042_amc_score.sql',
+    file: '0044_amc_score.sql',
     tables: ['provider_scores', 'buyer_scores', 'score_history', 'score_events'],
     functions: ['score_inputs_provider', 'score_inputs_buyer'],
     triggers: [

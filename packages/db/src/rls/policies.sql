@@ -650,9 +650,9 @@ CREATE POLICY "nudges: admin read" ON nudges
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 REVOKE INSERT, UPDATE, DELETE ON nudges FROM anon, authenticated;
 
--- ─── provider_scores / buyer_scores / score_history / score_events (0042, S2.4) ─
+-- ─── provider_scores / buyer_scores / score_history / score_events (0044, S2.4) ─
 -- A provider reads their OWN provider rows (the card switch is enforced in the route); buyer rows are admin / ops
--- only (not even the buyer, v1); no client writes. score_events is append-only (raise_append_only trigger in 0042).
+-- only (not even the buyer, v1); no client writes. score_events is append-only (raise_append_only trigger in 0044).
 ALTER TABLE provider_scores ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "provider_scores: own read" ON provider_scores;
 CREATE POLICY "provider_scores: own read" ON provider_scores

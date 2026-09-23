@@ -3,7 +3,7 @@
 **Status:** built 2026-09-23, dark. Decision record: **ADR-010** (`docs/adr/010-amc-score-v1.md`) — read it first;
 it holds the addendum check. Every surface is behind a registered `agent_settings` switch that defaults **off**:
 `score_compute_enabled`, `score_card_enabled`, `reliability_rank_enabled`, `growth_nudge_enabled`. Flag off: no
-score rows are computed, no card, and compare orders by price exactly as before. Migration **0042** (NOT staged;
+score rows are computed, no card, and compare orders by price exactly as before. Migration **0044** (NOT staged;
 applied to prod before the writer deploys).
 
 ## What it is — and is not
@@ -96,7 +96,7 @@ next nightly run recomputes it.
 
 ## Enablement order
 
-1. Migration 0042 applied; `verify-migrations` shows it present.
+1. Migration 0044 applied; `verify-migrations` shows it present.
 2. `score_compute_enabled = true` for **two weeks**; review the distribution, the gated share and the movers on the
    agents-console tile. Adjusting anything now is a v1 amendment only if no v1 score has been shown to anyone.
 3. `score_card_enabled = true` — providers see their own.
@@ -106,7 +106,7 @@ next nightly run recomputes it.
 ## Rollback
 
 Switch the settings off. The snapshots are inert rows that no route shows while the switches are off; compare returns
-to price ordering immediately. 0042 is additive; dropping it needs the code reverted first (the card, compare and
+to price ordering immediately. 0044 is additive; dropping it needs the code reverted first (the card, compare and
 growth code read its tables).
 
 ## Metrics
