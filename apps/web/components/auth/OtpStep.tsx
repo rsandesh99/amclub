@@ -4,7 +4,10 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
 import type { RequestOtp } from './AuthPanel'
+
+const OTP_LENGTH = 6
 
 interface OtpStepProps {
   /** Phone (E.164) when channel is 'sms'. */
@@ -26,14 +29,18 @@ export function OtpStep({ phone, email, channel = 'sms', requestOtp, onSuccess, 
 
   const target = channel === 'email' ? (email ?? '') : (phone ?? '')
 
-  const [otp, setOtp] = useState(['', '', '', '', '', ''])
+  const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [focused, setFocused] = useState(false)
   const [resendCountdown, setResendCountdown] = useState(30)
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  // Single-flight guard: auto-submit (typing, paste, SMS autofill) and the
+  // button can all fire for the same code — only one verify runs at a time.
+  const verifyingRef = useRef(false)
 
   useEffect(() => {
-    inputRefs.current[0]?.focus()
+    inputRef.current?.focus()
   }, [])
 
   useEffect(() => {
@@ -42,50 +49,40 @@ export function OtpStep({ phone, email, channel = 'sms', requestOtp, onSuccess, 
     return () => clearTimeout(timer)
   }, [resendCountdown])
 
-  function handleInput(index: number, value: string) {
-    if (!/^\d*$/.test(value)) return
-    const digit = value.slice(-1)
-    const next = [...otp]
-    next[index] = digit
-    setOtp(next)
-    if (digit && index < 5) inputRefs.current[index + 1]?.focus()
-    if (next.every(Boolean)) {
-      verify(next.join(''))
-    }
-  }
-
-  function handleKeyDown(index: number, e: React.KeyboardEvent) {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus()
-    }
-  }
-
-  function handlePaste(e: React.ClipboardEvent) {
-    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
-    if (text.length === 6) {
-      setOtp(text.split(''))
-      verify(text)
-    }
+  /** Accepts typed digits, any-length paste ("Your OTP is 123456"), and
+   *  one-time-code autofill — keeps the first 6 digits. */
+  function handleChange(value: string) {
+    const code = value.replace(/\D/g, '').slice(0, OTP_LENGTH)
+    setOtp(code)
+    if (code.length === OTP_LENGTH) void verify(code)
   }
 
   async function verify(code: string) {
+    if (verifyingRef.current || code.length !== OTP_LENGTH) return
+    verifyingRef.current = true
     setError('')
     setLoading(true)
-    const supabase = createClient()
-    const { error: verifyError } =
-      channel === 'email'
-        ? await supabase.auth.verifyOtp({ email: target, token: code, type: 'email' })
-        : await supabase.auth.verifyOtp({ phone: target, token: code, type: 'sms' })
-    setLoading(false)
+    try {
+      const supabase = createClient()
+      const { error: verifyError } =
+        channel === 'email'
+          ? await supabase.auth.verifyOtp({ email: target, token: code, type: 'email' })
+          : await supabase.auth.verifyOtp({ phone: target, token: code, type: 'sms' })
 
-    if (verifyError) {
-      setError(verifyError.message.includes('expired') ? tErr('otp_expired') : tErr('invalid_otp'))
-      setOtp(['', '', '', '', '', ''])
-      inputRefs.current[0]?.focus()
-      return
+      if (verifyError) {
+        setError(verifyError.message.includes('expired') ? tErr('otp_expired') : tErr('invalid_otp'))
+        setOtp('')
+        inputRef.current?.focus()
+        return
+      }
+
+      onSuccess()
+    } catch {
+      setError(tErr('invalid_otp'))
+    } finally {
+      verifyingRef.current = false
+      setLoading(false)
     }
-
-    onSuccess()
   }
 
   async function resend() {
@@ -96,8 +93,8 @@ export function OtpStep({ phone, email, channel = 'sms', requestOtp, onSuccess, 
       return
     }
     setResendCountdown(30)
-    setOtp(['', '', '', '', '', ''])
-    inputRefs.current[0]?.focus()
+    setOtp('')
+    inputRef.current?.focus()
   }
 
   return (
@@ -105,36 +102,67 @@ export function OtpStep({ phone, email, channel = 'sms', requestOtp, onSuccess, 
       <div>
         <p className="text-sm text-foreground">{t('otp_sent_to', { target })}</p>
         <button
+          type="button"
           onClick={onChangePhone}
-          className="mt-1 text-xs text-primary underline underline-offset-2 hover:no-underline"
+          className="inline-flex min-h-[44px] items-center text-sm text-primary underline underline-offset-2 hover:no-underline"
         >
           {channel === 'email' ? t('change_email') : t('change_phone')}
         </button>
       </div>
 
-      <div className="flex gap-2" onPaste={handlePaste}>
-        {otp.map((digit, i) => (
-          <input
-            key={i}
-            ref={(el) => { inputRefs.current[i] = el }}
-            type="text"
-            inputMode="numeric"
-            maxLength={1}
-            value={digit}
-            onChange={(e) => handleInput(i, e.target.value)}
-            onKeyDown={(e) => handleKeyDown(i, e)}
-            className="h-12 w-12 rounded-button border border-border bg-surface text-center text-lg font-semibold focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            aria-label={`OTP digit ${i + 1}`}
-          />
-        ))}
+      {/* ONE real input (autofill, paste, screen readers) drawn as 6 fluid
+          cells — the grid shrinks with the card, so 320 px screens fit. */}
+      <div className="relative">
+        <div className="grid grid-cols-6 gap-1.5 sm:gap-2" aria-hidden="true">
+          {Array.from({ length: OTP_LENGTH }, (_, i) => {
+            const active = focused && (i === otp.length || (i === OTP_LENGTH - 1 && otp.length === OTP_LENGTH))
+            return (
+              <div
+                key={i}
+                className={cn(
+                  'flex h-12 min-w-0 items-center justify-center rounded-button border bg-surface text-lg font-semibold tabular-nums text-foreground',
+                  error ? 'border-danger' : active ? 'border-primary ring-2 ring-primary/20' : 'border-border',
+                )}
+              >
+                {otp[i] ?? ''}
+              </div>
+            )
+          })}
+        </div>
+        <input
+          ref={inputRef}
+          id="otp-code"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]*"
+          maxLength={OTP_LENGTH}
+          value={otp}
+          onChange={(e) => handleChange(e.target.value)}
+          onPaste={(e) => {
+            e.preventDefault()
+            handleChange(e.clipboardData.getData('text'))
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          readOnly={loading}
+          aria-label={t('otp_label')}
+          aria-invalid={!!error}
+          aria-describedby={error ? 'otp-error' : undefined}
+          className="absolute inset-0 h-full w-full cursor-text border-0 bg-transparent text-transparent caret-transparent outline-none selection:bg-transparent"
+        />
       </div>
 
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && (
+        <p id="otp-error" role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
 
       <Button
-        onClick={() => verify(otp.join(''))}
+        onClick={() => void verify(otp)}
         loading={loading}
-        disabled={otp.some((d) => !d)}
+        disabled={otp.length !== OTP_LENGTH}
         className="w-full"
       >
         {t('verify_otp')}
@@ -145,7 +173,7 @@ export function OtpStep({ phone, email, channel = 'sms', requestOtp, onSuccess, 
         {resendCountdown > 0 ? (
           <span>{t('otp_resend_in', { seconds: resendCountdown })}</span>
         ) : (
-          <button onClick={resend} className="text-primary underline underline-offset-2 hover:no-underline">
+          <button type="button" onClick={resend} className="text-primary underline underline-offset-2 hover:no-underline">
             {t('otp_resend')}
           </button>
         )}
