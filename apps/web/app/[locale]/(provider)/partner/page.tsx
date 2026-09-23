@@ -12,6 +12,10 @@ import { AGENT_ENABLED, MART_ENABLED } from '@/lib/flags'
 import { onboardingDraftView } from '@/lib/agent/onboarding'
 import { isMunshiEnabledFor } from '@/lib/agent/munshi'
 import { isSupportEnabledFor } from '@/lib/support/settings'
+import { getScoreSettings } from '@/lib/score/settings'
+import { providerScoreCard } from '@/lib/score/card'
+import { ProviderScoreCard } from '@/components/score/ProviderScoreCard'
+import { getLocale } from 'next-intl/server'
 
 const ACTIVE_STATUSES = ['placed', 'accepted', 'requirements_submitted', 'in_progress', 'delivered', 'revision_requested']
 
@@ -39,6 +43,8 @@ export default async function PartnerDashboardPage() {
   const munshiOn = AGENT_ENABLED && profile.status === 'active' ? await isMunshiEnabledFor(admin, user.id) : false
   // S2.3 — the Help chat for an enabled, cohorted provider (the page 404s for everyone else).
   const supportOn = AGENT_ENABLED ? await isSupportEnabledFor(admin, user.id) : false
+  // S2.4 — the provider's OWN AMC Score (score_card_enabled; buyers never see a number).
+  const scoreCard = profile.status === 'active' && (await getScoreSettings(admin)).cardEnabled ? await providerScoreCard(admin, { providerId: profile.id, userId: user.id, locale: await getLocale() }) : null
   const orders = await listMyOrders(user.id, 'provider')
   const activeCount = orders.filter((o) => ACTIVE_STATUSES.includes(o.status)).length
   const completedCount = orders.filter((o) => o.status === 'completed').length
@@ -83,6 +89,8 @@ export default async function PartnerDashboardPage() {
           </div>
         ))}
       </div>
+
+      {scoreCard && <ProviderScoreCard card={scoreCard} />}
 
       {/* Onboarding CTA */}
       {isUnderReview && profile.status === 'pending_kyc' && (

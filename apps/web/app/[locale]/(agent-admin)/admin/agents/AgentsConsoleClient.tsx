@@ -31,12 +31,15 @@ interface MunshiStats {
 
 export function AgentsConsoleClient() {
   const t = useTranslations('admin_agents')
+  const tScore = useTranslations('admin_score')
   const { toast } = useToast()
   const [settings, setSettings] = useState<SettingRow[]>([])
   const [spend, setSpend] = useState<Spend | null>(null)
   const [dossiers, setDossiers] = useState<DossierStats | null>(null)
   const [triages, setTriages] = useState<TriageStats | null>(null)
   const [munshi, setMunshi] = useState<MunshiStats | null>(null)
+  // S2.4 — AMC Score distribution (compute / card / ranking switches are ordinary settings rows below)
+  const [score, setScore] = useState<{ provider: { subjects: number; scored: number; gated_share_pct: number | null; median: number | null }; buyer: { scored: number }; movers_week: unknown[] } | null>(null)
   const [agentsDraft, setAgentsDraft] = useState<Record<string, boolean>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -46,12 +49,13 @@ export function AgentsConsoleClient() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [s, sp, ds, ts, ms] = await Promise.all([
+    const [s, sp, ds, ts, ms, sc] = await Promise.all([
       fetch('/api/v1/agent/admin/settings', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { settings: [] })),
       fetch('/api/v1/agent/admin/spend', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
       fetch('/api/v1/agent/admin/dossiers/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/api/v1/agent/admin/triages/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/api/v1/agent/admin/munshi/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/v1/agent/admin/score/stats', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
     const rows: SettingRow[] = s.settings ?? []
     setSettings(rows)
@@ -62,6 +66,7 @@ export function AgentsConsoleClient() {
     setDossiers(ds)
     setTriages(ts)
     setMunshi(ms)
+    setScore(sc)
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -148,6 +153,13 @@ export function AgentsConsoleClient() {
                 {' · '}
                 {t('munshi_enabled', { n: munshi?.providers_enabled ?? 0 })}
               </p>
+            </div>
+            {/* S2.4 — AMC Score tile */}
+            <div className="rounded-card border border-border bg-surface p-4 shadow-card" data-testid="score-tile">
+              <p className="text-xs font-medium text-foreground-secondary">{tScore('tile_title')}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{score?.provider.median ?? '—'}</p>
+              <p className="mt-1 text-xs text-foreground-secondary">{tScore('tile_median')} · {tScore('tile_scored')} {score?.provider.scored ?? 0}/{score?.provider.subjects ?? 0}</p>
+              <p className="text-xs text-foreground-secondary">{tScore('tile_gated')}: {score?.provider.gated_share_pct == null ? '—' : `${score.provider.gated_share_pct}%`} · {tScore('tile_buyers')} {score?.buyer.scored ?? 0} · {tScore('tile_movers')} {score?.movers_week.length ?? 0}</p>
             </div>
             {/* S1.7 — dispute triages tile */}
             <div className="rounded-card border border-border bg-surface p-4 shadow-card">

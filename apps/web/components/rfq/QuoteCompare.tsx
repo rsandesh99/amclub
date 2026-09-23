@@ -12,6 +12,7 @@ import {
   compareLabel,
   declineMessageTemplate,
   type CompareFlag,
+  type CompareOrdering,
   type CompareQuoteResult,
   type ComparePointersCache,
   type DeclineMessageLocale,
@@ -23,8 +24,9 @@ import { Button } from '@/components/ui/button'
 import { ConfirmSheet } from '@/components/ui/confirm-sheet'
 import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 import { QuoteTermsRow } from './QuoteTermsRow'
+import { useAnalytics } from '@/components/providers/posthog'
 
-type Sort = 'price' | 'delivery' | 'rating' | 'response'
+type Sort = 'price' | 'delivery' | 'rating' | 'response' | 'reliability'
 
 export interface QuoteCompareProps {
   rfq: RfqDetailForBuyer
@@ -34,6 +36,11 @@ export interface QuoteCompareProps {
   pointers: ComparePointersCache | null
   /** AGENT_ENABLED + agents_enabled.compare_pointers + cohort for this buyer. */
   pointersEnabled: boolean
+  /**
+   * S2.4 — the server's order (ADR-010 §7). `reliability` only above the threshold with the switch on; the ids are
+   * all this screen ever gets — never a score. Absent = the price order, exactly as before.
+   */
+  ordering?: CompareOrdering
 }
 
 /**
@@ -44,12 +51,19 @@ export interface QuoteCompareProps {
  * Decline opens a sheet: reason, optional private note, the template preview
  * in the provider's language, no undo (the quote machine has no way back).
  */
-export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled }: QuoteCompareProps) {
+export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering }: QuoteCompareProps) {
   const t = useTranslations('rfq')
   const tc = useTranslations('checkout')
   const locale = useLocale()
   const router = useRouter()
-  const [sort, setSort] = useState<Sort>('price')
+  const posthog = useAnalytics()
+  const reliability = ordering?.mode === 'reliability'
+  const [sort, setSortState] = useState<Sort>(reliability ? 'reliability' : 'price')
+  const setSort = (next: Sort) => {
+    if (next !== sort) posthog.capture('compare_sort_changed', { locale, device: 'web', from: sort, to: next })
+    setSortState(next)
+  }
+  const rank = useMemo(() => new Map((ordering?.ids ?? []).map((id, i) => [id, i])), [ordering])
   const [threadFor, setThreadFor] = useState<string | null>(null)
   const [accepting, setAccepting] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -115,6 +129,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
 
   const sorted = [...rfq.quotes].sort((a, b) => {
     if (sort === 'price') return goods && a.goods && b.goods ? a.goods.unitPricePaise - b.goods.unitPricePaise : (resultById.get(a.id)?.normalizedTotalPaise ?? a.pricePaise) - (resultById.get(b.id)?.normalizedTotalPaise ?? b.pricePaise)
+    if (sort === 'reliability') return (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER)
     if (sort === 'delivery') return a.deliveryDays - b.deliveryDays
     if (sort === 'response') {
       const ra = a.provider.medianResponseMinutes, rb = b.provider.medianResponseMinutes
@@ -301,6 +316,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
           <label className="flex items-center gap-2">
             {t('sort_label')}
             <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="rounded-button border border-border bg-surface px-2 py-1 text-foreground">
+              {reliability && <option value="reliability">{t('sort_reliability')}</option>}
               <option value="price">{t('sort_price')}</option>
               <option value="delivery">{t('sort_delivery')}</option>
               <option value="rating">{t('sort_rating')}</option>
@@ -309,6 +325,14 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
           </label>
         </div>
       </div>
+
+      {/* S2.4 — one fixed line, never a number; price is one tap away */}
+      {sort === 'reliability' && (
+        <p className="text-xs text-foreground-secondary" data-testid="reliability-line">
+          {t('reliability_line')}{' '}
+          <button type="button" onClick={() => setSort('price')} className="text-primary underline underline-offset-2">{t('reliability_switch')}</button>
+        </p>
+      )}
 
       {error && <p className="text-sm text-danger">{error}</p>}
       {pointersEnabled && pointersState === 'unavailable' && <p className="text-xs text-foreground-secondary">{t('compare_pointers_unavailable')}</p>}

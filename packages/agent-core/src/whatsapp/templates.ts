@@ -34,6 +34,8 @@ export const WA_TEMPLATES: Record<string, TemplateSpec> = {
   munshi_window_warning: { names: { en: 'amc_munshi_window_warning_en', hi: 'amc_munshi_window_warning_hi', te: 'amc_munshi_window_warning_te' }, params: titleBody },
   munshi_reply_draft: { names: { en: 'amc_munshi_reply_draft_en', hi: 'amc_munshi_reply_draft_hi', te: 'amc_munshi_reply_draft_te' }, params: (n) => [n.title] },
   munshi_result: { names: { en: 'amc_munshi_result_en', hi: 'amc_munshi_result_hi', te: 'amc_munshi_result_te' }, params: (n) => [n.body] },
+  // S2.4 — the weekly growth nudge (opt-in gated; informational): [the nudge line]
+  munshi_growth: { names: { en: 'amc_munshi_growth_en', hi: 'amc_munshi_growth_hi', te: 'amc_munshi_growth_te' }, params: (n) => [n.body] },
   order_placed: { names: { en: 'amc_order_placed_en', hi: 'amc_order_placed_hi' }, params: titleBody },
   order_accepted: { names: { en: 'amc_order_accepted_en', hi: 'amc_order_accepted_hi' }, params: titleBody },
   requirements_submitted: { names: { en: 'amc_requirements_submitted_en', hi: 'amc_requirements_submitted_hi' }, params: titleBody },

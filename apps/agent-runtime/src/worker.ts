@@ -4,7 +4,7 @@ import { helloAgent, type HelloInput } from './agents/hello/index'
 import { payoutDossierAgent, type PayoutDossierInput } from './agents/payout-dossier/index'
 import { listExpiredOnboardingSessions, runOnboardingTurn, type OnboardingTurn } from './agents/onboarding/index'
 import { disputeTriageAgent, type DisputeTriageInput } from './agents/dispute-triage/index'
-import { runMunshiDecide, runMunshiFollowup, runMunshiScan, type MunshiDecideJob } from './agents/munshi/index'
+import { runMunshiDecide, runMunshiFollowup, runMunshiGrowth, runMunshiScan, type MunshiDecideJob } from './agents/munshi/index'
 import { runSupportDecide, runSupportReply, type SupportDecideJob, type SupportReplyJob } from './agents/support/index'
 import { admin, buildDeps, buildMunshiDeps, buildOnboardingDeps, buildSupportDeps } from './deps'
 import { handleWaInbound } from './whatsapp/inbound'
@@ -33,6 +33,8 @@ const ONBOARDING_RETRY = { retryLimit: 1, retryDelay: 60 } as const
 const MUNSHI_SCAN_QUEUE = 'agent.munshi.scan'
 const MUNSHI_DECIDE_QUEUE = 'agent.munshi.decide'
 const MUNSHI_FOLLOWUP_QUEUE = 'agent.munshi.followup'
+/** S2.4 — the weekly growth nudge (one per provider per week; informational). */
+const MUNSHI_GROWTH_QUEUE = 'agent.munshi.growth'
 const MUNSHI_DECIDE_RETRY = { retryLimit: 1, retryDelay: 60 } as const
 /** S2.3 — support turns: one retry after 60 s (a turn is idempotent through the stored message + the guarded ticket). */
 const SUPPORT_REPLY_QUEUE = 'agent.support.reply'
@@ -132,6 +134,11 @@ export async function startWorker(): Promise<void> {
     if (r.status === 'failed') console.warn(`[worker] munshi.followup: ${r.error}`)
     else console.log('[worker] munshi.followup', JSON.stringify(r.detail))
   })
+  await boss.work<{ kind: 'growth' }>(MUNSHI_GROWTH_QUEUE, async () => {
+    const r = await runMunshiGrowth(buildMunshiDeps())
+    if (r.status === 'failed') console.warn(`[worker] munshi.growth: ${r.error}`)
+    else console.log('[worker] munshi.growth', JSON.stringify(r.detail))
+  })
   await boss.work<MunshiDecideJob>(MUNSHI_DECIDE_QUEUE, async (jobs) => {
     for (const job of jobs) {
       const r = await runMunshiDecide(buildMunshiDeps(), { ...job.data, jobId: job.id })
@@ -202,6 +209,7 @@ export async function enqueueJob(agent: string, data: unknown): Promise<string |
   // S2.2 — the web crons: one scan / one follow-up per tick (singletonKey collapses overlapping ticks).
   if (agent === 'munshi.scan') return boss.send(MUNSHI_SCAN_QUEUE, { kind: 'scan' }, { retryLimit: 0, singletonKey: 'munshi.scan', singletonSeconds: 600 })
   if (agent === 'munshi.followup') return boss.send(MUNSHI_FOLLOWUP_QUEUE, { kind: 'followup' }, { retryLimit: 0, singletonKey: 'munshi.followup', singletonSeconds: 1800 })
+  if (agent === 'munshi.growth') return boss.send(MUNSHI_GROWTH_QUEUE, { kind: 'growth' }, { retryLimit: 0, singletonKey: 'munshi.growth', singletonSeconds: 3600 })
   if (agent === 'onboarding') {
     // The web start route: { kind:'start', sessionId }. Validated shape only.
     const t = data as Partial<OnboardingTurn>

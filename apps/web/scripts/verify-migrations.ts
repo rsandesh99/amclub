@@ -242,7 +242,7 @@ const MANIFEST: Entry[] = [
       ['munshi_drafts', 'munshi_drafts_set_updated_at'],
       ['munshi_provider_state', 'munshi_provider_state_set_updated_at'],
     ],
-    note: 'S2.3 Support agent: support_tickets (escalations a human resolves; the agent halts on an open one), support_threads + support_messages (web / mobile chat; user text masked, assistant text = the template), nudges (the counterparty nudge ledger written by the spine routes); wa_conversations support_ticket_id / support_last_intents / support_unclear_streak; ai_decisions feature CHECK gains support_nudge',
+    note: 'S2.2 Digital Munshi: munshi_drafts (proposals the provider decides on) + munshi_provider_state (scan cursor, daily cap, reminders); provider_price_book gains accepted_at / deleted_at / source (source_quote_id nullable for manual rows; accepted_at backfilled from accepted quotes); quotes.munshi_draft_id (+ the S1.2 column grant restated); ai_decisions feature CHECK gains munshi_reply',
   },
   {
     file: '0041_support.sql',
@@ -251,7 +251,7 @@ const MANIFEST: Entry[] = [
       ['support_tickets', 'support_tickets_set_updated_at'],
       ['support_threads', 'support_threads_set_updated_at'],
     ],
-    note: 'S2.2 Digital Munshi: munshi_drafts (proposals the provider decides on) + munshi_provider_state (scan cursor, daily cap, reminders); provider_price_book gains accepted_at / deleted_at / source (source_quote_id nullable for manual rows; accepted_at backfilled from accepted quotes); quotes.munshi_draft_id (+ the S1.2 column grant restated); ai_decisions feature CHECK gains munshi_reply',
+    note: 'S2.3 Support agent: support_tickets (escalations a human resolves; the agent halts on an open one), support_threads + support_messages (web / mobile chat; user text masked, assistant text = the template), nudges (the counterparty nudge ledger written by the spine routes); wa_conversations support_ticket_id / support_last_intents / support_unclear_streak; ai_decisions feature CHECK gains support_nudge',
   },
   {
     file: '0042_users_privilege_guard.sql',
@@ -265,6 +265,17 @@ const MANIFEST: Entry[] = [
     tables: ['messages', 'order_events', 'audit_logs', 'msme_profiles'],
     triggers: [['audit_logs', 'audit_logs_no_update']],
     note: 'Security hotfix: messages parties SELECT-only + INSERT/UPDATE/DELETE revoked; order_events parties-insert policy dropped + INSERT revoked; audit_logs append-only trigger (raise_append_only from 0017) + INSERT/UPDATE/DELETE revoked; msme_profiles owner SELECT-only + INSERT/UPDATE/DELETE revoked (no self-unsuspend / self-verify) — all from anon + authenticated (service role keeps its grants)',
+  },
+  {
+    file: '0044_amc_score.sql',
+    tables: ['provider_scores', 'buyer_scores', 'score_history', 'score_events'],
+    functions: ['score_inputs_provider', 'score_inputs_buyer'],
+    triggers: [
+      ['provider_scores', 'provider_scores_set_updated_at'],
+      ['buyer_scores', 'buyer_scores_set_updated_at'],
+      ['score_events', 'score_events_no_update'],
+    ],
+    note: 'S2.4 AMC Score v1 (ADR-010): score_inputs_provider / score_inputs_buyer (SECURITY INVOKER, services only, 90-day window; service_role EXECUTE only), provider_scores + buyer_scores (latest snapshot per subject x version), score_history (one row per subject per day), score_events (append-only); munshi_provider_state.last_growth_at',
   },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },

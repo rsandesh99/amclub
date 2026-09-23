@@ -7,6 +7,7 @@ import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
+import { AdminScoreBlock } from '@/components/admin/AdminScoreBlock'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -187,6 +188,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
           )}
         </Section>
       )}
+
+      {/* S2.4 — AMC Score (admin; the provider sees their own on the dashboard, buyers never) */}
+      <AdminScoreBlock side="provider" id={id} />
 
       {/* Recent orders */}
       <Section title={t('orders_title')}>

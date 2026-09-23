@@ -819,6 +819,60 @@ cron hold guard (`rfq_quality_hold_minutes`, default 30); web + mobile "Before w
   UPDATE is raced through `POST /quality/send`.
 - **Tamil/Telugu:** new keys only (13 each), English fallback for the rest.
 
+## Agent S2.4 — AMC Score v1 (logged 2026-09-23)
+
+**Shipped (dark):** ADR-010 first; the deterministic formula in shared `score.ts` (`SCORE_VERSION = 'v1'`, weights in
+code, 90-day window, sample gates, null = the neutral prior); nightly `cron/score-compute` (`score_inputs_provider /
+score_inputs_buyer` SQL functions → `provider_scores` / `buyer_scores` / `score_history` / append-only `score_events`);
+the provider's own card (`score_card_enabled`), buyers never see a number, admins see both; reliability-adjusted
+compare ordering server-side (`reliability_rank_enabled`, off until the founder confirms ADR-010 §9 (e)); the coaching
+note (`score_note@v1`, numbers in, output-policed); the weekly Munshi growth nudge (fixed copy); migration **0044**.
+Runbook `docs/agents/SCORE.md`.
+
+- **Prompt vs tree — the ranking formula.** The prompt's `total × (10000 + k × (100 − s)) ÷ 10000` with the default
+  `k = 1500` adds 150 % at a score of 90 and 900 % at 40, so a ten-point score gap would outweigh almost any price
+  gap. It contradicts the bounded `k_bps` setting (0..5000). The code reads k as the penalty in basis points at a score
+  of 0: `total × (1 000 000 + k × (100 − s)) ÷ 1 000 000` (+1.5 % at 90, +6 % at the neutral 60, +15 % at 0). The
+  prompt's own worked example (5 % cheaper at 40 ranks below 90) holds either way. ADR-010 §7.
+- **Closed orders, not completed, in the dispute denominator (both sides).** A refunded dispute never reaches
+  `completed`, so the prompt's "at-fault ÷ completed" would over-weight faults; the gate uses closed orders too.
+- **Decision rate counts under "how quickly you respond"** (ADR-010 §9 (b)): the addendum's own §4 defines responding
+  as a quote or a decline within the window. If the founder or counsel reads it otherwise, the fix before the first
+  enablement is `decision_rate = 0` as a v1 amendment — counsel-owned copy is not edited either way.
+- **`payment_follow_through` is per checkout subject** (a package or a quote), paid = a session `materialized`
+  (webhook-driven), decided = paid or every session expired unpaid; a retried UPI payment is not an abandonment.
+- **Growth nudge (3) is gated on a real weakness (< 70).** In the prompt's order a weakest component always exists, so
+  the "your score rose" nudge (4) could never fire. `GROWTH_TIP_BELOW` in `munshi-growth.ts`.
+- **`/profile/me` gains the caller's own listing facts** (`providerProfileGaps`, `providerState`,
+  `providerCategorySlugs`) so the growth job reads them under the provider's token — the runtime never reads
+  `provider_profiles` with the service role. The category demand (an aggregate count of platform data) and the
+  provider's own score row are service-role reads.
+- **The admin score routes are not `AGENT_ENABLED`-gated** (`/api/v1/admin/score/*`, `requireAdmin`): the score is a
+  trust product, not an agent. The stats tile lives on the agents console, which is gated.
+- **The growth in-app notification is en / hi / te** (the notification i18n type); a Tamil reader gets English there,
+  like every other notification kind. The WhatsApp line is rendered in the provider's locale (templates en / hi / te).
+- **Not built in v1 (as the prompt listed):** a subjective provider-rates-buyer rating (a later ADR); goods scoring
+  (after the Mart Launch Gate); search / fan-out ranking by score; a public score (S4.2, provider opt-in); pruning
+  `score_history` past 13 months (a later job).
+- **Rig skips (recorded, never passes):** the cron route with the compute switch on (it would score every real
+  provider — the library runs in-process restricted to the fixtures); the live coaching note (keyless → the stub note);
+  AGENT_ENABLED legs against a dark server.
+- **Live evals not run** (no LLM key): `score_note` ≥ 90 % and 0 policy violations; the injection set (now 276 pairs,
+  36 of them `score_note`) — the cohort gate for the note.
+- **ADR-010 §9 (e) confirmed with conditions (founder, 2026-09-23).** Before `reliability_rank_enabled` is switched on:
+  **counsel confirms the Consumer Protection (E-Commerce) Rules 2020 clause** on disclosing the main ranking parameters
+  and the wording of `help.faq_ranking` (en / hi; te / ta fall back to English — translate if counsel wants them).
+  The provider card's `ranking_line` and the buyer's track-record line + price / delivery re-sort are built.
+- **The score tables grant clients SELECT only** (`REVOKE ALL` from anon + authenticated, then `GRANT SELECT` to
+  authenticated; RLS picks the rows): no client INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER. Proven in
+  a rolled-back dry run, which also showed 0044 leaves the grants and policies on users, messages, order_events,
+  audit_logs and msme_profiles byte-identical.
+- **Migration renumbered 0042 → 0044** for PR #15 (0042 users privilege guard + 0043 RLS hardening, both applied to prod
+  2026-09-23). Master merged in: `score_note: 'in'` in `TASK_CLASS_RESIDENCY` (a named provider's own score —
+  derived, but personal); the rig uses `QUOTE_STATUS` and the shared order / RFQ status types; the note prompt sends
+  `maxTokens: 400`, and a failed paid note call is logged and charged by the bounded helper before the card falls back
+  to the tips.
+
 ## Agent S2.3 — Support agent (logged 2026-09-22)
 
 **Shipped (dark):** an intent classifier + template replies from `/api/v1` data — the model never writes a sentence

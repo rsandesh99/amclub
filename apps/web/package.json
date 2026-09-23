@@ -28,6 +28,7 @@
     "agents:verify:triage": "tsx scripts/verify-dispute-triage.ts",
     "agents:verify:munshi": "tsx scripts/verify-munshi.ts",
     "agents:verify:support": "tsx scripts/verify-support.ts",
+    "trust:verify:score": "tsx scripts/verify-score.ts",
     "voice:verify:v2": "tsx scripts/verify-voice-v2.ts"
   },
   "dependencies": {

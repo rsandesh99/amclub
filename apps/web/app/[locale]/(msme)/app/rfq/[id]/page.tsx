@@ -15,6 +15,7 @@ import { isInClarification, rfqIsActive } from '@amclub/shared'
 import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
 import { QualityQuestionsCard, QualitySummary } from '@/components/rfq/QualityQuestionsCard'
 import { NudgeButton } from '@/components/orders/NudgeButton'
+import { compareOrderingFor } from '@/lib/score/ordering'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
@@ -34,6 +35,8 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
   // S1.2 — deterministic flags + normalised totals (never a model); pointers only from the
   // cache here (the client loads fresh ones after mount when enabled, so the table never waits).
   const compare = computeCompare(rfq.kind, rfq.quotes)
+  // S2.4 — the server's order (price, or reliability-adjusted above the threshold); never a score
+  const ordering = await compareOrderingFor(admin, { kind: rfq.kind, quotes: rfq.quotes, results: compare, userId: user.id, rfqId: rfq.id })
   const pointersEnabled = await isComparePointersEnabledFor(admin, user.id)
   const pointerOutcome = pointersEnabled
     ? await getComparePointers(admin, { rfqId: rfq.id, kind: rfq.kind, quotes: rfq.quotes, results: compare, userId: user.id, locale: toPointerLocale(locale), allowModel: false })
@@ -124,7 +127,7 @@ export default async function BuyerRfqPage({ params }: { params: Promise<{ id: s
           {/* S1.3 — questions from providers, above the compare table; answers are visible to every matched provider. */}
           <ClarificationsCard rfqId={rfq.id} role="buyer" initial={rfq.clarifications} canWrite={active} closed={!active} />
 
-          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} />
+          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} />
         </>
       )}
     </div>

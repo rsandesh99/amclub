@@ -42,6 +42,7 @@ export const AGENT_TASK_CLASSES = [
   'approval_intent',   // S2.2: classify a provider's reply to a Munshi draft (re-ask / edit / reject — can NEVER approve)
   'thread_reply',      // S2.2: draft a courteous reply on a quote thread (no price change)
   'support_reply',     // customer support reply, bounded + safe (S2.3)
+  'score_note',        // S2.4: one informational coaching sentence from score components (numbers + keys only; no free text in)
   'benchmark_explain', // fair-price range explanation (S3.2)
   'translation',       // UI-adjacent short translation
   'embedding',         // retrieval vectors
@@ -70,6 +71,7 @@ export const TASK_CLASS_TIER: Record<AgentTaskClass, AgentTier> = {
   approval_intent: 'routine',
   thread_reply: 'routine',
   support_reply: 'reasoning',
+  score_note: 'routine',
   benchmark_explain: 'frontier',
   translation: 'routine',
   embedding: 'routine',
@@ -109,6 +111,7 @@ export const TASK_CLASS_RESIDENCY: Record<AgentTaskClass, AgentResidency> = {
   approval_intent: 'in',      // provider's reply to a Munshi draft
   thread_reply: 'in',         // quote thread messages
   support_reply: 'in',        // support messages
+  score_note: 'in',           // a named provider's own score components (derived numbers, but personal data)
   benchmark_explain: 'any',   // aggregate, anonymised price ranges only
   translation: 'any',         // platform / public catalogue copy only (e.g. the Mart pool pitch); translating a user's words must use an 'in' class
   embedding: 'in',            // vectors may be computed over user content
@@ -183,6 +186,8 @@ export const AGENT_TOOLS = [
   { name: 'list_deadlines', persona: 'provider', confirm: false, wraps: 'GET /orders (provider)' },
   // S2.2 — Digital Munshi reads the provider's own price book (the only basis a draft price may have); a GET.
   { name: 'read_price_book', persona: 'provider', confirm: false, wraps: 'GET /partner/price-book' },
+  // S2.4 — the provider's OWN AMC Score (registered now for Munshi's later use; no agent reads it in v1)
+  { name: 'read_own_score', persona: 'provider', confirm: false, wraps: 'GET /partner/score' },
   // S2.3 — the Support agent: the same two tools exist for BOTH personas (the table is per persona; a name may repeat).
   // support_lookup is never routed — the support core calls the lookups interface (session client / token GETs).
   { name: 'support_lookup', persona: 'buyer', confirm: false, wraps: 'GET /orders | /rfq | /quotes/[id]/messages (read-only)' },

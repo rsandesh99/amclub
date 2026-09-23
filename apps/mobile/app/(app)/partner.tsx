@@ -11,12 +11,14 @@ interface ProviderStatus {
 }
 
 export default function PartnerScreen() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [providerStatus, setProviderStatus] = useState<ProviderStatus['status']>(null)
   // 'ready' | 'missing_route' | 'bank_unverified' | 'not_ready' | 'no_bank' | null (from /profile/me)
   const [payoutReadiness, setPayoutReadiness] = useState<string | null>(null)
   const [munshiEnabled, setMunshiEnabled] = useState(false)
   const [supportEnabled, setSupportEnabled] = useState(false)
+  // S2.4 — the provider's OWN AMC Score (the route 404s unless score_card_enabled → no card)
+  const [scoreCard, setScoreCard] = useState<ScoreCardView | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -34,13 +36,15 @@ export default function PartnerScreen() {
         setMunshiEnabled(data.munshiEnabled === true)
         setSupportEnabled(data.supportEnabled === true)
         setPayoutReadiness(data.payoutReadiness ?? null)
+        const sc = await fetch(`${process.env['EXPO_PUBLIC_API_URL'] ?? ''}/api/v1/partner/score?locale=${locale}`, { headers: { Authorization: `Bearer ${session.access_token}` } })
+        if (sc.ok) setScoreCard((await sc.json()) as ScoreCardView)
       } catch {
         // ignore
       } finally {
         setLoading(false)
       }
     })
-  }, [])
+  }, [locale])
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -130,7 +134,9 @@ export default function PartnerScreen() {
               <Text className="text-2xl">📬</Text>
             </TouchableOpacity>
 
-            {/* S2.2 — Digital Munshi (only for an enabled, cohorted provider; the server decides) */}
+            {scoreCard && <ScoreCard card={scoreCard} t={t} />}
+
+            {/* S2.3 — the Help chat (only for an enabled, cohorted user; the server decides) */}
             {supportEnabled && (
               <TouchableOpacity onPress={() => router.push('/support' as never)} className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-surface p-5" testID="support-tile">
                 <View>
@@ -141,6 +147,7 @@ export default function PartnerScreen() {
               </TouchableOpacity>
             )}
 
+            {/* S2.2 — Digital Munshi (only for an enabled, cohorted provider; the server decides) */}
             {munshiEnabled && (
               <TouchableOpacity onPress={() => router.push('/partner-munshi' as never)} className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-surface p-5" testID="munshi-tile">
                 <View>
@@ -172,5 +179,53 @@ export default function PartnerScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  )
+}
+
+// ── S2.4 — the AMC Score card (parity with the web dashboard card) ──────────────────────────────
+interface ScoreCardView {
+  computed: boolean
+  score: number | null
+  gate: { needed: { closed_orders: number }; have: { closed_orders: number } }
+  components: { key: string; value: number | null; weight: number }[]
+  tips: { key: string; text: string }[]
+  note: string | null
+  ranking?: { threshold: string }
+}
+
+function ScoreCard({ card, t }: { card: ScoreCardView; t: (k: string) => string }) {
+  return (
+    <View className="rounded-xl border border-gray-200 bg-surface p-5" testID="score-card">
+      <View className="flex-row items-baseline justify-between">
+        <Text className="text-base font-semibold text-foreground">{t('score_card.title')}</Text>
+        {card.computed && card.score !== null && (
+          <Text className="text-3xl font-bold text-primary">{card.score}<Text className="text-xs text-foreground-secondary"> {t('score_card.out_of')}</Text></Text>
+        )}
+      </View>
+      {!card.computed && <Text className="mt-2 text-sm text-foreground-secondary">{t('score_card.not_computed')}</Text>}
+      {card.computed && card.score === null && (
+        <Text className="mt-2 text-sm text-foreground">{t('score_card.not_enough').replace('{have}', String(card.gate.have.closed_orders)).replace('{need}', String(card.gate.needed.closed_orders))}</Text>
+      )}
+      {card.note && <Text className="mt-3 text-sm text-foreground">{t('score_card.note_label')}: {card.note}</Text>}
+      {card.components.map((c) => (
+        <View key={c.key} className="mt-3">
+          <View className="flex-row justify-between">
+            <Text className="text-sm font-medium text-foreground">{t(`score_card.c_${c.key}`)}</Text>
+            <Text className="text-xs text-foreground-secondary">{c.value === null ? t('score_card.no_data') : c.value} · {t('score_card.weight').replace('{weight}', String(c.weight))}</Text>
+          </View>
+          <View className="mt-1 h-2 overflow-hidden rounded-full bg-gray-200">
+            {c.value !== null && <View className="h-full rounded-full bg-primary" style={{ width: `${c.value}%` }} />}
+          </View>
+        </View>
+      ))}
+      {card.tips.length > 0 && (
+        <View className="mt-4 border-t border-gray-200 pt-3">
+          <Text className="text-sm font-semibold text-foreground">{t('score_card.tips_title')}</Text>
+          {card.tips.map((tip) => <Text key={tip.key} className="mt-1 text-sm text-foreground">{tip.text}</Text>)}
+        </View>
+      )}
+      {card.ranking && <Text className="mt-4 text-xs text-foreground-secondary" testID="score-ranking-line">{t('score_card.ranking_line').replace('{threshold}', card.ranking.threshold)}</Text>}
+      <Text className="mt-2 text-xs text-foreground-secondary">{t('score_card.private_line')}</Text>
+    </View>
   )
 }

@@ -888,7 +888,10 @@
     "revise_none_left": "సవరణలు మిగలలేదు — ఈ కోట్ గరిష్ఠ సంఖ్యలో సవరించబడింది.",
     "intake_take_photo": "ఫోటో తీయండి",
     "intake_choose_file": "ఫైల్ ఎంచుకోండి",
-    "intake_choose_file_hint": "ఫోటో, PDF, STEP లేదా DXF"
+    "intake_choose_file_hint": "ఫోటో, PDF, STEP లేదా DXF",
+    "sort_reliability": "విశ్వసనీయతతో సర్దుబాటు చేసిన ధర",
+    "reliability_line": "ధర క్రమంలో, AMClub లో ప్రతి ప్రొవైడర్ డెలివరీ మరియు వివాదాల రికార్డుకు అనుగుణంగా సర్దుబాటు చేయబడింది.",
+    "reliability_switch": "బదులుగా ధరతో క్రమం చేయండి"
   },
   "provider_signup": {
     "wa_card_title": "WhatsAppలో పూర్తి చేయండి",
@@ -1035,5 +1038,49 @@
     "escalated_body": "24 గంటల్లో స్వీకరిస్తాం. ఇక్కడ రాసినదంతా టికెట్‌కు జోడించబడుతుంది.",
     "error": "ఏదో తప్పు జరిగింది. మళ్లీ ప్రయత్నించండి.",
     "too_fast": "ఇప్పుడే చాలా సందేశాలు. కొంచెం ఆగండి."
+  },
+  "score_card": {
+    "title": "మీ AMC స్కోర్",
+    "out_of": "100 లో",
+    "private_line": "ఈ సంఖ్యను మీరు మరియు AMClub బృందం మాత్రమే చూడగలరు. కొనుగోలుదారులు ఎప్పుడూ చూడరు.",
+    "addendum_link": "స్కోర్ ఎలా లెక్కిస్తారు",
+    "not_enough": "ఇంకా తగినన్ని ఆర్డర్లు లేవు: {need} లో {have} పూర్తి",
+    "not_enough_body": "{need} ఆర్డర్లు పూర్తయ్యాక మీ స్కోర్ కనిపిస్తుంది. కింద ఉన్నవన్నీ ఇప్పటికే లెక్కలోకి వస్తున్నాయి.",
+    "not_computed": "మీ స్కోర్ ప్రతి రాత్రి లెక్కించబడుతుంది. రేపు మళ్లీ చూడండి.",
+    "weight": "బరువు {weight}%",
+    "no_data": "ఇంకా డేటా లేదు",
+    "tips_title": "దీన్ని ఎలా పెంచాలి",
+    "trend_title": "గత 30 రోజులు",
+    "note_label": "ఈ వారం",
+    "c_responsiveness": "స్పందన సమయం",
+    "d_responsiveness": "అభ్యర్థన మీకు చేరిన తర్వాత మీరు ఎంత త్వరగా కొటేషన్ ఇస్తారు.",
+    "c_on_time": "సమయానికి డెలివరీ",
+    "d_on_time": "మీరు నిర్ణయించిన తేదీలోగా డెలివర్ చేసిన ఆర్డర్లు.",
+    "c_buyer_confirmation": "కొనుగోలుదారు నిర్ధారణలు",
+    "d_buyer_confirmation": "కొనుగోలుదారు నిర్ధారించిన పూర్తైన ఆర్డర్లు; ఆటోమేటిక్ ముగింపు సగంగా లెక్కించబడుతుంది.",
+    "c_dispute_record": "వివాదాల రికార్డు",
+    "d_dispute_record": "మీకు వ్యతిరేకంగా నిర్ణయించిన వివాదాలు, మీరు ముగించిన ఆర్డర్లతో పోలిస్తే.",
+    "c_decision_rate": "అభ్యర్థనలపై నిర్ణయాలు",
+    "d_decision_rate": "గడువు ముగిసేలా వదిలేయకుండా మీరు కొటేషన్ ఇచ్చిన లేదా కారణంతో తిరస్కరించిన అభ్యర్థనలు.",
+    "ranking_line": "{threshold} లేదా అంతకంటే ఎక్కువ అభ్యర్థనలలో, కొనుగోలుదారు పోలికలో మీ కొటేషన్ ఎక్కడ కనిపిస్తుందో మీ స్కోర్ మార్చవచ్చు. మీ ధర ఎప్పుడూ మారదు, కొనుగోలుదారులు ఈ సంఖ్యను ఎప్పుడూ చూడరు."
+  },
+  "admin_score": {
+    "title": "AMC Score",
+    "buyer_title": "Buyer score (admin only)",
+    "not_computed": "Not computed yet",
+    "gated": "Below the sample gate",
+    "events": "Recent changes",
+    "component": "Component",
+    "value": "Value",
+    "weight": "Weight",
+    "sample": "Sample",
+    "raw": "Raw counts",
+    "none": "None",
+    "tile_title": "AMC Score",
+    "tile_scored": "Scored providers",
+    "tile_gated": "Below the gate",
+    "tile_median": "Median",
+    "tile_buyers": "Scored buyers",
+    "tile_movers": "Moved this week"
   }
 }

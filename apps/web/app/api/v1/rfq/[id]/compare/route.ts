@@ -7,6 +7,7 @@ import { enforce, limiters } from '@/lib/rate-limit'
 import { RFQ_GOODS_LIST_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { loadBuyerQuotes } from '@/lib/rfq/queries'
 import { computeCompare, getComparePointers, toPointerLocale } from '@/lib/rfq/compare'
+import { compareOrderingFor } from '@/lib/score/ordering'
 import { captureServerEvent } from '@/lib/analytics/server'
 
 /**
@@ -35,6 +36,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const kind: 'service' | 'goods' = isGoodsRow(rfq as { kind?: string | null }) ? 'goods' : 'service'
   const quotes = await loadBuyerQuotes(admin, rfqId)
   const results = computeCompare(kind, quotes)
+  // S2.4 — the order only (mode + ids); scores are read server-side and never returned
+  const ordering = await compareOrderingFor(admin, { kind, quotes, results, userId, rfqId })
   const locale = toPointerLocale(request.nextUrl.searchParams.get('locale'))
 
   // Pointers: a fresh model call only after the per-user limiter; cache hits are free.
@@ -50,6 +53,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return NextResponse.json(
     {
       results,
+      ordering,
       pointers: outcome.pointers,
       pointers_source: outcome.source,
       ...(outcome.error ? { pointers_error: outcome.error } : !rl.ok && !outcome.pointers ? { pointers_error: 'rate_limited' } : {}),

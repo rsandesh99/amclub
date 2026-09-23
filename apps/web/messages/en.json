@@ -835,7 +835,8 @@
     "grievance_title": "Grievance officer",
     "grievance_body": "For unresolved complaints, write to our Grievance Officer. We acknowledge within {hours} hours and aim to resolve within {days} days.",
     "grievance_link": "Grievance page & officer details →",
-    "faq_fees": "Providers receive their full amount minus only AMC’s 5% commission. All payment gateway charges are borne by AMC."
+    "faq_fees": "Providers receive their full amount minus only AMC’s 5% commission. All payment gateway charges are borne by AMC.",
+    "faq_ranking": "How are quotes ordered? On larger requests, AMClub may list quotes by price adjusted for each provider's track record on the platform: how quickly they respond to requests (including declining ones they cannot take), on-time delivery, completion confirmations by buyers, and dispute outcomes. Reviews, location and a provider's price level are not used, and no provider can pay to move up. Buyers never see a provider's score, and you can always sort by price or delivery time instead."
   },
   "not_found": {
     "title": "Page not found",
@@ -1254,7 +1255,10 @@
     "accept_confirm_escrow": "AMClub holds your money and releases it to the provider only after you accept the work.",
     "accept_confirm_others": "{count, plural, one {The other quote on this request will be closed.} other {The other # quotes on this request will be closed.}}",
     "accept_confirm_submit": "Continue to payment",
-    "accept_confirm_cancel": "Not now"
+    "accept_confirm_cancel": "Not now",
+    "sort_reliability": "Price, adjusted for reliability",
+    "reliability_line": "Ordered by price, adjusted for each provider's delivery and dispute record on AMClub.",
+    "reliability_switch": "Sort by price instead"
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -2672,5 +2676,49 @@
     "cta_whatsapp": "Message us on WhatsApp",
     "whatsapp_text": "Hello, my AMClub buyer account is suspended. Please review it.",
     "cta_grievance": "Raise a grievance"
+  },
+  "score_card": {
+    "title": "Your AMC Score",
+    "out_of": "of 100",
+    "private_line": "Only you and the AMClub team can see this number. Buyers never see it.",
+    "addendum_link": "How the score works",
+    "not_enough": "Not enough orders yet: {have} of {need} completed",
+    "not_enough_body": "Your score appears after {need} completed orders. Everything below is already counting.",
+    "not_computed": "Your score is calculated every night. Check back tomorrow.",
+    "weight": "Weight {weight}%",
+    "no_data": "No data yet",
+    "tips_title": "How to raise it",
+    "trend_title": "Last 30 days",
+    "note_label": "This week",
+    "c_responsiveness": "Response time",
+    "d_responsiveness": "How quickly you quote after a request reaches you.",
+    "c_on_time": "On-time delivery",
+    "d_on_time": "Orders delivered by the date you set.",
+    "c_buyer_confirmation": "Buyer confirmations",
+    "d_buyer_confirmation": "Completed orders the buyer confirmed; an automatic close counts half.",
+    "c_dispute_record": "Dispute record",
+    "d_dispute_record": "Disputes decided against you, compared with the orders you closed.",
+    "c_decision_rate": "Decisions on requests",
+    "d_decision_rate": "Requests you quoted or declined with a reason, instead of letting them lapse.",
+    "ranking_line": "On requests of {threshold} or more, your score can change where your quote appears in the buyer's comparison. Your price is never changed, and buyers never see the number."
+  },
+  "admin_score": {
+    "title": "AMC Score",
+    "buyer_title": "Buyer score (admin only)",
+    "not_computed": "Not computed yet",
+    "gated": "Below the sample gate",
+    "events": "Recent changes",
+    "component": "Component",
+    "value": "Value",
+    "weight": "Weight",
+    "sample": "Sample",
+    "raw": "Raw counts",
+    "none": "None",
+    "tile_title": "AMC Score",
+    "tile_scored": "Scored providers",
+    "tile_gated": "Below the gate",
+    "tile_median": "Median",
+    "tile_buyers": "Scored buyers",
+    "tile_movers": "Moved this week"
   }
 }
