@@ -4,6 +4,26 @@ Items deliberately deferred during pre-cutover hardening. Each entry says what
 exists today, what is missing, and what would unblock it. Remove an entry when
 it ships.
 
+## H1 — money rigs in CI against a disposable Supabase (2026-09-23)
+
+`.github/workflows/money-rigs.yml` runs verify-authz, verify-money-loop, the two
+webhook kill-tests, verify-phase7 and verify-rfq on every PR. It uses a throwaway
+`supabase start` stack (`.github/supabase-ci`), a schema built from the commit
+(`db:bootstrap` + seed), and a real Redis behind an Upstash-compatible REST
+front, so rate limits are exercised.
+
+Deferred / notes:
+- **Storage buckets are not in any migration.** `order-documents`, `invoices`,
+  `kyc-documents`, `rfq-attachments`, `wa-media` and `public-assets` were
+  created outside the migrations. CI creates them from
+  `.github/supabase-ci/buckets.sql`; a from-zero rebuild (`db:bootstrap`,
+  RUNBOOK_RESTORE) would come up without them. Move the inserts into a
+  migration (idempotent `on conflict do nothing`).
+- **Make it a required check.** In branch protection, mark "Money rigs ·
+  disposable Supabase" as required (repository owner).
+- The CI database carries the staged Mart migrations, so it is a superset of
+  production; staged-column leaks are still caught by `mart:static`.
+
 ## ADR-014 — dispute settlement safety, H3 + H4 (2026-09-23)
 
 Landed: shared `planDisputeSettlement` decides what a resolution may do to the

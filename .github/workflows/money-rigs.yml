@@ -23,6 +23,21 @@ jobs:
     name: Money rigs · disposable Supabase
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Rate limiting is part of what verify-authz proves (the admin limiter must
+    # engage), so the app gets a real Redis behind an Upstash-compatible REST front.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+      upstash:
+        image: hiett/serverless-redis-http:latest
+        ports: ['8079:80']
+        env:
+          SRH_MODE: env
+          SRH_TOKEN: ci-upstash-token-disposable
+          SRH_CONNECTION_STRING: redis://redis:6379
     env:
       BASE_URL: http://localhost:3000
       WEBHOOK_URL: http://localhost:3000/api/v1/webhooks/razorpay
@@ -31,6 +46,8 @@ jobs:
       CRON_SECRET: ci-cron-secret-disposable
       RAZORPAY_WEBHOOK_SECRET: ci-webhook-secret-disposable
       COLUMN_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      UPSTASH_REDIS_REST_URL: http://localhost:8079
+      UPSTASH_REDIS_REST_TOKEN: ci-upstash-token-disposable
       SENTRY_AUTH_TOKEN: ""
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -74,10 +91,19 @@ jobs:
       - name: Schema (every migration + RLS) and seed
         run: |
           pnpm --filter @amclub/db db:bootstrap -- --url "$DATABASE_URL"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f .github/supabase-ci/buckets.sql
           pnpm --filter @amclub/db db:seed
           # Production keeps the demo providers suspended; match it so the rigs'
           # exact fan-out counts only see the providers they create.
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "update provider_profiles set status = 'suspended'"
+
+      - name: Upstash-compatible REST front answers
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" "$UPSTASH_REDIS_REST_URL/ping" | grep -q PONG; then echo "upstash ok"; exit 0; fi
+            sleep 2
+          done
+          echo "the Upstash REST front did not answer"; exit 1
 
       - name: Build and start the app (simulate payments)
         id: app
