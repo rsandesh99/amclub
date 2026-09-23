@@ -488,7 +488,12 @@
     "wa_card_no_number": "सेटअप होने पर हमारा WhatsApp नंबर यहाँ दिखेगा।",
     "wa_card_failed": "WhatsApp इंटरव्यू शुरू नहीं हो सका। कृपया फिर कोशिश करें।",
     "wa_prefill_chip": "आपके WhatsApp इंटरव्यू से",
-    "wa_prefill_notice": "हमने यह फ़ॉर्म आपके WhatsApp इंटरव्यू से पहले से भर दिया है। आगे बढ़ने से पहले हर फ़ील्ड जाँच लें।"
+    "wa_prefill_notice": "हमने यह फ़ॉर्म आपके WhatsApp इंटरव्यू से पहले से भर दिया है। आगे बढ़ने से पहले हर फ़ील्ड जाँच लें।",
+    "state_placeholder": "— राज्य चुनें —",
+    "city_placeholder": "जैसे हैदराबाद",
+    "bank_holder_placeholder": "जैसा आपके चेक या पासबुक पर छपा है",
+    "bank_account_placeholder": "9–18 अंक",
+    "bank_verify_failed": "हम इस बैंक खाते को सत्यापित नहीं कर सके। खाता संख्या, IFSC और खाताधारक का नाम जाँचें, फिर दोबारा कोशिश करें।"
   },
   "admin": {
     "verifications_title": "प्रदाता सत्यापन",

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { CATEGORY_LIST } from '@amclub/shared'
@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { PriceBlock } from '@/components/catalog/PriceBlock'
-import { ListBuilder } from './ListBuilder'
+import { LIST_COMMIT_ATTR, ListBuilder, type ListBuilderHandle } from './ListBuilder'
 
 export interface PackageDraft {
   id?: string
@@ -56,6 +56,11 @@ export function PackageWizard({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const step: Step = STEPS[stepIdx]!
+  // Typed-but-not-added list text is committed before Continue validates.
+  const scopeInRef = useRef<ListBuilderHandle>(null)
+  const scopeOutRef = useRef<ListBuilderHandle>(null)
+  const deliverablesRef = useRef<ListBuilderHandle>(null)
+  const requirementsRef = useRef<ListBuilderHandle>(null)
 
   const categories = CATEGORY_LIST.filter(
     (c) => allowedCategorySlugs.length === 0 || allowedCategorySlugs.includes(c.slug),
@@ -65,7 +70,17 @@ export function PackageWizard({
     setDraft((d) => ({ ...d, ...patch }))
   }
 
-  function validateStep(): string | null {
+  function commitPendingLists(): PackageDraft {
+    const patch: Partial<PackageDraft> = {}
+    if (scopeInRef.current) patch.scopeIncluded = scopeInRef.current.commit()
+    if (scopeOutRef.current) patch.scopeExcluded = scopeOutRef.current.commit()
+    if (deliverablesRef.current) patch.deliverables = deliverablesRef.current.commit()
+    if (requirementsRef.current) patch.requirements = requirementsRef.current.commit()
+    return { ...draft, ...patch }
+  }
+
+  function validateStep(d: PackageDraft = draft): string | null {
+    const draft = d
     if (step === 'basics') {
       if (!draft.categorySlug) return t('err_category')
       if (draft.title.trim().length < 5) return t('err_title')
@@ -82,7 +97,7 @@ export function PackageWizard({
   }
 
   function next() {
-    const err = validateStep()
+    const err = validateStep(commitPendingLists())
     if (err) {
       setError(err)
       return
@@ -191,6 +206,7 @@ export function PackageWizard({
               <Label>{t('scope_included')}</Label>
               <p className="mb-2 text-xs text-foreground-secondary">{t('scope_included_hint')}</p>
               <ListBuilder
+                ref={scopeInRef}
                 items={draft.scopeIncluded}
                 onChange={(scopeIncluded) => set({ scopeIncluded })}
                 placeholder={t('scope_placeholder')}
@@ -201,6 +217,7 @@ export function PackageWizard({
               <Label>{t('scope_excluded')}</Label>
               <p className="mb-2 text-xs text-foreground-secondary">{t('scope_excluded_hint')}</p>
               <ListBuilder
+                ref={scopeOutRef}
                 items={draft.scopeExcluded}
                 onChange={(scopeExcluded) => set({ scopeExcluded })}
                 placeholder={t('scope_excluded_placeholder')}
@@ -216,6 +233,7 @@ export function PackageWizard({
               <Label>{t('deliverables')}</Label>
               <p className="mb-2 text-xs text-foreground-secondary">{t('deliverables_hint')}</p>
               <ListBuilder
+                ref={deliverablesRef}
                 items={draft.deliverables}
                 onChange={(deliverables) => set({ deliverables })}
                 placeholder={t('deliverables_placeholder')}
@@ -226,6 +244,7 @@ export function PackageWizard({
               <Label>{t('requirements')}</Label>
               <p className="mb-2 text-xs text-foreground-secondary">{t('requirements_hint')}</p>
               <ListBuilder
+                ref={requirementsRef}
                 items={draft.requirements}
                 onChange={(requirements) => set({ requirements })}
                 placeholder={t('requirements_placeholder')}
@@ -386,7 +405,7 @@ export function PackageWizard({
             {tCommon('back')}
           </Button>
           {step !== 'preview' ? (
-            <Button type="button" onClick={next}>
+            <Button type="button" onClick={next} {...{ [LIST_COMMIT_ATTR]: '' }}>
               {tCommon('continue')}
             </Button>
           ) : (

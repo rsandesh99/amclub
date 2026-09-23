@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { PROVIDER_LANGUAGES, type ProviderLanguage } from '@amclub/shared'
+import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 
-type Lang = 'en' | 'hi'
+type Lang = ProviderLanguage
 
 export interface ProviderProfileInitial {
   displayName: string
@@ -93,19 +95,21 @@ export function ProviderProfileForm({ initial }: { initial: ProviderProfileIniti
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>{t('languages_label')}</Label>
-          <div className="flex gap-2">
-            {(['en', 'hi'] as Lang[]).map((lang) => (
+          <div className="flex flex-wrap gap-2">
+            {PROVIDER_LANGUAGES.map((lang) => (
               <button
                 key={lang}
                 type="button"
                 onClick={() => toggleLang(lang)}
-                className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                lang={lang}
+                aria-pressed={form.languages.includes(lang)}
+                className={`min-h-[44px] rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
                   form.languages.includes(lang)
                     ? 'border-primary bg-primary text-white'
                     : 'border-border text-foreground hover:border-primary'
                 }`}
               >
-                {lang === 'en' ? 'English' : 'हिंदी'}
+                {LOCALE_LABELS[lang]}
               </button>
             ))}
           </div>

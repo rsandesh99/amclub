@@ -488,7 +488,12 @@
     "wa_card_no_number": "Our WhatsApp number will appear here once it is set up.",
     "wa_card_failed": "Could not start the WhatsApp interview. Please try again.",
     "wa_prefill_chip": "From your WhatsApp interview",
-    "wa_prefill_notice": "We prefilled this form from your WhatsApp interview. Check each field before you continue."
+    "wa_prefill_notice": "We prefilled this form from your WhatsApp interview. Check each field before you continue.",
+    "state_placeholder": "— Select state —",
+    "city_placeholder": "e.g. Hyderabad",
+    "bank_holder_placeholder": "As printed on your cheque or passbook",
+    "bank_account_placeholder": "9–18 digits",
+    "bank_verify_failed": "We couldn't verify this bank account. Check the account number, IFSC and holder name, then try again."
   },
   "admin": {
     "verifications_title": "Provider Verifications",
