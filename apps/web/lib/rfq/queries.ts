@@ -2,7 +2,7 @@ import { signRfqAttachments } from '@/lib/rfq/attachments'
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
-import { effectiveCostAfterItcPaise, goodsQuoteMoney, resolveDeclineLocale, rfqQualityDeadline, rfqQualityReportSchema, type ClarificationView, type RfqQualityReport } from '@amclub/shared'
+import { effectiveCostAfterItcPaise, goodsQuoteMoney, QUOTE_STATUS, resolveDeclineLocale, rfqIsActive, rfqQualityDeadline, rfqQualityReportSchema, type ClarificationView, type QuoteStatus, type RfqQualityReport, type RfqStatus } from '@amclub/shared'
 import { RFQ_GOODS_LIST_COLS, QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
 import { countOpenQuestions, listClarifications, rfqsWithMyOpenQuestion } from '@/lib/rfq/clarifications'
 import { getRfqQualityHoldMinutes } from '@/lib/agent/rfq-quality'
@@ -269,40 +269,145 @@ export interface ProviderRfqItem {
   hasUnansweredMine: boolean
   /** S2.2 — when the match was notified (the quote-or-decline window starts here; Munshi's "new since last scan"). */
   notifiedAt: string | null
+  /** This provider's own quote status on the RFQ (null = no quote). */
+  quoteStatus: QuoteStatus | null
+  /** Derived per-provider outcome (never a status) — drives the inbox tabs and badges. */
+  outcome: ProviderRfqOutcome
+  /** Set when outcome = 'won': the order the accepted quote became (null until it materialises). */
+  orderId: string | null
 }
 
-/** RFQs matched to this provider that are still active (open/quoted). */
+/**
+ * What an RFQ means to ONE matched provider — derived from the RFQ status, its
+ * clock, this provider's quote (if any) and their match decline. Never stored:
+ *  open      — can still quote            quoted    — my quote is live
+ *  won       — my quote was accepted      lost      — I quoted; the buyer chose / declined me
+ *  declined  — I declined (or the window lapsed)
+ *  withdrawn — I withdrew my quote        expired   — the request ran out of time
+ *  closed    — awarded / cancelled / full before I quoted
+ */
+export type ProviderRfqOutcome = 'open' | 'quoted' | 'won' | 'lost' | 'declined' | 'withdrawn' | 'expired' | 'closed'
+export type ProviderInboxTab = 'open' | 'quoted' | 'closed'
+export const PROVIDER_INBOX_TABS: readonly ProviderInboxTab[] = ['open', 'quoted', 'closed']
+
+const RFQ_ACCEPTED: RfqStatus = 'accepted'
+const RFQ_EXPIRED: RfqStatus = 'expired'
+
+export function deriveProviderRfqOutcome(input: {
+  rfqStatus: string
+  expiresAt: string
+  quoteCount: number
+  maxQuotes: number
+  quoteStatus: QuoteStatus | null
+  matchDeclined: boolean
+  now?: number
+}): ProviderRfqOutcome {
+  const live = rfqIsActive(input.rfqStatus) && new Date(input.expiresAt).getTime() > (input.now ?? Date.now())
+  switch (input.quoteStatus) {
+    case QUOTE_STATUS.accepted: return 'won'
+    case QUOTE_STATUS.declined: return 'lost'
+    case QUOTE_STATUS.withdrawn: return 'withdrawn'
+    case QUOTE_STATUS.expired: return 'expired'
+    case QUOTE_STATUS.submitted:
+      if (live) return 'quoted'
+      return input.rfqStatus === RFQ_ACCEPTED ? 'lost' : 'expired'
+    default:
+      break
+  }
+  if (input.matchDeclined) return 'declined'
+  if (live) return input.quoteCount < input.maxQuotes ? 'open' : 'closed'
+  return rfqIsActive(input.rfqStatus) || input.rfqStatus === RFQ_EXPIRED ? 'expired' : 'closed'
+}
+
+export function inboxTabFor(outcome: ProviderRfqOutcome): ProviderInboxTab {
+  return outcome === 'open' ? 'open' : outcome === 'quoted' ? 'quoted' : 'closed'
+}
+
+/** One party-scoped load of the provider's matches with their derived outcome (newest match first). */
+async function loadProviderMatches(admin: Awaited<ReturnType<typeof createAdminClient>>, providerId: string, limit: number | null): Promise<ProviderRfqItem[]> {
+  let query = admin
+    .from('rfq_matches')
+    .select('rfq_id, viewed_at, declined_at, notified_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug))')
+    .eq('provider_id', providerId)
+    .order('notified_at', { ascending: false })
+  if (limit != null) query = query.limit(limit)
+  const { data: matches } = await query
+  if (!matches) return []
+
+  // This provider's own quote (id + status) per RFQ, and the order behind any accepted one.
+  const rfqIds = matches.map((m: any) => m.rfq_id)
+  const myQuoteByRfq = new Map<string, { id: string; status: QuoteStatus }>()
+  const orderByQuote = new Map<string, string>()
+  if (rfqIds.length) {
+    const { data: myQuotes } = await admin.from('quotes').select('id, rfq_id, status').eq('provider_id', providerId).in('rfq_id', rfqIds)
+    for (const q of (myQuotes ?? []) as any[]) myQuoteByRfq.set(q.rfq_id, { id: q.id, status: q.status as QuoteStatus })
+    const wonIds = [...myQuoteByRfq.values()].filter((q) => q.status === QUOTE_STATUS.accepted).map((q) => q.id)
+    if (wonIds.length) {
+      const { data: orders } = await admin.from('orders').select('id, quote_id').in('quote_id', wonIds)
+      for (const o of (orders ?? []) as any[]) orderByQuote.set(o.quote_id, o.id)
+    }
+  }
+  // S1.3 — open questions per RFQ + "one of them is mine" (two queries for the whole list).
+  const [open, mineOpen] = await Promise.all([countOpenQuestions(admin, rfqIds), rfqsWithMyOpenQuestion(admin, rfqIds, providerId)])
+
+  return (matches as any[])
+    .filter((m) => m.rfq)
+    .map((m) => {
+      const mine = myQuoteByRfq.get(m.rfq_id) ?? null
+      const outcome = deriveProviderRfqOutcome({
+        rfqStatus: m.rfq.status, expiresAt: m.rfq.expires_at, quoteCount: m.rfq.quote_count, maxQuotes: m.rfq.max_quotes,
+        quoteStatus: mine?.status ?? null, matchDeclined: !!m.declined_at,
+      })
+      return {
+        rfqId: m.rfq_id, title: m.rfq.title, status: m.rfq.status, kind: m.rfq.kind === 'goods' ? 'goods' : 'service', martCategorySlug: m.rfq.mart_category_slug ?? null, categorySlug: m.rfq.category?.slug ?? null,
+        quoteCount: m.rfq.quote_count, maxQuotes: m.rfq.max_quotes, expiresAt: m.rfq.expires_at,
+        viewed: !!m.viewed_at, quoted: !!mine, declined: !!m.declined_at,
+        openQuestions: open.get(m.rfq_id) ?? 0, hasUnansweredMine: mineOpen.has(m.rfq_id),
+        notifiedAt: m.notified_at ?? null,
+        quoteStatus: mine?.status ?? null, outcome,
+        orderId: mine && outcome === 'won' ? orderByQuote.get(mine.id) ?? null : null,
+      } satisfies ProviderRfqItem
+    })
+}
+
+/** RFQs matched to this provider that are still active (open/quoted) — the mobile / Munshi / Support read. */
 export async function listMatchedRfqsForProvider(userId: string): Promise<ProviderRfqItem[]> {
   const admin = await createAdminClient()
   const actor = await resolveActor(admin, userId)
   if (!actor.providerId) return []
+  const all = await loadProviderMatches(admin, actor.providerId, null)
+  return all.filter((m) => rfqIsActive(m.status))
+}
 
-  const { data: matches } = await admin
-    .from('rfq_matches')
-    .select('rfq_id, viewed_at, declined_at, notified_at, rfq:rfqs!inner(id, title, status, quote_count, max_quotes, expires_at' + RFQ_GOODS_LIST_COLS + ', category:categories(slug))')
-    .eq('provider_id', actor.providerId)
-    .order('notified_at', { ascending: false })
-  if (!matches) return []
+/** The inbox scans this many most-recent matches; older history is out of the web list (a sane cap, not a cursor). */
+export const PROVIDER_INBOX_SCAN_LIMIT = 300
+export const PROVIDER_INBOX_PAGE_SIZE = 20
 
-  // Which of these has this provider already quoted on?
-  const rfqIds = matches.map((m: any) => m.rfq_id)
-  const quotedSet = new Set<string>()
-  if (rfqIds.length) {
-    const { data: myQuotes } = await admin.from('quotes').select('rfq_id').eq('provider_id', actor.providerId).in('rfq_id', rfqIds)
-    for (const q of myQuotes ?? []) quotedSet.add((q as any).rfq_id)
-  }
-  // S1.3 — open questions per RFQ + "one of them is mine" (two queries for the whole list).
-  const [open, mineOpen] = await Promise.all([countOpenQuestions(admin, rfqIds), rfqsWithMyOpenQuestion(admin, rfqIds, actor.providerId)])
+export interface ProviderInboxPage {
+  tab: ProviderInboxTab
+  items: ProviderRfqItem[]
+  counts: Record<ProviderInboxTab, number>
+  page: number
+  pageCount: number
+}
 
-  return (matches as any[])
-    .filter((m) => m.rfq && (m.rfq.status === 'open' || m.rfq.status === 'quoted'))
-    .map((m) => ({
-      rfqId: m.rfq_id, title: m.rfq.title, status: m.rfq.status, kind: m.rfq.kind === 'goods' ? 'goods' : 'service', martCategorySlug: m.rfq.mart_category_slug ?? null, categorySlug: m.rfq.category?.slug ?? null,
-      quoteCount: m.rfq.quote_count, maxQuotes: m.rfq.max_quotes, expiresAt: m.rfq.expires_at,
-      viewed: !!m.viewed_at, quoted: quotedSet.has(m.rfq_id), declined: !!m.declined_at,
-      openQuestions: open.get(m.rfq_id) ?? 0, hasUnansweredMine: mineOpen.has(m.rfq_id),
-      notifiedAt: m.notified_at ?? null,
-    }))
+/**
+ * /partner/rfqs — every matched RFQ (history included) with its derived outcome,
+ * split into Open · Quoted · Closed and paged. Won / lost / expired requests stay
+ * visible so the "awarded to another provider" alert lands on a list that has it.
+ */
+export async function listProviderRfqInbox(userId: string, opts: { tab: ProviderInboxTab; page: number }): Promise<ProviderInboxPage> {
+  const empty: ProviderInboxPage = { tab: opts.tab, items: [], counts: { open: 0, quoted: 0, closed: 0 }, page: 1, pageCount: 1 }
+  const admin = await createAdminClient()
+  const actor = await resolveActor(admin, userId)
+  if (!actor.providerId) return empty
+  const all = await loadProviderMatches(admin, actor.providerId, PROVIDER_INBOX_SCAN_LIMIT)
+  const counts: Record<ProviderInboxTab, number> = { open: 0, quoted: 0, closed: 0 }
+  for (const m of all) counts[inboxTabFor(m.outcome)]++
+  const inTab = all.filter((m) => inboxTabFor(m.outcome) === opts.tab)
+  const pageCount = Math.max(1, Math.ceil(inTab.length / PROVIDER_INBOX_PAGE_SIZE))
+  const page = Math.min(Math.max(1, Math.floor(opts.page) || 1), pageCount)
+  return { tab: opts.tab, items: inTab.slice((page - 1) * PROVIDER_INBOX_PAGE_SIZE, page * PROVIDER_INBOX_PAGE_SIZE), counts, page, pageCount }
 }
 
 /**
@@ -360,6 +465,9 @@ export interface RfqDetailForProvider {
   myQuote: ({ id: string; pricePaise: number; deliveryDays: number; scope: string; message: string | null; status: string; goods: QuoteGoodsTerms | null; declineReason: string | null; declineMessage: string | null; revision: number; revisedAt: string | null } & QuoteTerms) | null
   /** S1.3 — the whole thread (every provider's questions); `mine` marks this provider's. Never a provider id. */
   clarifications: ClarificationView[]
+  /** Derived per-provider outcome (same rule as the inbox) + the order a won quote became. */
+  outcome: ProviderRfqOutcome
+  orderId: string | null
 }
 
 /** RFQ detail for a matched provider; marks viewed_at on open. */
@@ -399,7 +507,20 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
   const slotsLeft = r.quote_count < r.max_quotes
   const notExpired = new Date(r.expires_at).getTime() > Date.now()
 
+  const myStatus = ((myQuote as any)?.status ?? null) as QuoteStatus | null
+  const outcome = deriveProviderRfqOutcome({
+    rfqStatus: r.status, expiresAt: r.expires_at, quoteCount: r.quote_count, maxQuotes: r.max_quotes,
+    quoteStatus: myStatus, matchDeclined: !!(match as any).declined_at,
+  })
+  let orderId: string | null = null
+  if (outcome === 'won' && myQuote) {
+    const { data: order } = await admin.from('orders').select('id').eq('quote_id', (myQuote as any).id).limit(1).maybeSingle()
+    orderId = (order as any)?.id ?? null
+  }
+
   return {
+    outcome,
+    orderId,
     id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: await signRfqAttachments(admin, (r.attachments ?? []) as { url: string; name: string }[]),
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
     categorySlug: r.category?.slug ?? null,
