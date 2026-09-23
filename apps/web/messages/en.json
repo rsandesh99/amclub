@@ -2892,7 +2892,10 @@
     "consequence_auto_cancel_refund": "or it auto-cancels with a full refund",
     "consequence_auto_accept": "after that it’s accepted for you",
     "needs_your_action": "Needs your action",
-    "see_all": "See all"
+    "see_all": "See all",
+    "quote_expiring": "Quote from {provider} expires {when}",
+    "quotes_from": "from {price} all-in · compare",
+    "none": "Nothing needs your action right now."
   },
   "dev_ui": {
     "title": "UI v3 — Precision",
@@ -3267,5 +3270,25 @@
     "budget_over25k": "> ₹25,000",
     "need_different": "Need something different?",
     "need_different_cta": "Post a requirement and get quotes"
+  },
+  "home_v3": {
+    "recent_orders": "Recent orders",
+    "see_all": "See all",
+    "saved_providers": "Saved providers",
+    "pickup_heading": "Pick up where you left off",
+    "pickup_draft": "Draft",
+    "pickup_package": "Package",
+    "pickup_provider": "Provider",
+    "draft_untitled": "Your requirement",
+    "buy_again_heading": "Buy again",
+    "buy_again": "Buy again",
+    "buy": "Buy",
+    "price_now": "{now} + GST",
+    "price_then_now": "{then} last time · {now} now (+ GST)",
+    "unavailable": "No longer offered by this provider",
+    "find_similar": "Find similar",
+    "repeat_requirement": "Repeat requirement",
+    "complete_profile": "Complete your business profile so providers can quote accurately",
+    "dismiss": "Hide for a week"
   }
 }

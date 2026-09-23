@@ -2849,7 +2849,10 @@
     "consequence_auto_cancel_refund": "वरना यह पूरे रिफ़ंड के साथ अपने-आप रद्द हो जाएगा",
     "consequence_auto_accept": "उसके बाद यह आपकी ओर से स्वीकार हो जाएगा",
     "needs_your_action": "आपकी कार्रवाई चाहिए",
-    "see_all": "सभी देखें"
+    "see_all": "सभी देखें",
+    "quote_expiring": "{provider} का कोटेशन {when} समाप्त होगा",
+    "quotes_from": "{price} से, सब मिलाकर · तुलना करें",
+    "none": "अभी आपके करने लायक कुछ नहीं है।"
   },
   "dev_ui": {
     "title": "UI v3 — प्रिसिज़न",
@@ -3224,5 +3227,25 @@
     "budget_over25k": "> ₹25,000",
     "need_different": "कुछ अलग चाहिए?",
     "need_different_cta": "ज़रूरत पोस्ट करें और कोटेशन पाएँ"
+  },
+  "home_v3": {
+    "recent_orders": "हाल के ऑर्डर",
+    "see_all": "सभी देखें",
+    "saved_providers": "सहेजे गए प्रदाता",
+    "pickup_heading": "जहाँ छोड़ा था वहीं से शुरू करें",
+    "pickup_draft": "ड्राफ़्ट",
+    "pickup_package": "पैकेज",
+    "pickup_provider": "प्रदाता",
+    "draft_untitled": "आपकी ज़रूरत",
+    "buy_again_heading": "फिर से खरीदें",
+    "buy_again": "फिर से खरीदें",
+    "buy": "खरीदें",
+    "price_now": "{now} + GST",
+    "price_then_now": "पिछली बार {then} · अब {now} (+ GST)",
+    "unavailable": "यह प्रदाता अब यह सेवा नहीं देता",
+    "find_similar": "मिलते-जुलते खोजें",
+    "repeat_requirement": "ज़रूरत दोहराएँ",
+    "complete_profile": "अपनी व्यवसाय प्रोफ़ाइल पूरी करें ताकि प्रदाता सही कोटेशन दे सकें",
+    "dismiss": "एक हफ़्ते के लिए छिपाएँ"
   }
 }

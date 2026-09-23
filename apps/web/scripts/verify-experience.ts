@@ -11,7 +11,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin } from '@amclub/shared'
+import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, type ActionItem, type OrderStatus } from '@amclub/shared'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -758,6 +758,141 @@ async function e6() {
   for (const id of created.rfqIds) await admin.from('quotes').delete().eq('rfq_id', id)
 }
 
+async function e9() {
+  console.log('\nE9 — homes and retention')
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const buyer = await mkUser('e9buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E9 Buyer Co', state: 'MZ', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const prov = await mkUser('e9prov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E9 Rao Associates', display_name: 'E9 Rao Associates', slug: `${tag}-e9prov`, state: 'MZ', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: tax!.id })
+  const { data: pkg } = await admin.from('packages').insert({ provider_id: pp!.id, category_id: tax!.id, slug: `${tag}-e9pkg`, title_i18n: { en: 'E9 GST filing' }, scope_included: ['x'], deliverables: ['y'], price_paise: 1000_00, delivery_days: 5, status: 'active', service_slug: 'gst-filing' }).select('id').single()
+  created.packageIds.push(pkg!.id)
+
+  const now = Date.now()
+  const iso = (ms: number) => new Date(ms).toISOString()
+  const istDate = (ms: number) => new Date(ms + 5.5 * 3600e3).toISOString().slice(0, 10)
+  const mkRfq = async (title: string, status: string, extra: Record<string, unknown> = {}) => {
+    const { data: r } = await admin.from('rfqs').insert({ msme_id: msme!.id, category_id: tax!.id, title, details: {}, status, expires_at: iso(now + 70 * 3600e3), fanout_at: iso(now), ...extra }).select('id').single()
+    created.rfqIds.push(r!.id)
+    return r!.id as string
+  }
+  // One fixture per kind (FR-9.1).
+  const rfqA = await mkRfq('E9 GST returns FY 25-26', 'quoted', { quote_count: 2, expires_at: iso(now + 60 * 3600e3) })
+  // One quote per provider per RFQ (unique): the second quote comes from a second provider.
+  const prov2 = await mkUser('e9prov2', ['provider'])
+  const { data: pp2 } = await admin.from('provider_profiles').insert({ user_id: prov2.uid, legal_name: 'E9 Second Firm', display_name: 'E9 Second Firm', slug: `${tag.replace(/_/g, '-')}-e9prov2`, state: 'MZ', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp2!.id)
+  const { data: qa, error: qaErr } = await admin.from('quotes').insert([
+    { rfq_id: rfqA, provider_id: pp2!.id, price_paise: 4500_00, delivery_days: 3, scope: 'E9 fixture quote scope one', gst_included: false, valid_until: istDate(now + 10 * 86400e3) },
+    { rfq_id: rfqA, provider_id: pp!.id, price_paise: 6000_00, delivery_days: 3, scope: 'E9 fixture quote scope two', gst_included: true, valid_until: istDate(now + 24 * 3600e3) },
+  ]).select('id, price_paise')
+  if (qaErr) throw new Error(`E9 quotes fixture: ${qaErr.message}`)
+  const expiringQuote = (qa ?? []).find((q) => Number(q.price_paise) === 6000_00)?.id
+  const rfqB = await mkRfq('E9 Factory licence', 'open')
+  await admin.from('rfq_clarifications').insert({ rfq_id: rfqB, provider_id: pp!.id, question: 'Which district is the factory in?' })
+  const mkOrder = async (title: string, status: OrderStatus, extra: Record<string, unknown> = {}) => {
+    const { data: o, error } = await admin.from('orders').insert({
+      msme_id: msme!.id, provider_id: pp!.id, source: 'package', package_id: pkg!.id, title, scope_snapshot: {},
+      price_paise: 1000_00, discount_paise: 0, gst_paise: 180_00, total_paise: 1180_00, commission_bps: 1000, commission_paise: 100_00,
+      provider_earning_paise: 900_00, delivery_days: 5, status, ...extra,
+    }).select('id, status, created_at, due_at, auto_accept_at, external_wait_since').single()
+    if (error) throw new Error(`order ${title}: ${error.message}`)
+    created.orderIds.push(o!.id)
+    return o!
+  }
+  const oAccepted = await mkOrder('E9 a Udyam registration', 'accepted')
+  const oDelivered = await mkOrder('E9 b Trademark filing', 'delivered', { auto_accept_at: iso(now + 72 * 3600e3) })
+  const oDisputed = await mkOrder('E9 c Payroll', 'disputed')
+  const oCompleted = await mkOrder('E9 d GST filing monthly', 'completed', { completed_at: iso(now - 5 * 86400e3) })
+  const oPlaced = await mkOrder('E9 e Waiting on provider', 'placed')
+
+  const res = await fetch(`${BASE}/api/v1/me/actions`, { headers: { Authorization: `Bearer ${buyer.token}` } })
+  const json = await res.json()
+  const items = ((json as { buyer?: { items?: ActionItem[] } }).buyer?.items ?? [])
+  check('FR-9.1: /me/actions matches the shared contract (web + mobile read this payload)', res.ok && meActionsSchema.safeParse(json).success)
+  const key = (it: ActionItem) => (it.kind === 'order_action' ? `order:${it.action}` : it.kind)
+  const got = items.map(key).sort()
+  const want = ['clarification_question', 'order:dispute_statement', 'order:leave_review', 'order:review_delivery', 'order:share_requirements', 'quote_expiring', 'quotes_waiting'].sort()
+  check('FR-9.1: exactly one row per fixture kind (the placed order waits on the provider)', JSON.stringify(got) === JSON.stringify(want) && !items.some((i) => i.objectId === oPlaced.id), got.join(','))
+  const dated = items.filter((i) => i.dueAt)
+  check('FR-9.1: deadline order — expiring quote, then the RFQ, then the auto-accept; undated last',
+    dated.map(key).join(',') === 'quote_expiring,quotes_waiting,order:review_delivery' && items.findIndex((i) => !i.dueAt) === dated.length, items.map(key).join(','))
+  const qw = items.find((i) => i.kind === 'quotes_waiting')
+  check('FR-9.1: "from ₹X all-in" = the lowest normalised total (₹4,500 + GST vs ₹6,000 incl.)', qw?.kind === 'quotes_waiting' && qw.fromPaise === 5310_00, String(qw && 'fromPaise' in qw ? qw.fromPaise : ''))
+  const qe = items.find((i) => i.kind === 'quote_expiring')
+  check('FR-9.1: the expiring quote names its provider and the exact quote', qe?.kind === 'quote_expiring' && qe.providerName === 'E9 Rao Associates' && qe.objectId === expiringQuote && qe.href === `/app/rfq/${rfqA}`)
+  const byId = new Map(items.filter((i) => i.kind === 'order_action').map((i) => [i.objectId, i]))
+  const sameRule = [oAccepted, oDelivered, oDisputed, oCompleted].every((o) => {
+    const a = nextAction(o.status as OrderStatus, 'buyer', { createdAt: o.created_at as string, dueAt: o.due_at as string | null, autoAcceptAt: o.auto_accept_at as string | null, externalWaitSince: o.external_wait_since as string | null, ownStatementSubmitted: false })
+    const row = byId.get(o.id as string)
+    return !!a && row?.action === a.action && row.dueAt === a.dueAt
+  })
+  check('FR-9.1: every order row is nextAction’s (what the NextStepBar shows)', sameRule)
+
+  // The home itself (flag `home`).
+  const home = await (await fetch(`${BASE}/app`, { headers: { cookie: buyer.cookie } })).text()
+  const v = visible(home)
+  const block = v.slice(v.indexOf('data-testid="home-actions"'), v.indexOf('data-testid="home-buy-again"'))
+  // Rows can share a link (the expiring quote and its RFQ's quotes both open the RFQ), so search forward.
+  const positions: number[] = []
+  for (const it of items.slice(0, 5)) positions.push(block.indexOf(`href="${it.href}"`, (positions[positions.length - 1] ?? -1) + 1))
+  check('FR-9.1: the home lists the first 5 rows in order, then "See all"', v.includes('data-testid="home-v3"') && positions.every((p) => p >= 0) && block.includes('href="/app/actions"'), positions.join(','))
+  check('FR-9.4: the five tiles are gone; the completeness card stays under 80 %', !v.includes('📨') && !v.includes('📦') && v.includes('data-testid="home-completeness"'))
+  const all = visible(await (await fetch(`${BASE}/app/actions`, { headers: { cookie: buyer.cookie } })).text())
+  check('FR-9.1: "See all" lists every row', all.includes('data-testid="actions-all"') && items.every((i) => all.includes(`href="${i.href}"`)))
+  const me = (await (await fetch(`${BASE}/api/v1/profile/me`, { headers: { Authorization: `Bearer ${buyer.token}` } })).json()) as { homeV3Enabled?: boolean }
+  check('mobile: /profile/me tells the app the home is on', me.homeV3Enabled === true)
+
+  // FR-9.3 — Buy again at today's server price.
+  await admin.from('packages').update({ price_paise: 1200_00 }).eq('id', pkg!.id)
+  const ba = await fetch(`${BASE}/api/v1/orders/${oCompleted.id}/buy-again`, { headers: { Authorization: `Bearer ${buyer.token}` } })
+  const bj = (await ba.json()) as { kind?: string; packageId?: string; priceChanged?: boolean; displayThen?: { taxablePaise: number; totalPaise: number }; displayNow?: Record<string, unknown>; href?: string }
+  const expectNow = priceDisplay({ pricePaise: 1200_00, discountBps: 0 })
+  check('FR-9.3: buy again → the same package, both prices (₹1,000 then · ₹1,200 now)', ba.ok && bj.kind === 'package' && bj.packageId === pkg!.id && bj.priceChanged === true && bj.displayThen?.taxablePaise === 1000_00 && bj.displayThen.totalPaise === 1180_00 && JSON.stringify(bj.displayNow) === JSON.stringify(expectNow) && bj.href === `/app/checkout/${pkg!.id}`)
+  const home2 = visible(await (await fetch(`${BASE}/app`, { headers: { cookie: buyer.cookie } })).text())
+  check('FR-9.3: the home shelf shows both prices', home2.includes('data-testid="buy-again-price-changed"') && home2.includes('₹1,000') && home2.includes('₹1,200') && home2.includes(`href="/app/checkout/${pkg!.id}"`))
+  const orderPage = visible(await (await fetch(`${BASE}/app/orders/${oCompleted.id}`, { headers: { cookie: buyer.cookie } })).text())
+  check('FR-9.3: the finished order offers Buy again', orderPage.includes('data-testid="order-buy-again"'))
+  const co = await api(buyer.token, '/api/v1/checkout', { packageId: bj.packageId, idempotencyKey: crypto.randomUUID() })
+  const cj = (await co.json()) as { amountPaise?: number; checkoutSessionId?: string }
+  check('FR-9.3: checkout charges the NEW server price', co.ok && cj.amountPaise === expectNow.totalPaise, `amount ${cj.amountPaise}`)
+  if (cj.checkoutSessionId) await admin.from('checkout_sessions').delete().eq('id', cj.checkoutSessionId)
+  check('FR-9.3: an unfinished order → 409', (await fetch(`${BASE}/api/v1/orders/${oAccepted.id}/buy-again`, { headers: { Authorization: `Bearer ${buyer.token}` } })).status === 409)
+  const other = await mkUser('e9other')
+  const { data: om } = await admin.from('msme_profiles').insert({ user_id: other.uid, business_name: 'E9 Other', state: 'MZ', sector: 'services' }).select('id').single()
+  created.msmeIds.push(om!.id)
+  check('FR-9.3: someone else’s order → 404', (await fetch(`${BASE}/api/v1/orders/${oCompleted.id}/buy-again`, { headers: { Authorization: `Bearer ${other.token}` } })).status === 404)
+  await admin.from('provider_profiles').update({ capacity_paused: true }).eq('id', pp!.id)
+  const sim = (await (await fetch(`${BASE}/api/v1/orders/${oCompleted.id}/buy-again`, { headers: { Authorization: `Bearer ${buyer.token}` } })).json()) as { kind?: string; searchHref?: string }
+  await admin.from('provider_profiles').update({ capacity_paused: false }).eq('id', pp!.id)
+  check('FR-9.3: a paused provider → "Find similar" in search, prefilled with the service', sim.kind === 'similar' && (sim.searchHref ?? '').startsWith('/app/search?') && (sim.searchHref ?? '').includes('service=gst-filing'), sim.searchHref)
+
+  // FR-9.3 — Repeat requirement for a quote order: the repost with service, band and must-haves.
+  const rfqC = await mkRfq('E9 Monthly GST returns for our unit', 'accepted', { details: { notes: 'GSTR-1 and 3B every month', service_slug: 'gst-filing' }, budget_min_paise: 200_000, budget_max_paise: 500_000, must_haves: { credentials: ['icai'], languages: [], onSite: false, inStateOnly: true } })
+  const { data: qc } = await admin.from('quotes').insert({ rfq_id: rfqC, provider_id: pp!.id, price_paise: 3000_00, delivery_days: 5, scope: 'E9 fixture accepted quote', status: 'accepted' }).select('id').single()
+  const oQuote = await mkOrder('E9 f Monthly GST (quote)', 'completed', { source: 'quote', package_id: null, quote_id: qc!.id, completed_at: iso(now - 86400e3) })
+  const { data: beforeC } = await admin.from('rfqs').select('title, details, status, must_haves, budget_min_paise, budget_max_paise, updated_at').eq('id', rfqC).single()
+  const rep = (await (await fetch(`${BASE}/api/v1/orders/${oQuote.id}/buy-again`, { headers: { Authorization: `Bearer ${buyer.token}` } })).json()) as { kind?: string; href?: string }
+  check('FR-9.3: a quote order → "Repeat requirement" (the repost)', rep.kind === 'repeat' && rep.href === `/app/rfq/new?from=${rfqC}&entry=buy_again`)
+  const form = await (await fetch(`${BASE}${rep.href}`, { headers: { cookie: buyer.cookie } })).text()
+  const attr = (html: string, name: string) => html.match(new RegExp(`${name}="([^"]*)"`))?.[1] ?? null
+  check('FR-9.3: the form copies category, service, budget band and must-haves',
+    attr(form, 'data-entry') === 'buy_again' && attr(form, 'data-prefill-category') === 'tax-accounting' && attr(form, 'data-prefill-service') === 'gst-filing' && attr(form, 'data-prefill-band') === '2kto5k' && (attr(form, 'data-prefill-must-haves') ?? '').includes('icai'))
+  const again = await api(buyer.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: beforeC!.title, details: beforeC!.details, budget_min_paise: 200_000, budget_max_paise: 500_000, must_haves: beforeC!.must_haves })
+  const aj = (await again.json()) as { rfqId?: string; matched?: number }
+  if (aj.rfqId) created.rfqIds.push(aj.rfqId)
+  const { data: afterC } = await admin.from('rfqs').select('title, details, status, must_haves, budget_min_paise, budget_max_paise, updated_at').eq('id', rfqC).single()
+  check('FR-9.3: repeating creates a NEW requirement that fans out; the original is unchanged', again.ok && !!aj.rfqId && aj.rfqId !== rfqC && (aj.matched ?? 0) >= 1 && JSON.stringify(afterC) === JSON.stringify(beforeC), `status ${again.status}, matched ${aj.matched}`)
+
+  // Quote orders reference quotes: remove this section's orders, then the quotes.
+  for (const id of created.orderIds) { await admin.from('order_events').delete().eq('order_id', id); await admin.from('orders').delete().eq('id', id) }
+  for (const id of created.rfqIds) await admin.from('quotes').delete().eq('rfq_id', id)
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -769,6 +904,7 @@ async function main() {
     await e2b(fx)
     await e5()
     await e6()
+    await e9()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

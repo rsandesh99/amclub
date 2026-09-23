@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/i18n'
 import { fetchUnreadCount, fetchMe } from '@/lib/api'
 import { LocaleToggle } from '@/components/LocaleToggle'
 import { HeroBanner } from '@/components/HeroBanner'
+import { HomeV3Block } from '@/components/HomeV3Block'
 import { CATEGORY_LIST, pickLocale } from '@amclub/shared'
 
 export default function HomeScreen() {
@@ -17,6 +18,7 @@ export default function HomeScreen() {
   const [unread, setUnread] = useState(0)
   const [supportEnabled, setSupportEnabled] = useState(false)
   const [assistantEnabled, setAssistantEnabled] = useState(false)
+  const [homeV3, setHomeV3] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -25,6 +27,8 @@ export default function HomeScreen() {
       setSupportEnabled(me?.supportEnabled === true)
       // S3.1 — the buying assistant for an enabled, cohorted buyer (the server decides; the routes 404 for everyone else)
       setAssistantEnabled(me?.procurementEnabled === true)
+      // Experience v3 E9 — the server decides (flag `home`).
+      setHomeV3(me?.homeV3Enabled === true)
     })()
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserName((user?.user_metadata?.['full_name'] as string | undefined) ?? '')
@@ -91,6 +95,9 @@ export default function HomeScreen() {
             <Text className="text-xs font-semibold text-white">{t('catalog.search_btn')}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Experience v3 E9 — needs your action + buy again (the same payload as the web home) */}
+        {homeV3 && <HomeV3Block />}
 
         {/* CMS hero (MOBILE_PARITY §3) — same /api/v1/cms/banners content as web */}
         <HeroBanner />

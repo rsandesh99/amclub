@@ -2,7 +2,7 @@
  *  API as web (§ Phase 3). Auth'd calls attach the Supabase access token. */
 import Constants from 'expo-constants'
 import { supabase } from './supabase'
-import type { PriceDisplay, ProfileMeResponse, QuoteExtractResponse } from '@amclub/shared'
+import type { BuyAgain, MeActions, PriceDisplay, ProfileMeResponse, QuoteExtractResponse } from '@amclub/shared'
 
 const API_URL =
   (Constants.expoConfig?.extra?.['apiUrl'] as string | undefined) ??
@@ -264,6 +264,29 @@ export async function fetchMe(): Promise<Partial<ProfileMeResponse> | null> {
     return (await res.json()) as Partial<ProfileMeResponse>
   } catch {
     return null
+  }
+}
+
+/** N2 / E9 — what needs the buyer's action (the same payload as the web home). null on failure. */
+export async function fetchMyActions(): Promise<MeActions | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/me/actions`, { headers: await authHeaders() })
+    if (!res.ok) return null
+    return (await res.json()) as MeActions
+  } catch {
+    return null
+  }
+}
+
+/** E9 FR-9.3 — the "Buy again" shelf (server prices; 404 while the `home` flag is off → []). */
+export async function fetchBuyAgainShelf(): Promise<BuyAgain[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/me/buy-again`, { headers: await authHeaders() })
+    if (!res.ok) return []
+    const d = (await res.json()) as { items?: BuyAgain[] }
+    return d.items ?? []
+  } catch {
+    return []
   }
 }
 

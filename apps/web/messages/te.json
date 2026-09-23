@@ -1239,7 +1239,10 @@
     "consequence_auto_cancel_refund": "లేకపోతే పూర్తి రీఫండ్‌తో ఆటోమేటిక్‌గా రద్దవుతుంది",
     "consequence_auto_accept": "ఆ తర్వాత మీ తరఫున అంగీకరించబడుతుంది",
     "needs_your_action": "మీ చర్య అవసరం",
-    "see_all": "అన్నీ చూడండి"
+    "see_all": "అన్నీ చూడండి",
+    "quote_expiring": "{provider} కొటేషన్ {when} గడువు ముగుస్తుంది",
+    "quotes_from": "{price} నుండి, అన్నీ కలిపి · పోల్చండి",
+    "none": "ప్రస్తుతం మీరు చేయాల్సింది ఏమీ లేదు."
   },
   "public_nav": {
     "services": "సేవలు",
@@ -1569,5 +1572,25 @@
     "budget_over25k": "> ₹25,000",
     "need_different": "ఇంకేదైనా కావాలా?",
     "need_different_cta": "అవసరాన్ని పోస్ట్ చేసి కోట్‌లు పొందండి"
+  },
+  "home_v3": {
+    "recent_orders": "ఇటీవలి ఆర్డర్లు",
+    "see_all": "అన్నీ చూడండి",
+    "saved_providers": "సేవ్ చేసిన ప్రొవైడర్లు",
+    "pickup_heading": "ఆపిన చోట నుండి కొనసాగించండి",
+    "pickup_draft": "డ్రాఫ్ట్",
+    "pickup_package": "ప్యాకేజీ",
+    "pickup_provider": "ప్రొవైడర్",
+    "draft_untitled": "మీ అవసరం",
+    "buy_again_heading": "మళ్ళీ కొనండి",
+    "buy_again": "మళ్ళీ కొనండి",
+    "buy": "కొనండి",
+    "price_now": "{now} + GST",
+    "price_then_now": "గతసారి {then} · ఇప్పుడు {now} (+ GST)",
+    "unavailable": "ఈ ప్రొవైడర్ ఇకపై దీన్ని అందించడం లేదు",
+    "find_similar": "ఇలాంటివి వెతకండి",
+    "repeat_requirement": "అవసరాన్ని మళ్ళీ పంపండి",
+    "complete_profile": "ప్రొవైడర్లు సరిగ్గా కోట్ చేయడానికి మీ వ్యాపార ప్రొఫైల్ పూర్తి చేయండి",
+    "dismiss": "ఒక వారం దాచండి"
   }
 }

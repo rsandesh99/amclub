@@ -34,6 +34,7 @@ import type { IntakeResult, VoiceMetaClarify } from '@amclub/shared'
 import { QualityQuestionsCard } from '@/components/rfq/QualityQuestionsCard'
 import type { RfqQualityReport } from '@amclub/shared'
 import { INDIAN_STATES } from '@/lib/constants/india'
+import { RFQ_DRAFT_KEY } from './draft-key'
 
 export interface RfqCategoryOption {
   slug: string
@@ -41,7 +42,7 @@ export interface RfqCategoryOption {
   fields: RfqTemplateField[]
 }
 
-const DRAFT_KEY = 'amclub_rfq_draft'
+const DRAFT_KEY = RFQ_DRAFT_KEY
 const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
 
 /** Experience v3 E6 — what the page hands the v3 form (flag `requirements`). */
@@ -100,7 +101,7 @@ function specLabel(slug: string): string {
 }
 
 /** "Repost with edits" — fields copied from one of the buyer's own earlier RFQs (loaded server-side, RLS-scoped). */
-export type RfqPrefill = Pick<DraftState, 'categorySlug' | 'title' | 'details' | 'budgetMin' | 'budgetMax'> & { service?: string }
+export type RfqPrefill = Pick<DraftState, 'categorySlug' | 'title' | 'details' | 'budgetMin' | 'budgetMax'> & { service?: string; budgetBand?: RfqBudgetBand; mustHaves?: RfqMustHaves }
 
 export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3 }: { categories: RfqCategoryOption[]; documentIntakeEnabled?: boolean; prefill?: RfqPrefill | undefined; v3?: RfqFormV3 | undefined }) {
   const t = useTranslations('rfq')

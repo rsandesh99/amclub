@@ -62,3 +62,24 @@ export function priceDisplay(input: {
 
 /** Percent for "18 % GST" from basis points (never money). */
 export const gstPercent = (bps: number): number => Math.round(bps / 100)
+
+/**
+ * E9 (FR-9.3) — the same shape for what an order ACTUALLY charged, read from
+ * its stored amounts (never recomputed): "₹1,000 last time" on Buy again.
+ * `discountPaise` already includes any coupon the buyer used then.
+ */
+export function orderPriceDisplay(o: { pricePaise: number; discountPaise: number; gstPaise: number; totalPaise: number }): PriceDisplay {
+  const taxablePaise = o.pricePaise - o.discountPaise
+  return {
+    listPaise: o.pricePaise,
+    discountPaise: o.discountPaise,
+    taxablePaise,
+    gstPaise: o.gstPaise,
+    gstBps: taxablePaise > 0 ? Math.round((o.gstPaise * 10000) / taxablePaise) : DEFAULT_GST_BPS,
+    totalPaise: o.totalPaise,
+    itcPaise: null,
+    discountPct: o.pricePaise > 0 ? Math.round((o.discountPaise * 100) / o.pricePaise) : 0,
+    memberPaise: null,
+    memberExtraPct: 0,
+  }
+}

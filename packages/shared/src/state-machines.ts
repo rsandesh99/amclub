@@ -88,6 +88,9 @@ export const ORDER_DONE_STATUSES: readonly OrderStatus[] = ['completed', 'review
  *  lasting choice (Experience v3 FR-4.6 "Most chosen" leaves them out). */
 export const ORDER_UNCHOSEN_STATUSES: readonly OrderStatus[] = ['auto_cancelled', 'cancelled_by_buyer', 'cancelled_duplicate', 'refunded']
 
+/** E9 (FR-9.3) — a finished order the buyer can buy again / repeat: completed, with or without a review. */
+export const ORDER_REPEATABLE_STATUSES: readonly OrderStatus[] = ['completed', 'reviewed']
+
 /** Statuses from which a payout is permitted (§3.7). */
 export const PAYOUT_RELEASE_STATUSES: readonly OrderStatus[] = [
   'completed',

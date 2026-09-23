@@ -1592,6 +1592,31 @@ Compare quotes · GST returns FY 25-26                 Shortlisted only ☐     
 
 **RICE:** R 0.7 · I 1 · C 0.8 · E 2.5 → **0.22**. The D-PRD5 part isn't scored until counsel and the CA answer.
 
+**As built (E9a: home, buy again, repeat requirement).** E9 ships as two PRs: E9a is this one; E9b adds licences, reminders and the obligations checklist (D-PRD5, dark).
+- **Action rows.** `actionItemSchema` is now a discriminated union.
+  - `quotes_waiting` carries `fromPaise`, the lowest `compareQuotes` total.
+  - The new `quote_expiring` kind is a submitted quote whose `valid_until` (an IST date, ending 23:59:59 IST) falls within 48 h. It carries `providerName`.
+  - Order rows stay `order_action` with the N23 key (`share_requirements`, `review_delivery`, `dispute_statement`, `leave_review`), so the home and the order page read one rule.
+  - The PRD's `answer_clarification` is the existing `clarification_question`.
+  - The new data appears only while `home` is on for the user, so E1's badges are unchanged with the flag off.
+- **Buy again.**
+  - `GET /api/v1/orders/[id]/buy-again` is read-only and returns one of three kinds:
+    - `package`: `displayThen` from the order's stored amounts (`orderPriceDisplay`, coupon included) and `displayNow` from `priceDisplay` today.
+    - `similar`: the package, its provider or its capacity is paused or gone. It links to search prefilled with the category and service.
+    - `repeat`: a quote order.
+  - Buying is an ordinary checkout. `verify-money-loop` checks that a buy-again checkout session is identical to a fresh Buy-now session at the new price.
+  - `GET /api/v1/me/buy-again` serves the shelf (up to 4 packages, one row per package, newest first) to web and mobile.
+  - Finished statuses are `ORDER_REPEATABLE_STATUSES` (completed, reviewed).
+- **Repeat requirement.** It uses the existing repost, `/app/rfq/new?from=<rfq>&entry=buy_again`. With E6 on, the repost also copies the service (`details.service_slug`), the budget band (`budgetBandOf`) and the must-haves. Needed-by stays cleared. The page itself stays `/app/rfq/new`; the `/app/requirements/*` rename belongs to the E1 IA work.
+- **Home.**
+  - Sections: Needs your action (≤ 5, "See all" → `/app/actions`), Pick up where you left off, Buy again, the CMS banner, recent orders (3) and saved providers (4).
+  - The pick-up shelf is client-side because the requirement draft lives on the device (`amclub_rfq_draft`) and the recent items merge local and account lists.
+  - Dismissing the completeness card hides it for 7 days on this device.
+  - The five tiles are gone. Help and Assistant stay as two small links when their agents are on.
+  - A new buyer with no orders and no actions sees one card: Explore services or Post a requirement.
+- **Order page.** A finished services order shows Buy again, Repeat requirement or Find similar.
+- **Mobile.** `/profile/me.homeV3Enabled` turns on `HomeV3Block`, which shows Needs your action and Buy again from the same two payloads as web.
+
 ---
 
 ### E10: Provider onboarding v3

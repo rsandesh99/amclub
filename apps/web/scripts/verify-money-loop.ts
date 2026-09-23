@@ -179,6 +179,36 @@ async function main() {
     check('payout marked paid with a transfer id', payoutAfter?.status === 'paid' && Boolean(payoutAfter?.razorpay_transfer_id))
   }
 
+  // ── E9 FR-9.3 (PRD Experience v3): "Buy again" is an ordinary Buy-now order at today's price ──
+  console.log('\nE9 — buy again = a fresh Buy-now checkout at today’s server price:')
+  const buyAgainUrl = `${BASE}/api/v1/orders/${o1}/buy-again`
+  const bearer = { authorization: `Bearer ${buyerToken}` }
+  if ((await fetch(buyAgainUrl, { headers: bearer })).status === 404) {
+    console.log('  ⏭ buy-again legs SKIPPED (EXP_V3_HOME is off for this server)')
+  } else {
+    await admin.from('packages').update({ price_paise: 600000 }).eq('id', packageId)
+    try {
+      const now = computeOrderAmounts({ pricePaise: 600000, discountBps: 1000, commissionBps })
+      const { data: o1row } = await admin.from('orders').select('total_paise').eq('id', o1).single()
+      const b = (await (await fetch(buyAgainUrl, { headers: bearer })).json()) as { kind?: string; packageId?: string; priceChanged?: boolean; displayThen?: { totalPaise: number }; displayNow?: { totalPaise: number } }
+      check('buy-again offers the same package with both prices (then = the order, now = today)', b.kind === 'package' && b.packageId === packageId && b.priceChanged === true && b.displayThen?.totalPaise === Number(o1row!.total_paise) && b.displayNow?.totalPaise === now.totalPaise)
+      const start = async () => {
+        const res = await fetch(`${BASE}/api/v1/checkout`, { method: 'POST', headers: { 'content-type': 'application/json', ...bearer }, body: JSON.stringify({ packageId: b.packageId, idempotencyKey: randomUUID() }) })
+        return (await res.json().catch(() => ({}))) as { checkoutSessionId?: string; amountPaise?: number }
+      }
+      const again = await start()
+      const fresh = await start()
+      const cols = 'source, package_id, quote_id, price_paise, discount_paise, gst_paise, total_paise, commission_bps, commission_paise, provider_earning_paise, delivery_days, revision_max'
+      const { data: sa } = await admin.from('checkout_sessions').select(cols).eq('id', again.checkoutSessionId ?? '').maybeSingle()
+      const { data: sf } = await admin.from('checkout_sessions').select(cols).eq('id', fresh.checkoutSessionId ?? '').maybeSingle()
+      check('a buy-again checkout is identical to a fresh Buy-now checkout', !!sa && JSON.stringify(sa) === JSON.stringify(sf))
+      check('… and charges today’s server price (not the old order’s)', again.amountPaise === now.totalPaise && Number(sa?.total_paise) === now.totalPaise)
+      for (const id of [again.checkoutSessionId, fresh.checkoutSessionId]) if (id) await admin.from('checkout_sessions').delete().eq('id', id)
+    } finally {
+      await admin.from('packages').update({ price_paise: 500000 }).eq('id', packageId)
+    }
+  }
+
   // ── DC 6: refund on pre-accept cancel ──
   console.log('\nDC6 — pre-accept cancel = 100% refund:')
   const o2 = await makePaidOrder(commissionBps)

@@ -59,7 +59,7 @@ export function GroupedRow({
     </>
   )
   const cls = cn('grouped-row flex w-full items-center gap-3 px-4 text-left', (href || onClick) && 'transition-colors hover:bg-foreground/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary', className)
-  if (href) return <Link href={href as '/app'} className={cls}>{body}</Link>
+  if (href) return <Link href={href as '/app'} onClick={onClick} className={cls}>{body}</Link>
   if (onClick) return <button type="button" onClick={onClick} className={cls}>{body}</button>
   return <div className={cls}>{body}</div>
 }

@@ -21,7 +21,8 @@ const TYPE = ['t-large-title', 't-title-1', 't-title-2', 't-title-3', 't-headlin
 
 const NOW = Date.now()
 const SAMPLE_ACTIONS: ActionItem[] = [
-  { kind: 'quotes_waiting', objectId: 'r1', title: 'GST returns FY 25-26', action: null, count: 3, dueAt: new Date(NOW + 30 * 3600e3).toISOString(), href: '/admin/dev/ui' },
+  { kind: 'quote_expiring', objectId: 'q1', title: 'Factory licence', action: null, count: null, dueAt: new Date(NOW + 20 * 3600e3).toISOString(), href: '/admin/dev/ui', providerName: 'Rao Associates' },
+  { kind: 'quotes_waiting', objectId: 'r1', title: 'GST returns FY 25-26', action: null, count: 3, dueAt: new Date(NOW + 30 * 3600e3).toISOString(), href: '/admin/dev/ui', fromPaise: 531000 },
   { kind: 'order_action', objectId: 'o1', title: 'Trademark filing', action: 'review_delivery', count: null, dueAt: new Date(NOW + 70 * 3600e3).toISOString(), href: '/admin/dev/ui' },
   { kind: 'order_action', objectId: 'o2', title: 'Udyam registration', action: 'share_requirements', count: null, dueAt: null, href: '/admin/dev/ui' },
 ]
