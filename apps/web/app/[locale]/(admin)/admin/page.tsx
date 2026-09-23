@@ -18,6 +18,11 @@ const CRON_JOBS = [
   { name: 'reconcile', staleAfterMs: 14 * 3600_000 },
   { name: 'payouts', staleAfterMs: 26 * 3600_000 },
   { name: 'provider-stats', staleAfterMs: 26 * 3600_000 },
+  // Agent crons beat even while AGENT_ENABLED=false (they only skip the enqueue).
+  { name: 'agent-munshi-scan', staleAfterMs: 1 * 3600_000 },
+  { name: 'agent-munshi-followup', staleAfterMs: 3 * 3600_000 },
+  { name: 'agent-onboarding-expire', staleAfterMs: 3 * 3600_000 },
+  // pool-close is omitted: it deliberately records no beat while MART_ENABLED=false.
 ]
 
 export default function AdminDashboardPage() {
