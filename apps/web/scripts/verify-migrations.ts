@@ -260,6 +260,12 @@ const MANIFEST: Entry[] = [
     triggers: [['users', 'users_roles_guard']],
     note: 'Security hotfix: users owner policy is SELECT-only, INSERT/UPDATE/DELETE revoked from anon + authenticated, users_roles_guard refuses a roles change by a client role (closes self-promotion to admin)',
   },
+  {
+    file: '0043_party_write_guards.sql',
+    tables: ['messages', 'conversations', 'order_events', 'audit_logs', 'agent_events'],
+    triggers: [['audit_logs', 'audit_logs_no_update']],
+    note: 'Security follow-up (P0-2/3/10/12): conversations + messages parties READ only (writes service-role; no client edit/delete/unmasked insert); order_events parties-insert dropped + INSERT revoked (no forged events); audit_logs append-only (raise_append_only trigger + REVOKE); agent_events self-read excludes injection_suspected (detector internals admin-only). Policies/grants are proven by verify-authz §7c',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

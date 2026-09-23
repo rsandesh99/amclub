@@ -50,7 +50,7 @@ const eq = (name: string, actual: unknown, expected: unknown) => {
   ok ? pass++ : fail++
 }
 
-const created = { users: [] as string[], msmeIds: [] as string[], providerIds: [] as string[], packageIds: [] as string[], orderIds: [] as string[], rfqIds: [] as string[] }
+const created = { users: [] as string[], msmeIds: [] as string[], providerIds: [] as string[], packageIds: [] as string[], orderIds: [] as string[], rfqIds: [] as string[], agentRunIds: [] as string[] }
 
 async function mkUser(label: string, roles: string[]): Promise<{ uid: string; token: string }> {
   const email = `${tag}_${label}@killtest.amclub`
@@ -567,6 +567,92 @@ async function main() {
     eq('after escalation attempts: buyerB roles unchanged', JSON.stringify((bRow as { roles: string[] } | null)?.roles ?? null), JSON.stringify(['msme']))
     denied('buyerB GET admin API after attempts', (await api(buyerB.token, '/api/v1/admin/kpi', undefined, 'GET')).status)
 
+    // ── 7c. Party write guards (0043) — P0-2 messages, P0-3 order_events,
+    //        P0-10 audit_logs, P0-12 agent_events detector internals ──────────
+    console.log('Party write guards (0043, direct PostgREST):')
+    {
+      const aBuyer = asUser(buyerA.token)
+      const aProv = asUser(provA.token)
+      const aAdmin = asUser(adminUser.token)
+
+      // P0-2 — the quote thread §5 wrote (buyerA → provA's quote), attacked by both parties.
+      if (quoteId) {
+        const { data: convo } = await admin.from('conversations').select('id').eq('context_type', 'quote').eq('context_id', quoteId).maybeSingle()
+        eq('quote thread from §5 exists', Boolean(convo), true)
+        if (convo) {
+          const thread = () => admin.from('messages').select('id, sender_id, body, redacted').eq('conversation_id', convo.id).order('created_at', { ascending: true })
+          const before = (await thread()).data ?? []
+          const msg = before[0]
+          eq('buyerA direct-reads OWN thread (≥1 message)', ((await aBuyer.from('messages').select('id').eq('conversation_id', convo.id)).data ?? []).length >= 1, true)
+          eq('provA direct-reads the thread it is party to (≥1 message)', ((await aProv.from('messages').select('id').eq('conversation_id', convo.id)).data ?? []).length >= 1, true)
+          deniedRows('buyerB direct-reads A’s thread', await bClient.from('messages').select('id').eq('conversation_id', convo.id))
+          if (msg) {
+            deniedRows('provA UPDATEs buyerA’s message (un-redact)', await aProv.from('messages').update({ body: 'call me on 9876543210', redacted: false }).eq('id', msg.id).select('id'))
+            deniedRows('buyerA UPDATEs OWN message', await aBuyer.from('messages').update({ body: 'edited after the fact' }).eq('id', msg.id).select('id'))
+            deniedRows('provA DELETEs buyerA’s message', await aProv.from('messages').delete().eq('id', msg.id).select('id'))
+            deniedRows('buyerA DELETEs OWN message', await aBuyer.from('messages').delete().eq('id', msg.id).select('id'))
+          }
+          deniedRows('buyerA INSERTs an unmasked message directly (skips the route’s mask)', await aBuyer.from('messages').insert({ conversation_id: convo.id, sender_id: buyerA.uid, body: 'call me on 9876543210', redacted: false }).select('id'))
+          deniedRows('provA INSERTs a message as buyerA (spoofed sender)', await aProv.from('messages').insert({ conversation_id: convo.id, sender_id: buyerA.uid, body: 'I accept, pay outside' }).select('id'))
+          deniedRows('provA DELETEs the conversation (messages would cascade)', await aProv.from('conversations').delete().eq('id', convo.id).select('id'))
+          deniedRows('buyerA re-points the conversation', await aBuyer.from('conversations').update({ context_id: crypto.randomUUID() }).eq('id', convo.id).select('id'))
+          const after = (await thread()).data ?? []
+          eq('after tamper attempts: thread byte-identical', JSON.stringify(after), JSON.stringify(before))
+        }
+      } else {
+        console.log('  (skipped message checks — no quote id)')
+      }
+
+      // P0-3 — no client can append to an order timeline, whatever event/actor it claims.
+      const evCount = async () => ((await admin.from('order_events').select('id').eq('order_id', orderA)).data ?? []).length
+      const nEvents = await evCount()
+      eq('buyerA direct-reads OWN order_events (parties read kept)', ((await aBuyer.from('order_events').select('id').eq('order_id', orderA)).data ?? []).length >= 1, true)
+      deniedRows('buyerA INSERTs a forged payout_paid as provA', await aBuyer.from('order_events').insert({ order_id: orderA, actor_id: provA.uid, event: 'payout_paid', payload: { tag } }).select('id'))
+      deniedRows('provA INSERTs a forged manual_refund as the admin', await aProv.from('order_events').insert({ order_id: orderA, actor_id: adminUser.uid, event: 'manual_refund', payload: { amount_paise: 1 } }).select('id'))
+      deniedRows('buyerA INSERTs an event as itself', await aBuyer.from('order_events').insert({ order_id: orderA, actor_id: buyerA.uid, event: 'completed' }).select('id'))
+      deniedRows('admin JWT INSERTs order_events directly (routes use the service role)', await aAdmin.from('order_events').insert({ order_id: orderA, actor_id: adminUser.uid, event: 'manual_refund' }).select('id'))
+      eq('after forgery attempts: order_events count unchanged', await evCount(), nEvents)
+
+      // P0-10 — audit_logs is append-only: UPDATE raises for every role, clients cannot write.
+      const { data: auditRow, error: auditErr } = await admin
+        .from('audit_logs')
+        .insert({ actor_id: adminUser.uid, action: 'killtest_append_only', entity: 'users', entity_id: adminUser.uid, after: { tag } })
+        .select('id')
+        .single()
+      eq('service role appends an audit row', auditErr?.message ?? null, null)
+      if (auditRow) {
+        eq('admin direct-reads the audit row (admin read kept)', ((await aAdmin.from('audit_logs').select('id').eq('id', auditRow.id)).data ?? []).length, 1)
+        deniedRows('admin JWT UPDATEs audit_logs', await aAdmin.from('audit_logs').update({ action: 'rewritten' }).eq('id', auditRow.id).select('id'))
+        deniedRows('admin JWT DELETEs audit_logs', await aAdmin.from('audit_logs').delete().eq('id', auditRow.id).select('id'))
+        const svcUpd = await admin.from('audit_logs').update({ action: 'rewritten' }).eq('id', auditRow.id)
+        eq('append-only: UPDATE audit_logs raises even for service role', Boolean(svcUpd.error), true)
+        const { data: still } = await admin.from('audit_logs').select('action').eq('id', auditRow.id).maybeSingle()
+        eq('audit row unchanged after tamper attempts', still?.action, 'killtest_append_only')
+      }
+      deniedRows('buyerB INSERTs a forged audit row', await bClient.from('audit_logs').insert({ actor_id: buyerB.uid, action: 'provider_set_bank_verified', entity: 'provider_profiles', entity_id: provAId }).select('id'))
+      deniedRows('admin JWT INSERTs audit_logs directly', await aAdmin.from('audit_logs').insert({ actor_id: adminUser.uid, action: 'forged', entity: 'users', entity_id: adminUser.uid }).select('id'))
+
+      // P0-12 — the run owner never sees the detector's score/hits; admins still do.
+      const { data: run, error: runErr } = await admin
+        .from('agent_runs')
+        .insert({ user_id: buyerB.uid, persona: 'buyer', surface: 'web', meta: { tag } })
+        .select('id')
+        .single()
+      eq('service role opens a run for buyerB', runErr?.message ?? null, null)
+      if (run) {
+        created.agentRunIds.push(run.id)
+        const { error: evErr } = await admin.from('agent_events').insert([
+          { run_id: run.id, kind: 'started', actor: 'system' },
+          { run_id: run.id, kind: 'injection_suspected', actor: 'system', payload: { provenance: { kind: 'rfq', id: tag }, score: 80, hits: ['ignore_previous'], prompt: 'rfq_parse@v1' } },
+        ])
+        eq('service role appends started + injection_suspected', evErr?.message ?? null, null)
+        const own = await bClient.from('agent_events').select('kind').eq('run_id', run.id)
+        eq('owner reads own run events → started only', JSON.stringify((own.data ?? []).map((e) => e.kind)), JSON.stringify(['started']))
+        deniedRows('owner direct-reads injection_suspected (detector score/hits)', await bClient.from('agent_events').select('payload').eq('run_id', run.id).eq('kind', 'injection_suspected'))
+        eq('admin reads the injection_suspected event (ops keep detector detail)', ((await aAdmin.from('agent_events').select('id').eq('run_id', run.id).eq('kind', 'injection_suspected')).data ?? []).length, 1)
+      }
+    }
+
     // ── 8. Phase 2: terms_acceptances (append-only, self-read) + signup gate ──
     console.log('Phase 2 — terms_acceptances + signup gate:')
     const buyerC = await mkUser('buyerC', ['msme'])
@@ -594,6 +680,7 @@ async function main() {
     // checkout_sessions FK-reference orders → drop sessions first. Also sweep
     // orders by msme_id so any leak-created order (untracked) is caught.
     await del('sessions', admin.from('checkout_sessions').delete().in('package_id', created.packageIds))
+    if (created.agentRunIds.length) await del('agent_runs', admin.from('agent_runs').delete().in('id', created.agentRunIds)) // cascades agent_events
     if (created.msmeIds.length) {
       const { data: extra } = await admin.from('orders').select('id').in('msme_id', created.msmeIds)
       for (const o of extra ?? []) if (!created.orderIds.includes(o.id)) created.orderIds.push(o.id)

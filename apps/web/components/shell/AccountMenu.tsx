@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { cn } from '@/lib/utils'
+import { purgeClientCaches } from '@/lib/pwa/purge-caches'
 
 export type ShellContext = 'msme' | 'provider' | 'admin' | 'public'
 
@@ -55,6 +56,8 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin }: Ac
     } catch {
       /* storage unavailable — sign-out still proceeds */
     }
+    // P0-6: nothing of this session may survive in Cache Storage (shared devices).
+    await purgeClientCaches()
     // Hard navigation clears all cached server state.
     window.location.href = '/'
   }

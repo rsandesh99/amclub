@@ -6,6 +6,7 @@ import { LEGAL_DOC_PATHS, LEGAL_VERSIONS, type LegalDoc } from '@amclub/shared'
 import { Link, useRouter } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
+import { purgeClientCaches } from '@/lib/pwa/purge-caches'
 
 /**
  * Re-acceptance gate for EXISTING users (Phase 2b). On every authenticated
@@ -89,6 +90,7 @@ export function LegalGate() {
           type="button"
           onClick={async () => {
             await createClient().auth.signOut()
+            await purgeClientCaches() // P0-6: shared devices
             router.push('/login')
           }}
           className="mt-3 block w-full text-center text-xs text-foreground-secondary underline underline-offset-2 hover:text-primary"

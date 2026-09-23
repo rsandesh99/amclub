@@ -404,9 +404,13 @@ REVOKE INSERT, UPDATE, DELETE ON agent_runs FROM anon, authenticated;
 
 ALTER TABLE agent_events ENABLE ROW LEVEL SECURITY;
 
+-- 0043 (P0-12): injection_suspected events (detector score + hits) are admin-only.
 DROP POLICY IF EXISTS "agent_events: self read" ON agent_events;
 CREATE POLICY "agent_events: self read" ON agent_events
-  FOR SELECT USING (run_id IN (SELECT id FROM agent_runs WHERE user_id = auth_user_id()));
+  FOR SELECT USING (
+    kind <> 'injection_suspected'
+    AND run_id IN (SELECT id FROM agent_runs WHERE user_id = auth_user_id())
+  );
 
 DROP POLICY IF EXISTS "agent_events: admin read" ON agent_events;
 CREATE POLICY "agent_events: admin read" ON agent_events
@@ -716,19 +720,15 @@ CREATE POLICY "order_events: parties read" ON order_events
     )
   );
 
+-- 0043 (P0-3): no client inserts. Every event is written by the service role
+-- (transitions, payout, disputes, routes) or materialize_order (SECURITY
+-- DEFINER); the old parties-insert policy let a party forge any event/actor.
 DROP POLICY IF EXISTS "order_events: parties insert" ON order_events;
-CREATE POLICY "order_events: parties insert" ON order_events
-  FOR INSERT WITH CHECK (
-    order_id IN (
-      SELECT id FROM orders
-      WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
-         OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
-    )
-  );
-
 DROP POLICY IF EXISTS "order_events: admin all" ON order_events;
-CREATE POLICY "order_events: admin all" ON order_events
-  FOR ALL USING (has_role('admin') OR has_role('ops'));
+DROP POLICY IF EXISTS "order_events: admin read" ON order_events;
+CREATE POLICY "order_events: admin read" ON order_events
+  FOR SELECT USING (has_role('admin') OR has_role('ops'));
+REVOKE INSERT, UPDATE, DELETE ON order_events FROM anon, authenticated;
 
 -- ─── order_milestones & order_documents ───────────────────────────────────────
 
@@ -846,22 +846,30 @@ CREATE POLICY "reviews: admin all" ON reviews
 
 -- ─── conversations & messages ──────────────────────────────────────────────────
 
+-- 0043 (P0-2): parties READ only. The one writer is the quote-messages route
+-- (service role, contact mask applied before insert); a client write could
+-- edit/delete the other side's messages, skip the mask, or delete the
+-- conversation (messages cascade).
 DROP POLICY IF EXISTS "conversations: parties all" ON conversations;
-CREATE POLICY "conversations: parties all" ON conversations
-  FOR ALL USING (
+DROP POLICY IF EXISTS "conversations: parties read" ON conversations;
+CREATE POLICY "conversations: parties read" ON conversations
+  FOR SELECT USING (
     msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
     OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
   );
+REVOKE INSERT, UPDATE, DELETE ON conversations FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "messages: parties all" ON messages;
-CREATE POLICY "messages: parties all" ON messages
-  FOR ALL USING (
+DROP POLICY IF EXISTS "messages: parties read" ON messages;
+CREATE POLICY "messages: parties read" ON messages
+  FOR SELECT USING (
     conversation_id IN (
       SELECT id FROM conversations
       WHERE msme_id IN (SELECT id FROM msme_profiles WHERE user_id = auth_user_id())
          OR provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())
     )
   );
+REVOKE INSERT, UPDATE, DELETE ON messages FROM anon, authenticated;
 
 -- ─── saved_providers ──────────────────────────────────────────────────────────
 
@@ -922,6 +930,14 @@ CREATE POLICY "invoices: admin all" ON invoices
 DROP POLICY IF EXISTS "audit_logs: admin read" ON audit_logs;
 CREATE POLICY "audit_logs: admin read" ON audit_logs
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
+
+-- 0043 (P0-10): append-only, same posture as order_events (0019). The service
+-- role keeps DELETE for kill-test cleanup; UPDATE raises for everyone.
+DROP TRIGGER IF EXISTS audit_logs_no_update ON audit_logs;
+CREATE TRIGGER audit_logs_no_update
+  BEFORE UPDATE ON audit_logs
+  FOR EACH ROW EXECUTE FUNCTION raise_append_only();
+REVOKE INSERT, UPDATE, DELETE ON audit_logs FROM anon, authenticated;
 
 -- ─── cms_banners ──────────────────────────────────────────────────────────────
 

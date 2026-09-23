@@ -1,7 +1,9 @@
 /**
  * Phase 8 §5 — PWA verification: manifest + icons reachable, service worker
- * registers and controls the page, orders list readable from cache offline
- * (read-only, §3.8), offline shell for unvisited pages, offline banner shows.
+ * registers and controls the page, offline banner shows, offline shell for
+ * every page. P0-6 (USER_EXPECTATIONS_AUDIT): nothing user-specific is cached
+ * (a visited authed page comes back as the offline shell, never a cached
+ * copy), and sign-out purges Cache Storage (the worker re-caches the shell).
  *
  * Run against a production `next start` (SW registers only in production):
  *   BASE_URL=http://localhost:3100 tsx scripts/verify-pwa.ts
@@ -81,28 +83,86 @@ async function main() {
     const controlled = await page.evaluate(() => !!navigator.serviceWorker.controller)
     check('page controlled by SW after reload', controlled)
 
-    // 3. Visit orders (authed) so its HTML lands in the SW cache.
+    // Everything in Cache Storage, by cache name + path (P0-6 audit).
+    const cacheAudit = () =>
+      page.evaluate(async () => {
+        const out: { cache: string; path: string }[] = []
+        for (const name of await caches.keys()) {
+          const c = await caches.open(name)
+          for (const req of await c.keys()) out.push({ cache: name, path: new URL(req.url).pathname })
+        }
+        return out
+      })
+    const isStatic = (p: string) =>
+      p === '/offline.html' || p.startsWith('/_next/static/') || p.startsWith('/icons/') || /.(?:png|jpg|jpeg|svg|webp|woff2?)$/.test(p)
+
+    check('SW cache is the P0-6 version (amclub-sw-v2)', (await cacheAudit()).some((e) => e.cache === 'amclub-sw-v2'))
+
+    // 3. Visit orders (authed) + hit the orders/notifications APIs v1 used to cache.
     await page.goto(`${BASE}/app/orders`, { waitUntil: 'networkidle' })
     const ordersVisible = page.url().includes('/app/orders')
     check('orders list loads (authed)', ordersVisible, page.url())
+    await page.evaluate(async () => {
+      await Promise.all(['/api/v1/orders', '/api/v1/notifications'].map((u) => fetch(u).catch(() => null)))
+    })
+    const leaked = (await cacheAudit()).filter((e) => !isStatic(e.path))
+    check('nothing user-specific cached (no page / API entries)', leaked.length === 0, leaked.map((e) => e.path).join(', '))
 
-    // 4. Airplane mode: orders page must still render from cache (read-only).
+    // 4. Connectivity drops on a loaded page → banner.
     await ctx.setOffline(true)
-    await page.goto(`${BASE}/app/orders`, { waitUntil: 'load', timeout: 20_000 }).catch(() => {})
-    const offlineOrdersHtml = await page.content()
-    check(
-      'orders list readable OFFLINE from cache',
-      offlineOrdersHtml.includes('orders') || offlineOrdersHtml.includes('Orders') || offlineOrdersHtml.includes('ऑर्डर'),
-    )
     const bannerVisible = await page.locator('[role="status"]').isVisible().catch(() => false)
     check('offline banner shows', bannerVisible)
 
-    // 5. Unvisited page while offline → offline shell.
+    // 5. Airplane mode: a VISITED authed page must NOT come back from cache —
+    //    the next person on a shared device would read it (P0-6).
+    await page.goto(`${BASE}/app/orders`, { waitUntil: 'load', timeout: 20_000 }).catch(() => {})
+    const offlineTitle = await page.title().catch(() => '')
+    check('visited authed page OFFLINE → offline shell, not a cached copy', /^Offline/.test(offlineTitle), offlineTitle)
+
+    // 6. Unvisited page while offline → offline shell.
     await page.goto(`${BASE}/help?nocache=${Date.now()}`, { waitUntil: 'load', timeout: 20_000 }).catch(() => {})
     const shellHtml = await page.content()
     check('offline shell for unvisited page', /You.?re offline/i.test(shellHtml))
 
+    // 7. Sign-out purges Cache Storage. Seed what a v1 worker would have left
+    //    (a cached authed page + API body), then sign out through the real menu.
     await ctx.setOffline(false)
+    // Accept terms + privacy first, or the LegalGate modal covers the account menu.
+    const accepted = await page.request.post(`${BASE}/api/v1/legal/accept`, { data: { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' } })
+    check('legal accept for the fixture user → 200', accepted.ok(), `status ${accepted.status()}`)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto(`${BASE}/app/orders`, { waitUntil: 'networkidle' })
+    await page.evaluate(async () => {
+      await (await caches.open('amclub-sw-v1')).put('/app/orders', new Response('<p>previous user orders</p>', { headers: { 'Content-Type': 'text/html' } }))
+      await (await caches.open('amclub-sw-v2')).put('/api/v1/orders', new Response('{"orders":[]}', { headers: { 'Content-Type': 'application/json' } }))
+    })
+    check('legacy user entries seeded', (await cacheAudit()).filter((e) => !isStatic(e.path)).length === 2)
+    let signedOut = true
+    try {
+      await page.locator('button[aria-haspopup="menu"]').first().click({ timeout: 10_000 })
+      await Promise.all([
+        page.waitForURL((u) => new URL(u).pathname === '/', { timeout: 20_000 }),
+        page.getByRole('menuitem', { name: /sign out|साइन आउट/i }).click({ timeout: 10_000 }),
+      ])
+    } catch (e) {
+      signedOut = false
+      console.log(`    sign-out click failed: ${(e as Error).message.split('\n')[0]}`)
+    }
+    check('signed out through the account menu (landed on /)', signedOut)
+    const afterSignOut = await cacheAudit()
+    check('sign-out: no cache from the old worker survives', !afterSignOut.some((e) => e.cache === 'amclub-sw-v1'))
+    check(
+      'sign-out: no page / API entries survive',
+      afterSignOut.filter((e) => !isStatic(e.path)).length === 0,
+      afterSignOut.filter((e) => !isStatic(e.path)).map((e) => e.path).join(', '),
+    )
+    // The worker re-precaches the offline shell after its purge (async; poll briefly).
+    let shellBack = false
+    for (let i = 0; i < 20 && !shellBack; i++) {
+      shellBack = (await cacheAudit()).some((e) => e.path === '/offline.html')
+      if (!shellBack) await page.waitForTimeout(250)
+    }
+    check('sign-out: offline shell re-cached by the worker', shellBack)
   } finally {
     await browser.close()
     await admin.from('msme_profiles').delete().eq('user_id', u.user.id)

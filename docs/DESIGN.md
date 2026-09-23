@@ -345,7 +345,7 @@ Payout to provider releases ONLY from `completed` or `resolved_release/partial`.
 - **Empty RFQ quotes (pending):** timeline showing "Sent to 12 providers · usually replies within 24h".
 - **Empty search results:** "No providers yet for this in {state}" + CTA "Post a requirement instead" (RFQ funnel rescue) + relax-filters suggestion.
 - **Payment failure:** order NOT created; sheet shows retry + support link; abandoned-checkout nudge after 1h (one only).
-- **Offline (PWA):** cached shell + "You're offline" banner; orders list served from cache read-only.
+- **Offline (PWA):** cached offline shell + "You're offline" banner. Pages and API data are never cached, and sign-out purges Cache Storage, so a shared device keeps nothing of the previous user (USER_EXPECTATIONS_AUDIT P0-6; this replaced the earlier read-only cached orders list).
 - **Provider unverified:** dashboard shows verification checklist with per-item status, not a dead end.
 - **Skeletons everywhere** listings/cards load; never spinner-on-white.
 - **Clarification thread empty (S1.3):** "No questions yet" inside the card, with the "visible to all providers who received this request" hint; never a blank card.
