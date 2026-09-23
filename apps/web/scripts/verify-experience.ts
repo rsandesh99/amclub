@@ -1223,6 +1223,94 @@ async function e11b() {
   }
 }
 
+async function e11c() {
+  console.log('\nE11c — insights (privacy gates), tenders + GeM checklist (dark)')
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const { data: gov } = await admin.from('categories').select('id').eq('slug', 'government-licensing').single()
+  const buyer = await mkUser('e11cbuyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E11c Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  const mkProv = async (label: string, display: string, cat: string) => {
+    const u = await mkUser(label, ['provider'])
+    const { data: pp } = await admin.from('provider_profiles').insert({ user_id: u.uid, legal_name: display, display_name: display, slug: `${tag.replace(/_/g, '-')}-${label}`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+    created.providerIds.push(pp!.id)
+    await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: cat })
+    return { ...u, providerId: pp!.id as string }
+  }
+  const me = await mkProv('e11cme', 'E11c Me', tax!.id)
+  const rival = await mkProv('e11crival', 'E11c Rival Secret Co', tax!.id)
+  const govProv = await mkProv('e11cgov', 'E11c Licensing', gov!.id)
+  const rfqs: string[] = []
+  const alerts: string[] = []
+  const { data: gem } = await admin.from('cms_pages').select('id').eq('slug', 'gem-seller-checklist').single()
+  let restoreTenders: (() => Promise<void>) | null = null
+  try {
+    // Five RFQs I lost on price by 20 % (₹12,000 + GST vs the winner's ₹10,000 + GST), and three declined on price.
+    for (let i = 0; i < 5; i++) {
+      const { data: r } = await admin.from('rfqs').insert({ msme_id: msme!.id, category_id: tax!.id, title: `E11c lost ${i}`, details: {}, status: 'accepted', fanout_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400e3).toISOString() }).select('id').single()
+      rfqs.push(r!.id)
+      created.rfqIds.push(r!.id)
+      await admin.from('quotes').insert([
+        // A buyer decline as the decline route writes it (status, reason, who, when — the funnel reads updated_at).
+        { rfq_id: r!.id, provider_id: me.providerId, price_paise: 12_000_00, delivery_days: 5, scope: 'E11c my quote scope text here', gst_included: false, status: i < 3 ? 'declined' : 'submitted', ...(i < 3 ? { decline_reason: 'price_high', declined_by: 'buyer', declined_at: new Date().toISOString(), updated_at: new Date().toISOString() } : {}) },
+        { rfq_id: r!.id, provider_id: rival.providerId, price_paise: 10_000_00, delivery_days: 5, scope: 'E11c rival quote scope text', gst_included: false, status: 'accepted' },
+      ])
+    }
+    const { data: pkg } = await admin.from('packages').insert({ provider_id: me.providerId, category_id: tax!.id, slug: `${tag.replace(/_/g, '-')}-e11cpkg`, title_i18n: { en: 'E11c listing' }, scope_included: ['x'], deliverables: ['y'], price_paise: 1000_00, delivery_days: 5, status: 'active' }).select('id').single()
+    created.packageIds.push(pkg!.id)
+    await admin.from('view_counts_daily').insert({ subject_kind: 'package', subject_id: pkg!.id, provider_id: me.providerId, day: new Date().toISOString().slice(0, 10), views: 3 })
+
+    const ins = await fetch(`${BASE}/api/v1/partner/insights?range=30d`, { headers: { Authorization: `Bearer ${me.token}` } })
+    const raw = await ins.text()
+    const j = JSON.parse(raw) as { loss?: { price?: { n: number; of: number; medianPct: number | null } }; declineReasons?: { reason: string; n: number }[]; listings?: { views: number }[] }
+    check('FR-11.5: "lost on price by a median of 20 %" from n = 5', ins.ok && j.loss?.price?.n === 5 && j.loss.price.medianPct === 20, JSON.stringify(j.loss))
+    check('FR-11.5: decline reasons show at n ≥ 3', (j.declineReasons ?? []).some((d) => d.reason === 'price_high' && d.n === 3), JSON.stringify(j.declineReasons))
+    check('FR-11.5: deltas only — no other provider’s name or price, no composite score', !raw.includes('Rival Secret') && !raw.includes('1180000') && !raw.includes('1000000') && !/score/i.test(raw))
+    check('FR-11.5: listing performance counts views', (j.listings ?? []).some((l) => l.views === 3))
+    // Below the gate: drop to four losses and the median disappears (the count stays).
+    await admin.from('quotes').delete().eq('rfq_id', rfqs[4]!)
+    const j4 = (await (await fetch(`${BASE}/api/v1/partner/insights?range=30d`, { headers: { Authorization: `Bearer ${me.token}` } })).json()) as { loss?: { price?: { n: number; medianPct: number | null } } }
+    check('FR-11.5: n < 5 → the count only, never a median', j4.loss?.price?.n === 4 && j4.loss.price.medianPct === null)
+    const page = visible(await (await fetch(`${BASE}/partner/insights`, { headers: { cookie: me.cookie } })).text())
+    check('FR-11.5: /partner/insights renders the weekly bars and listings', page.includes('data-testid="weekly-bars"') && page.includes('data-testid="listing-performance"') && !page.includes('Rival Secret'))
+
+    // Tenders + GeM — dark by default.
+    // (provider) has a loading boundary, so a page redirect streams: assert the page itself never renders.
+    check('D9: tenders are dark (feedback 404, no tenders page)', (await api(govProv.token, `/api/v1/partner/tenders/${crypto.randomUUID()}/feedback`, { verdict: 'saved' })).status === 404 && !visible(await (await fetch(`${BASE}/partner/tenders`, { headers: { cookie: govProv.cookie } })).text()).includes('data-testid="tenders-page"'))
+    restoreTenders = await setSetting('tenders_enabled', true)
+    const day = (d: number) => new Date(Date.now() + d * 86400e3 + 5.5 * 3600e3).toISOString().slice(0, 10)
+    const { data: al } = await admin.from('tender_alerts').insert([
+      { source: 'e11c', source_ref: `${tag}-a1`, title: 'E11c Supply of fire safety audit services', department: 'TS Fire Services', value_band: '5l_to_25l', closes_on: day(10), portal_url: 'https://tender.telangana.gov.in/', category_slugs: ['government-licensing'], states: ['TS'] },
+      { source: 'e11c', source_ref: `${tag}-a2`, title: 'E11c Karnataka only', department: 'KA', closes_on: day(10), portal_url: 'https://kppp.karnataka.gov.in/', category_slugs: ['government-licensing'], states: ['KA'] },
+      { source: 'e11c', source_ref: `${tag}-a3`, title: 'E11c Closed yesterday', department: 'TS', closes_on: day(-1), portal_url: 'https://tender.telangana.gov.in/', category_slugs: ['government-licensing'], states: [] },
+    ]).select('id, source_ref')
+    for (const a of al ?? []) alerts.push(a.id as string)
+    const a1 = (al ?? []).find((a) => (a.source_ref as string).endsWith('-a1'))!.id as string
+    const tp = await (await fetch(`${BASE}/partner/tenders`, { headers: { cookie: govProv.cookie } })).text()
+    const tv = visible(tp)
+    const shown = (al ?? []).filter((a) => tv.includes(`data-alert="${a.id}"`)).map((a) => (a.source_ref as string).slice(-2))
+    check('FR-11.6: alerts matched by category + state, open ones only', JSON.stringify(shown) === JSON.stringify(['a1']), shown.join(','))
+    check('FR-11.6: alerts only — no form, no bid / apply / submit control', !/<form/i.test(tv) && !/>\s*(Bid|Apply|Submit)\b/i.test(tv) && tv.includes('https://tender.telangana.gov.in/'))
+    check('FR-11.6: a provider outside government & licensing is not eligible', visible(await (await fetch(`${BASE}/partner/tenders`, { headers: { cookie: me.cookie } })).text()).includes('data-testid="tenders-not-eligible"'))
+    const fb = await api(govProv.token, `/api/v1/partner/tenders/${a1}/feedback`, { verdict: 'not_relevant' })
+    const after = visible(await (await fetch(`${BASE}/partner/tenders`, { headers: { cookie: govProv.cookie } })).text())
+    check('FR-11.6: "Not relevant" is stored and hides the alert', fb.ok && !after.includes(`data-alert="${a1}"`))
+    const gemPage = async () => visible(await (await fetch(`${BASE}/partner/tenders/gem-checklist`, { headers: { cookie: govProv.cookie } })).text())
+    const unreviewed = await gemPage()
+    await admin.from('cms_pages').update({ reviewed_by: 'E11c reviewer', reviewed_at: new Date().toISOString() }).eq('id', gem!.id)
+    const fresh = await gemPage()
+    await admin.from('cms_pages').update({ reviewed_at: new Date(Date.now() - 200 * 86400e3).toISOString() }).eq('id', gem!.id)
+    const stale = await gemPage()
+    check('FR-11.6: the GeM checklist shows only within 180 days of review', unreviewed.includes('data-testid="gem-unavailable"') && fresh.includes('data-testid="gem-reviewed"') && fresh.includes('E11c reviewer') && stale.includes('data-testid="gem-unavailable"'))
+  } finally {
+    if (restoreTenders) await restoreTenders()
+    await admin.from('cms_pages').update({ reviewed_by: null, reviewed_at: null }).eq('id', gem!.id)
+    if (alerts.length) await admin.from('tender_alerts').delete().in('id', alerts)
+    await admin.from('view_counts_daily').delete().eq('provider_id', me.providerId)
+    for (const id of rfqs) await admin.from('quotes').delete().eq('rfq_id', id)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1239,6 +1327,7 @@ async function main() {
     await e10()
     await e11a()
     await e11b()
+    await e11c()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

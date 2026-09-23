@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, boolean, integer, timestamp, jsonb, bigint,
+  pgTable, uuid, text, boolean, integer, timestamp, jsonb, bigint, date,
   unique, primaryKey, check, index,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
@@ -262,4 +262,43 @@ export const cmsBanners = pgTable('cms_banners', {
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
+})
+
+// Experience v3 E11c (0057; FR-11.6, N30 — gated by D9, dark): tender alerts
+// (alerts only; service role), a provider's Save / Not relevant, and reviewed
+// CMS pages (the GeM seller checklist; readable only within 180 days of review).
+export const tenderAlerts = pgTable('tender_alerts', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  source: text('source').notNull(),
+  sourceRef: text('source_ref').notNull(),
+  title: text('title').notNull(),
+  department: text('department').notNull(),
+  valueBand: text('value_band'),
+  closesOn: date('closes_on').notNull(),
+  portalUrl: text('portal_url').notNull(),
+  categorySlugs: text('category_slugs').array().default(sql`'{}'`).notNull(),
+  states: text('states').array().default(sql`'{}'`).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => [unique('tender_alerts_source_uniq').on(table.source, table.sourceRef)])
+
+export const tenderFeedback = pgTable('tender_feedback', {
+  providerId: uuid('provider_id').references(() => providerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  alertId: uuid('alert_id').references(() => tenderAlerts.id, { onDelete: 'cascade' }).notNull(),
+  verdict: text('verdict').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [primaryKey({ columns: [table.providerId, table.alertId] })])
+
+export const cmsPages = pgTable('cms_pages', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  slug: text('slug').notNull().unique(),
+  titleI18n: jsonb('title_i18n').notNull(),
+  bodyI18n: jsonb('body_i18n').notNull(),
+  reviewedBy: text('reviewed_by'),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 })

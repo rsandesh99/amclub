@@ -192,6 +192,12 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E11 / N28b (D2): the inbox shows "Buyer verified ✓" (a boolean only — Udyam or GSTIN verified AND at least one paid order on AMClub). No buyer id, name, count or contact before a quote; fan-out and the 7-quote cap are unchanged. Turn on only after D2.',
   },
+  // ── Experience v3 E11c — tender alerts + the GeM seller checklist (FR-11.6, N30; gated by D9 + its mini-PRD) ──
+  tenders_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E11c / N30 (D9): /partner/tenders — tender ALERTS matched by category + state for verified government-licensing providers (Save / Not relevant; the official portal link) and the reviewed GeM checklist. No bidding, applying or submitting inside AMClub. Turn on only after D9 and the mini-PRD settle the data source and its licence.',
+  },
   // ── S3.2 fair price ranges (benchmarks) — compute and display are separate switches, both OFF; the formula is code ──
   benchmark_compute_enabled: {
     schema: z.boolean(),
