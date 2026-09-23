@@ -1969,6 +1969,19 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
   - The beacon `POST /api/v1/views` fires from the provider and package pages while the `partner` experience is live. It skips bots and the owner, and counts a visitor (IP + UA) once per subject per IST day through the `viewOnce` limiter, with an IP cap.
 - **Privacy checks.** `verify-authz` checks that view counts are readable only by their provider. The inbox privacy checks run in the experience rig: they need a cookie session and the flag.
 
+**As built (E11b: quote form v3 and the server preview).** Insights, listing performance and the gated tenders / GeM checklist follow in E11c.
+- **One number per quote (ADR-017).**
+  - Shared `quoteChargeAmounts` is the one rule: included → carve GST out (ADR-015); extra or unstated → GST on top.
+  - Checkout's quote branch now calls it. This is a refactor, and checkout behaviour is unchanged.
+  - `compareQuotes` now adds GST for an **unstated** quote too, as checkout always charged it. The `gst_unstated` flag stays, and the retired note was "GST unstated — not added".
+  - A shared test pins preview = compare = checkout for `gst_included` true / false / null. The rig checks it end to end.
+- **Preview.** `POST /api/v1/rfq/[id]/quote/preview` is matched providers only, rate-limited, with no write. It returns "Buyer sees ₹X + 18 % GST = ₹Y all-in" (or "₹Y, GST included") and "You receive ≈ ₹E … paid 2 days after the buyer accepts", at the RFQ category's current commission.
+- **Form** (`QuoteComposer` `v3`, services only; revise stays v2).
+  - Required marks, and GST as a required Extra / Included control. "Not applicable" waits for ADR-016.
+  - Transport as Extra / Included / N/A. Valid-until presets for 3 / 7 / 14 days plus a date. Advance chips 0 / 20 / 50 / custom.
+  - "What's included" starts from a scaffold, and the preview updates under the price.
+- **Munshi.** The inline draft keeps S2.2's path (`munshi_draft_id`, `ai_decisions`).
+
 ---
 
 ### E12: Order-value extensions (the ADR track)

@@ -3399,5 +3399,24 @@
     "col_needed_by": "कब तक",
     "col_quotes": "कोटेशन",
     "col_closes": "बंद होगा"
+  },
+  "quote_v3": {
+    "gst": "GST",
+    "gst_extra": "अलग से",
+    "gst_included": "शामिल",
+    "gst_na_note": "“लागू नहीं” GST-छूट पंजीकरण के साथ आएगा।",
+    "transport": "परिवहन",
+    "transport_extra": "अलग से",
+    "transport_included": "शामिल",
+    "transport_na": "लागू नहीं",
+    "valid_until": "कब तक मान्य",
+    "days": "{n} दिन",
+    "advance": "अग्रिम",
+    "custom": "अपना",
+    "included": "क्या शामिल है",
+    "scaffold": "शामिल:\n- \nशामिल नहीं:\n- \nआपको साझा करना होगा:\n- ",
+    "buyer_sees_extra": "ख़रीदार को दिखेगा {price} + {pct} % GST = {total} कुल",
+    "buyer_sees_included": "ख़रीदार {total} कुल देगा (GST {gst} शामिल)",
+    "you_receive": "AMClub शुल्क के बाद आपको ≈ {amount} मिलेंगे · ख़रीदार की स्वीकृति के {days} दिन बाद भुगतान"
   }
 }

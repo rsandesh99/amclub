@@ -1107,5 +1107,24 @@
     "col_needed_by": "தேவைப்படும் தேதி",
     "col_quotes": "மேற்கோள்கள்",
     "col_closes": "முடிவு"
+  },
+  "quote_v3": {
+    "gst": "GST",
+    "gst_extra": "கூடுதலாக",
+    "gst_included": "உள்ளடக்கியது",
+    "gst_na_note": "“பொருந்தாது” GST-விலக்கு பதிவுடன் வரும்.",
+    "transport": "போக்குவரத்து",
+    "transport_extra": "கூடுதலாக",
+    "transport_included": "உள்ளடக்கியது",
+    "transport_na": "பொருந்தாது",
+    "valid_until": "செல்லுபடியாகும் தேதி",
+    "days": "{n} நா",
+    "advance": "முன்பணம்",
+    "custom": "தனிப்பயன்",
+    "included": "என்ன உள்ளடக்கம்",
+    "scaffold": "உள்ளடக்கம்:\n- \nஉள்ளடக்கப்படாதவை:\n- \nநீங்கள் பகிர வேண்டியவை:\n- ",
+    "buyer_sees_extra": "வாங்குபவர் பார்ப்பது {price} + {pct} % GST = {total} மொத்தம்",
+    "buyer_sees_included": "வாங்குபவர் {total} மொத்தம் செலுத்துவார் (GST {gst} உள்ளடக்கம்)",
+    "you_receive": "AMClub கட்டணத்திற்குப் பிறகு உங்களுக்கு ≈ {amount} · வாங்குபவர் ஏற்ற {days} நாட்களுக்குப் பிறகு பணம்"
   }
 }

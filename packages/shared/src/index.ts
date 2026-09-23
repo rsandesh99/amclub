@@ -50,6 +50,7 @@ export * from './home-v3'
 export * from './licences'
 export * from './provider-onboarding-v3'
 export * from './partner-v3'
+export * from './quote-v3'
 
 // N9 — public measured stats (gated; never the composite score)
 export * from './public-stats'

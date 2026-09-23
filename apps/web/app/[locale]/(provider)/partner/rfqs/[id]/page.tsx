@@ -28,6 +28,8 @@ import { munshiDraftForComposer } from '@/lib/agent/munshi'
 import { getBenchmarkFor } from '@/lib/benchmarks/view'
 import { BenchmarkLine } from '@/components/rfq/BenchmarkLine'
 import { RfqExtrasV3, RFQ_V3_DETAIL_KEYS } from '@/components/rfq/RfqExtrasV3'
+import { isOnFor } from '@/lib/experiments'
+import { todayIST } from '@/lib/agent/quote-extract'
 
 export default async function ProviderRfqPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ munshi?: string }> }) {
   const { id } = await params
@@ -198,7 +200,13 @@ export default async function ProviderRfqPage({ params, searchParams }: { params
         </div>
       ) : rfq.canQuote ? (
         <div className="space-y-3">
-          <QuoteComposer rfqId={rfq.id} goods={goods ?? undefined} extractEnabled={extractEnabled} {...(munshi ? { initial: { ...munshi.initial, message: null }, munshiDraftId: munshi.draftId } : {})} />
+          <QuoteComposer
+            rfqId={rfq.id}
+            goods={goods ?? undefined}
+            extractEnabled={extractEnabled}
+            {...(munshi ? { initial: { ...munshi.initial, message: null }, munshiDraftId: munshi.draftId } : {})}
+            {...(!goods && isOnFor('partner', user.id) ? { v3: { todayIst: todayIST(), scaffold: (await getTranslations('quote_v3'))('scaffold'), entry: munshi ? ('munshi' as const) : ('inbox' as const) } } : {})}
+          />
           {/* S0.4 quote-or-decline: an honest "no" beside "Quote". */}
           <div className="flex justify-end gap-2">
             <DeclineRfqButton rfqId={rfq.id} />

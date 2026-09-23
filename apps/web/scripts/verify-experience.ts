@@ -11,7 +11,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, autofilledFields, type ActionItem, type GstinAutofill, type OrderStatus } from '@amclub/shared'
+import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, autofilledFields, quotePreview, type ActionItem, type GstinAutofill, type OrderStatus } from '@amclub/shared'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -1159,6 +1159,65 @@ async function e11a() {
   }
 }
 
+async function e11b() {
+  console.log('\nE11b — quote form v3 + the server preview (one number per quote, ADR-017)')
+  const { data: tax } = await admin.from('categories').select('id, commission_bps').eq('slug', 'tax-accounting').single()
+  const buyer = await mkUser('e11bbuyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E11b Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const mkProv = async (label: string) => {
+    const u = await mkUser(label, ['provider'])
+    const { data: pp } = await admin.from('provider_profiles').insert({ user_id: u.uid, legal_name: label, display_name: label, slug: `${tag.replace(/_/g, '-')}-${label}`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+    created.providerIds.push(pp!.id)
+    return { ...u, providerId: pp!.id as string }
+  }
+  const p1 = await mkProv('e11bp1')
+  const p2 = await mkProv('e11bp2')
+  const outsider = await mkProv('e11bout')
+  const { data: r } = await admin.from('rfqs').insert({ msme_id: msme!.id, category_id: tax!.id, title: 'E11b GST returns', details: {}, status: 'open', fanout_at: new Date().toISOString(), expires_at: new Date(Date.now() + 48 * 3600e3).toISOString() }).select('id').single()
+  const rfqId = r!.id as string
+  created.rfqIds.push(rfqId)
+  await admin.from('rfq_matches').insert([{ rfq_id: rfqId, provider_id: p1.providerId }, { rfq_id: rfqId, provider_id: p2.providerId }])
+  const commissionBps = Number(tax!.commission_bps ?? 1000)
+  const sessions: string[] = []
+  try {
+    const pv = await api(p1.token, `/api/v1/rfq/${rfqId}/quote/preview`, { price_paise: 4_500_00, gst_included: false })
+    const pj = (await pv.json()) as { totalPaise?: number; earningPaise?: number; gstMode?: string }
+    const want = quotePreview({ pricePaise: 4_500_00, gstIncluded: false, commissionBps })
+    check('FR-11.4: the preview is the shared rule (₹4,500 + 18 % = ₹5,310; you receive at the category rate)', pv.ok && pj.totalPaise === 5_310_00 && pj.earningPaise === want.earningPaise && pj.gstMode === 'extra', JSON.stringify(pj))
+    check('FR-11.4: only a matched provider may ask for a preview', (await api(outsider.token, `/api/v1/rfq/${rfqId}/quote/preview`, { price_paise: 4_500_00, gst_included: false })).status === 404)
+    check('FR-11.4: the preview never writes', ((await admin.from('quotes').select('id').eq('rfq_id', rfqId)).data ?? []).length === 0)
+
+    // One number: an INCLUDED quote and an UNSTATED quote — preview = compare = checkout for each.
+    const { data: qi } = await admin.from('quotes').insert({ rfq_id: rfqId, provider_id: p1.providerId, price_paise: 11_800_00, delivery_days: 5, scope: 'E11b included quote scope text', gst_included: true }).select('id').single()
+    const { data: qn } = await admin.from('quotes').insert({ rfq_id: rfqId, provider_id: p2.providerId, price_paise: 10_000_00, delivery_days: 4, scope: 'E11b unstated quote scope text', gst_included: null }).select('id').single()
+    const cmp = (await (await fetch(`${BASE}/api/v1/rfq/${rfqId}/compare`, { headers: { Authorization: `Bearer ${buyer.token}` } })).json()) as { results?: { id: string; normalizedTotalPaise: number; flags: string[] }[] }
+    const byId = new Map((cmp.results ?? []).map((x) => [x.id, x]))
+    const charge = async (quoteId: string) => {
+      const res = await api(buyer.token, '/api/v1/checkout', { quoteId, idempotencyKey: crypto.randomUUID() })
+      const j = (await res.json().catch(() => ({}))) as { amountPaise?: number; checkoutSessionId?: string }
+      if (j.checkoutSessionId) sessions.push(j.checkoutSessionId)
+      return j.amountPaise
+    }
+    const pInc = (await (await api(p1.token, `/api/v1/rfq/${rfqId}/quote/preview`, { price_paise: 11_800_00, gst_included: true })).json()) as { totalPaise?: number }
+    const cInc = await charge(qi!.id as string)
+    check('ADR-015/017: GST included — preview = compare = checkout = the quoted price', pInc.totalPaise === 11_800_00 && byId.get(qi!.id as string)?.normalizedTotalPaise === 11_800_00 && cInc === 11_800_00, `${pInc.totalPaise} / ${byId.get(qi!.id as string)?.normalizedTotalPaise} / ${cInc}`)
+    const cNull = await charge(qn!.id as string)
+    const unstated = byId.get(qn!.id as string)
+    check('ADR-017: GST unstated — compare shows what checkout charges (GST on top), still flagged', unstated?.normalizedTotalPaise === 11_800_00 && cNull === 11_800_00 && (unstated?.flags ?? []).includes('gst_unstated'), `${unstated?.normalizedTotalPaise} / ${cNull}`)
+
+    // The provider page renders the v3 form (required GST, presets) for a services RFQ.
+    await admin.from('quotes').delete().eq('rfq_id', rfqId)
+    const page = visible(await (await fetch(`${BASE}/partner/rfqs/${rfqId}`, { headers: { cookie: p1.cookie } })).text())
+    check('FR-11.4: the quote form v3 renders its terms block', page.includes('data-testid="quote-v3-terms"'))
+  } finally {
+    for (const id of sessions) await admin.from('checkout_sessions').delete().eq('id', id)
+    await admin.from('quotes').delete().eq('rfq_id', rfqId)
+    await admin.from('rfq_matches').delete().eq('rfq_id', rfqId)
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1174,6 +1233,7 @@ async function main() {
     await e9b()
     await e10()
     await e11a()
+    await e11b()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

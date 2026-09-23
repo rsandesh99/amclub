@@ -3442,5 +3442,24 @@
     "col_needed_by": "Needed by",
     "col_quotes": "Quotes",
     "col_closes": "Closes"
+  },
+  "quote_v3": {
+    "gst": "GST",
+    "gst_extra": "Extra",
+    "gst_included": "Included",
+    "gst_na_note": "“Not applicable” arrives with GST-exempt registration.",
+    "transport": "Transport",
+    "transport_extra": "Extra",
+    "transport_included": "Included",
+    "transport_na": "N/A",
+    "valid_until": "Valid until",
+    "days": "{n} d",
+    "advance": "Advance",
+    "custom": "Custom",
+    "included": "What’s included",
+    "scaffold": "Included:\n- \nNot included:\n- \nYou’ll need to share:\n- ",
+    "buyer_sees_extra": "Buyer sees {price} + {pct} % GST = {total} all-in",
+    "buyer_sees_included": "Buyer pays {total} all-in (GST {gst} included)",
+    "you_receive": "You receive ≈ {amount} after AMClub’s fee · paid {days} days after the buyer accepts"
   }
 }

@@ -71,11 +71,12 @@ describe('compareQuotes — normalisation', () => {
     expect(r!.normalizedTotalPaise).toBe(10_000_00)
     expect(r!.flags.some((f) => f.startsWith('gst_'))).toBe(false)
   })
-  it('GST unstated → unchanged AND flagged gst_unstated with a note (never assumed)', () => {
+  it('GST unstated → added (what checkout charges, ADR-017) AND flagged gst_unstated', () => {
     const [r] = compareQuotes([base({ gstIncluded: null }), base({ id: U(2), deliveryDays: 20, pricePaise: 12_000_00 })], { today: TODAY })
-    expect(r!.normalizedTotalPaise).toBe(10_000_00)
-    expect(r!.normalizationNotes).toEqual([{ code: 'gst_assumed_none' }])
+    expect(r!.normalizedTotalPaise).toBe(10_000_00 + servicesGstPaise(10_000_00, DEFAULT_GST_BPS))
+    expect(r!.normalizationNotes).toEqual([{ code: 'gst_added', paise: 1_800_00 }])
     expect(r!.flags).toContain('gst_unstated')
+    expect(r!.flags).not.toContain('gst_not_included')
   })
   it('a custom servicesGstBps is honoured', () => {
     const [r] = compareQuotes([base({ gstIncluded: false }), base({ id: U(2) })], { today: TODAY, servicesGstBps: 500 })
@@ -139,8 +140,11 @@ describe('compareQuotes — flags', () => {
   })
   it('the 7-quote fixture: exact totals and flags', () => {
     const rs = compareQuotes(SEVEN, { today: TODAY })
-    expect(rs.map((r) => r.normalizedTotalPaise)).toEqual([10_000_00, 10_620_00, 11_500_00, 8_800_00, 12_000_00, 9_900_00, 10_000_00])
-    expect(byId(rs, U(4)).flags).toEqual(expect.arrayContaining(['gst_unstated', 'delivery_unstated', 'cheapest_after_normalization']))
+    // ADR-017: U4's unstated GST is added as checkout charges it (₹8,800 → ₹10,384), so U6 is now the cheapest.
+    expect(rs.map((r) => r.normalizedTotalPaise)).toEqual([10_000_00, 10_620_00, 11_500_00, 10_384_00, 12_000_00, 9_900_00, 10_000_00])
+    expect(byId(rs, U(4)).flags).toEqual(expect.arrayContaining(['gst_unstated', 'delivery_unstated']))
+    expect(byId(rs, U(4)).flags).not.toContain('cheapest_after_normalization')
+    expect(byId(rs, U(6)).flags).toContain('cheapest_after_normalization')
     expect(byId(rs, U(2)).flags).toEqual(expect.arrayContaining(['gst_not_included', 'transport_unstated', 'advance_unstated']))
     expect(byId(rs, U(3)).flags).toEqual(expect.arrayContaining(['transport_not_included', 'advance_high', 'fastest']))
     expect(byId(rs, U(5)).flags).toContain('validity_short')

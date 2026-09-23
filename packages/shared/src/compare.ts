@@ -4,8 +4,10 @@ import { DEFAULT_GST_BPS } from './money'
 /**
  * Comparability engine (BUILD_PROMPTS S1.2). Deterministic code, never a
  * model: given the quotes a buyer sees, compute a normalised total per quote
- * and the flags that make the differences explicit. GST is added only when a
- * quote SAYS it is excluded; silence is flagged, never assumed. Transport is a
+ * and the flags that make the differences explicit. The total is what checkout
+ * CHARGES (ADR-017): GST is added when a quote says it is excluded AND when it
+ * is silent (flagged `gst_unstated`, as checkout adds it); an included price is
+ * taken as-is (ADR-015). Transport is a
  * flag only (there is no rate to add). Pure, zero deps beyond zod; the web
  * page, the compare route, mobile and the golden set all call this one
  * function. All money in integer paise.
@@ -51,7 +53,7 @@ export interface CompareQuoteInput {
   goods?: { unitPricePaise: number; qty: number; gstRateBps: number } | null
 }
 
-export type NormalizationNoteCode = 'gst_added' | 'gst_assumed_none' | 'tie_broken'
+export type NormalizationNoteCode = 'gst_added' | 'tie_broken'
 export interface NormalizationNote {
   code: NormalizationNoteCode
   paise?: number
@@ -107,14 +109,12 @@ export function compareQuotes(quotes: readonly CompareQuoteInput[], opts: Compar
       if (m.gstPaise > 0) notes.push({ code: 'gst_added', paise: m.gstPaise })
     } else {
       total = q.pricePaise
-      if (q.gstIncluded === false) {
+      // ADR-017 — excluded and unstated both add GST on top, exactly as checkout's quote branch charges them.
+      if (q.gstIncluded !== true) {
         const gst = servicesGstPaise(q.pricePaise, gstBps)
         total += gst
         notes.push({ code: 'gst_added', paise: gst })
-        flags.push('gst_not_included')
-      } else if (q.gstIncluded === null) {
-        notes.push({ code: 'gst_assumed_none' })
-        flags.push('gst_unstated')
+        flags.push(q.gstIncluded === false ? 'gst_not_included' : 'gst_unstated')
       }
     }
 
