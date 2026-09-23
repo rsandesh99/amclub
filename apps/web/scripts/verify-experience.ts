@@ -22,7 +22,7 @@ const admin = createClient(URL_, SERVICE, { auth: { persistSession: false } })
 let pass = 0, fail = 0
 const check = (n: string, ok: boolean, extra = '') => { console.log(`  ${ok ? '✓' : '✗'} ${n}${extra ? ' — ' + extra : ''}`); ok ? pass++ : fail++ }
 const tag = `expv_${Date.now()}`
-const created: { users: string[]; providerIds: string[]; msmeIds: string[]; orderIds: string[] } = { users: [], providerIds: [], msmeIds: [], orderIds: [] }
+const created: { users: string[]; providerIds: string[]; msmeIds: string[]; orderIds: string[]; packageIds: string[] } = { users: [], providerIds: [], msmeIds: [], orderIds: [], packageIds: [] }
 
 async function mkUser(label: string, roles: string[] = ['msme']): Promise<{ uid: string; token: string; cookie: string }> {
   const email = `${tag}_${label}@killtest.amclub`
@@ -121,23 +121,26 @@ async function e0() {
   const ordered = res.every((r, i) => i === 0 || w(res[i - 1]!) + 1e-9 >= w(r))
   check('U9: sort=rating is ordered by the review-weighted rating', search.ok && ordered, `${res.length} results`)
 
-  const { data: seedProv } = await admin.from('provider_profiles').select('slug').eq('status', 'active').neq('slug', `${tag}-prov`).limit(1).maybeSingle()
-  if (seedProv) {
-    const page = await fetch(`${BASE}/p/${seedProv.slug}`)
-    const ph = await page.text()
-    check('U9: the provider page shows no "Top Rated"', page.ok && !/Top Rated/i.test(ph))
-    check('U4: the provider page links a requirement in its category', page.ok && ph.includes('/app/rfq/new?category='))
-    const reviews = await fetch(`${BASE}/p/${seedProv.slug}/reviews`)
-    check('U11: /p/[slug]/reviews renders', reviews.ok, `status ${reviews.status}`)
-    const { data: pk } = await admin.from('packages').select('slug, provider:provider_profiles!inner(slug)').eq('status', 'active').limit(1).maybeSingle()
-    if (pk) {
-      const provSlug = (pk.provider as unknown as { slug: string }).slug
-      const pkgHtml = await (await fetch(`${BASE}/p/${provSlug}/${pk.slug}`)).text()
-      check('U2: no member-price line while NEXT_PUBLIC_MEMBER_PRICING_ENABLED is off', !/for members/i.test(pkgHtml))
-    }
-  } else {
-    check('seed has an active provider', false)
-  }
+  // CI suspends every seed provider (money-rigs.yml), so the storefront checks
+  // use this rig's own active provider with one active package that carries a
+  // member discount (U2: that line must never render while the flag is off).
+  const { data: pkg } = await admin.from('packages').insert({
+    provider_id: pp!.id, category_id: cat!.id, slug: `${tag}-pkg`, title_i18n: { en: 'E0 GST filing' },
+    scope_included: ['Monthly GST return'], deliverables: ['Filed return'], price_paise: 1499_00,
+    member_extra_discount_bps: 1000, delivery_days: 3, status: 'active',
+  }).select('id').single()
+  if (pkg) created.packageIds.push(pkg.id)
+  const page = await fetch(`${BASE}/p/${tag}-prov`)
+  const ph = await page.text()
+  check('U9: the provider page shows no "Top Rated"', page.ok && !/Top Rated/i.test(ph), `status ${page.status}`)
+  check('U4: the provider page links a requirement in its category', page.ok && ph.includes('/app/rfq/new?category=tax-accounting'))
+  check('U4: the provider page links its packages above the fold', page.ok && ph.includes(`/p/${tag}-prov#packages`))
+  const reviews = await fetch(`${BASE}/p/${tag}-prov/reviews`)
+  check('U11: /p/[slug]/reviews renders', reviews.ok, `status ${reviews.status}`)
+  const pkgPage = await fetch(`${BASE}/p/${tag}-prov/${tag}-pkg`)
+  const pkgHtml = await pkgPage.text()
+  check('U2: no member-price line while NEXT_PUBLIC_MEMBER_PRICING_ENABLED is off', pkgPage.ok && !/for members/i.test(pkgHtml), `status ${pkgPage.status}`)
+  check('U3: the package page has the sticky buy bar', pkgPage.ok && pkgHtml.includes('lg:hidden') && pkgHtml.includes(`/app/checkout/${pkg?.id}`))
 }
 
 async function main() {
@@ -148,6 +151,7 @@ async function main() {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }
     for (const id of created.orderIds) { await t(admin.from('order_events').delete().eq('order_id', id)); await t(admin.from('orders').delete().eq('id', id)) }
+    for (const id of created.packageIds) await t(admin.from('packages').delete().eq('id', id))
     for (const id of created.providerIds) { await t(admin.from('provider_categories').delete().eq('provider_id', id)); await t(admin.from('provider_profiles').delete().eq('id', id)) }
     for (const id of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', id))
     for (const uid of created.users) { await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
