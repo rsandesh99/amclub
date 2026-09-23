@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon, COUPON_ERROR_KEY } from '@/lib/coupons/apply'
 import { COUPONS_ENABLED } from '@/lib/flags'
+import { priceDisplay } from '@amclub/shared'
 
 const bodySchema = z
   .object({
@@ -38,6 +39,9 @@ export async function POST(request: NextRequest) {
 
   let taxableBeforeCoupon = 0
   let categoryId: string | null = null
+  // Experience v3 N16: the package price inputs, so the reply can carry the
+  // server display with the coupon applied (the client renders it, never sums).
+  let pkgPrice: { pricePaise: number; discountBps: number } | null = null
 
   if (packageId) {
     const { data: p } = await supabase
@@ -49,6 +53,7 @@ export async function POST(request: NextRequest) {
     if (!p) return NextResponse.json({ ok: false, error: 'package_unavailable' }, { status: 404 })
     taxableBeforeCoupon = Number(p.price_paise) - Math.round((Number(p.price_paise) * (p.discount_bps ?? 0)) / 10000)
     categoryId = p.category_id
+    pkgPrice = { pricePaise: Number(p.price_paise), discountBps: p.discount_bps ?? 0 }
   } else {
     const { data: q } = await supabase
       .from('quotes')
@@ -73,5 +78,11 @@ export async function POST(request: NextRequest) {
   if (result.error) {
     return NextResponse.json({ ok: false, error: COUPON_ERROR_KEY[result.error] })
   }
-  return NextResponse.json({ ok: true, discountPaise: result.discountPaise, code: result.code, kind: result.kind })
+  return NextResponse.json({
+    ok: true,
+    discountPaise: result.discountPaise,
+    code: result.code,
+    kind: result.kind,
+    ...(pkgPrice ? { display: priceDisplay({ ...pkgPrice, extraDiscountPaise: result.discountPaise }) } : {}),
+  })
 }

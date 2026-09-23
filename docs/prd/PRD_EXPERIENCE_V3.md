@@ -1162,6 +1162,16 @@ Payment success stays a server event from the webhook.
 
 **RICE:** R 0.9 · I 1 · C 0.8 · E 1 → **0.72**.
 
+**As built (E5).**
+- **Own route group.** Checkout now lives in `(checkout)`. With the flag off, its layout behaves exactly like `(msme)`.
+- **Guests.** With `EXP_V3_CHECKOUT=on` the middleware lets a signed-out visitor open `/app/checkout/<uuid>` only. Every other `/app` path is still walled. Guests only see this at "on", because there is no user to bucket.
+- **Inline sign-in.** `AuthPanel` (phone or email OTP, or Google, with the consent checkbox) runs on the page. A new account then finishes name + business inline. The writes are the signup wizard's own `acceptLegalDocs(BUYER_LEGAL_DOCS)` then `POST /profile/msme`. The page refreshes into Pay.
+- **ITC line.** It appears only for a checksum-valid profile GSTIN, which is shown masked.
+- **Coupons.** When a coupon is applied, the breakdown comes from the coupon route's own `display` (priceDisplay with `extraDiscountPaise`). The v3 client does no money math.
+- **Checkout is a focused task.** The v3 shell shows no rail or tab bar here, so the sticky Pay bar never overlaps them.
+- **Success.** The Paisa Moment is capped at 900 ms (PaisaMoment `totalMs`; Mart keeps 1.4 s), then the order page opens. The NextStepBar arrives with E8.
+- **Legal-acceptance check.** It lives in `verify-experience` e5, next to the flow it covers.
+
 ---
 
 ### E6: Requirements (RFQ) v3
