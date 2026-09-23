@@ -9,6 +9,9 @@ import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
 import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { PROVIDER_LANGUAGES, type ProviderLanguage } from '@amclub/shared'
+import { isOnFor } from '@/lib/experiments'
+import { createAdminClient } from '@/lib/supabase/server'
+import { ProviderTrustSettings } from '@/components/trust/ProviderTrustSettings'
 
 export default async function ProviderProfilePage() {
   const t = await getTranslations('profile')
@@ -42,6 +45,22 @@ export default async function ProviderProfilePage() {
 
   const isActive = profile.status === 'active'
 
+  // Experience v3 E3 (flag `trust`): availability + logo. A separate,
+  // error-tolerant service-role read — these 0049 columns may not exist yet.
+  let trustInitial: Parameters<typeof ProviderTrustSettings>[0]['initial'] | null = null
+  if (isOnFor('trust', user.id)) {
+    const admin = await createAdminClient()
+    const { data: x, error } = await admin.from('provider_profiles').select('next_available_on, capacity_slots, logo_status, logo_url').eq('user_id', user.id).maybeSingle()
+    if (!error && x) {
+      trustInitial = {
+        nextAvailableOn: (x.next_available_on as string | null) ?? null,
+        capacitySlots: Number(x.capacity_slots ?? 5),
+        logoStatus: (['none', 'pending', 'approved', 'rejected'].includes(x.logo_status as string) ? x.logo_status : 'none') as 'none',
+        logoUrl: (x.logo_url as string | null) ?? null,
+      }
+    }
+  }
+
   return (
     <div className="mx-auto max-w-lg px-4 py-6 space-y-6">
       <div className="flex items-start justify-between gap-3">
@@ -64,6 +83,8 @@ export default async function ProviderProfilePage() {
       )}
 
       <ProviderProfileForm initial={initial} />
+
+      {trustInitial && <ProviderTrustSettings initial={trustInitial} />}
 
       {AGENT_ENABLED && <AgentGrantsSection persona="provider" />}
       {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}

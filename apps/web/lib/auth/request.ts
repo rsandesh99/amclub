@@ -1,6 +1,7 @@
 import { headers } from 'next/headers'
 import { createClient as createTokenClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { touchLastSeen } from '@/lib/trust/last-seen'
 
 /**
  * Returns a Supabase client authenticated as the requesting user, working for
@@ -28,11 +29,13 @@ export async function getAuthedSupabase(): Promise<{
       },
     )
     const { data } = await client.auth.getUser()
+    if (data.user?.id) touchLastSeen(data.user.id)
     // Cast: the token client is API-compatible with the cookie client for our use.
     return { supabase: client as unknown as Awaited<ReturnType<typeof createClient>>, userId: data.user?.id ?? null }
   }
 
   const supabase = await createClient()
   const { data } = await supabase.auth.getUser()
+  if (data.user?.id) touchLastSeen(data.user.id)
   return { supabase, userId: data.user?.id ?? null }
 }

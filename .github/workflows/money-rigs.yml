@@ -54,6 +54,7 @@ jobs:
       # the rigs exercise the new surfaces; the axe job keeps the production
       # default (off) and scans the v2 public pages.
       EXP_V3_SHELL: "on"
+      EXP_V3_TRUST: "on"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

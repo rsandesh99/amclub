@@ -5,6 +5,7 @@ import { Link } from '@/i18n/navigation'
 import { VerificationActions } from './VerificationActions'
 import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
 import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
+import { PendingLogos, type PendingLogo } from '@/components/trust/PendingLogos'
 
 interface ProviderRow {
   id: string
@@ -61,9 +62,38 @@ async function getApprovedNotReady() {
     .filter((p) => p.readiness !== 'ready')
 }
 
+/** E3 / N12 — logos waiting for moderation, with short-lived signed previews.
+ *  Error-tolerant: before migration 0049 the columns don't exist → none. */
+async function getPendingLogos(): Promise<PendingLogo[]> {
+  const supabase = await createAdminClient()
+  const { data, error } = await supabase.from('provider_profiles').select('id, display_name, logo_pending_url').eq('logo_status', 'pending').limit(50)
+  if (error || !data) return []
+  return Promise.all(
+    data.map(async (p) => {
+      const { data: signed } = await supabase.storage.from('kyc-documents').createSignedUrl(p.logo_pending_url as string, 600)
+      return { providerId: p.id as string, displayName: p.display_name as string, signedUrl: signed?.signedUrl ?? null }
+    }),
+  )
+}
+
+/** F4 — GSTINs the nightly re-check found inactive in the last 14 days (flags only; ops decide). */
+async function getGstinFlags(): Promise<{ id: string; name: string; at: string }[]> {
+  const supabase = await createAdminClient()
+  const since = new Date(Date.now() - 14 * 86400e3).toISOString()
+  const { data } = await supabase.from('audit_logs').select('entity_id, created_at').eq('action', 'gstin_inactive_flagged').gte('created_at', since).order('created_at', { ascending: false }).limit(50)
+  const ids = [...new Set((data ?? []).map((r) => r.entity_id as string))]
+  if (ids.length === 0) return []
+  const { data: provs } = await supabase.from('provider_profiles').select('id, display_name').in('id', ids)
+  const name = new Map((provs ?? []).map((p) => [p.id as string, p.display_name as string]))
+  const firstAt = new Map<string, string>()
+  for (const r of data ?? []) if (!firstAt.has(r.entity_id as string)) firstAt.set(r.entity_id as string, r.created_at as string)
+  return ids.map((id) => ({ id, name: name.get(id) ?? id, at: firstAt.get(id) ?? '' }))
+}
+
 export default async function VerificationsPage() {
   const t = await getTranslations('admin')
-  const [providers, notReady] = await Promise.all([getPendingProviders(), getApprovedNotReady()])
+  const [providers, notReady, logos, gstinFlags] = await Promise.all([getPendingProviders(), getApprovedNotReady(), getPendingLogos(), getGstinFlags()])
+  const tt = await getTranslations('trust_admin')
 
   return (
     <div className="space-y-6">
@@ -71,6 +101,22 @@ export default async function VerificationsPage() {
         <h1 className="text-2xl font-bold">{t('verifications_title')}</h1>
         <p className="text-sm text-foreground-secondary mt-1">{t('verifications_subtitle')}</p>
       </div>
+
+      {gstinFlags.length > 0 && (
+        <section className="rounded-card border border-danger/40 bg-danger/5 p-4">
+          <h2 className="text-sm font-semibold text-danger">{tt('gstin_flags', { count: gstinFlags.length })}</h2>
+          <p className="mt-1 text-xs text-foreground-secondary">{tt('gstin_flags_body')}</p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {gstinFlags.map((f) => (
+              <li key={f.id}>
+                <Link href={`/admin/providers/${f.id}` as '/admin/providers'} className="font-medium text-primary hover:underline">{f.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <PendingLogos items={logos} />
 
       {notReady.length > 0 && (
         <section className="rounded-card border border-warning/40 bg-warning/10 p-4">

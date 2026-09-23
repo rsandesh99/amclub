@@ -246,3 +246,32 @@ admin-only in v1.
   growth nudge is fixed copy: no model, no confirm, no `ai_decisions` row.
 - Rollback: switch the settings off. Snapshots are inert rows that no route shows while
   the switches are off; compare returns to price ordering immediately.
+
+## Amendment A1 — individual measured stats may be public (PROPOSED, awaiting decision D1)
+
+**Status:** Proposed, 2026-09-23 (Experience v3 E3, `docs/prd/PRD_EXPERIENCE_V3.md`
+§6 E3 and §10 D1). Built dark; nothing changes for buyers until the founder decides
+D1 and flips `agent_settings.public_stats_enabled`.
+
+**Change.** §6 ("buyers never see a number") is narrowed, not dropped:
+- Buyers MAY see a provider's **individual measured stats**, each with its own sample:
+  on-time delivery % (first delivery ≤ `due_at`, 180 days), repeat-buyer % (buyers with
+  ≥ 2 paid orders ÷ distinct buyers, 365 days), response rate (quoted or declined with a
+  reason within 48 h, 90 days) and orders completed.
+- Each stat shows only when **its own** sample reaches `public_stats_min_n` (default 10,
+  floor 5 in code — settings can only tighten).
+- Buyers still **never** see the composite AMC Score, its component weights, ranks or
+  the reliability adjustment. `SCORE_FIELD_NAMES` stays out of every buyer payload; the
+  public field names are a separate allow-list (`PUBLIC_STAT_FIELD_NAMES` in
+  `@amclub/shared` `public-stats.ts`) and a shared test proves the two never overlap.
+
+**Where.** The stats are stored nightly in `provider_public_stats` (migration 0049;
+service role only, no client grant). Buyer payloads carry only `publicStatsView()` —
+the gated projection — on result cards (one headline stat) and the profile (stat tiles).
+
+**Why.** The survey (§4 of `docs/market/SURVEY_2026-09.md`) found every comparable
+portal shows measured outcome stats, and our loop already computes them. A single
+number invites gaming and hides its sample; separate stats with their samples don't.
+
+**Rollback.** `public_stats_enabled = false` removes every stat from every surface on
+the next request; the nightly rows stay inert.

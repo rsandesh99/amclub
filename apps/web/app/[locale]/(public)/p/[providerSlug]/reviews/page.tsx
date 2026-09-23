@@ -6,6 +6,9 @@ import { Link } from '@/i18n/navigation'
 import { Stars } from '@/components/catalog/Stars'
 import { ReviewList } from '@/components/catalog/ReviewList'
 import { getProviderBySlug, getReviews } from '@/lib/catalog/queries'
+import { isOnForEveryone } from '@/lib/experiments'
+import { reviewExtras } from '@/lib/trust/reviews'
+import { ReviewHistogram } from '@/components/trust/ReviewHistogram'
 
 export const revalidate = 300
 
@@ -43,6 +46,8 @@ export default async function ProviderReviewsPage({
   const pageCount = Math.max(1, Math.ceil(first.total / PAGE_SIZE))
   const page = Math.min(requested, pageCount)
   const { reviews, total } = page === requested ? first : await getReviews(provider.id, PAGE_SIZE, (page - 1) * PAGE_SIZE)
+  // Experience v3 E3 (N13): histogram + "repeat buyer" marker.
+  const extras = isOnForEveryone('trust') ? await reviewExtras(provider.id, reviews.map((r) => r.id)).catch(() => null) : null
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -59,7 +64,10 @@ export default async function ProviderReviewsPage({
       {reviews.length === 0 ? (
         <p className="mt-6 text-sm text-foreground-secondary">{t('no_reviews')}</p>
       ) : (
-        <ReviewList reviews={reviews} />
+        <>
+          {extras && <div className="mt-4"><ReviewHistogram histogram={extras.histogram} total={total} /></div>}
+          <ReviewList reviews={extras ? reviews.map((r) => ({ ...r, repeatBuyer: extras.repeat.has(r.id) })) : reviews} />
+        </>
       )}
 
       {pageCount > 1 && (

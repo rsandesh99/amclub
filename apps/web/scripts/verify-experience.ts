@@ -11,7 +11,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { summarizeProviderOrders } from '@amclub/shared'
+import { scoreFieldPaths, summarizeProviderOrders } from '@amclub/shared'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -231,18 +231,127 @@ async function e1() {
   check('E1: /admin/dev/ui is admin-only', [302, 303, 307].includes(gal.status), `status ${gal.status}`)
 }
 
+async function setSetting(key: string, value: unknown): Promise<() => Promise<void>> {
+  const { data: before } = await admin.from('agent_settings').select('value').eq('key', key).maybeSingle()
+  await admin.from('agent_settings').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  return async () => {
+    if (before) await admin.from('agent_settings').upsert({ key, value: before.value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    else await admin.from('agent_settings').delete().eq('key', key)
+  }
+}
+
+async function e3() {
+  console.log('\nE3 — trust made visible')
+  const { data: cat } = await admin.from('categories').select('id').eq('slug', 'legal').single()
+  const buyer = await mkUser('e3buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E3 Buyer Co', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  const buyer2 = await mkUser('e3buyer2')
+  const { data: msme2 } = await admin.from('msme_profiles').insert({ user_id: buyer2.uid, business_name: 'E3 Buyer Two', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme2!.id)
+  const prov = await mkUser('e3prov', ['provider'])
+  const slug = `${tag}-e3prov`
+  const { data: pp } = await admin.from('provider_profiles').insert({
+    user_id: prov.uid, legal_name: 'E3 Prov', display_name: 'E3 Prov', slug, state: 'TS', status: 'active', languages: ['en', 'te'],
+  }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: cat!.id })
+  await admin.from('provider_verifications').insert([
+    { provider_id: pp!.id, kind: 'gstin', value: '36AAAAA0000A1Z5', status: 'api_verified', verified_at: '2026-09-12T06:00:00Z' },
+    { provider_id: pp!.id, kind: 'bar_council', value: 'TS/1/2020', status: 'manually_approved', verified_at: '2026-09-03T06:00:00Z' },
+  ])
+
+  // 12 delivered + completed orders, 11 on time; buyer 1 has 11 of them (repeat), buyer 2 has 1.
+  const now = Date.now()
+  const orderIds: string[] = []
+  for (let i = 0; i < 12; i++) {
+    const due = new Date(now - (20 - i) * 86400e3).toISOString()
+    const deliveredAt = new Date(Date.parse(due) + (i === 0 ? 86400e3 : -86400e3)).toISOString()
+    const { data: o } = await admin.from('orders').insert({
+      msme_id: i === 11 ? msme2!.id : msme!.id, provider_id: pp!.id, source: 'package', title: `E3 order ${i}`, scope_snapshot: {},
+      price_paise: 1000_00, gst_paise: 180_00, total_paise: 1180_00, commission_bps: 500, commission_paise: 50_00,
+      provider_earning_paise: 950_00, delivery_days: 5, status: 'completed', due_at: due, completed_at: deliveredAt,
+    }).select('id').single()
+    created.orderIds.push(o!.id)
+    orderIds.push(o!.id)
+    await admin.from('order_events').insert({ order_id: o!.id, event: 'deliver', created_at: deliveredAt })
+  }
+  const reviewRows = orderIds.map((id, i) => ({ order_id: id, msme_id: i === 11 ? msme2!.id : msme!.id, provider_id: pp!.id, rating: i < 9 ? 5 : 4, text: `Review ${i}`, status: 'published' }))
+  const { error: revErr } = await admin.from('reviews').insert(reviewRows)
+  check('fixture reviews inserted', !revErr, revErr?.message ?? '')
+
+  const cronSecret = process.env['CRON_SECRET']
+  const cron = await fetch(`${BASE}/api/v1/cron/provider-stats`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })
+  const { data: row } = await admin.from('provider_public_stats').select('on_time_pct, on_time_n, repeat_n, completed_orders').eq('provider_id', pp!.id).maybeSingle()
+  check('N9: nightly stats = fixture truth (11 of 12 on time)', cron.ok && Number(row?.on_time_pct) === 91.67 && row?.on_time_n === 12 && row?.completed_orders === 12, JSON.stringify(row))
+
+  type TrustPayload = { trust?: { stats: { onTime: { pct: number; n: number } | null } | null; verification: { kind: string; method: string; verifiedAt: string | null }[]; availability: { kind: string; date?: string } | null; logoUrl: string | null } | null }
+  const read = async () => (await (await fetch(`${BASE}/api/v1/catalog/provider/${slug}?_=${Date.now()}`)).json()) as TrustPayload
+  const off = await read()
+  check('D1 off (default): no stats in the payload', off.trust !== undefined && off.trust?.stats === null)
+  const restore = await setSetting('public_stats_enabled', true)
+  try {
+    const on = await read()
+    check('D1 on: on-time 92 % with n = 12', on.trust?.stats?.onTime?.pct === 92 && on.trust?.stats?.onTime?.n === 12, JSON.stringify(on.trust?.stats))
+    check('privacy: no AMC Score field in the buyer payload', scoreFieldPaths(on).length === 0, scoreFieldPaths(on).join(', '))
+  } finally {
+    await restore()
+  }
+  const ver = off.trust?.verification ?? []
+  check('N10: every verified kind shows method + date', ver.length === 2 && ver.every((v) => (v.method === 'api' || v.method === 'manual') && !!v.verifiedAt) && JSON.stringify(off).indexOf('36AAAAA0000A1Z5') === -1)
+
+  // N11 — availability + last_seen
+  const avail = await api(prov.token, '/api/v1/profile/provider/availability', { nextAvailableOn: '2031-01-15', capacitySlots: 3 }, 'PATCH')
+  const afterAvail = await read()
+  check('N11: the provider’s own next-available date shows', avail.ok && afterAvail.trust?.availability?.kind === 'from' && afterAvail.trust?.availability?.date === '2031-01-15')
+  check('N11: availability PATCH rejects a bad capacity', (await api(prov.token, '/api/v1/profile/provider/availability', { nextAvailableOn: null, capacitySlots: 0 }, 'PATCH')).status === 422)
+  await new Promise((r) => setTimeout(r, 1500)) // the write runs after the response (next/server after())
+  const { data: seen1 } = await admin.from('users').select('last_seen_at').eq('id', prov.uid).single()
+  await api(prov.token, '/api/v1/partner/stats', undefined, 'GET')
+  await new Promise((r) => setTimeout(r, 1500))
+  const { data: seen2 } = await admin.from('users').select('last_seen_at').eq('id', prov.uid).single()
+  check('N11: authenticated activity writes last_seen_at, at most once per 15 min', !!seen1?.last_seen_at && seen1.last_seen_at === seen2?.last_seen_at, `${seen1?.last_seen_at} / ${seen2?.last_seen_at}`)
+
+  // N12 — logo moderation
+  const sharp = (await import('sharp')).default
+  const png = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 14, g: 107, b: 79 } } }).png().toBuffer()
+  const fd = new FormData()
+  fd.append('file', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'logo.png')
+  const up = await fetch(`${BASE}/api/v1/profile/provider/logo`, { method: 'POST', headers: { Authorization: `Bearer ${prov.token}` }, body: fd })
+  const pending = await read()
+  check('N12: an uploaded logo waits for approval (not public)', up.ok && pending.trust?.logoUrl === null, `status ${up.status}`)
+  const adminUser = await mkUser('e3admin', ['msme', 'admin'])
+  const dec = await api(adminUser.token, `/api/v1/admin/providers/${pp!.id}/logo`, { decision: 'approve' })
+  const approved = await read()
+  check('N12: after approval the logo is public', dec.ok && !!approved.trust?.logoUrl, `status ${dec.status}`)
+  check('N12: a buyer cannot approve logos', (await api(buyer.token, `/api/v1/admin/providers/${pp!.id}/logo`, { decision: 'approve' })).status === 403)
+
+  // N13 — reviews v2
+  type RP = { reviews: { id: string; repeatBuyer: boolean }[]; histogram: number[]; total: number; nextCursor: string | null }
+  const p1 = (await (await fetch(`${BASE}/api/v1/providers/${slug}/reviews`)).json()) as RP
+  const p2 = p1.nextCursor ? ((await (await fetch(`${BASE}/api/v1/providers/${slug}/reviews?cursor=${p1.nextCursor}`)).json()) as RP) : null
+  const ids = new Set([...p1.reviews, ...(p2?.reviews ?? [])].map((r) => r.id))
+  check('N13: reviews paginate past 10 with no gaps or repeats', p1.reviews.length === 10 && p2?.reviews.length === 2 && ids.size === 12 && p2.nextCursor === null)
+  check('N13: histogram sums to the total (9×5★, 3×4★)', p1.total === 12 && p1.histogram[0] === 9 && p1.histogram[1] === 3)
+  const all = [...p1.reviews, ...(p2?.reviews ?? [])]
+  check('N13: "repeat buyer" only for the buyer with ≥ 2 orders', all.filter((r) => r.repeatBuyer).length === 11)
+  check('N13: a forged cursor is ignored, not an error', (await fetch(`${BASE}/api/v1/providers/${slug}/reviews?cursor=${Buffer.from('x,y|z').toString('base64url')}`)).ok)
+  for (const id of orderIds) await admin.from('reviews').delete().eq('order_id', id)
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
     await e0()
     await e1()
+    await e3()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }
     for (const id of created.orderIds) { await t(admin.from('order_events').delete().eq('order_id', id)); await t(admin.from('orders').delete().eq('id', id)) }
     for (const id of created.packageIds) await t(admin.from('packages').delete().eq('id', id))
     for (const id of created.rfqIds) await t(admin.from('rfqs').delete().eq('id', id))
-    for (const id of created.providerIds) { await t(admin.from('provider_categories').delete().eq('provider_id', id)); await t(admin.from('provider_profiles').delete().eq('id', id)) }
+    for (const id of created.providerIds) { await t(admin.from('provider_categories').delete().eq('provider_id', id)); await t(admin.from('provider_verifications').delete().eq('provider_id', id)); await t(admin.from('provider_public_stats').delete().eq('provider_id', id)); await t(admin.from('provider_profiles').delete().eq('id', id)) }
     for (const id of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', id))
     for (const uid of created.users) { await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
   }
