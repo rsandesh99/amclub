@@ -1,14 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import { History } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { useAnalytics } from '@/components/providers/posthog'
-import { pickI18n } from '@/lib/format'
-import { readRecent, type RecentItem } from './store'
-
-type ServerItem = { kind: 'provider' | 'package'; id: string; title: { en: string; hi?: string }; href: string; viewedAt: string }
+import { useRecentItems } from './useRecentItems'
 
 /**
  * FR-2.8 — "Recently viewed": this device's list merged with the account's
@@ -17,30 +13,8 @@ type ServerItem = { kind: 'provider' | 'package'; id: string; title: { en: strin
  */
 export function RecentlyViewed({ limit = 8, className }: { limit?: number; className?: string }) {
   const t = useTranslations('recent_v3')
-  const locale = useLocale()
   const analytics = useAnalytics()
-  const [items, setItems] = useState<RecentItem[]>([])
-
-  useEffect(() => {
-    let live = true
-    const local = readRecent()
-    setItems(local)
-    fetch('/api/v1/me/recent-views')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { items?: ServerItem[] } | null) => {
-        if (!live || !j?.items) return
-        const merged = new Map<string, RecentItem>()
-        for (const s of j.items) merged.set(`${s.kind}:${s.id}`, { kind: s.kind, id: s.id, title: pickI18n(s.title, locale), href: s.href, at: Date.parse(s.viewedAt) })
-        for (const l of local) {
-          const k = `${l.kind}:${l.id}`
-          const prev = merged.get(k)
-          if (!prev || l.at > prev.at) merged.set(k, l)
-        }
-        setItems([...merged.values()].sort((a, b) => b.at - a.at))
-      })
-      .catch(() => {})
-    return () => { live = false }
-  }, [locale])
+  const items = useRecentItems()
 
   if (items.length === 0) return null
   return (

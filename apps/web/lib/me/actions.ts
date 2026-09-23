@@ -1,8 +1,11 @@
 import 'server-only'
-import { nextAction, sortActionItems, type ActionItem, type MeActions, type OrderStatus } from '@amclub/shared'
+import { compareQuotes, isQuoteExpiringSoon, nextAction, QUOTE_STATUS, quoteValidityEndsAt, sortActionItems, type ActionItem, type CompareQuoteInput, type MeActions, type OrderStatus } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { listMatchedRfqsForProvider } from '@/lib/rfq/queries'
+import { todayIST } from '@/lib/agent/quote-extract'
+import { isOnFor } from '@/lib/experiments'
+import { isGoodsRow, QUOTE_GOODS_COLS, RFQ_GOODS_LIST_COLS } from '@/lib/mart/staged-columns'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -42,6 +45,66 @@ async function orderItems(admin: Admin, userId: string, col: 'msme_id' | 'provid
   return items
 }
 
+type LiveRfq = { id: string; title: string | null; kind?: string | null }
+type QuoteRow = {
+  id: string
+  rfq_id: string
+  price_paise: number
+  delivery_days: number | null
+  gst_included: boolean | null
+  transport_included: boolean | null
+  valid_until: string | null
+  advance_percent: number | null
+  unit_price_paise?: number | null
+  qty?: number | null
+  gst_rate_bps?: number | null
+  provider: { display_name: string | null } | { display_name: string | null }[] | null
+}
+
+/**
+ * E9 FR-9.1 — per open RFQ, the lowest normalised all-in total of its
+ * submitted quotes (`compareQuotes`, the compare screen's own rule), and one
+ * `quote_expiring` row per submitted quote whose validity ends within 48 h.
+ * Keyed to the buyer's own RFQ ids; staged goods columns ride the fragments.
+ */
+async function buyerQuoteFacts(admin: Admin, live: LiveRfq[]): Promise<{ fromPaise: Map<string, number>; expiring: ActionItem[] }> {
+  const fromPaise = new Map<string, number>()
+  const expiring: ActionItem[] = []
+  if (live.length === 0) return { fromPaise, expiring }
+  const { data } = await admin
+    .from('quotes')
+    .select('id, rfq_id, price_paise, delivery_days, gst_included, transport_included, valid_until, advance_percent' + QUOTE_GOODS_COLS + ', provider:provider_profiles(display_name)')
+    .in('rfq_id', live.map((r) => r.id))
+    .eq('status', QUOTE_STATUS.submitted)
+  const rows = (data ?? []) as unknown as QuoteRow[]
+  const today = todayIST()
+  const now = new Date()
+  for (const r of live) {
+    const mine = rows.filter((q) => q.rfq_id === r.id)
+    if (mine.length === 0) continue
+    const goods = isGoodsRow(r)
+    const inputs: CompareQuoteInput[] = mine.map((q) => ({
+      id: q.id,
+      kind: goods ? 'goods' : 'service',
+      pricePaise: Number(q.price_paise),
+      deliveryDays: q.delivery_days,
+      gstIncluded: q.gst_included,
+      transportIncluded: q.transport_included,
+      validUntil: q.valid_until,
+      advancePercent: q.advance_percent,
+      goods: goods && q.unit_price_paise != null ? { unitPricePaise: Number(q.unit_price_paise), qty: Number(q.qty), gstRateBps: Number(q.gst_rate_bps) } : null,
+    }))
+    const totals = compareQuotes(inputs, { today }).map((c) => c.normalizedTotalPaise)
+    fromPaise.set(r.id, Math.min(...totals))
+    for (const q of mine) {
+      if (!isQuoteExpiringSoon(q.valid_until, now)) continue
+      const p = Array.isArray(q.provider) ? q.provider[0] : q.provider
+      expiring.push({ kind: 'quote_expiring', objectId: q.id, title: r.title ?? '', action: null, count: null, dueAt: quoteValidityEndsAt(q.valid_until), href: `/app/rfq/${r.id}`, providerName: p?.display_name ?? '' })
+    }
+  }
+  return { fromPaise, expiring }
+}
+
 /**
  * N2 — everything waiting on this user, per role. Party-scoped: every read is
  * keyed to the caller's own profile ids (resolveActor), so the service-role
@@ -55,25 +118,37 @@ export async function getMyActions(userId: string): Promise<MeActions> {
   if (actor.msmeId) {
     const [orders, { data: rfqs }] = await Promise.all([
       orderItems(admin, userId, 'msme_id', actor.msmeId, 'buyer'),
-      admin.from('rfqs').select('id, title, status, quote_count, expires_at').eq('msme_id', actor.msmeId).in('status', ['open', 'quoted']).is('deleted_at', null),
+      admin.from('rfqs').select('id, title, status, quote_count, expires_at' + RFQ_GOODS_LIST_COLS).eq('msme_id', actor.msmeId).in('status', ['open', 'quoted']).is('deleted_at', null),
     ])
-    const live = rfqs ?? []
+    const live = (rfqs ?? []) as unknown as { id: string; title: string | null; quote_count: number | null; expires_at: string | null; kind?: string | null }[]
+    // E9 (flag `home`): the lowest all-in total per RFQ and the quotes about to lapse.
+    const quoteFacts = isOnFor('home', userId) ? await buyerQuoteFacts(admin, live) : null
     const quotes: ActionItem[] = live
       .filter((r) => Number(r.quote_count) > 0)
-      .map((r) => ({ kind: 'quotes_waiting', objectId: r.id as string, title: (r.title as string) ?? '', action: null, count: Number(r.quote_count), dueAt: (r.expires_at as string | null) ?? null, href: `/app/rfq/${r.id}` }))
+      .map((r) => ({
+        kind: 'quotes_waiting' as const,
+        objectId: r.id,
+        title: r.title ?? '',
+        action: null,
+        count: Number(r.quote_count),
+        dueAt: r.expires_at ?? null,
+        href: `/app/rfq/${r.id}`,
+        ...(quoteFacts ? { fromPaise: quoteFacts.fromPaise.get(r.id) ?? null } : {}),
+      }))
     const questions: ActionItem[] = []
     if (live.length) {
       const { data: open } = await admin.from('rfq_clarifications').select('rfq_id').in('rfq_id', live.map((r) => r.id as string)).is('answered_at', null).is('deleted_at', null)
       const byRfq = new Map<string, number>()
       for (const c of open ?? []) byRfq.set(c.rfq_id as string, (byRfq.get(c.rfq_id as string) ?? 0) + 1)
       for (const r of live) {
-        const n = byRfq.get(r.id as string)
-        if (n) questions.push({ kind: 'clarification_question', objectId: r.id as string, title: (r.title as string) ?? '', action: null, count: n, dueAt: null, href: `/app/rfq/${r.id}#questions` })
+        const n = byRfq.get(r.id)
+        if (n) questions.push({ kind: 'clarification_question', objectId: r.id, title: r.title ?? '', action: null, count: n, dueAt: null, href: `/app/rfq/${r.id}#questions` })
       }
     }
+    const expiring = quoteFacts?.expiring ?? []
     buyer = {
-      counts: { requirements: quotes.length + questions.length, orders: orders.length },
-      items: sortActionItems([...orders, ...quotes, ...questions]).slice(0, ITEM_CAP),
+      counts: { requirements: quotes.length + questions.length + expiring.length, orders: orders.length },
+      items: sortActionItems<ActionItem>([...orders, ...quotes, ...expiring, ...questions]).slice(0, ITEM_CAP),
     }
   }
 

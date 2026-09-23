@@ -838,5 +838,21 @@
     "composer_placeholder": "Describe what you need, or reply…",
     "composer_label": "Message to your assistant",
     "send": "Send"
+  },
+  "home_v3": {
+    "needs_your_action": "Needs your action",
+    "quotes_waiting": "{count} quote(s) on “{title}”",
+    "quote_expiring": "Quote from {provider} expires {when}",
+    "quotes_from": "from {price} all-in · compare",
+    "clarification_question": "A provider asked a question on “{title}”",
+    "due": "by {when}",
+    "buy_again": "Buy again",
+    "buy": "Buy",
+    "price_now": "{now} + GST",
+    "price_then_now": "{then} last time · {now} now (+ GST)",
+    "action_share_requirements": "Share your requirements",
+    "action_review_delivery": "Review the delivery",
+    "action_leave_review": "Leave a review",
+    "action_dispute_statement": "Add your side of the dispute"
   }
 }

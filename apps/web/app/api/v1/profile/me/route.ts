@@ -10,6 +10,7 @@ import { isOnboardingEnabledFor } from '@/lib/agent/onboarding'
 import { isMunshiEnabledFor } from '@/lib/agent/munshi'
 import { isSupportEnabledFor } from '@/lib/support/settings'
 import { isProcurementEnabledFor } from '@/lib/agent/procurement'
+import { isOnFor } from '@/lib/experiments'
 import { providerProfileGaps } from '@amclub/shared'
 
 /** S2.4 — the slugs of the categories the provider lists (their own rows). */
@@ -84,6 +85,7 @@ export async function GET() {
     munshiEnabled,
     supportEnabled,
     procurementEnabled,
+    homeV3Enabled: isOnFor('home', userId),
     // S2.4 — the caller's own listing facts (Munshi's weekly growth nudge reads them under the provider's token)
     providerProfileGaps: provider ? providerProfileGaps(provider as Parameters<typeof providerProfileGaps>[0]) : null,
     providerState: provider ? ((provider as { state?: string | null }).state ?? null) : null,

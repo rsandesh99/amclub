@@ -602,7 +602,10 @@
     "consequence_auto_cancel_refund": "இல்லையெனில் முழுப் பணத்திருப்பத்துடன் தானாக ரத்தாகும்",
     "consequence_auto_accept": "அதன் பிறகு உங்கள் சார்பில் ஏற்கப்படும்",
     "needs_your_action": "உங்கள் நடவடிக்கை தேவை",
-    "see_all": "அனைத்தையும் காண்க"
+    "see_all": "அனைத்தையும் காண்க",
+    "quote_expiring": "{provider} மேற்கோள் {when} காலாவதியாகும்",
+    "quotes_from": "{price} முதல், அனைத்தும் சேர்த்து · ஒப்பிடுங்கள்",
+    "none": "இப்போது நீங்கள் செய்ய வேண்டியது எதுவும் இல்லை."
   },
   "public_nav": {
     "services": "சேவைகள்",
@@ -932,5 +935,25 @@
     "budget_over25k": "> ₹25,000",
     "need_different": "வேறு ஏதாவது வேண்டுமா?",
     "need_different_cta": "தேவையைப் பதிவிட்டு விலைப்புள்ளிகள் பெறுங்கள்"
+  },
+  "home_v3": {
+    "recent_orders": "சமீபத்திய ஆர்டர்கள்",
+    "see_all": "அனைத்தையும் பார்க்க",
+    "saved_providers": "சேமித்த வழங்குநர்கள்",
+    "pickup_heading": "விட்ட இடத்திலிருந்து தொடருங்கள்",
+    "pickup_draft": "வரைவு",
+    "pickup_package": "தொகுப்பு",
+    "pickup_provider": "வழங்குநர்",
+    "draft_untitled": "உங்கள் தேவை",
+    "buy_again_heading": "மீண்டும் வாங்க",
+    "buy_again": "மீண்டும் வாங்க",
+    "buy": "வாங்க",
+    "price_now": "{now} + GST",
+    "price_then_now": "கடந்த முறை {then} · இப்போது {now} (+ GST)",
+    "unavailable": "இந்த வழங்குநர் இனி இதை வழங்கவில்லை",
+    "find_similar": "இதுபோன்றவை தேடுக",
+    "repeat_requirement": "தேவையை மீண்டும் அனுப்பு",
+    "complete_profile": "வழங்குநர்கள் சரியாக மேற்கோள் தர உங்கள் வணிக சுயவிவரத்தை நிறைவு செய்யுங்கள்",
+    "dismiss": "ஒரு வாரம் மறை"
   }
 }

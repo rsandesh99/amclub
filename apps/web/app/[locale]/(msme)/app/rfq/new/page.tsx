@@ -9,7 +9,7 @@ import { AGENT_ENABLED } from '@/lib/flags'
 import { isAgentEnabledForUser } from '@/lib/agent/settings'
 import { Button } from '@/components/ui/button'
 import { RfqForm, type RfqCategoryOption, type RfqFormV3, type RfqPrefill } from '@/components/rfq/RfqForm'
-import { INDIAN_STATES, parseRfqPrefill, SPECIALIZATIONS, type RfqEntryPoint } from '@amclub/shared'
+import { budgetBandOf, INDIAN_STATES, isEmptyMustHaves, parseRfqPrefill, rfqMustHavesSchema, SPECIALIZATIONS, type RfqEntryPoint } from '@amclub/shared'
 import { isOnFor } from '@/lib/experiments'
 import { getAgentSetting } from '@/lib/agent/settings'
 
@@ -142,6 +142,22 @@ export default async function NewRfqPage({
       const slug = known(((pc ?? [])[0]?.category as { slug?: string } | null)?.slug)
       if (slug) prefill = { categorySlug: slug, title: '', details: {}, budgetMin: '', budgetMax: '' }
     }
+    if (prefill && pre.from) {
+      // E9 FR-9.3 "Repeat requirement" (and every v3 repost): the service, budget band and must-haves
+      // come along too; needed-by stays cleared. Own RFQ only (the user-scoped client, RLS).
+      const { data: prev } = await supabase.from('rfqs').select('details, budget_min_paise, budget_max_paise, must_haves').eq('id', pre.from).maybeSingle()
+      if (prev) {
+        const svc = (prev.details as Record<string, unknown> | null)?.['service_slug']
+        const band = budgetBandOf(prev.budget_min_paise == null ? null : Number(prev.budget_min_paise), prev.budget_max_paise == null ? null : Number(prev.budget_max_paise))
+        const mh = rfqMustHavesSchema.safeParse(prev.must_haves)
+        prefill = {
+          ...prefill,
+          ...(typeof svc === 'string' && (SPECIALIZATIONS as Record<string, readonly string[]>)[prefill.categorySlug]?.includes(svc) ? { service: svc } : {}),
+          ...(band ? { budgetBand: band } : {}),
+          ...(mh.success && !isEmptyMustHaves(mh.data) ? { mustHaves: mh.data } : {}),
+        }
+      }
+    }
     if (prefill && pre.service && !prefill.service && (SPECIALIZATIONS as Record<string, readonly string[]>)[prefill.categorySlug]?.includes(pre.service)) {
       prefill = { ...prefill, service: pre.service }
     }
@@ -186,6 +202,8 @@ export default async function NewRfqPage({
           data-entry={v3.entry}
           data-prefill-category={prefill?.categorySlug ?? ''}
           data-prefill-service={prefill?.service ?? ''}
+          data-prefill-band={prefill?.budgetBand ?? ''}
+          data-prefill-must-haves={prefill?.mustHaves ? JSON.stringify(prefill.mustHaves) : ''}
           data-docs={Object.values(v3.documents).flat().map((d) => d.key).join(',')}
           data-sla={Object.entries(v3.sla).map(([k, v]) => `${k}:${v.medianMinutes ?? ''}:${v.n}`).join(',')}
         >

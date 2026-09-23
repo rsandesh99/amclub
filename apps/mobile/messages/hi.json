@@ -838,5 +838,21 @@
     "composer_placeholder": "बताइए क्या चाहिए, या जवाब दीजिए…",
     "composer_label": "अपने सहायक को संदेश",
     "send": "भेजें"
+  },
+  "home_v3": {
+    "needs_your_action": "आपके ध्यान के लिए",
+    "quotes_waiting": "“{title}” पर {count} कोटेशन",
+    "quote_expiring": "{provider} का कोटेशन {when} समाप्त होगा",
+    "quotes_from": "{price} से, सब मिलाकर · तुलना करें",
+    "clarification_question": "“{title}” पर एक प्रदाता ने सवाल पूछा",
+    "due": "{when} तक",
+    "buy_again": "फिर से खरीदें",
+    "buy": "खरीदें",
+    "price_now": "{now} + GST",
+    "price_then_now": "पिछली बार {then} · अब {now} (+ GST)",
+    "action_share_requirements": "अपनी ज़रूरतें साझा करें",
+    "action_review_delivery": "डिलीवरी देखें",
+    "action_leave_review": "समीक्षा लिखें",
+    "action_dispute_statement": "विवाद में अपना पक्ष जोड़ें"
   }
 }

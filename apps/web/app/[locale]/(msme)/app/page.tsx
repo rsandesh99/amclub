@@ -15,8 +15,9 @@ import { isProcurementEnabledFor } from '@/lib/agent/procurement'
 import { createAdminClient } from '@/lib/supabase/server'
 import { isOnFor } from '@/lib/experiments'
 import { RecentlyViewed } from '@/components/recent-v3/RecentlyViewed'
+import { HomeV3 } from '@/components/home-v3/HomeV3'
 
-function getGreeting() {
+function getGreeting(): 'greeting_morning' | 'greeting_afternoon' | 'greeting_evening' {
   const hour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getHours()
   if (hour < 12) return 'greeting_morning'
   if (hour < 17) return 'greeting_afternoon'
@@ -39,8 +40,21 @@ export default async function MsmeHomePage() {
   const supportOn = AGENT_ENABLED ? await isSupportEnabledFor(await createAdminClient(), user.id) : false
   // S3.1 — the buying assistant for an enabled, cohorted buyer (the page 404s for everyone else).
   const assistantOn = AGENT_ENABLED ? await isProcurementEnabledFor(await createAdminClient(), user.id) : false
-  const orders = (await listMyOrders(user.id, 'msme')).slice(0, 3)
   const greeting = getGreeting()
+  // Experience v3 E9 (flag `home`): the home as a tool.
+  if (isOnFor('home', user.id)) {
+    return (
+      <HomeV3
+        userId={user.id}
+        firstName={user.fullName?.split(' ')[0] ?? ''}
+        greetingKey={greeting}
+        completeness={profile.profileCompleteness}
+        supportOn={supportOn}
+        assistantOn={assistantOn}
+      />
+    )
+  }
+  const orders = (await listMyOrders(user.id, 'msme')).slice(0, 3)
   const name = user.fullName?.split(' ')[0] ?? 'there'
 
   return (
