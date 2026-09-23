@@ -69,7 +69,10 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: `latest` resolves through the unauthenticated GitHub API,
+          # which rate-limits shared runner IPs ("Failed to resolve latest
+          # Supabase CLI release: rate limit exceeded"). Bump deliberately.
+          version: 2.117.0
 
       - name: Start the disposable Supabase stack
         run: supabase start --workdir .github/supabase-ci -x studio,imgproxy,realtime,edge-runtime,logflare,vector

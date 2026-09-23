@@ -15,6 +15,9 @@ import { NextResponse } from 'next/server'
  *    per-identifier (+ per-IP) for OTP send.
  *  - To add a limiter for a new Phase-5 endpoint: add one line to `build(...)`
  *    below and call `enforce(limiters.x, key)` in the route. Nothing else.
+ *  - Probing a limiter in production: CDN-cached GETs (e.g. /catalog/search,
+ *    `s-maxage=60`) never reach the function for a repeated URL, so give each
+ *    probe request a unique query param or the limiter never runs.
  */
 
 const url = process.env['UPSTASH_REDIS_REST_URL']
