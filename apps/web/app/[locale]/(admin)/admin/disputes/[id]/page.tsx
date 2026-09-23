@@ -5,6 +5,10 @@ import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { ConfirmSheet } from '@/components/ui/confirm-sheet'
+import type { DisputeResolution } from '@amclub/shared'
+
+type Resolution = DisputeResolution
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -25,6 +29,7 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
   const [partialRupees, setPartialRupees] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [showThread, setShowThread] = useState(false)
+  const [confirming, setConfirming] = useState<Resolution | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/v1/admin/disputes/${id}`, { cache: 'no-store' })
@@ -33,18 +38,42 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
   }, [id])
   useEffect(() => { load() }, [load])
 
-  async function resolve(resolution: string) {
+  // D2 — every resolution moves money, so each goes through a confirm sheet.
+  // Partial: parse the typed rupees to integer paise (input parsing only — the
+  // server's computeRefundPaise stays the money authority) and bound it by the
+  // server-provided order total.
+  function partialPaise(): number | null {
+    const raw = partialRupees.trim()
+    if (!/^\d+(\.\d{1,2})?$/.test(raw)) return null
+    const [r, p = ''] = raw.split('.')
+    return Number(r) * 100 + Number(p.padEnd(2, '0'))
+  }
+  function openConfirm(resolution: Resolution) {
+    setError('')
+    if (resolution === 'refund_partial') {
+      const amt = partialPaise()
+      const totalPaise = Number(data?.order?.total_paise ?? 0)
+      if (amt == null || amt <= 0 || amt > totalPaise) {
+        setError(t('partial_invalid', { max: formatINR(totalPaise) }))
+        return
+      }
+    }
+    setConfirming(resolution)
+  }
+
+  async function resolve(resolution: Resolution) {
     setBusy(true); setError('')
     const body: any = { resolution }
-    if (resolution === 'refund_partial') body.amountPaise = Math.round(Number(partialRupees) * 100)
+    if (resolution === 'refund_partial') body.amountPaise = partialPaise()
     // S1.7 — link the click to the card the founder had open (after settlement; never a precondition).
     if (data?.triage?.id) body.triage_id = data.triage.id
     const res = await fetch(`/api/v1/admin/disputes/${id}/resolve`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
-    const d = await res.json()
+    const d = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) { setError(typeof d.error === 'string' ? d.error : t('action_failed')); return }
+    setConfirming(null)
     await load()
   }
 
@@ -168,17 +197,43 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
         <div className="rounded-card border border-border bg-surface p-4 space-y-3">
           <h2 className="text-sm font-semibold">{t('resolve')}</h2>
           <div className="flex flex-wrap gap-2">
-            <Button variant="danger" onClick={() => resolve('refund_full')} loading={busy}>{t('refund_full')}</Button>
-            <Button onClick={() => resolve('release')} loading={busy}>{t('release')}</Button>
+            <Button variant="danger" onClick={() => openConfirm('refund_full')} disabled={busy}>{t('refund_full')}</Button>
+            <Button onClick={() => openConfirm('release')} disabled={busy}>{t('release')}</Button>
           </div>
           <div className="flex items-end gap-2 border-t border-border pt-3">
             <label className="flex-1 text-xs">{t('partial_amount')}
-              <input type="number" value={partialRupees} onChange={(e) => setPartialRupees(e.target.value)} className="mt-1 w-full rounded-button border border-border bg-background p-2 text-sm" placeholder={`≤ ${formatINR(total)}`} />
+              <span className="mt-1 flex items-center rounded-button border border-border bg-background">
+                <span className="pl-2 text-sm text-foreground-secondary" aria-hidden="true">₹</span>
+                <input type="text" inputMode="decimal" value={partialRupees} onChange={(e) => setPartialRupees(e.target.value.replace(/[^\d.]/g, ''))} className="w-full bg-transparent p-2 text-sm outline-none" placeholder={t('partial_placeholder', { max: formatINR(total) })} />
+              </span>
             </label>
-            <Button variant="outline" onClick={() => resolve('refund_partial')} loading={busy} disabled={!partialRupees}>{t('refund_partial')}</Button>
+            <Button variant="outline" onClick={() => openConfirm('refund_partial')} disabled={busy || !partialRupees}>{t('refund_partial')}</Button>
           </div>
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && !confirming && <p role="alert" className="text-sm text-danger">{error}</p>}
         </div>
+      )}
+
+      {confirming && (
+        <ConfirmSheet
+          open
+          title={t(`confirm_${confirming}_title` as 'confirm_release_title')}
+          description={
+            confirming === 'release'
+              ? t('confirm_release_body', { amount: formatINR(Number(order?.provider_earning_paise ?? 0)) })
+              : confirming === 'refund_full'
+                ? t('confirm_refund_full_body', { amount: formatINR(total) })
+                : t('confirm_refund_partial_body', { amount: formatINR(partialPaise() ?? 0), total: formatINR(total) })
+          }
+          confirmLabel={t(confirming)}
+          cancelLabel={t('confirm_back')}
+          onConfirm={() => resolve(confirming)}
+          onClose={() => { if (!busy) { setConfirming(null); setError('') } }}
+          busy={busy}
+          error={error || null}
+          variant={confirming === 'release' ? 'primary' : 'danger'}
+        >
+          <p className="text-xs text-foreground-secondary">{t('confirm_resolution_final')}</p>
+        </ConfirmSheet>
       )}
 
       {/* S1.7 — Party statements (verbatim, redacted) */}
