@@ -61,7 +61,12 @@
     "consent_prefix": "मैं सहमत हूँ:",
     "consent_terms": "सेवा शर्तें",
     "consent_and": "और",
-    "consent_privacy": "गोपनीयता नीति"
+    "consent_privacy": "गोपनीयता नीति",
+    "partner_signup_title": "प्रदाता बनें",
+    "partner_signup_body": "प्रदाता ऑनबोर्डिंग — व्यवसाय विवरण, GST, KYC और बैंक खाता — अभी AMClub वेबसाइट पर होती है। इसमें लगभग 10 मिनट लगते हैं।",
+    "partner_signup_same_number": "वहाँ इसी मोबाइल नंबर से साइन इन करें। मंज़ूरी मिलने के बाद आप लीड, कोटेशन और ऑर्डर यहीं ऐप में संभाल सकते हैं।",
+    "partner_signup_open_web": "वेबसाइट पर जारी रखें",
+    "partner_signup_open_failed": "ब्राउज़र नहीं खुल सका। जारी रखने के लिए {url} पर जाएँ।"
   },
   "msme_signup": {
     "step_profile_title": "आपकी प्रोफ़ाइल",

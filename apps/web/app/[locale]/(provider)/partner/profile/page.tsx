@@ -8,6 +8,7 @@ import { ProviderProfileForm, type ProviderProfileInitial } from '@/components/p
 import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
 import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
 import { AGENT_ENABLED } from '@/lib/flags'
+import { PROVIDER_LANGUAGES, type ProviderLanguage } from '@amclub/shared'
 
 export default async function ProviderProfilePage() {
   const t = await getTranslations('profile')
@@ -28,7 +29,7 @@ export default async function ProviderProfilePage() {
   if (!profile) redirect('/partner/onboarding')
 
   const langs = Array.isArray(profile.languages)
-    ? (profile.languages.filter((l): l is 'en' | 'hi' => l === 'en' || l === 'hi'))
+    ? (profile.languages.filter((l): l is ProviderLanguage => (PROVIDER_LANGUAGES as readonly string[]).includes(l)))
     : []
 
   const initial: ProviderProfileInitial = {

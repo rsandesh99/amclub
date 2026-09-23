@@ -488,7 +488,12 @@
     "wa_card_no_number": "Our WhatsApp number will appear here once it is set up.",
     "wa_card_failed": "Could not start the WhatsApp interview. Please try again.",
     "wa_prefill_chip": "From your WhatsApp interview",
-    "wa_prefill_notice": "We prefilled this form from your WhatsApp interview. Check each field before you continue."
+    "wa_prefill_notice": "We prefilled this form from your WhatsApp interview. Check each field before you continue.",
+    "state_placeholder": "— Select state —",
+    "city_placeholder": "e.g. Hyderabad",
+    "bank_holder_placeholder": "As printed on your cheque or passbook",
+    "bank_account_placeholder": "9–18 digits",
+    "bank_verify_failed": "We couldn't verify this bank account. Check the account number, IFSC and holder name, then try again."
   },
   "admin": {
     "verifications_title": "Provider Verifications",
@@ -1127,7 +1132,10 @@
     "withdraw_failed": "Could not withdraw. Please try again.",
     "withdraw_err_checkout": "The buyer is paying for this quote right now, so it cannot be withdrawn. Try again in 30 minutes.",
     "withdraw_err_closed": "This quote can no longer be withdrawn. Refresh to see its current status.",
-    "revise_none_left": "No revisions left — this quote has been revised the maximum number of times."
+    "revise_none_left": "No revisions left — this quote has been revised the maximum number of times.",
+    "intake_take_photo": "Take photo",
+    "intake_choose_file": "Choose file",
+    "intake_choose_file_hint": "Photo, PDF, STEP or DXF"
   },
   "coming_soon": {
     "badge": "Coming soon",

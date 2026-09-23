@@ -61,7 +61,12 @@
     "consent_prefix": "I agree to the",
     "consent_terms": "Terms of Service",
     "consent_and": "and",
-    "consent_privacy": "Privacy Policy"
+    "consent_privacy": "Privacy Policy",
+    "partner_signup_title": "Become a provider",
+    "partner_signup_body": "Provider onboarding — business details, GST, KYC and bank account — happens on the AMClub website for now. It takes about 10 minutes.",
+    "partner_signup_same_number": "Sign in there with this same mobile number. Once you're approved, you can manage leads, quotes and orders here in the app.",
+    "partner_signup_open_web": "Continue on the website",
+    "partner_signup_open_failed": "Couldn't open the browser. Visit {url} to continue."
   },
   "msme_signup": {
     "step_profile_title": "Your profile",

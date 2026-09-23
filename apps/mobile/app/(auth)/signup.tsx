@@ -2,11 +2,12 @@ import {
   Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
-import { normalisePhone, isEmail, signInWithGoogle } from '@/lib/auth'
+import { isEmail, signInWithGoogle } from '@/lib/auth'
+import { normalizeIndianPhone, phoneSchema, toE164India } from '@amclub/shared'
 
 type Method = 'phone' | 'email'
 type Step = 'auth' | 'otp' | 'profile'
@@ -20,6 +21,9 @@ export default function SignupScreen() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
+  // 30 s resend countdown + single-flight verify guard (see login.tsx).
+  const [resendIn, setResendIn] = useState(0)
+  const verifyingRef = useRef(false)
   const [fullName, setFullName] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,6 +31,12 @@ export default function SignupScreen() {
   // and is written to terms_acceptances (surface 'mobile') before the profile
   // POST, which refuses without it.
   const [agreed, setAgreed] = useState(false)
+
+  useEffect(() => {
+    if (step !== 'otp' || resendIn <= 0) return
+    const timer = setTimeout(() => setResendIn((s) => s - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [step, resendIn])
 
   function requireConsent(): boolean {
     if (agreed) return true
@@ -39,34 +49,45 @@ export default function SignupScreen() {
     setLoading(true)
     try {
       if (method === 'phone') {
-        const normalised = normalisePhone(phone)
-        if (normalised.length < 13) { Alert.alert(t('errors.title'), t('errors.invalid_phone')); return }
-        const { error } = await supabase.auth.signInWithOtp({ phone: normalised, options: { shouldCreateUser: true } })
+        // Paste-safe: "+91 98765 43210" → national 9876543210 → +919876543210.
+        if (!phoneSchema.safeParse(normalizeIndianPhone(phone)).success) { Alert.alert(t('errors.title'), t('errors.invalid_phone')); return }
+        const { error } = await supabase.auth.signInWithOtp({ phone: toE164India(phone), options: { shouldCreateUser: true } })
         if (error) { Alert.alert(t('common.error'), error.message); return }
       } else {
         if (!isEmail(email)) { Alert.alert(t('errors.title'), t('errors.invalid_email')); return }
         const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: true } })
         if (error) { Alert.alert(t('common.error'), error.message); return }
       }
+      setOtp('')
+      setResendIn(30)
       setStep('otp')
     } finally {
       setLoading(false)
     }
   }
 
-  async function verifyOtp() {
-    if (otp.length !== 6) { Alert.alert(t('errors.title'), t('errors.invalid_code')); return }
+  async function verifyOtp(code: string = otp) {
+    if (code.length !== 6) { Alert.alert(t('errors.title'), t('errors.invalid_code')); return }
+    if (verifyingRef.current) return
+    verifyingRef.current = true
     setLoading(true)
     try {
       const { error } =
         method === 'phone'
-          ? await supabase.auth.verifyOtp({ phone: normalisePhone(phone), token: otp, type: 'sms' })
-          : await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: otp, type: 'email' })
-      if (error) { Alert.alert(t('common.error'), error.message); return }
+          ? await supabase.auth.verifyOtp({ phone: toE164India(phone), token: code, type: 'sms' })
+          : await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code, type: 'email' })
+      if (error) { setOtp(''); Alert.alert(t('common.error'), error.message); return }
       setStep('profile')
     } finally {
+      verifyingRef.current = false
       setLoading(false)
     }
+  }
+
+  function onOtpChange(value: string) {
+    const code = value.replace(/\D/g, '').slice(0, 6)
+    setOtp(code)
+    if (code.length === 6) void verifyOtp(code)
   }
 
   async function google() {
@@ -123,7 +144,7 @@ export default function SignupScreen() {
                 <View className="flex-row items-center rounded-xl border border-gray-200 bg-surface px-4 py-3">
                   <Text className="mr-2 text-base font-medium text-foreground">+91</Text>
                   <View className="h-5 w-px bg-gray-300 mr-2" />
-                  <TextInput className="flex-1 text-base text-foreground" placeholder={t('auth.phone_placeholder')} placeholderTextColor="#9CA3AF" keyboardType="phone-pad" maxLength={10} value={phone} onChangeText={setPhone} />
+                  <TextInput className="flex-1 text-base text-foreground" placeholder={t('auth.phone_placeholder')} placeholderTextColor="#9CA3AF" keyboardType="phone-pad" textContentType="telephoneNumber" autoComplete="tel" accessibilityLabel={t('auth.phone_label')} value={phone} onChangeText={(v) => setPhone(normalizeIndianPhone(v))} />
                 </View>
               ) : (
                 <View className="rounded-xl border border-gray-200 bg-surface px-4 py-3">
@@ -163,11 +184,24 @@ export default function SignupScreen() {
           {step === 'otp' && (
             <View className="gap-4">
               <Text className="text-sm text-foreground-secondary text-center">{t('auth.otp_sent_to')} {identifierLabel}</Text>
-              <TextInput className="rounded-xl border border-gray-200 bg-surface px-4 py-3 text-center text-2xl font-bold tracking-widest text-foreground" placeholder="— — — — — —" placeholderTextColor="#9CA3AF" keyboardType="number-pad" maxLength={6} value={otp} onChangeText={setOtp} />
-              <TouchableOpacity onPress={verifyOtp} disabled={loading} className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}>
+              <TextInput
+                className="rounded-xl border border-gray-200 bg-surface px-4 py-3 text-center text-2xl font-bold tracking-widest text-foreground"
+                placeholder="— — — — — —" placeholderTextColor="#9CA3AF" keyboardType="number-pad"
+                textContentType="oneTimeCode" autoComplete="sms-otp" autoFocus
+                accessibilityLabel={t('auth.otp_label')}
+                value={otp} onChangeText={onOtpChange} editable={!loading}
+              />
+              <TouchableOpacity onPress={() => void verifyOtp()} disabled={loading} className={`rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}>
                 <Text className="text-base font-semibold text-white">{loading ? t('common.loading') : t('auth.verify_btn')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setStep('auth')} className="items-center">
+              {resendIn > 0 ? (
+                <Text className="text-center text-sm text-foreground-secondary">{t('auth.otp_resend_in', { seconds: resendIn })}</Text>
+              ) : (
+                <TouchableOpacity onPress={() => void sendOtp()} disabled={loading} accessibilityRole="button" className="min-h-[44px] items-center justify-center">
+                  <Text className="text-sm font-semibold text-primary">{t('auth.otp_resend')}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={() => { setOtp(''); setStep('auth') }} accessibilityRole="button" className="min-h-[44px] items-center justify-center">
                 <Text className="text-sm text-primary">{method === 'phone' ? t('auth.change_number') : t('auth.change_email')}</Text>
               </TouchableOpacity>
             </View>

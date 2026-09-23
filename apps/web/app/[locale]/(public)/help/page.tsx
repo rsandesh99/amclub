@@ -72,12 +72,12 @@ export default async function HelpPage() {
         <p className="mt-1 text-sm text-foreground-secondary">{t('grievance_body', { hours: GRIEVANCE_SLA.acknowledgeHours, days: GRIEVANCE_SLA.resolveDays })}</p>
         <p className="mt-1 text-sm text-foreground">{GRIEVANCE_OFFICER.name} · {GRIEVANCE_OFFICER.designation}</p>
         <a
-          href={`mailto:`}
-          className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+          href={`mailto:${GRIEVANCE_EMAIL}`}
+          className="mt-2 inline-flex min-h-[44px] items-center text-sm font-medium text-primary hover:underline"
         >
           {GRIEVANCE_EMAIL}
         </a>
-        <Link href="/grievance" className="ml-3 inline-block text-sm font-medium text-primary hover:underline">
+        <Link href="/grievance" className="ml-3 inline-flex min-h-[44px] items-center text-sm font-medium text-primary hover:underline">
           {t('grievance_link')}
         </Link>
       </section>
