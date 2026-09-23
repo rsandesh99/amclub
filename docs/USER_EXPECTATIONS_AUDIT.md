@@ -272,3 +272,41 @@ user's own session.* No inferred profiles; user-confirmed preferences only (see 
 9. **Ops tooling** — user lookup, support timeline, case model, admin-decision notices, observability.
 10. **Mobile functional parity**.
 11. **Agent memory** (P2.4) — §8.1 + ADR, dark, after the 25-order gate.
+
+---
+
+## Status after PR #15 (2026-09-23)
+
+**Fixed in this PR** (code + regression checks where a harness exists; nothing run against the live DB):
+P0-1 (0042 users guard) · P0-2, P0-3, P0-10 mutability (0043: messages read-only, no client order_events
+inserts, append-only audit_logs, msme_profiles owner read-only) · P0-4 (quote accept opens Razorpay behind a
+confirm) · P0-5 (stable idempotency key per quote + server one-checkout-per-RFQ guard; a racing duplicate is
+flagged for an ops refund, never auto-refunded on a repurposed transition) · P0-6 (no caching of pages/API
+data, cache purge on sign-out) · P0-7 (privacy copy discloses AI processors + WhatsApp media, version bump) ·
+P0-8 (suspension enforced, `/account-suspended` screen) · P0-9 (KYC stored as paths, signed on read) · P0-10
+audit insert errors logged · P0-11 grievance `mailto:` · P0-12 (injection event payload redacted).
+Buyer P1: cancel after accept · raise dispute · requirements form + both parties see them · invoice uses the
+checkout GSTIN · refund amount/status shown · repost with edits (`?from=`) · payment-held first view.
+Provider P1: payout hold reasons · quote thread on web + role-aware links · RFQ inbox history tabs (won/lost/
+expired) · withdraw quote · revisions-left · capacity pause refuses package checkout · pending_kyc loop ·
+Telugu kept on save. Notifications: te/ta copy with en fallback, RFQ/quote expiry, auto-cancel (provider),
+auto-accept (buyer), insert errors logged. Ops: buyer lookup by phone/email/GSTIN, provider search sanitised,
+heartbeat panel covers agent crons, handled 500s reach Sentry.
+
+**Still open** (each needs its own PR; several need an §8.1 entry or ADR first):
+- In-order chat after payment; unified inbox; message attachments/read state.
+- "AI activity" page (ai_decisions / munshi drafts / agent runs for the user); WhatsApp thread view.
+- DPDP export + erasure (anonymisation ADR — NO ACTION FKs + append-only tables), retention matrix + purge cron,
+  WhatsApp media retention schedule (FOUNDER_FILL).
+- Grievance case model with 24 h / 15 d SLA clocks (S2.3 `support_tickets` covers support escalation, not
+  statutory grievances); admin one-page user timeline; admin-decision notifications to users.
+- Notification preferences, live SMS, mobile push; payout-failed / suspension notices.
+- Change phone / email, sessions list, account linking, account deletion.
+- Provider statements (monthly/annual, commission GST invoices, 194-O TDS), bank-account change flow,
+  availability/vacation, team logins (account-model ADR), review flag button + new-review notice.
+- Search over own records, pagination on buyer/provider lists, exports (scope PDF, CSV).
+- `DISPUTABLE_STATUSES` lists accepted/requirements_submitted but `ORDER_TRANSITIONS` has no edge to
+  `disputed` from them (§3.7 says "any-pre-completed → disputed") — reconcile via ADR.
+- GST on "GST-included" services quotes: checkout adds 18 % on top — money decision, ADR.
+- Automatic refund of a duplicate RFQ order needs a dedicated state (ADR) — today it is flagged for ops.
+- Suspended buyers currently also lose READ access to past orders/invoices (fails safe; decide if they keep it).

@@ -266,3 +266,24 @@ Web font loading is already right (per-locale Noto, rupee-glyph subset, `lang` s
 9. **Design tokens package** (B6) + Storybook + visual regression + pseudo-locale in CI (A3).
 10. **Native affordances** — push, share, masked call/WhatsApp relay, capture, biometric gate, update
     prompt.
+
+---
+
+## Status after PR #15 (2026-09-23)
+
+**Done:** C1 type scale (base 16 px), `:lang(hi|te|ta)` line-height/tracking, weight 500, secondary text to
+7.8:1, `color-scheme: light`, 44 px min-height on form controls, 24 px consent checkbox, `rounded-input`
+defined, stale CSS vars synced · `ConfirmSheet` (C2) wired into quote accept, order actions, admin dispute
+resolution, withdraw quote · C3 phone paste (`normalizeIndianPhone`, shared + tests), fluid autofill OTP
+(web) + autofill/resend/auto-submit (mobile), ListBuilder text never lost, wizard bank-draft guard, Telugu
+options, goods checkout state/GST refresh + disabled-Pay reason, checkout GSTIN/coupon labels, coded +
+translated checkout errors, camera vs file picker split · C4 order stepper-lite (next-step line, revisions,
+auto-accept deadline, translated events, payment-held banner, refund) · C5 visible 44 px language switcher,
+grievance link · C6 mobile partner-signup screen, order-screen parity · C7 te/ta notification copy.
+
+**Open** (Part E order): error-code contract beyond checkout (B2) · `nextActionFor` + role-aware shell with
+tabs/badges/to-do queues/page titles (B1, B5) · shared input kit remainder (GSTIN→state/PAN, pincode,
+StateCombobox, MoneyInput, DateInput) · locale architecture (account locale sync on switch, first-run picker,
+shared date/plural formatters, localised states/categories, cross-script search) · mobile stacks per tab,
+keyboard avoidance, font scaling, FlatList/pull-to-refresh/offline cache · design-tokens package, Storybook,
+visual regression + pseudo-locale in CI · native affordances (push, share, masked call, capture).
