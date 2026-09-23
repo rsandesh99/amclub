@@ -40,11 +40,6 @@ export function ResultCard({ result }: { result: CatalogResult }) {
           />
           <Stars rating={result.avgRating} count={result.reviewCount} className="mt-1" />
         </div>
-        {result.topRated && (
-          <span className="shrink-0 rounded-chip bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent-foreground">
-            {t('top_rated')}
-          </span>
-        )}
       </div>
 
       {/* Package title */}

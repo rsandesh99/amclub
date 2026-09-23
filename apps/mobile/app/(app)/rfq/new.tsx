@@ -84,6 +84,10 @@ export default function NewRfqScreen() {
 
   const category = cats.find((c) => c.slug === slug)
   const fields: any[] = category?.rfq_template?.fields ?? []
+  // E0 / U10 — ONE free-text box (mirrors web RfqForm): the template's own
+  // textarea, when it has one, IS the box; the typed text is stored under its key.
+  const freeField = fields.find((f) => f.type === 'textarea') ?? null
+  const freeValue: string = details['additional_details'] ?? (freeField ? details[freeField.name] : undefined) ?? ''
 
   function markEdited(field: string) {
     setVoice((v: any) => {
@@ -158,7 +162,10 @@ export default function NewRfqScreen() {
   async function submit() {
     setError('')
     if (!slug || title.trim().length < 10) { setError(t('rfq.required')); return }
-    for (const f of fields) if (f.required && !details[f.name]?.trim()) { setError(rfqFieldLabel(f, locale) + ': ' + t('rfq.required')); return }
+    for (const f of fields) {
+      const v = f === freeField ? freeValue : details[f.name]
+      if (f.required && !v?.trim()) { setError(rfqFieldLabel(f, locale) + ': ' + t('rfq.required')); return }
+    }
     setLoading(true)
     const voiceMeta = voice
       ? {
@@ -170,8 +177,13 @@ export default function NewRfqScreen() {
           ...(voice.clarify ? { clarify: voice.clarify } : {}),
         }
       : undefined
+    const sendDetails: Record<string, string> = { ...details }
+    if (freeField) {
+      delete sendDetails['additional_details']
+      sendDetails[freeField.name] = freeValue
+    }
     const res = await createRfq({
-      category_slug: slug, title: title.trim(), details,
+      category_slug: slug, title: title.trim(), details: sendDetails,
       ...(intakeIds.length ? { intake_extraction_ids: intakeIds } : {}),
       ...(bmin ? { budget_min_paise: Math.round(Number(bmin) * 100) } : {}),
       ...(bmax ? { budget_max_paise: Math.round(Number(bmax) * 100) } : {}),
@@ -355,7 +367,7 @@ export default function NewRfqScreen() {
           </View>
         ) : null}
 
-        <Text className="text-sm font-medium text-foreground">{t('rfq.pick_category')}</Text>
+        <Text className="text-sm font-medium text-foreground">{t('rfq.pick_category')} *</Text>
         <View className="flex-row flex-wrap gap-2">
           {cats.map((c) => (
             <TouchableOpacity key={c.slug} onPress={() => { markEdited('category'); setSlug(c.slug); setDetails(voice ? details : {}) }}
@@ -367,12 +379,12 @@ export default function NewRfqScreen() {
 
         {category && (
           <>
-            <Field label={t('rfq.title_label')} value={title} onChange={(v) => { markEdited('title'); setTitle(v) }} />
-            {fields.map((f) => (
+            <Field label={t('rfq.title_label') + ' *'} value={title} onChange={(v) => { markEdited('title'); setTitle(v) }} />
+            {fields.filter((f) => f !== freeField).map((f) => (
               <Field key={f.name} label={rfqFieldLabel(f, locale) + (f.required ? ' *' : '') + (f.options ? ` (${f.options.join(' / ')})` : '')}
                 value={details[f.name] ?? ''} onChange={(v) => setDetails((d) => ({ ...d, [f.name]: v }))} multiline={f.type === 'textarea'} />
             ))}
-            <Field label={t('rfq.details_label')} value={details['additional_details'] ?? ''}
+            <Field label={freeField ? rfqFieldLabel(freeField, locale) + (freeField.required ? ' *' : '') : t('rfq.details_label')} value={freeValue}
               onChange={(v) => { markEdited('description'); setDetails((d) => ({ ...d, additional_details: v })) }} multiline />
             <View className="flex-row gap-3">
               <View className="flex-1"><Field label={t('rfq.budget_min')} value={bmin} onChange={setBmin} numeric /></View>

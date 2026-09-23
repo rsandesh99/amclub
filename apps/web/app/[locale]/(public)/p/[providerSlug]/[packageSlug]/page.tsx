@@ -9,7 +9,7 @@ import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
 import { getPackageDetail } from '@/lib/catalog/queries'
 import { getSiteUrl } from '@/lib/site-url'
-import { pickI18n, initials, computePricing } from '@/lib/format'
+import { pickI18n, initials, computePricing, formatINR } from '@/lib/format'
 
 export const revalidate = 300
 
@@ -81,7 +81,8 @@ export default async function PackageDetailPage({
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    // pb-28 below lg keeps the last section clear of the sticky buy bar.
+    <div className="mx-auto max-w-5xl px-4 pb-28 pt-8 lg:pb-8">
       <JsonLd data={jsonLd} />
 
       {/* Breadcrumb */}
@@ -221,6 +222,27 @@ export default async function PackageDetailPage({
             <p className="mt-2 text-center text-xs text-foreground-secondary">{t('buy_now_note')}</p>
           </div>
         </aside>
+      </div>
+
+      {/* E0 / U3 — on phones the buy box sits below the FAQs, so a sticky bar
+          keeps the price and Buy now in reach. Hidden from lg up, where the
+          sticky aside does the job. */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 pt-3 shadow-card lg:hidden"
+        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+      >
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-display text-lg font-bold leading-none tabular-nums">{t('price_plus_gst', { price: formatINR(pricing.discountedPaise) })}</p>
+            <p className="mt-1 truncate text-xs text-foreground-secondary">{t('delivery_days', { days: pkg.deliveryDays })}</p>
+          </div>
+          <Link
+            href={buyHref}
+            className="shrink-0 rounded-button bg-primary px-5 py-3 text-center font-semibold text-white transition-colors hover:bg-primary/90"
+          >
+            {t('buy_now')}
+          </Link>
+        </div>
       </div>
     </div>
   )

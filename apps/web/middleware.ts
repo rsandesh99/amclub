@@ -115,7 +115,8 @@ export async function middleware(request: NextRequest) {
     // Locale-STRIPPED path: the login page pushes `next` through the next-intl
     // router, which re-prefixes the active locale — a raw /hi/... here would
     // become /hi/hi/... and 404.
-    loginUrl.searchParams.set('next', path)
+    // The query rides along (e.g. a checkout's ?tier=), so the intent survives signup (E0 / U1).
+    loginUrl.searchParams.set('next', `${path}${request.nextUrl.search}`)
     return NextResponse.redirect(loginUrl)
   }
 

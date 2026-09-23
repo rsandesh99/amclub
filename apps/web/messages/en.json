@@ -18,7 +18,6 @@
     "view_all": "View all",
     "verified": "Verified",
     "promoted": "Promoted",
-    "top_rated": "Top Rated",
     "or": "or",
     "skip": "Skip for now",
     "optional": "Optional",
@@ -302,7 +301,6 @@
     "member_price": "{price} for members (extra {pct}% off)",
     "price_incl_note": "Plus 18% GST at checkout. GST invoice included.",
     "verified": "Verified",
-    "top_rated": "Top Rated",
     "view_all": "View all",
     "delivery_days": "{days, plural, one {# day} other {# days}}",
     "revisions": "{count, plural, one {# revision} other {# revisions}}",
@@ -386,7 +384,15 @@
     "faqs": "Frequently asked questions",
     "delivery_time": "Delivery time",
     "buy_now": "Buy now",
-    "buy_now_note": "Secure payment · GST invoice · Money held until you accept"
+    "buy_now_note": "Secure payment · GST invoice · Money held until you accept",
+    "price_plus_gst": "{price} + GST",
+    "see_packages": "See {count, plural, =1 {1 package} other {# packages}}",
+    "post_requirement_in": "Post a requirement in {category}",
+    "show_all_reviews": "Show all {count} reviews",
+    "reviews_pagination": "Review pages",
+    "page_prev": "← Newer",
+    "page_next": "Older →",
+    "page_of": "Page {page} of {pages}"
   },
   "landing": {
     "hero_title": "Every service your business needs. Verified. Transparent.",
@@ -405,7 +411,7 @@
     "step2_body": "Every provider is KYC- and credential-verified. Look for the blue tick.",
     "step3_title": "Pay safely, get delivered",
     "step3_body": "Your money is held securely and released only when you accept the work.",
-    "top_rated_title": "Top-rated providers",
+    "top_rated_title": "Highly rated providers",
     "provider_cta_title": "Are you a service provider?",
     "provider_cta_body": "Reach thousands of MSMEs looking for exactly what you offer. List your services free.",
     "provider_cta_btn": "Start selling on AMClub",
@@ -606,7 +612,8 @@
     "city_placeholder": "e.g. Hyderabad",
     "bank_holder_placeholder": "As printed on your cheque or passbook",
     "bank_account_placeholder": "9–18 digits",
-    "bank_verify_failed": "We couldn't verify this bank account. Check the account number, IFSC and holder name, then try again."
+    "bank_verify_failed": "We couldn't verify this bank account. Check the account number, IFSC and holder name, then try again.",
+    "continue_to_next": "Continue where you left off"
   },
   "admin": {
     "verifications_title": "Provider Verifications",
@@ -823,7 +830,8 @@
     "help": "Help & support",
     "sign_out": "Sign out",
     "signing_out": "Signing out…",
-    "assistant_entry": "Buying assistant"
+    "assistant_entry": "Buying assistant",
+    "search": "Search services"
   },
   "help": {
     "title": "Help & support",

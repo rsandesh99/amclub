@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/server'
 import { upsertUserRow } from '@/lib/auth/session'
-import { safeNext } from '@/lib/auth/safe-next'
+import { safeNext, withNext } from '@/lib/auth/safe-next'
 
 /**
  * OAuth / magic-link callback. The new-vs-returning decision is made HERE by
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     dest = wantsNext ?? roleHome
   } else {
     // Brand-new user → run the right wizard ONCE. `next` carries the intent.
-    dest = next.startsWith('/partner') ? '/partner/onboarding' : '/signup?complete=1'
+    dest = withNext(next.startsWith('/partner') ? '/partner/onboarding' : '/signup?complete=1', wantsNext)
   }
 
   return NextResponse.redirect(new URL(dest, origin))

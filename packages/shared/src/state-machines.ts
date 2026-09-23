@@ -71,6 +71,19 @@ export const DISPUTABLE_STATUSES: readonly OrderStatus[] = [
   'completed',
 ]
 
+/** Work in flight: paid, not yet completed or closed, and not in dispute (dashboards, "active orders"). */
+export const ORDER_IN_FLIGHT_STATUSES: readonly OrderStatus[] = [
+  'placed',
+  'accepted',
+  'requirements_submitted',
+  'in_progress',
+  'delivered',
+  'revision_requested',
+]
+
+/** Finished by acceptance: `reviewed` is a completed order the buyer went on to review. */
+export const ORDER_DONE_STATUSES: readonly OrderStatus[] = ['completed', 'reviewed']
+
 /** Statuses from which a payout is permitted (§3.7). */
 export const PAYOUT_RELEASE_STATUSES: readonly OrderStatus[] = [
   'completed',

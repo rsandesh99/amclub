@@ -157,6 +157,11 @@ jobs:
         working-directory: apps/web
         run: pnpm exec tsx scripts/verify-rfq.ts
 
+      - name: Experience v3 (PRD acceptance, one section per epic)
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/verify-experience.ts
+
       - name: App log (on failure)
         if: failure()
         run: tail -300 "$RUNNER_TEMP/next.log" || true

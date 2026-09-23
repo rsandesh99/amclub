@@ -9,6 +9,8 @@ import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
 import { SaveButton } from '@/components/catalog/SaveButton'
+import { TrackedLink } from '@/components/analytics/TrackedLink'
+import { ReviewList } from '@/components/catalog/ReviewList'
 import { getProviderBySlug, getPackagesForProvider, getReviews } from '@/lib/catalog/queries'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatResponseTime } from '@/lib/format'
@@ -66,6 +68,7 @@ export default async function ProviderProfilePage({
   ])
 
   const stateLabel = STATE_LABEL.get(provider.state) ?? provider.state
+  const primaryCategory = provider.categories[0] ?? null
   const responseTime = formatResponseTime(provider.medianResponseMinutes)
   const headlineCredential = headlineCredentialKind(provider.badges.map((b) => b.kind))
   const appUrl = getSiteUrl()
@@ -116,11 +119,6 @@ export default async function ProviderProfilePage({
               {provider.badges.length > 0 && (
                 <BadgeCheck className="h-5 w-5 text-trust" aria-label={t('verified')} />
               )}
-              {provider.topRated && (
-                <span className="rounded-chip bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent-foreground">
-                  {t('top_rated')}
-                </span>
-              )}
             </div>
             {headlineCredential && (
               <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-verified">
@@ -150,6 +148,29 @@ export default async function ProviderProfilePage({
             </div>
             <div className="mt-3">
               <VerificationBadges badges={provider.badges} />
+            </div>
+            {/* E0 / U4 — the two ways to buy, above the fold (was: Save only). */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {packages.length > 0 && (
+                <TrackedLink
+                  href={`/p/${provider.slug}#packages`}
+                  event="provider_cta_clicked"
+                  eventProps={{ cta: 'see_packages' }}
+                  className="rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+                >
+                  {t('see_packages', { count: packages.length })}
+                </TrackedLink>
+              )}
+              {primaryCategory && (
+                <TrackedLink
+                  href={`/app/rfq/new?category=${primaryCategory.slug}`}
+                  event="provider_cta_clicked"
+                  eventProps={{ cta: 'post_requirement' }}
+                  className="rounded-button border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                >
+                  {t('post_requirement_in', { category: pickI18n(primaryCategory.nameI18n, locale) })}
+                </TrackedLink>
+              )}
             </div>
           </div>
           <div className="shrink-0">
@@ -183,7 +204,7 @@ export default async function ProviderProfilePage({
       )}
 
       {/* Packages */}
-      <section className="mt-8">
+      <section id="packages" className="mt-8 scroll-mt-24">
         <h2 className="font-display text-lg font-bold">{t('packages')}</h2>
         {packages.length === 0 ? (
           <p className="mt-2 text-sm text-foreground-secondary">{t('no_packages')}</p>
@@ -243,23 +264,18 @@ export default async function ProviderProfilePage({
         {reviews.length === 0 ? (
           <p className="mt-2 text-sm text-foreground-secondary">{t('no_reviews')}</p>
         ) : (
-          <ul className="mt-4 space-y-4">
-            {reviews.map((r) => (
-              <li key={r.id} className="rounded-card border border-border bg-surface p-4">
-                <div className="flex items-center justify-between">
-                  <Stars rating={r.rating} />
-                  <span className="text-xs text-foreground-secondary">{t('verified_buyer')}</span>
-                </div>
-                {r.body && <p className="mt-2 text-sm text-foreground">{r.body}</p>}
-                {r.providerReply && (
-                  <div className="mt-3 rounded-button bg-muted p-3 text-sm">
-                    <span className="font-medium text-primary">{t('provider_reply')}: </span>
-                    <span className="text-foreground-secondary">{r.providerReply}</span>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
+          <>
+            <ReviewList reviews={reviews} />
+            {/* E0 / U11 — reviews were capped at 10 with no way to read the rest. */}
+            {reviewTotal > reviews.length && (
+              <Link
+                href={`/p/${provider.slug}/reviews`}
+                className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
+              >
+                {t('show_all_reviews', { count: reviewTotal })}
+              </Link>
+            )}
+          </>
         )}
       </section>
     </div>

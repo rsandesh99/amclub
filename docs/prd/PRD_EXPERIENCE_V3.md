@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Status** | DRAFT for founder approval |
+| **Status** | **APPROVED** by the founder, 2026-09-23 (DESIGN.md §8.7), including D-PRD2. Building in the §8 wave order; the agent programme is paused after S3.2. |
 | **Date** | 2026-09-23 |
 | **Decision owner** | Founder |
 | **Author** | Claude Code |
@@ -567,12 +567,11 @@ Each row is a UX element the survey found missing or weak. It's **paired with th
 - **FR-0.8 (U9): "Top Rated" is removed** from the card, the profile and the sort key until D1 decides its definition. Sort becomes rating weighted by review count.
 - **FR-0.9 (U10): the RFQ form merges the template "notes" field and "Anything else" into one field.** Category and title show the required mark.
 - **FR-0.10 (U11): "Show all reviews" links to a paginated list.** Minimal version of N13.
-- **FR-0.11 (U12): the gateway's size band is saved** to `msme_profiles.size_band`.
-  - Values: `micro` | `small` | `medium` | `unknown`.
-  - Migration + backfill `unknown`.
+- **FR-0.11 (U12): the gateway's size band is saved.**
+  - *As built:* `msme_profiles.employee_band` already existed (`1-9` | `10-49` | `50-249`, the gateway's own bands), so no migration: the wizard sends the band and `POST /profile/msme` stores it.
 - **Not in E0:** U7 (messaging after payment) is medium-sized and lives in E8.
 
-**Data and API.** One migration (`msme_profiles.size_band`). Rollback: drop the column.
+**Data and API.** *As built:* no new column (U12 uses `employee_band`). One migration, `0047_search_weighted_rating.sql` (U9's sort). New route `GET /api/v1/partner/stats` (U8). Rollback: re-run 0007's function body.
 
 **Events:**
 

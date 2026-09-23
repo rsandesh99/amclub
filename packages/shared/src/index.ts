@@ -38,6 +38,12 @@ export * from './states'
 // GSTIN format + mod-36 checksum validation
 export * from './gstin'
 
+// E0 / U8 — provider home stats (server-computed, web + mobile)
+export * from './provider-stats'
+
+// Post-auth redirect sanitising + intent carry-over (E0 / U1)
+export * from './safe-next'
+
 // Indian mobile number normalisation (paste-safe national form + E.164)
 export * from './phone'
 

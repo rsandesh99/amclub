@@ -69,7 +69,8 @@ export default async function MsmeHomePage() {
       <div className="grid grid-cols-2 gap-3">
         {(
           [
-            { label: t('browse_services'), href: '/services', icon: '🔍' },
+            // E0 / U6 — the logged-in search (was /services, leaving /app/search unreachable).
+            { label: t('browse_services'), href: '/app/search', icon: '🔍' },
             // AMC Mart (dark build): the tile exists only while MART_ENABLED.
             ...(MART_ENABLED ? [{ label: t('mart'), href: '/mart', icon: '🧰' }, { label: t('my_pools'), href: '/app/mart/pools', icon: '🤝' }] : []),
             { label: t('post_rfq'), href: '/app/rfq/new', icon: '📋' },

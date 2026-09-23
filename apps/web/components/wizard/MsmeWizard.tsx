@@ -14,6 +14,7 @@ import { INDIAN_STATES } from '@/lib/constants/india'
 import { loadBuyerDraft } from '@/components/gateway/draft'
 import { ConsentCheckbox } from '@/components/auth/ConsentCheckbox'
 import { acceptLegalDocs } from '@/lib/legal/client'
+import { useAnalytics } from '@/components/providers/posthog'
 import { BUYER_LEGAL_DOCS, SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
 import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 
@@ -32,20 +33,26 @@ interface WizardState {
   udyamNumber: string
   gstin: string
   preferredLocale: string
+  /** E0 / U12 — carried from the gateway wizard's size step; never asked twice. */
+  employeeBand: string
 }
 
 interface MsmeWizardProps {
   /** True when the user is already authenticated (e.g. via Google/email) and
    *  only needs to complete their profile. */
   skipAuth?: boolean
+  /** E0 (U1) — the sanitized page the user was heading to (e.g. a checkout)
+   *  when the auth wall sent them here; the wizard ends there, not on /app. */
+  next?: string | null
 }
 
-export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
+export function MsmeWizard({ skipAuth, next = null }: MsmeWizardProps) {
   const t = useTranslations('msme_signup')
   const tAuth = useTranslations('auth')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const locale = useLocale()
+  const analytics = useAnalytics()
 
   const [step, setStep] = useState<Step>(skipAuth ? 'profile' : 'auth')
   const [wizardState, setWizardState] = useState<WizardState>({
@@ -56,6 +63,7 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
     city: '',
     udyamNumber: '',
     gstin: '',
+    employeeBand: '',
     // Pre-select the language the visitor is using (te included); ta is a
     // gateway-only partial locale the profile API does not accept → en.
     preferredLocale: toSupportedLocale(locale),
@@ -78,6 +86,7 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
       ...s,
       sector: s.sector || (draft.biz ?? ''),
       stateCode: s.stateCode || (draft.state ?? ''),
+      employeeBand: s.employeeBand || (draft.band ?? ''),
     }))
   }, [])
 
@@ -93,7 +102,7 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
   async function handleAuthenticated() {
     const { isNew, destination } = await resolvePostAuthRoute()
     if (isNew) setStep('profile')
-    else router.push(destination)
+    else router.push(next ?? destination)
   }
 
   async function submitBusiness(skip = false) {
@@ -119,13 +128,20 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
           udyamNumber: skip ? undefined : wizardState.udyamNumber || undefined,
           gstin: skip ? undefined : wizardState.gstin || undefined,
           preferredLocale: wizardState.preferredLocale,
+          employeeBand: wizardState.employeeBand || undefined,
         }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
         throw new Error(typeof d.error === 'string' ? d.error : t('save_failed'))
       }
-      router.push('/app')
+      if (next) {
+        analytics.capture('signup_intent_restored', {
+          intent: next.startsWith('/app/checkout') ? 'checkout' : next.startsWith('/app/rfq') || next.startsWith('/app/requirements') ? 'requirement' : 'other',
+          device: 'web',
+        })
+      }
+      router.push(next ?? '/app')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('save_failed'))
     } finally {
@@ -145,7 +161,7 @@ export function MsmeWizard({ skipAuth }: MsmeWizardProps) {
           </div>
           <AuthPanel
             onAuthenticated={handleAuthenticated}
-            googleRedirectTo="/signup?complete=1"
+            googleRedirectTo={next ?? '/signup?complete=1'}
             consent={{ checked: consented, onChange: setConsented }}
           />
         </>

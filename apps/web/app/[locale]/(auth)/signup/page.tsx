@@ -1,14 +1,15 @@
 import { getTranslations } from 'next-intl/server'
 import { Link } from '@/i18n/navigation'
 import { MsmeWizard } from '@/components/wizard/MsmeWizard'
+import { safeNext, withNext } from '@/lib/auth/safe-next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ complete?: string }>
+  searchParams: Promise<{ complete?: string; next?: string }>
 }) {
-  const { complete } = await searchParams
+  const { complete, next } = await searchParams
   const t = await getTranslations('msme_signup')
   const tAuth = await getTranslations('auth')
 
@@ -22,10 +23,10 @@ export default async function SignupPage({
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {/* complete=1 → user already authenticated (Google/email); skip to profile. */}
-        <MsmeWizard skipAuth={complete === '1'} />
+        <MsmeWizard skipAuth={complete === '1'} next={safeNext(next)} />
         <p className="text-center text-sm text-foreground-secondary">
           {tAuth('already_have_account')}{' '}
-          <Link href="/login" className="text-primary underline underline-offset-2 hover:no-underline">
+          <Link href={withNext('/login', next)} className="text-primary underline underline-offset-2 hover:no-underline">
             {tAuth('sign_in')}
           </Link>
         </p>

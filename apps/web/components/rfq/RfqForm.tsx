@@ -247,16 +247,29 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
     }))
   }
 
+  // E0 / U10 — ONE free-text box. When the category template has its own
+  // textarea (e.g. "notes"), that field IS the box: it's not rendered twice, it
+  // takes the template's label + required mark, and on submit the typed text is
+  // stored under the template's key (so the quality precheck and the provider's
+  // view both see it). Voice fills still land in additional_details first.
+  const freeField = category?.fields.find((f) => f.type === 'textarea') ?? null
+  const freeValue = s.details['additional_details'] ?? (freeField ? s.details[freeField.name] : undefined) ?? ''
+
   async function submit() {
     setError('')
     if (!category) { setError(t('required_field')); return }
     if (s.title.trim().length < 10) { setError(t('title_label') + ': ' + t('required_field')); return }
     for (const f of category.fields) {
-      if (f.required && !s.details[f.name]?.trim()) { setError(label(f) + ': ' + t('required_field')); return }
+      const v = f === freeField ? freeValue : s.details[f.name]
+      if (f.required && !v?.trim()) { setError(label(f) + ': ' + t('required_field')); return }
     }
     setLoading(true)
     try {
       const details: Record<string, unknown> = { ...s.details }
+      if (freeField) {
+        delete details['additional_details']
+        details[freeField.name] = freeValue
+      }
       // S1.8 — the (edited) document facts travel with the request as one readable line.
       const facts = (s.intake?.facts ?? []).filter((f) => f.k.trim() && f.v.trim())
       if (facts.length > 0) details['document_facts'] = facts.map((f) => `${f.k}: ${f.v}`).join(' · ').slice(0, 2000)
@@ -429,7 +442,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
 
       {/* Category */}
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="rfq-category">{t('pick_category')}</Label>
+        <Label htmlFor="rfq-category">{t('pick_category')}<span className="text-danger"> *</span></Label>
         <Select
           id="rfq-category"
           value={s.categorySlug}
@@ -446,7 +459,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
       {category && (
         <>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="rfq-title">{t('title_label')}</Label>
+            <Label htmlFor="rfq-title">{t('title_label')}<span className="text-danger"> *</span></Label>
             <Input
               id="rfq-title"
               value={s.title}
@@ -456,7 +469,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
           </div>
 
           {/* Dynamic fields from the category's rfq_template */}
-          {category.fields.map((f) => (
+          {category.fields.filter((f) => f !== freeField).map((f) => (
             <div key={f.name} className="flex flex-col gap-1.5">
               <Label htmlFor={`f-${f.name}`}>
                 {label(f)}{f.required && <span className="text-danger"> *</span>}
@@ -475,10 +488,13 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill }: 
 
           {/* Free-text */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="rfq-free">{t('free_details_label')}</Label>
+            <Label htmlFor="rfq-free">
+              {freeField ? label(freeField) : t('free_details_label')}
+              {freeField?.required && <span className="text-danger"> *</span>}
+            </Label>
             <Textarea
               id="rfq-free"
-              value={s.details['additional_details'] ?? ''}
+              value={freeValue}
               onChange={(e) => { markEdited('description'); setField('additional_details', e.target.value) }}
               placeholder={t('free_details_placeholder')}
               rows={3}

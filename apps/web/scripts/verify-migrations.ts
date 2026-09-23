@@ -293,6 +293,11 @@ const MANIFEST: Entry[] = [
     triggers: [['price_benchmarks', 'price_benchmarks_set_updated_at']],
     note: 'S3.2 fair price ranges (dark): price_benchmarks (aggregates only, no id column), benchmark_inputs() + replace_price_benchmarks() (service_role only); any signed-in user reads, clients SELECT only',
   },
+  {
+    file: '0047_search_weighted_rating.sql',
+    functions: ['search_packages'],
+    note: 'E0 / U9: search_packages ordering drops top_rated; "rating" is review-count weighted (same signature as 0007)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

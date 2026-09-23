@@ -94,6 +94,8 @@ interface ProviderWizardProps {
   waEnabled?: boolean
   /** S1.6 — server-loaded confirmed draft; undefined ⇒ the wizard asks the draft route itself. */
   waDraft?: WaDraftProp | null
+  /** E0 (U1) — the sanitized page the applicant was heading to when the auth wall sent them here. */
+  next?: string | null
 }
 
 /** Fill only EMPTY fields from a confirmed draft; returns the patch and the keys it filled. */
@@ -118,7 +120,7 @@ function prefillFromWa(d: Draft, v: WaDraftProp | null | undefined): { next: Par
   return { next, filled }
 }
 
-export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: waDraftProp }: ProviderWizardProps) {
+export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: waDraftProp, next = null }: ProviderWizardProps) {
   const t = useTranslations('provider_signup')
   const tCommon = useTranslations('common')
   // Credential type labels live in the gateway namespace (translated in all 4
@@ -283,7 +285,7 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
   async function handleAuthenticated() {
     const res = await fetch('/api/v1/profile/me')
     const d = await res.json().catch(() => ({}))
-    if (d.hasProviderProfile) router.push('/partner')
+    if (d.hasProviderProfile) router.push(next ?? '/partner')
     else setStep('business')
   }
 
@@ -927,7 +929,12 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
             <h2 className="text-xl font-semibold">{t('under_review_title')}</h2>
             <p className="mt-2 text-sm text-foreground-secondary max-w-sm">{t('under_review_body')}</p>
           </div>
-          <Button onClick={() => router.push('/services')} className="w-full max-w-xs">
+          {next && (
+            <Button onClick={() => router.push(next)} className="w-full max-w-xs">
+              {t('continue_to_next')}
+            </Button>
+          )}
+          <Button onClick={() => router.push('/services')} variant={next ? 'outline' : 'primary'} className="w-full max-w-xs">
             {t('browse_as_msme')}
           </Button>
         </div>

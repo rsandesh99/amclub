@@ -16,8 +16,7 @@ import { getScoreSettings } from '@/lib/score/settings'
 import { providerScoreCard } from '@/lib/score/card'
 import { ProviderScoreCard } from '@/components/score/ProviderScoreCard'
 import { getLocale } from 'next-intl/server'
-
-const ACTIVE_STATUSES = ['placed', 'accepted', 'requirements_submitted', 'in_progress', 'delivered', 'revision_requested']
+import { summarizeProviderOrders } from '@amclub/shared'
 
 export default async function PartnerDashboardPage() {
   const t = await getTranslations('partner_home')
@@ -46,11 +45,8 @@ export default async function PartnerDashboardPage() {
   // S2.4 — the provider's OWN AMC Score (score_card_enabled; buyers never see a number).
   const scoreCard = profile.status === 'active' && (await getScoreSettings(admin)).cardEnabled ? await providerScoreCard(admin, { providerId: profile.id, userId: user.id, locale: await getLocale() }) : null
   const orders = await listMyOrders(user.id, 'provider')
-  const activeCount = orders.filter((o) => ACTIVE_STATUSES.includes(o.status)).length
-  const completedCount = orders.filter((o) => o.status === 'completed').length
-  const earningsPaise = orders
-    .filter((o) => o.status === 'completed')
-    .reduce((sum, o) => sum + Number(o.provider_earning_paise), 0)
+  // E0 / U8 — one shared rule (web + /partner/stats for mobile); reviewed orders count as completed.
+  const { activeCount, completedCount, earningsPaise } = summarizeProviderOrders(orders)
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">

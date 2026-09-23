@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl'
 import { computePricing, formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { MEMBER_PRICING_ENABLED } from '@/lib/public-flags'
 
 /**
  * The canonical price block (§4.3). ONE component, used identically on cards
@@ -9,7 +10,8 @@ import { cn } from '@/lib/utils'
  *  - large discounted price (marigold-adjacent emphasis)
  *  - strikethrough list price when discounted
  *  - marigold "X% OFF" pill
- *  - member extra-discount line when configured
+ *  - member extra-discount line when configured AND memberships are live
+ *    (MEMBER_PRICING_ENABLED — off until checkout can honour it; E0 / U2)
  */
 export function PriceBlock({
   pricePaise,
@@ -56,7 +58,7 @@ export function PriceBlock({
         )}
       </div>
 
-      {p.hasMemberExtra && (
+      {MEMBER_PRICING_ENABLED && p.hasMemberExtra && (
         <span className={cn('text-xs font-medium text-primary', detail && 'text-sm')}>
           {t('member_price', {
             price: formatINR(p.memberPaise),
