@@ -134,8 +134,8 @@ These use the scripts in the repo but need keys that CI does not hold.
 
 | Check | Command | Where | Last run |
 |---|---|---|---|
-| Accessibility (axe, 45 surfaces) | `A11Y_ENFORCE=1 BASE_URL=<url> pnpm --filter @amclub/web exec tsx scripts/a11y-scan.ts` | A preview with the v3 flags on, `apps/web/.env.local` pointing at its Supabase | 2026-07-09 (before v3). **Re-run due.** |
-| Load: search | `k6 run -e BASE_URL=<url> loadtest/k6-search.js` | Production is fine (read-only) | 2026-07-09 |
+| Accessibility (axe, 45 surfaces) | `A11Y_ENFORCE=1 BASE_URL=<url> pnpm --filter @amclub/web exec tsx scripts/a11y-scan.ts` | A preview with the v3 flags on, `apps/web/.env.local` pointing at its Supabase | Signed in, full mode: runs on every PR in `money-rigs.yml` (since #52), against the CI stack with the v3 flags on. A preview run is still useful before a big visual change. |
+| Load: search | Actions → **Load test (search)** → Run workflow (or `k6 run -e BASE_URL=<url> loadtest/k6-search.js`) | Production is fine (read-only). The per-IP limiter answers most uncached searches from one machine with 429; that is expected | 2026-09-24 on production: p95 68.5 ms on served searches, zero 5xx (`docs/LOAD_TEST.md`) |
 | Load: checkout / RFQ | `tsx apps/web/scripts/loadtest-prep.ts`, then `k6 run -e BASE_URL=<preview> loadtest/k6-checkout.js` (and `k6-rfq.js`), then **always** `tsx apps/web/scripts/loadtest-cleanup.ts` | A **preview**: production refuses simulated checkout (ADR 023) | 2026-07-09 |
 | Services suites against prod | `verify-authz`, `verify-money-loop`, `verify-rfq`, `verify-te-render` (CLAUDE.md Mart rule) | Read the script header first; the money ones create and clean up fixtures | Not run since the go-live |
 

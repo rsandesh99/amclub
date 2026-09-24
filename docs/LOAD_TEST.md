@@ -21,6 +21,21 @@ Latency caveat: every DB hop from this machine pays laptop→Mumbai RTT (~40–8
 | (c) RFQ create + fan-out burst | 50 RFQs / 25 buyers in ~25s | p50 621 ms · **p95 911 ms** · 0 failed · every RFQ matched + fanned out | zero 5xx | ✅ (2nd run; 1st see below) |
 | (d) Voice-parse at ceiling (**prod**) | 1 user, 12 reqs / ~95s vs 3/min+15/h caps | **6× 429, 0× 5xx**, clean `Retry-After`s | limiter proves out, zero 5xx | ✅ — also proves **Upstash rate limiting is LIVE in prod** (closes STATUS_AUDIT §3 unknown) |
 
+## 2026-09-24 — search against production (Actions `loadtest.yml`)
+
+It ran from one GitHub runner against `https://amclub-web.vercel.app` (bom1), with the same 500 VUs for 100 s: 32,470 requests at 313 rps.
+
+| | Result |
+|---|---|
+| Served searches (200) | **p95 68.5 ms**, p99 652 ms, max 2.06 s. Target is p95 < 800 ms: ✅ |
+| 5xx / other errors | **0** |
+| 429 from the per-IP limiter | 26,130 (80 %) |
+| Edge cache | 6,220 HIT, 26,250 MISS (the 429s are MISSes) |
+
+The first run failed only its `http_req_failed` threshold, and every one of those "failures" was a 429. Production's limiter is live (Upstash). It allows 60 uncached searches a minute per IP, and 500 VUs from one runner share one IP. A 429 is never cached, so most of the 216 query combinations could never warm. The 2026-07-09 run went to a local build without the limiter, so it saw none.
+
+`k6-search.js` now counts a 429 as an expected response. The target is measured on 200s, and any 5xx fails the run. **Still unmeasured on production:** the uncached Postgres FTS path under real concurrency. One IP only gets about 120 misses into a run. Measuring it needs distributed load generators (many IPs); the 2026-07-09 local run (p95 241 ms on the live database) remains the best evidence.
+
 ## The bottleneck that mattered (found, fixed, re-measured)
 
 Profiling the search p95 miss led somewhere much bigger than the test harness:
