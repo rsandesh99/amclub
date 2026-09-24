@@ -107,9 +107,15 @@ CREATE POLICY "msme_profiles: admin read" ON msme_profiles
 
 -- ─── provider_profiles ────────────────────────────────────────────────────────
 
+-- 0072 (ADR 025): owner is read-only. Every write is the service role (profile/provider
+-- upsert, settings, availability, logo, Mart activation, admin verify/suspend); a client
+-- role could otherwise self-activate, lift a suspension, set sells_goods / *_verified or
+-- forge ratings.
 DROP POLICY IF EXISTS "provider_profiles: owner all" ON provider_profiles;
-CREATE POLICY "provider_profiles: owner all" ON provider_profiles
-  FOR ALL USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
+DROP POLICY IF EXISTS "provider_profiles: owner read" ON provider_profiles;
+CREATE POLICY "provider_profiles: owner read" ON provider_profiles
+  FOR SELECT USING (user_id = auth_user_id());
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON provider_profiles FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "provider_profiles: public read active" ON provider_profiles;
 CREATE POLICY "provider_profiles: public read active" ON provider_profiles
@@ -129,6 +135,10 @@ CREATE OR REPLACE VIEW public_providers AS
     created_at
   FROM provider_profiles
   WHERE status = 'active' AND deleted_at IS NULL;
+-- 0072 (ADR 025): the view is auto-updatable and runs as its owner (RLS does not apply to
+-- writes through it), and default privileges grant ALL on new views. SELECT only.
+REVOKE ALL ON public_providers FROM anon, authenticated;
+GRANT SELECT ON public_providers TO anon, authenticated;
 
 -- ─── provider_verifications ───────────────────────────────────────────────────
 
@@ -170,11 +180,9 @@ DROP POLICY IF EXISTS "provider_categories: public read" ON provider_categories;
 CREATE POLICY "provider_categories: public read" ON provider_categories
   FOR SELECT USING (true);
 
+-- 0072 (ADR 025): writes are the service role (profile/provider); the public read covers owners.
 DROP POLICY IF EXISTS "provider_categories: owner all" ON provider_categories;
-CREATE POLICY "provider_categories: owner all" ON provider_categories
-  FOR ALL
-  USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
-  WITH CHECK (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON provider_categories FROM anon, authenticated;
 
 -- ─── packages ─────────────────────────────────────────────────────────────────
 
@@ -186,11 +194,12 @@ CREATE POLICY "packages: public read active" ON packages
     AND provider_id IN (SELECT id FROM provider_profiles WHERE status = 'active' AND deleted_at IS NULL)
   );
 
+-- 0073 (ADR 025): owners read; writes are the service role (partner/packages routes).
 DROP POLICY IF EXISTS "packages: provider crud own" ON packages;
-CREATE POLICY "packages: provider crud own" ON packages
-  FOR ALL
-  USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
-  WITH CHECK (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+DROP POLICY IF EXISTS "packages: provider read own" ON packages;
+CREATE POLICY "packages: provider read own" ON packages
+  FOR SELECT USING (provider_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()));
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON packages FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "packages: admin all" ON packages;
 CREATE POLICY "packages: admin all" ON packages
@@ -1095,10 +1104,12 @@ BEGIN
   EXECUTE 'CREATE POLICY "products: public read active" ON products FOR SELECT USING (
     status = ''active'' AND deleted_at IS NULL
     AND seller_id IN (SELECT id FROM provider_profiles WHERE status = ''active'' AND deleted_at IS NULL AND sells_goods = true))';
+  -- 0072 (ADR 025): sellers read their own rows; every write is a /api/v1/mart route on the service role.
   EXECUTE 'DROP POLICY IF EXISTS "products: seller crud own" ON products';
-  EXECUTE 'CREATE POLICY "products: seller crud own" ON products FOR ALL
-    USING (seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))
-    WITH CHECK (seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))';
+  EXECUTE 'DROP POLICY IF EXISTS "products: seller read own" ON products';
+  EXECUTE 'CREATE POLICY "products: seller read own" ON products FOR SELECT
+    USING (seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id()))';
+  EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON products FROM anon, authenticated';
   EXECUTE 'DROP POLICY IF EXISTS "products: admin all" ON products';
   EXECUTE 'CREATE POLICY "products: admin all" ON products FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
 
@@ -1107,9 +1118,10 @@ BEGIN
     product_id IN (SELECT p.id FROM products p JOIN provider_profiles s ON s.id = p.seller_id
       WHERE p.status = ''active'' AND p.deleted_at IS NULL AND s.status = ''active'' AND s.deleted_at IS NULL AND s.sells_goods = true))';
   EXECUTE 'DROP POLICY IF EXISTS "price_tiers: seller crud own" ON price_tiers';
-  EXECUTE 'CREATE POLICY "price_tiers: seller crud own" ON price_tiers FOR ALL
-    USING (product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())))
-    WITH CHECK (product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())))';
+  EXECUTE 'DROP POLICY IF EXISTS "price_tiers: seller read own" ON price_tiers';
+  EXECUTE 'CREATE POLICY "price_tiers: seller read own" ON price_tiers FOR SELECT
+    USING (product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM provider_profiles WHERE user_id = auth_user_id())))';
+  EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON price_tiers FROM anon, authenticated';
   EXECUTE 'DROP POLICY IF EXISTS "price_tiers: admin all" ON price_tiers';
   EXECUTE 'CREATE POLICY "price_tiers: admin all" ON price_tiers FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
 
@@ -1157,7 +1169,8 @@ BEGIN
   EXECUTE 'CREATE POLICY "pool_events: admin read" ON pool_events FOR SELECT USING (has_role(''admin'') OR has_role(''ops''))';
   EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON pool_events FROM anon, authenticated';
 
+  -- 0072 (ADR 025): only the server reads it; the caller's RLS applies and no client role holds a grant.
+  EXECUTE 'ALTER VIEW buyer_pool_discipline_v1 SET (security_invoker = true)';
   EXECUTE 'REVOKE ALL ON buyer_pool_discipline_v1 FROM anon, authenticated';
-  EXECUTE 'GRANT SELECT ON buyer_pool_discipline_v1 TO authenticated';
 END
 $mart_pools$;

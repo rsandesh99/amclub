@@ -437,6 +437,15 @@ const MANIFEST: Entry[] = [
     triggers: [['service_pool_offer_tiers', 'service_pool_offer_tiers_immutable'], ['service_pool_events', 'service_pool_events_no_update']],
     note: 'S3.4 / ADR 024 (agent migration, NOT staged): services group requests — pools, members (one live pool per request), volume-tier offers (immutable tiers), append-only events; service_pool_claim claims the slot + marks the member in one transaction (service_role only); no client grants; ai_decisions feature demand_pool',
   },
+  {
+    file: '0072_provider_write_lockdown.sql',
+    views: ['public_providers'],
+    note: 'ADR 025 security hotfix: public_providers SELECT-only; no client INSERT/UPDATE/DELETE on provider_profiles, provider_categories, products, price_tiers (owners read); buyer_pool_discipline_v1 security_invoker with no client grant',
+  },
+  {
+    file: '0073_packages_write_lockdown.sql',
+    note: 'ADR 025 part 2: no client INSERT/UPDATE/DELETE on packages (owners read); the partner routes write with the service role. Apply after that build is live',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]
