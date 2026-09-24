@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
+  agentRunnable,
   agentSettingDefault,
   AGENT_SETTING_DEFS,
   AGENT_SETTING_KEYS,
@@ -8,6 +9,7 @@ import {
   type AgentSettingKey,
   type AgentsEnabled,
 } from '@amclub/shared'
+import { agentRuntimeReady } from './runtime-client'
 
 /**
  * Read the agent config registry (agent_settings) with registry defaults. A key
@@ -52,8 +54,12 @@ export async function getAgentsEnabled(admin: SupabaseClient): Promise<AgentsEna
   return (await getAgentSetting(admin, 'agents_enabled')) as AgentsEnabled
 }
 
-/** True only when the agent's flag is on AND the user is in the cohort allowlist. */
+/**
+ * True only when the agent's flag is on AND the user is in the cohort allowlist
+ * AND, for a runtime agent, the runtime is configured (shared `agentRunnable`).
+ */
 export async function isAgentEnabledForUser(admin: SupabaseClient, name: AgentName, userId: string): Promise<boolean> {
+  if (!agentRunnable(name, agentRuntimeReady())) return false
   const enabled = await getAgentsEnabled(admin)
   if (!enabled?.[name]) return false
   const cohort = (await getAgentSetting(admin, 'cohort_user_ids')) as string[]

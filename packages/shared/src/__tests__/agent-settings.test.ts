@@ -5,8 +5,10 @@ import {
   AGENT_SETTING_DEFS,
   agentSettingDefault,
   agentSettingPutSchema,
+  agentRunnable,
   killSwitchAgentsEnabled,
   parseAgentSetting,
+  RUNTIME_AGENTS,
 } from '../index'
 
 /**
@@ -44,5 +46,24 @@ describe('agent settings registry', () => {
     const killed = killSwitchAgentsEnabled()
     for (const name of AGENT_NAMES) expect(killed[name]).toBe(false)
     expect(parseAgentSetting('agents_enabled', killed).ok).toBe(true)
+  })
+})
+
+describe('agentRunnable — runtime agents read as off until the runtime is configured', () => {
+  it('turns off exactly the runtime agents when the runtime is missing', () => {
+    for (const name of AGENT_NAMES) {
+      expect(agentRunnable(name, false)).toBe(!(RUNTIME_AGENTS as readonly string[]).includes(name))
+    }
+    expect(RUNTIME_AGENTS).toEqual(['payout_dossier', 'onboarding', 'dispute_triage', 'munshi', 'procurement'])
+  })
+
+  it('never blocks an agent once the runtime is configured', () => {
+    for (const name of AGENT_NAMES) expect(agentRunnable(name, true)).toBe(true)
+  })
+
+  it('keeps the bounded Vercel agents (and support web chat) runnable without a runtime', () => {
+    for (const name of ['quote_extract', 'compare_pointers', 'decline_message', 'rfq_quality', 'rfq_clarify', 'document_intake', 'support', 'benchmark', 'content_translate'] as const) {
+      expect(agentRunnable(name, false)).toBe(true)
+    }
   })
 })

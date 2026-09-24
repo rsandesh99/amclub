@@ -13,6 +13,16 @@ import { env } from '@/lib/env'
 
 export const NIL_UUID = '00000000-0000-0000-0000-000000000000'
 
+/**
+ * True when runtime agents can actually act: the web can queue their jobs
+ * (AGENT_RUNTIME_URL + AGENT_RUNTIME_SECRET) and mint their delegated run
+ * tokens (SUPABASE_JWT_SECRET). Without all three, shared `agentRunnable`
+ * reads every RUNTIME_AGENTS entry as off.
+ */
+export function agentRuntimeReady(): boolean {
+  return Boolean(env.AGENT_RUNTIME_URL && env.AGENT_RUNTIME_SECRET && env.SUPABASE_JWT_SECRET)
+}
+
 export interface EnqueueResult {
   ok: boolean
   jobId: string | null

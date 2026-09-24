@@ -1,11 +1,13 @@
 # AMClub agent programme — staged build prompts (one PR per prompt)
 
-> **PAUSED after S3.2 (founder, 2026-09-23).** The build moved to Experience v3
-> (`docs/prd/PRD_EXPERIENCE_V3.md`, §8.2 there). Resume rules: S3.3 when H7 +
-> ADR-011 + the CA opinion land; S3.4 after Wave 1, with its tiered quotes
-> redesigned together with E12b speed tiers (one `quote_options` design); S4.2
-> after decision D1; S4.1 at its six-month gate; S4.3 is paperwork only. Do not
-> start S3.3 or later until CLAUDE.md drops its "PAUSED" line.
+> **RESUMED 2026-09-24 (founder).** It was paused after S3.2 on 2026-09-23 while
+> Experience v3 took the build; Wave 1 has since landed.
+> - **Open:** S3.4 (its tiered quotes reuse the E12b `quote_options` design, ADR-020)
+>   and S4.3 (paperwork only).
+> - **Still gated:**
+>   - S3.3 needs ADR-011 Accepted: the founder's numbers, the CA opinion and H7.
+>   - S4.2 needs decision D1.
+>   - S4.1 keeps its six-month gate.
 
 Every prompt is self-contained for an IDE agent that has the repo but not the
 conversation that produced this plan. Run them **in order**; each assumes the

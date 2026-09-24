@@ -1588,7 +1588,9 @@
     "proc_total": "{n} in 30 days",
     "proc_proposals": "Proposals: {approved} approved · {edited} edited · {declined} declined",
     "proc_outcomes": "{rfqs} requests created · {orders} completed orders",
-    "proc_cost": "model cost per completed order"
+    "proc_cost": "model cost per completed order",
+    "runtime_missing_title": "Agent runtime not configured",
+    "runtime_missing_body": "These agents are off until AGENT_RUNTIME_URL, AGENT_RUNTIME_SECRET and SUPABASE_JWT_SECRET are set in Vercel and the runtime is deployed: {agents}. Their switches below are kept, and they turn on by themselves once the runtime is ready."
   },
   "agent_grants": {
     "title": "AI assistant",

@@ -36,6 +36,23 @@ export const AGENT_NAMES = [
 ] as const
 export type AgentName = (typeof AGENT_NAMES)[number]
 
+/**
+ * Agents that only work through the agent runtime (pg-boss jobs on Fly) and
+ * delegated run tokens. Without AGENT_RUNTIME_URL + AGENT_RUNTIME_SECRET +
+ * SUPABASE_JWT_SECRET they cannot act: jobs are never queued and tokens can't
+ * be minted. So they read as OFF, rather than showing a surface that silently
+ * never answers (onboarding sends people to WhatsApp, Munshi "approves" drafts
+ * that are never sent, the assistant only ever says "will reply shortly").
+ * Support is not listed: its web chat is a bounded call on Vercel, and only
+ * its WhatsApp side lives in the runtime.
+ */
+export const RUNTIME_AGENTS = ['payout_dossier', 'onboarding', 'dispute_triage', 'munshi', 'procurement'] as const satisfies readonly AgentName[]
+
+/** False for a runtime agent while the runtime is not configured; every other agent is unaffected. */
+export function agentRunnable(name: AgentName, runtimeReady: boolean): boolean {
+  return runtimeReady || !(RUNTIME_AGENTS as readonly AgentName[]).includes(name)
+}
+
 /** agents_enabled value — a boolean per agent, every one defaulting to false. */
 export const agentsEnabledSchema = z.object(
   Object.fromEntries(AGENT_NAMES.map((n) => [n, z.boolean().default(false)])) as Record<

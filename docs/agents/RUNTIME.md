@@ -12,6 +12,13 @@ Everything here is **dark**: nothing runs for a user until `AGENT_ENABLED=true`
 on the web app **and** the agent's `agent_settings.agents_enabled.<name>` flag +
 cohort allowlist are flipped from `/admin/agents` (S0.2).
 
+**Web-side readiness (2026-09-24).** `payout_dossier`, `onboarding`, `dispute_triage`, `munshi` and `procurement` (shared `RUNTIME_AGENTS`) read as **off** while the web app lacks any of these: `AGENT_RUNTIME_URL`, `AGENT_RUNTIME_SECRET` or `SUPABASE_JWT_SECRET`.
+- The check is shared `agentRunnable` inside `isAgentEnabledForUser`.
+- Their pages 404 and their triggers skip, instead of silently never answering.
+- `/admin/agents` shows a "runtime not configured" banner that lists them.
+- Their switches stay as set, so they come on by themselves once the web app has all three values and the runtime is deployed.
+- The bounded Vercel agents and the support web chat don't need the runtime.
+
 ## Founder-gated externals (enable, not build)
 
 Recorded in `docs/COMPLIANCE.md`. None is needed to build/verify S0.1; all are
@@ -39,6 +46,7 @@ fly secrets set --app amc-agent-runtime \
   NEXT_PUBLIC_SUPABASE_URL="https://<project>.supabase.co" \
   SUPABASE_SERVICE_ROLE_KEY="<service-role-key>" \
   DATABASE_URL="postgres://…"  \
+  AGENT_ENABLED="true" \
   AGENT_LLM_API_KEY="<gateway-key>" \
   UPSTASH_REDIS_REST_URL="<url>" UPSTASH_REDIS_REST_TOKEN="<token>"
 
