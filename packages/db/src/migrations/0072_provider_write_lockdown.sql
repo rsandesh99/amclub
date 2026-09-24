@@ -17,9 +17,16 @@
 -- The same statements are mirrored in rls/policies.sql. verify-authz §7a6 proves it.
 
 -- ─── 1. public_providers: read-only for everyone ─────────────────────────────
-REVOKE ALL ON public_providers FROM anon, authenticated;
---> statement-breakpoint
-GRANT SELECT ON public_providers TO anon, authenticated;
+-- The view is created by rls/policies.sql, which a fresh bootstrap applies after the
+-- migrations (and which carries the same REVOKE / GRANT), so it may not exist yet.
+DO $view$
+BEGIN
+  IF to_regclass('public.public_providers') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON public_providers FROM anon, authenticated';
+    EXECUTE 'GRANT SELECT ON public_providers TO anon, authenticated';
+  END IF;
+END
+$view$;
 --> statement-breakpoint
 
 -- ─── 2. provider_profiles: owner read-only, writes are the service role ──────
