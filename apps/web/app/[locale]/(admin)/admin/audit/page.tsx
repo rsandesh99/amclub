@@ -40,7 +40,7 @@ export default function AdminAuditPage() {
               </div>
               <p className="text-xs text-foreground-secondary">{t('entity')}: {l.entity} · {t('actor')}: {l.actor?.email ?? l.actor_id ?? 'system'}{l.ip ? ` · ${l.ip}` : ''}</p>
               {(l.before || l.after) && (
-                <pre className="mt-1 overflow-x-auto rounded bg-background p-2 text-[11px] text-foreground-secondary">{JSON.stringify({ before: l.before, after: l.after }, null, 0)}</pre>
+                <pre tabIndex={0} role="region" aria-label={t('diff')} className="mt-1 overflow-x-auto rounded bg-background p-2 text-[11px] text-foreground-secondary">{JSON.stringify({ before: l.before, after: l.after }, null, 0)}</pre>
               )}
             </li>
           ))}
