@@ -94,6 +94,9 @@ export const ORDER_REPEATABLE_STATUSES: readonly OrderStatus[] = ['completed', '
 /** E9b (FR-9.5) — a provider may record the certificate issued on a registration order from the work stage on. */
 export const ORDER_LICENCE_RECORDABLE_STATUSES: readonly OrderStatus[] = ['in_progress', 'delivered', 'revision_requested', 'completed', 'reviewed']
 
+/** ADR 026 — cancelled statuses whose refund may still be owed (re-driven by finishRefund / the auto-cancel sweeper). */
+export const ORDER_REFUND_OWED_STATUSES: readonly OrderStatus[] = ['cancelled_by_buyer', 'auto_cancelled', 'cancelled_duplicate']
+
 /** Statuses from which a payout is permitted (§3.7). */
 export const PAYOUT_RELEASE_STATUSES: readonly OrderStatus[] = [
   'completed',

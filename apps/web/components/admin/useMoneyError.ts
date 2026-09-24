@@ -14,6 +14,14 @@ const MONEY_ERROR_CODES = [
   'resolution_in_progress',
   'resolution_conflict',
   'refund_over_total',
+  // ADR 026 — the payout release rule, order compare-and-set and durable refunds.
+  'payout_held_use_release',
+  'payout_not_failed',
+  'payout_changed',
+  'order_not_releasable',
+  'order_changed',
+  'refund_failed',
+  'not_refund_owed',
 ] as const
 type MoneyErrorCode = (typeof MONEY_ERROR_CODES)[number]
 

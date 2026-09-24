@@ -5,6 +5,10 @@ const rid = (prefix: string) => `${prefix}_${randomBytes(8).toString('hex')}`
 
 /** In-memory refund ledger per payment (process-local; enough for kill-tests). */
 const mockRefunds = new Map<string, GatewayRefund[]>()
+/** In-memory transfer ledger per payout id, so findTransfer behaves like the real gateway (ADR 026).
+ *  On globalThis: every route bundle of the server process sees the same ledger. */
+const g = globalThis as unknown as { __amcMockTransfers?: Map<string, GatewayTransfer> }
+const mockTransfers = (g.__amcMockTransfers ??= new Map<string, GatewayTransfer>())
 
 /**
  * Simulation gateway — used when real Razorpay keys aren't provided. It returns
@@ -37,8 +41,14 @@ export const mockGateway: PaymentGateway = {
     return mockRefunds.get(razorpayPaymentId) ?? []
   },
 
-  async createTransfer({ amountPaise }): Promise<GatewayTransfer> {
-    return { razorpayTransferId: rid('trf'), amountPaise, status: 'created', simulated: true }
+  async createTransfer({ amountPaise, notes }): Promise<GatewayTransfer> {
+    const transfer: GatewayTransfer = { razorpayTransferId: rid('trf'), amountPaise, status: 'created', simulated: true }
+    mockTransfers.set(notes.payout_id, transfer)
+    return transfer
+  },
+
+  async findTransfer({ payoutId }): Promise<GatewayTransfer | null> {
+    return mockTransfers.get(payoutId) ?? null
   },
 
   async fetchPayment(razorpayPaymentId: string): Promise<GatewayPayment | null> {

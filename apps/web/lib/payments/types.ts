@@ -60,12 +60,20 @@ export interface PaymentGateway {
   /** Refunds the gateway already holds for a payment (retry-safety lookup). */
   listRefunds(razorpayPaymentId: string): Promise<GatewayRefund[]>
 
-  /** Razorpay Route transfer to a provider's linked account (payout). */
+  /** Razorpay Route transfer to a provider's linked account (payout). `notes.payout_id` is required (ADR 026). */
   createTransfer(params: {
     linkedAccountId: string | null
     amountPaise: number
-    notes?: Record<string, string>
+    notes: { payout_id: string } & Record<string, string>
   }): Promise<GatewayTransfer>
+
+  /**
+   * ADR 026 — the transfer this platform already made for a payout (matched on
+   * `notes.payout_id`), or null when the gateway holds none since `sinceUnixSeconds`.
+   * THROWS when it cannot tell (lookup failed, or too many transfers to scan):
+   * "unknown" must never read as "no transfer", or a retry would pay twice.
+   */
+  findTransfer(params: { payoutId: string; sinceUnixSeconds: number }): Promise<GatewayTransfer | null>
 
   /** Fetch a single payment — used by reconciliation / dropped-webhook recovery. */
   fetchPayment(razorpayPaymentId: string): Promise<GatewayPayment | null>

@@ -29,8 +29,7 @@ import {
   type GoodsOrderAction,
 } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
-import { schedulePayout, processRefund, type Actor, type TransitionResult } from '@/lib/orders/transitions'
-import { generateInvoices } from '@/lib/invoices/generate'
+import { safeGenerateInvoices, schedulePayout, settleCancellationRefund, type Actor, type TransitionResult } from '@/lib/orders/transitions'
 import { notifyOrderTransition } from '@/lib/notifications/events'
 import { getEwayBillThresholdPaise } from './config'
 import { orderReturnable } from './release'
@@ -131,16 +130,20 @@ export async function applyGoodsTransition(
     if (!isValidOrderTransition('accepted', 'requirements_submitted') || !isValidOrderTransition('requirements_submitted', 'in_progress')) {
       return { ok: false, status: 409, error: 'Illegal transition' }
     }
-    const { error: e1 } = await admin
+    // ADR 026 (H6) — each leg is compare-and-set and must change exactly this row.
+    const { data: m1, error: e1 } = await admin
       .from('orders')
       .update({ status: 'requirements_submitted', updated_at: now })
       .eq('id', orderId)
       .eq('status', 'accepted')
+      .select('id')
     if (e1) return { ok: false, status: 500, error: e1.message }
+    if (!m1?.length) return { ok: false, status: 409, error: 'order_changed' }
     await addEvent(admin, orderId, 'requirements_submitted', actor.userId, { auto: true, source: 'goods_delivery_snapshot' })
     // Fall through with from = requirements_submitted for the final leg.
-    const { error: e2 } = await admin.from('orders').update(patch).eq('id', orderId).eq('status', 'requirements_submitted')
+    const { data: m2, error: e2 } = await admin.from('orders').update(patch).eq('id', orderId).eq('status', 'requirements_submitted').select('id')
     if (e2) return { ok: false, status: 500, error: e2.message }
+    if (!m2?.length) return { ok: false, status: 409, error: 'order_changed' }
     await addEvent(admin, orderId, eventName, actor.userId, eventPayload)
     const updated = { ...order, ...patch }
     try { await notifyOrderTransition(admin, updated, NOTIFY_AS[action]) } catch (e) { console.error('[notifyOrderTransition]', e) }
@@ -180,15 +183,18 @@ export async function applyGoodsTransition(
   if (action === 'cancel') patch['cancelled_reason'] = 'buyer_cancelled'
 
   if (!isValidOrderTransition(from, rule.to)) return { ok: false, status: 409, error: `Illegal transition ${from} → ${rule.to}` }
-  const { error: updErr } = await admin.from('orders').update(patch).eq('id', orderId).eq('status', from)
+  // ADR 026 (H6) — compare-and-set; a 0-row update means someone else moved the
+  // order first, so no refund, payout or invoice runs from this call.
+  const { data: moved, error: updErr } = await admin.from('orders').update(patch).eq('id', orderId).eq('status', from).select('id')
   if (updErr) return { ok: false, status: 500, error: updErr.message }
-  await addEvent(admin, orderId, eventName, actor.userId, eventPayload)
+  if (!moved?.length) return { ok: false, status: 409, error: 'order_changed' }
+  await addEvent(admin, orderId, eventName, actor.userId, action === 'cancel' ? { from } : eventPayload)
   const updated = { ...order, ...patch }
 
   // ── side effects (services functions only) ──────────────────────────────
   if (action === 'accept_delivery') {
     await schedulePayout(admin, updated) // goods branch inside: hold reasons from the release gate + TDS fields
-    await generateInvoices(admin, orderId)
+    await safeGenerateInvoices(admin, orderId)
   }
   if (action === 'open_return') {
     const r = extra.return as { reason: string; details?: string }
@@ -211,12 +217,8 @@ export async function applyGoodsTransition(
     }
   }
   if (action === 'cancel') {
-    const refunded = await processRefund(admin, updated, from)
-    if (refunded > 0) {
-      await admin.from('orders').update({ status: 'refunded' }).eq('id', orderId)
-      await addEvent(admin, orderId, 'refunded', null, { amount_paise: refunded })
-      updated.status = 'refunded'
-    }
+    const r = await settleCancellationRefund(admin, updated, from)
+    updated.status = r.status
   }
 
   try { await notifyOrderTransition(admin, updated, NOTIFY_AS[action]) } catch (e) { console.error('[notifyOrderTransition]', e) }

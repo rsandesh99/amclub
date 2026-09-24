@@ -74,7 +74,8 @@ const EVENT_LABEL: Record<string, string> = {
   payout_held: 'orders.event_payout_held', payout_scheduled: 'orders.event_payout_scheduled', payout_released: 'orders.event_payout_released',
   payout_paid: 'orders.event_payout_paid', payout_failed: 'orders.event_payout_failed', payout_voided: 'orders.event_payout_voided',
 }
-const HIDDEN_EVENTS = new Set(['placed_side_effects', 'requirements_data'])
+// Same set as web OrderWorkspace: internal markers and ops-only retries (ADR 026) never show.
+const HIDDEN_EVENTS = new Set(['placed_side_effects', 'requirements_data', 'duplicate_rfq_order', 'quote_not_live_at_payment', 'refund_failed', 'invoice_failed', 'payout_unconfirmed'])
 const PROVIDER_ONLY_EVENTS = new Set(['payout_held', 'payout_scheduled', 'payout_released', 'payout_paid', 'payout_failed', 'payout_voided'])
 
 function istDateTime(iso: string): string {

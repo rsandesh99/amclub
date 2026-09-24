@@ -2,9 +2,9 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
-import { autoCancelOrder, staleOrdersForAutoCancel, autoAcceptOrder } from '@/lib/orders/transitions'
+import { autoCancelOrder, staleOrdersForAutoCancel, autoAcceptOrder, redriveCancellationRefunds, generateMissingInvoices } from '@/lib/orders/transitions'
 import { getPaymentGateway } from '@/lib/payments'
-import { runPayouts } from '@/lib/payments/payout'
+import { runPayouts, settleUnconfirmedPayouts } from '@/lib/payments/payout'
 import { reconcileCapturedPayments } from '@/lib/payments/materialize'
 
 export const dynamic = 'force-dynamic'
@@ -39,5 +39,10 @@ export async function GET(request: NextRequest) {
   // 4. Reconcile dropped webhooks (last 48h).
   const recon = await reconcileCapturedPayments(getPaymentGateway(), Math.floor(Date.now() / 1000) - 2 * 24 * 3600, admin)
 
-  return NextResponse.json({ cancelled, completed, payouts: payouts.processed, reconciled: recon.recovered })
+  // 5. ADR 026 sweepers: failed cancellation refunds, unconfirmed payouts, missing invoices.
+  const refunds = await redriveCancellationRefunds(admin)
+  const unconfirmed = await settleUnconfirmedPayouts(admin, getPaymentGateway())
+  const invoices = await generateMissingInvoices(admin)
+
+  return NextResponse.json({ cancelled, completed, payouts: payouts.processed, reconciled: recon.recovered, refundsRedriven: refunds.refunded, unconfirmedPayouts: unconfirmed, invoicesGenerated: invoices.generated })
 }

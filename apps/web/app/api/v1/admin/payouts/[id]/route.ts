@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { isValidPayoutTransition, payoutReleaseBodySchema, type PayoutStatus } from '@amclub/shared'
+import { isValidPayoutTransition, payoutReleaseBodySchema, PAYOUT_RELEASE_STATUSES, type OrderStatus, type PayoutStatus } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
 import { requireNotDelegated } from '@/lib/agent/scope'
@@ -59,10 +59,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: `illegal transition ${from} → scheduled` }, { status: 409 })
   }
 
+  // ADR 026 (audit M19) — only an order in a release status may pay out; an
+  // open dispute (order 'disputed') always blocks. runPayouts re-checks this.
+  const { data: ord } = await admin.from('orders').select('*').eq('id', payout.order_id).maybeSingle()
+  if (!ord || !PAYOUT_RELEASE_STATUSES.includes(ord.status as OrderStatus)) {
+    return NextResponse.json({ error: 'order_not_releasable', orderStatus: ord?.status ?? null }, { status: 409 })
+  }
+
   // AMC Mart — goods release gate (MART_DESIGN.md §4.3): a goods payout is
   // NEVER released while delivery evidence, receipt, the return window or an
   // open return still hold. Services orders (kind='service') skip this block.
-  const { data: ord } = await admin.from('orders').select('*').eq('id', payout.order_id).maybeSingle()
   if (ord?.kind === 'goods') {
     const goods = await getGoodsDossier(admin, ord)
     if (!goods.gate.ok) {
