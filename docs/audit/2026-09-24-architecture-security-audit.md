@@ -141,7 +141,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | L3 | The agent runtime holds the full service-role key and DATABASE_URL in the process that parses public webhooks | Open |
 | L4 | The pool "Pay ₹X to confirm" amount is computed on the client before GST (web and mobile) | Open |
 | L5 | Money and policy switches live in the agent registry, whose only editor sits behind AGENT_ENABLED | Open |
-| L6 | Docs drift: seven sampled CLAUDE.md claims are false or contradictory | Open |
+| L6 | Docs drift: seven sampled CLAUDE.md claims are false or contradictory | Partly fixed: CLAUDE.md corrected; flag inventory from code open |
 | L7 | Hot, growing tables lack indexes (`notifications` has none and is polled every 30 s per tab) | Open |
 | L8 | The goods order page sends the seller's payout (amount, status, schedule) to the buyer | Open |
 | L9 | Two concurrent (or resumed) pool closes can release the quote slot the pool's own quote holds | Open |
@@ -691,7 +691,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### L6. Docs drift: seven sampled CLAUDE.md claims are false or contradictory
 
-- **Status:** Open
+- **Status:** Partly fixed. CLAUDE.md now marks `completed → reviewed` and RFQ `open → cancelled` as reserved (nothing writes them), names the real flag mechanisms (no PostHog flags), scopes the "rigs never run against production" line, states that some env vars are still read outside `lib/env.ts`, and records the `bundles_enabled` / `tenders_enabled` production question for the founder. Generating the flag and rig inventory from code in CI is open
 - **Where:** `CLAUDE.md:107`
 - **Raised by:** 1 finding from 1 audit team (Architecture and code health)
 - **Impact:** The governance document no longer describes the system, and one statement may mean a money feature is on without its prerequisites.
