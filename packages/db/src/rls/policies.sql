@@ -1161,6 +1161,10 @@ BEGIN
   EXECUTE 'DROP POLICY IF EXISTS "pools: admin all" ON pools';
   EXECUTE 'CREATE POLICY "pools: admin all" ON pools FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
   EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON pools FROM anon, authenticated';
+  -- 0076 (audit M15): clients read every pools column except the agent's rationale.
+  EXECUTE 'REVOKE SELECT ON pools FROM anon, authenticated';
+  EXECUTE (SELECT format('GRANT SELECT (%s) ON pools TO anon, authenticated', string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position))
+             FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pools' AND column_name <> 'rationale');
 
   EXECUTE 'DROP POLICY IF EXISTS "pool_members: member read own" ON pool_members';
   EXECUTE 'CREATE POLICY "pool_members: member read own" ON pool_members FOR SELECT USING (user_id = auth_user_id())';

@@ -15,6 +15,7 @@ import { checkIntakeExtractions, linkIntakeExtractions, type IntakeRow } from '@
 import { writeConsentedCorpus } from '@/lib/corpus'
 import { getMartCategory } from '@/lib/mart/config'
 import { isRfqQualityEnabledFor, runRfqQualityCheck, toQualityLocale } from '@/lib/agent/rfq-quality'
+import { attachmentRefAllowed } from '@/lib/rfq/attachments'
 
 const RFQ_TTL_MS = 72 * 60 * 60 * 1000
 
@@ -100,6 +101,12 @@ export async function POST(request: NextRequest) {
   // statement (the one added column value); with the flag off no setting is read.
   const twoPhase = d.kind !== 'goods' && (await isRfqQualityEnabledFor(admin, userId))
   const nowIso = new Date().toISOString()
+
+  // Audit M5 — a request references only files this buyer uploaded (POST /rfq/attachments
+  // or the document intake): never another buyer's path, "..", or a foreign link.
+  if ((d.attachments ?? []).some((a) => !attachmentRefAllowed(a.url, actor.msmeId as string))) {
+    return NextResponse.json({ error: 'attachment_invalid' }, { status: 422 })
+  }
 
   const maxQuotes = effectiveQuoteCap(await getAgentSetting(admin, 'rfq_max_quotes'))
   const { data: rfq, error } = await admin

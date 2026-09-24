@@ -155,6 +155,17 @@ export function mapPool(r: any, counts: { committed_qty: number; member_count: n
   }
 }
 
+/**
+ * Audit M15 — what buyers and the public see of a pool. The agent's rationale
+ * (source order ids, the seller's 30-day volume, buyer counts) is for the admin
+ * console only (/api/v1/mart/admin/pools); every other surface goes through this.
+ */
+export function publicPool<T extends { rationale?: unknown }>(pool: T): Omit<T, 'rationale'> {
+  const rest: Record<string, unknown> = { ...pool }
+  delete rest['rationale']
+  return rest as Omit<T, 'rationale'>
+}
+
 export async function listPools(
   admin: Admin,
   opts: { statuses?: PoolRowStatus[]; category?: string; limit?: number } = {},

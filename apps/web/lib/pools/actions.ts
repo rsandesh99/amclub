@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
+  redactContactInfo,
   POOL_MEMBER_ACTION_MAP,
   memberActionAllowed,
   poolClosesAt,
@@ -261,8 +262,9 @@ export async function submitOffer(
       provider_id: a.providerId,
       status: 'active',
       delivery_days: a.body.delivery_days,
-      scope: a.body.scope,
-      message: a.body.message ?? null,
+      // Audit M40 — offer text reaches every member before payment: contact details masked (§9.3).
+      scope: redactContactInfo(a.body.scope).text,
+      message: a.body.message ? redactContactInfo(a.body.message).text : null,
       gst_included: a.body.gst_included,
       transport_included: a.body.transport_included ?? null,
       valid_until: a.body.valid_until,
