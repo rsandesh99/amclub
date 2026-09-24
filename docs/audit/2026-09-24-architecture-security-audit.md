@@ -52,8 +52,8 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | **1 — inbound and dependencies (done, PR #59; 0074 live)** | H3 SMS hook signature (Standard Webhooks, +91 only; closed once the secret is set); H4 WhatsApp webhook fails closed without a verified signature; M6 `safeNext` control characters; H10 sharp, M27 next, M25 next-intl upgrades; M1 revoke `generate_order_number` from clients; the advisor items (revoke EXECUTE on internal definer functions from anon, pin `search_path`) | H3 needs a `SEND_SMS_HOOK_SECRET` in Vercel and the Supabase hook config |
 | **2 — money path (done, PR #60: H5–H9, M19, M39)** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
 | **3 — authorisation and abuse (done, PR #61: M3, M7–M9, M10 part 1, M13, M17)** | M7 / M8 delegated tokens refused unless a route opts in; M13 suspension enforced in `resolveActor`; M9 review flags go to a queue; M10 coupons: no public read, atomic redemption, per-buyer limit; M12 ownership checks on Udyam and penny-drop; M22 self-dealing guard; M17 clarification provider id hidden; M5 / L2 attachment and certificate paths pinned; M3 no token renewal from a delegated token | M12 touches KYC, so an ADR is needed |
-| **4 — Mart, pools and agents (in review: M4 part 1, M5, M15, M40, L2)** | M14 return window; M15 rationale off the public API; M16 re-review on material edits; M44 / M45 / L9 pool quote and offer sealing; M41–M43 WhatsApp binding, Munshi "yes" routing, trusted-part hygiene; M23 / M24 residency and budget; L3 runtime service-role scope | Several are dark features; fix before their cohort widens |
-| **5 — operations and architecture** | M32–M38 (queue creation, stuck-inbound alert, media caps, failing heartbeats, Upstash fail-open for reads, timeouts, re-drive); M28 / M29 / M30 (state-machine enforcement, one money-formula home, one masking rule set); M31 (a CI job with production flags, web unit tests); M26 (pin actions, OIDC for Fly); L4–L8; the performance advisor (119 unindexed foreign keys, the `notifications` index) | |
+| **4 — Mart, pools and agents (done, PR #62: M4 part 1, M5, M15, M40, L2; 0076 live)** | M14 return window; M15 rationale off the public API; M16 re-review on material edits; M44 / M45 / L9 pool quote and offer sealing; M41–M43 WhatsApp binding, Munshi "yes" routing, trusted-part hygiene; M23 / M24 residency and budget; L3 runtime service-role scope | Several are dark features; fix before their cohort widens |
+| **5 — operations and architecture (5a in review: M25, M26, M31 part 1, M35–M37, L7, L8)** | M32–M38 (queue creation, stuck-inbound alert, media caps, failing heartbeats, Upstash fail-open for reads, timeouts, re-drive); M28 / M29 / M30 (state-machine enforcement, one money-formula home, one masking rule set); M31 (a CI job with production flags, web unit tests); M26 (pin actions, OIDC for Fly); L4–L8; the performance advisor (119 unindexed foreign keys, the `notifications` index) | |
 
 ## How the audit ran
 
@@ -94,8 +94,8 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Fixed on production (0074) |
 | M2 | Refunds, payouts and reconcile still go through the simulation gateway on production | Open |
 | M3 | The agent token endpoint accepts delegated tokens: renewal forever, wider scopes, any run id | Fixed (wave 3, PR #61) |
-| M4 | A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order | Partly fixed (wave 4): API views stripped; direct table read open |
-| M5 | RFQ attachment URLs are client-supplied and re-signed with the service role (IDOR on the private bucket) | Fixed in code (wave 4) |
+| M4 | A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order | Partly fixed (wave 4, PR #62): API views stripped; direct table read open |
+| M5 | RFQ attachment URLs are client-supplied and re-signed with the service role (IDOR on the private bucket) | Fixed (wave 4, PR #62) |
 | M6 | `safeNext` open redirect via tab / CR / LF in `next` | Fixed (wave 1, PR #59) |
 | M7 | Admin mutation routes accept delegated agent tokens by default | Fixed (wave 3, PR #61) |
 | M8 | Delegated tokens are allowed by default on buyer, provider and pool write routes; the transition scope covers every action | Fixed (wave 3, PR #61) |
@@ -105,7 +105,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M12 | Verification flags prove existence, not ownership (Udyam number, penny-drop name match) | Open |
 | M13 | Suspended providers keep their powers: quote, get paid, accept and deliver, read matched RFQs | Fixed (wave 3, PR #61) |
 | M14 | A goods return can be opened from `completed` with no time limit | Open |
-| M15 | The public pool API leaks agent rationale (order ids, seller 30-day volume, buyer counts) | Fixed in code (wave 4); migration 0076 |
+| M15 | The public pool API leaks agent rationale (order ids, seller 30-day volume, buyer counts) | Fixed (wave 4, PR #62); migration 0076 |
 | M16 | Edits to approved Mart listings go live without re-review (category / commission, GST rate, images) | Open |
 | M17 | `rfq_clarifications.provider_id` is readable by every matched competitor | Fixed (wave 3, PR #61); migration 0075 |
 | M18 | `buyer_pool_discipline_v1` let every buyer read every buyer's pool record | Fixed |
@@ -115,35 +115,35 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M22 | No self-dealing guard: one person can buy from, quote to, review and settle with their own provider profile | Open |
 | M23 | The model-provider residency and retention guard is off by default | Open |
 | M24 | The platform AI budget can be drained from outside the cohort; the Mart catalog agent and speech-to-text bypass it | Open |
-| M25 | next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j) | Mitigated (wave 1 guard); v4 upgrade open |
-| M26 | The agent-runtime deploy workflow trusts a mutable action ref and `latest` flyctl next to FLY_API_TOKEN | Open |
+| M25 | next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j) | Fixed in code (wave 5a): next-intl 4.14.7 |
+| M26 | The agent-runtime deploy workflow trusts a mutable action ref and `latest` flyctl next to FLY_API_TOKEN | Fixed in code (wave 5a); Environment + Fly token are operator steps |
 | M27 | next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories) | Fixed (wave 1, PR #59) |
 | M28 | The state-machine rule is not enforced by the DB, the types or lint; status literals are spread through the apps | Open |
 | M29 | Tax and money formulas are duplicated outside shared, on different bases | Open |
 | M30 | Three different contact-masking rule sets; the weakest one guards pre-payment human messages | Open |
-| M31 | CI does not exercise the production configuration, and apps/web has no unit tests | Open |
+| M31 | CI does not exercise the production configuration, and apps/web has no unit tests | Partly fixed (wave 5a): mart:static in CI; web unit tests open |
 | M32 | The pg-boss queue `agent.munshi.growth` is never created, so the weekly job is silently dropped | Open |
 | M33 | Inbound WhatsApp messages can be stored but never processed, invisibly to the health check | Open |
 | M34 | The public WhatsApp webhook downloads media synchronously, with no size cap or timeout, before its duplicate check | Open |
-| M35 | Cron heartbeats only prove the job ran; failed runs stay green and handled errors never reach Sentry | Open |
-| M36 | An Upstash error makes every rate-limited route return 500, and a slow Upstash adds 5 s per request | Open |
-| M37 | Outbound calls (Resend, Surepass, MSG91, WhatsApp, Razorpay) have no timeouts and run inline in money paths | Open |
+| M35 | Cron heartbeats only prove the job ran; failed runs stay green and handled errors never reach Sentry | Fixed in code (wave 5a) |
+| M36 | An Upstash error makes every rate-limited route return 500, and a slow Upstash adds 5 s per request | Fixed in code (wave 5a) |
+| M37 | Outbound calls (Resend, Surepass, MSG91, WhatsApp, Razorpay) have no timeouts and run inline in money paths | Partly fixed (wave 5a): timeouts; outbox open |
 | M38 | Crons write the new status first and are never re-driven when the side effects fail; money crons set no maxDuration | Open |
 | M39 | Reconciliation reads only the first 100 Razorpay payments and never flags a second capture | Partly fixed (wave 2): all pages read; second-capture flag open |
-| M40 | Quote and group-offer scope / message text reaches buyers without contact masking | Fixed in code (wave 4) |
+| M40 | Quote and group-offer scope / message text reaches buyers without contact masking | Fixed (wave 4, PR #62) |
 | M41 | A WhatsApp conversation stays bound to a user after a phone change | Open |
 | M42 | A typed or spoken "yes" is captured by Munshi before procurement and approves the wrong proposal | Open |
 | M43 | The payout dossier puts party-authored order titles in TRUSTED prompt parts | Open |
 | M44 | A group (pool) quote can be re-priced, or its GST mode flipped, after close via the ordinary quote PATCH | Open |
 | M45 | A provider can read competitors' sealed pool offers by joining the pool through their own buyer profile | Open |
 | L1 | Admin `manual_refund` does not hold the payout, so a refund and a full payout can both go out | Open |
-| L2 | `buyer_licences.certificate_path` is client-writable, and the certificate routes sign whatever path the row holds | Fixed in code (wave 4) |
+| L2 | `buyer_licences.certificate_path` is client-writable, and the certificate routes sign whatever path the row holds | Fixed (wave 4, PR #62) |
 | L3 | The agent runtime holds the full service-role key and DATABASE_URL in the process that parses public webhooks | Open |
 | L4 | The pool "Pay ₹X to confirm" amount is computed on the client before GST (web and mobile) | Open |
 | L5 | Money and policy switches live in the agent registry, whose only editor sits behind AGENT_ENABLED | Open |
 | L6 | Docs drift: seven sampled CLAUDE.md claims are false or contradictory | Partly fixed: CLAUDE.md corrected; flag inventory from code open |
-| L7 | Hot, growing tables lack indexes (`notifications` has none and is polled every 30 s per tab) | Open |
-| L8 | The goods order page sends the seller's payout (amount, status, schedule) to the buyer | Open |
+| L7 | Hot, growing tables lack indexes (`notifications` has none and is polled every 30 s per tab) | Fixed in code (wave 5a); migration 0080 |
+| L8 | The goods order page sends the seller's payout (amount, status, schedule) to the buyer | Fixed in code (wave 5a) |
 | L9 | Two concurrent (or resumed) pool closes can release the quote slot the pool's own quote holds | Open |
 
 ## Supabase advisors (production, after 0072)
@@ -308,7 +308,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M4. A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order
 
-- **Status:** Partly fixed (wave 4). A matched seller's view of a goods request drops the buyer's contact name, phone and street address (shared `goodsSpecForSeller` keeps city, state, pincode and pickup); the contact reaches the seller on the paid order's delivery snapshot. A matched seller can still read `rfqs.goods_spec` straight through PostgREST; closing that needs the contact moved out of `goods_spec` (data-model change, open)
+- **Status:** Partly fixed (wave 4, PR #62). A matched seller's view of a goods request drops the buyer's contact name, phone and street address (shared `goodsSpecForSeller` keeps city, state, pincode and pickup); the contact reaches the seller on the paid order's delivery snapshot. A matched seller can still read `rfqs.goods_spec` straight through PostgREST; closing that needs the contact moved out of `goods_spec` (data-model change, open)
 - **Where:** `apps/web/lib/rfq/queries.ts:540`
 - **Raised by:** 1 finding from 1 audit team (Server-rendered pages: service-role data serialized into client components, and public ISR pages)
 - **Impact:** Buyer PII goes to every matched seller, not only the one who is later paid, and it enables off-platform deals that skip the escrow/commission path (the §8.3 stance against pre-order chat). This differs from the known finding (GET /orders/[id] exposes the phone to the one paid seller after the order): here it happens pre-order, to all matched sellers, through the RFQ endpoint.
@@ -316,7 +316,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M5. RFQ attachment URLs are client-supplied and re-signed with the service role (IDOR on the private bucket)
 
-- **Status:** Fixed in code (wave 4). An RFQ may reference only the buyer's own uploads (`rfq-attachments/<msmeId>/<uuid>.<ext>`, else 422 `attachment_invalid`); the loaders sign only paths under the RFQ owner's prefix and pass legacy external links through only when https
+- **Status:** Fixed (wave 4, PR #62). An RFQ may reference only the buyer's own uploads (`rfq-attachments/<msmeId>/<uuid>.<ext>`, else 422 `attachment_invalid`); the loaders sign only paths under the RFQ owner's prefix and pass legacy external links through only when https
 - **Where:** `apps/web/lib/rfq/attachments.ts:77`, `packages/shared/src/schemas/index.ts:146`
 - **Raised by:** 2 findings from 2 audit teams (AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); Web-side agent libraries and the deferred-release RFQ lifecycle)
 - **Impact:** Other buyers' RFQ documents (drawings, GST notices, quotations) can be read by anyone who has learned their keys, with persistent re-signing after the original 15-minute link expires. There is potential cross-bucket exposure of private files (invoices with buyer name and GSTIN). This breaks the stated invariant that 'nobody else reaches those loaders'.
@@ -401,7 +401,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M15. The public pool API leaks agent rationale (order ids, seller 30-day volume, buyer counts)
 
-- **Status:** Fixed in code (wave 4). The public pool API (list, detail, "mine") omits the agent rationale (`publicPool`), and migration 0076 withdraws the column from client roles
+- **Status:** Fixed (wave 4, PR #62). The public pool API (list, detail, "mine") omits the agent rationale (`publicPool`), and migration 0076 withdraws the column from client roles
 - **Where:** `apps/web/lib/mart/group-buy-agent.ts:209`
 - **Raised by:** 1 finding from 1 audit team (AuthZ: provider (partner) and Mart routes)
 - **Impact:** Other sellers' confidential sales volumes and customer counts, and internal order identifiers, are disclosed to the public. Order UUIDs are meant to be unguessable handles, and publishing them removes that layer of defence for any order-keyed endpoint.
@@ -483,7 +483,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M25. next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j)
 
-- **Status:** Mitigated (wave 1). The middleware answers 400 for encoded or decoded control characters and backslashes, and replaces any off-origin redirect from next-intl with `/`. The next-intl v4 upgrade stays open
+- **Status:** Fixed in code (wave 5a). next-intl 4.14.7 (≥ 4.9.1 patches GHSA-8f24-v5vv-gm5j in the library itself); the wave 1 middleware guards stay as defence in depth. `localeCookie.maxAge` keeps the one-year NEXT_LOCALE; statuses and redirect targets matched the old build on all 64 requests compared
 - **Where:** `apps/web/middleware.ts:56`
 - **Raised by:** 1 finding from 1 audit team (Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** Phishing and credential or OTP theft that borrows the production domain's trust, and it defeats link-domain checks. This was verified against the library locally, not against production: Vercel or Next could normalise %09 before the middleware sees it.
@@ -491,7 +491,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M26. The agent-runtime deploy workflow trusts a mutable action ref and `latest` flyctl next to FLY_API_TOKEN
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5a). Every action in every workflow is pinned to a commit SHA, flyctl to 0.4.107; agent-runtime.yml has `permissions: contents: read`, a `fly-deploy` concurrency group, master-only deploys, `environment: production` and the token tested through env; root `.dockerignore`, `USER node`. Operator steps (docs/agents/RUNTIME.md): an app-scoped `fly tokens create deploy` token in a GitHub Environment `production` restricted to master
 - **Where:** `.github/workflows/agent-runtime.yml:38`
 - **Raised by:** 1 finding from 1 audit team (Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** The Fly token lets an attacker deploy code, or `fly ssh`/read secrets if it is an org token, to the runtime, which holds SUPABASE_SERVICE_ROLE_KEY and DATABASE_URL, so this is a path to a full database compromise outside code review. GitHub branch protection is not enforced on this plan, which makes the workflow the only gate.
@@ -531,7 +531,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M31. CI does not exercise the production configuration, and apps/web has no unit tests
 
-- **Status:** Open
+- **Status:** Partly fixed (wave 5a). `mart:static` runs in the main CI job; the :3001 production-flags server now also runs with COUPONS_ENABLED. Web unit tests (vitest for the pure lib modules) are open
 - **Where:** `.github/workflows/ci.yml:52`
 - **Raised by:** 1 finding from 1 audit team (Architecture and code health)
 - **Impact:** Live money and agent paths are untested at merge time, and one gate the docs describe as enforced does not exist.
@@ -563,7 +563,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M35. Cron heartbeats only prove the job ran; failed runs stay green and handled errors never reach Sentry
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5a). Each heartbeat stores ok / degraded / failed + a summary (`lib/jobs/cron-registry.ts` lists every scheduled cron and what counts as degraded); `runCronJob` records a failure, reports it to Sentry and answers 500; /admin shows stale / failed red and degraded amber; `pnpm lint` fails if vercel.json, the cron folders and the registry disagree; Sentry environment from VERCEL_ENV. Stale-cron alerting outside /admin (Sentry Cron Monitors) and runtime Sentry are open
 - **Where:** `apps/web/app/[locale]/(admin)/admin/page.tsx:32`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** Failures in the money, Mart and agent pipelines go unnoticed until users complain.
@@ -571,7 +571,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M36. An Upstash error makes every rate-limited route return 500, and a slow Upstash adds 5 s per request
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5a). `enforce()` never throws and waits at most 1 s; ordinary limiters fail open with a throttled log + Sentry event, cost-bearing ones (OTP, SMS hook, KYC, voice, paid model endpoints, coupon brute force) keep enforcing in memory
 - **Where:** `apps/web/lib/rate-limit.ts:110`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** An outage at the third-party rate limiter takes down sign-in and checkout.
@@ -579,7 +579,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M37. Outbound calls (Resend, Surepass, MSG91, WhatsApp, Razorpay) have no timeouts and run inline in money paths
 
-- **Status:** Open
+- **Status:** Partly fixed (wave 5a). Every outbound call in apps/web has a deadline (Resend / WhatsApp 5 s, Surepass / Razorpay 10 s, STT 25 s, TTS 10 s); a timed-out Razorpay call is "outcome unknown", never a refused payout. The notification outbox is open
 - **Where:** `apps/web/lib/notifications/channels.ts:67`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** Slowness cascades into function timeouts on money paths, crons finish only part of their batch, and users see generic errors.
@@ -603,7 +603,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M40. Quote and group-offer scope / message text reaches buyers without contact masking
 
-- **Status:** Fixed in code (wave 4). Quote scope / message (every quote write goes through `quoteRowColumns`: submit, revision, pool close) and group-offer text are contact-masked with shared `redactContactInfo` before storage
+- **Status:** Fixed (wave 4, PR #62). Quote scope / message (every quote write goes through `quoteRowColumns`: submit, revision, pool close) and group-offer text are contact-masked with shared `redactContactInfo` before storage
 - **Where:** `apps/web/lib/rfq/quote-terms.ts:109`
 - **Raised by:** 1 finding from 1 audit team (Server-rendered pages: service-role data serialized into client components, and public ISR pages)
 - **Impact:** A pre-order contact channel that bypasses the platform (NOT-NOW §8.3: pre-order provider chat) and undermines the masking already built for clarifications and quote threads. This is the provider→buyer direction; the already-reported finding covers buyer RFQ text.
@@ -659,7 +659,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### L2. `buyer_licences.certificate_path` is client-writable, and the certificate routes sign whatever path the row holds
 
-- **Status:** Fixed in code (wave 4). A licence certificate is signed or deleted only when its stored path is under `<msme_id>/<licence_id>/`
+- **Status:** Fixed (wave 4, PR #62). A licence certificate is signed or deleted only when its stored path is under `<msme_id>/<licence_id>/`
 - **Where:** `packages/db/src/migrations/0054_licences_obligations.sql:60`
 - **Raised by:** 1 finding from 1 audit team (Database: RLS, grants, functions, views, storage)
 - **Impact:** Cross-tenant read or delete of private licence certificates (FSSAI, factory licences and similar). Exploitation needs the target object key, which is not easily guessable, hence medium. It is a structural flaw: a service-role signer trusts a client-writable storage pointer.
@@ -699,7 +699,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### L7. Hot, growing tables lack indexes (`notifications` has none and is polled every 30 s per tab)
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5a): migration 0080 adds the notifications (user, unread) and (user, created) indexes plus payments(order_id), checkout_sessions(order_id), orders(quote_id), orders(package_id), quotes(provider_id, created_at), rfq_matches(provider_id, notified_at), payouts(status, scheduled_for)
 - **Where:** `packages/db/src/migrations/0000_robust_phalanx.sql:401`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** Database CPU grows with users × notifications. With a few hundred concurrent users and 10^5 to 10^6 rows, these polls dominate Postgres and slow every API.
@@ -707,7 +707,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### L8. The goods order page sends the seller's payout (amount, status, schedule) to the buyer
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5a). The goods order page reads the payout only for the provider; the buyer gets `payout: null` and the query is skipped
 - **Where:** `apps/web/lib/mart/order-extras.ts:27`
 - **Raised by:** 1 finding from 1 audit team (Server-rendered pages: service-role data serialized into client components, and public ISR pages)
 - **Impact:** The buyer learns the seller's net take and margin and whether the seller's payout is held (which signals suspension, an unverified bank account or a dispute). This is new: the API route does not return payouts.
