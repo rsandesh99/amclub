@@ -101,6 +101,8 @@ export * from './quote-options'
 export * from './bundles'
 // Experience v3 E17 (N36, gated D-UX2) — analytics consent: versioned notice, cookie + stored record, consent rate
 export * from './analytics-consent'
+// Audit M10 (ADR 027) — the admin coupon schema, the checkout's claim answers, the per-buyer rule
+export * from './coupons'
 
 // Agentic assistant contract: task classes → tiers, personas, tool allowlists,
 // confirm gates, event kinds (H0 groundwork, DESIGN.md §8.6 / ADR-008)

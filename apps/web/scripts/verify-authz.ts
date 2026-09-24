@@ -1044,6 +1044,10 @@ async function main() {
       eq('anon cannot list coupon codes', Boolean(anonCoupons.error) || (anonCoupons.data ?? []).length === 0, true)
       const buyerCoupons = await asUser(buyerA.token).from('coupons').select('code')
       eq('a signed-in buyer cannot list coupon codes', Boolean(buyerCoupons.error) || (buyerCoupons.data ?? []).length === 0, true)
+      // M10 parts 2–3 (0081, ADR 027) — the coupon claim and the redemption record are the server's.
+      eq('a signed-in buyer cannot call claim_coupon_for_session', Boolean((await asUser(buyerA.token).rpc('claim_coupon_for_session', { p_session_id: crypto.randomUUID() })).error), true)
+      eq('a signed-in buyer cannot call record_coupon_redemption', Boolean((await asUser(buyerA.token).rpc('record_coupon_redemption', { p_order_id: orderA })).error), true)
+      eq('anon cannot call claim_coupon_for_session', Boolean((await createClient(URL_, ANON, { auth: { persistSession: false } }).rpc('claim_coupon_for_session', { p_session_id: crypto.randomUUID() })).error), true)
     }
   } finally {
     // Cleanup — children before parents; loud on error.

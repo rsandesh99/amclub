@@ -216,6 +216,8 @@ jobs:
         env:
           AGENT_ENABLED: "true"
           MART_ENABLED: "true"
+          # Production runs coupons too (2026-09-24); the coupon rig below proves them here.
+          COUPONS_ENABLED: "true"
         run: |
           nohup pnpm start -p 3001 > "$RUNNER_TEMP/next-agent.log" 2>&1 &
           for i in $(seq 1 60); do
@@ -239,6 +241,13 @@ jobs:
         env:
           AGENT_BASE_URL: http://localhost:3001
         run: pnpm exec tsx scripts/verify-experience.ts --only=e18
+
+      - name: Coupons (audit M10 / M11, ADR 027 — last use claimed once, per-buyer limit, audit row; coupons on)
+        if: ${{ !cancelled() && steps.agentapp.outcome == 'success' }}
+        working-directory: apps/web
+        env:
+          BASE_URL: http://localhost:3001
+        run: pnpm exec tsx scripts/verify-coupons.ts
 
       # The rigs above prove the server; these prove the screens. A real
       # Chromium clicks through package → paid order → delivery → payout and

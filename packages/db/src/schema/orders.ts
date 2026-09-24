@@ -151,6 +151,9 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   deliveryDays: integer('delivery_days').notNull(),
   revisionMax: integer('revision_max'),
   couponCode: text('coupon_code'),
+  // Audit M10 (0081): set by claim_coupon_for_session when this session holds a
+  // use of its coupon; the hold lasts while the session can still be paid.
+  couponClaimedAt: timestamp('coupon_claimed_at', { withTimezone: true }),
   gstInvoice: jsonb('gst_invoice'),
   // S2.1 (0020) + AMC Mart (0022): same three goods columns as orders —
   // materialize_order copies them verbatim into the order row.

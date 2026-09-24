@@ -136,7 +136,8 @@
     "err_rate_limited": "Too many attempts. Please wait a minute and try again.",
     "err_addon_changed": "An add-on changed since you chose it. Go back to the package to see the new total.",
     "err_payments_unavailable": "Payments are not available right now. Please try again later — you have not been charged.",
-    "err_checkout_expired": "This checkout timed out, so its price and terms are no longer held. Tap Pay again to continue at the current price. You have not been charged."
+    "err_checkout_expired": "This checkout timed out, so its price and terms are no longer held. Tap Pay again to continue at the current price. You have not been charged.",
+    "err_coupon_unavailable": "This coupon can't be used on this order right now. Remove it to pay the full price, or try again later — no money has been taken."
   },
   "orders": {
     "nudge_button": "Send a reminder",
@@ -1449,7 +1450,10 @@
     "coupon_expired": "This coupon has expired.",
     "coupon_usage_exceeded": "This coupon has reached its usage limit.",
     "coupon_category_mismatch": "This coupon doesn't apply to this service.",
-    "addon_changed": "An add-on changed. Go back to the package to see the new total."
+    "addon_changed": "An add-on changed. Go back to the package to see the new total.",
+    "coupon_per_buyer_exceeded": "You have already used this coupon as many times as it allows.",
+    "coupon_in_checkout": "This coupon is already applied to another of your checkouts. Finish that payment, or try again in 30 minutes.",
+    "coupon_unavailable": "This coupon can't be used on this order right now."
   },
   "admin_support": {
     "title": "Support queue",
@@ -1666,7 +1670,10 @@
     "value": "Value",
     "used": "Used",
     "status": "Active",
-    "empty": "No coupons yet."
+    "empty": "No coupons yet.",
+    "per_buyer_limit": "Uses per buyer",
+    "per_buyer_unlimited": "Unlimited",
+    "per_buyer_short": "{n} per buyer"
   },
   "admin_cms": {
     "title": "Banners",

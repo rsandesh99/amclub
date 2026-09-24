@@ -1025,8 +1025,21 @@ CREATE POLICY "notifications: owner mark read" ON notifications
 -- ─── coupons ──────────────────────────────────────────────────────────────────
 
 -- 0075 (audit M10): no client read; checkout and validate read coupons with the service role.
+-- 0081: no client privilege of any kind (per_buyer_limit included); the claim and the
+-- redemption record are service-role functions.
 DROP POLICY IF EXISTS "coupons: public read active" ON coupons;
-REVOKE SELECT ON coupons FROM anon, authenticated;
+REVOKE ALL ON coupons FROM anon, authenticated;
+DO $$
+BEGIN
+  IF to_regprocedure('claim_coupon_for_session(uuid)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION claim_coupon_for_session(uuid) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION claim_coupon_for_session(uuid) TO service_role';
+  END IF;
+  IF to_regprocedure('record_coupon_redemption(uuid)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION record_coupon_redemption(uuid) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION record_coupon_redemption(uuid) TO service_role';
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "coupons: admin all" ON coupons;
 CREATE POLICY "coupons: admin all" ON coupons

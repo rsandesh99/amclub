@@ -13,6 +13,7 @@ interface Coupon {
   valid_from: string
   valid_to: string
   usage_limit: number | null
+  per_buyer_limit: number | null
   used_count: number
   is_active: boolean
   category: { slug: string } | null
@@ -34,6 +35,7 @@ export function CouponsClient() {
   const [validFrom, setValidFrom] = useState(todayPlus(0))
   const [validTo, setValidTo] = useState(todayPlus(30))
   const [usageLimit, setUsageLimit] = useState('')
+  const [perBuyerLimit, setPerBuyerLimit] = useState('')
 
   async function load() {
     try {
@@ -54,13 +56,14 @@ export function CouponsClient() {
         validFrom: new Date(validFrom).toISOString(),
         validTo: new Date(validTo + 'T23:59:59').toISOString(),
         usageLimit: usageLimit ? Number(usageLimit) : undefined,
+        perBuyerLimit: perBuyerLimit ? Number(perBuyerLimit) : undefined,
       }
       const res = await fetch('/api/v1/admin/coupons', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const d = await res.json()
       if (!res.ok) throw new Error(typeof d.error === 'string' ? d.error : t('create_failed'))
-      setCode(''); setValue(''); setMaxDiscount(''); setUsageLimit('')
+      setCode(''); setValue(''); setMaxDiscount(''); setUsageLimit(''); setPerBuyerLimit('')
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('create_failed'))
@@ -104,6 +107,9 @@ export function CouponsClient() {
           <label className="text-sm">{t('usage_limit')}
             <input type="number" value={usageLimit} onChange={(e) => setUsageLimit(e.target.value)} className="mt-1 w-full rounded-button border border-border bg-background p-2 text-sm" placeholder={t('optional')} />
           </label>
+          <label className="text-sm">{t('per_buyer_limit')}
+            <input type="number" min={1} step={1} value={perBuyerLimit} onChange={(e) => setPerBuyerLimit(e.target.value)} className="mt-1 w-full rounded-button border border-border bg-background p-2 text-sm" placeholder={t('per_buyer_unlimited')} />
+          </label>
         </div>
         {error && <p className="text-sm text-danger">{error}</p>}
         <Button onClick={create} loading={busy}>{t('create')}</Button>
@@ -126,7 +132,10 @@ export function CouponsClient() {
                 <tr key={c.id} className="border-b border-border last:border-0">
                   <td className="p-3 font-mono font-medium">{c.code}</td>
                   <td className="p-3">{fmtValue(c)}{c.max_discount_paise ? ` (≤₹${c.max_discount_paise / 100})` : ''}</td>
-                  <td className="p-3">{c.used_count}{c.usage_limit ? `/${c.usage_limit}` : ''}</td>
+                  <td className="p-3">
+                    {c.used_count}{c.usage_limit ? `/${c.usage_limit}` : ''}
+                    {c.per_buyer_limit ? <span className="block text-xs text-foreground-secondary">{t('per_buyer_short', { n: c.per_buyer_limit })}</span> : null}
+                  </td>
                   <td className="p-3">{new Date(c.valid_to).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
                   <td className="p-3">{c.is_active ? '🟢' : '⚪'}</td>
                 </tr>

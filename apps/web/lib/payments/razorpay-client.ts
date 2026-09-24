@@ -72,6 +72,8 @@ export const CHECKOUT_ERROR_KEYS: Record<string, string> = {
   razorpay_load_failed: 'err_razorpay_load_failed',
   payments_unavailable: 'err_payments_unavailable',
   checkout_expired: 'err_checkout_expired',
+  // Audit M10 — the coupon's last use (total or per buyer) went to another checkout.
+  coupon_unavailable: 'err_coupon_unavailable',
   network: 'err_network',
   rate_limited: 'err_rate_limited',
 }

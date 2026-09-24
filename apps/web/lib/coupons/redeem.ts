@@ -1,4 +1,5 @@
 import 'server-only'
+import { isCouponClaimResult, type CouponClaimResult } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -7,55 +8,38 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
  * Record a coupon_redemption for a freshly materialised order and bump the
  * coupon's used_count — exactly once per order. The coupon code lives on the
  * checkout_session (frozen at checkout); we only act if a discount was actually
- * applied. One redemption per order is guaranteed by the (coupon_id, order_id)
- * primary key; used_count is bumped only when this call inserts the row.
+ * applied. materialize_order normally records it in the same transaction as the
+ * order; this is the fallback the materialise path calls afterwards.
  *
- * Caller gates on the `placed_side_effects` marker, so this runs once even if
- * the webhook replays — but we double-guard on the redemption row anyway.
+ * Audit M10: the insert and the bump are ONE statement pair inside
+ * `record_coupon_redemption` (0081, service role only) — the row lock on the
+ * coupon and the (coupon_id, order_id) primary key make a replay a no-op, and the
+ * old read-modify-write fallback (which could lose a concurrent bump) is gone.
  */
 export async function recordCouponRedemption(admin: Admin, orderId: string): Promise<void> {
-  const { data: order } = await admin
-    .from('orders')
-    .select('id, msme_id, discount_paise')
-    .eq('id', orderId)
-    .maybeSingle()
-  if (!order) return
+  const { error } = await admin.rpc('record_coupon_redemption', { p_order_id: orderId })
+  if (error) console.error('[recordCouponRedemption]', orderId, error.message)
+}
 
-  const { data: session } = await admin
-    .from('checkout_sessions')
-    .select('coupon_code')
-    .eq('order_id', orderId)
-    .maybeSingle()
-  const code = session?.coupon_code
-  if (!code) return
+/**
+ * Audit M10 — claim one use of the session's coupon (the session must carry the
+ * code it applied). Decided in the database under the coupon's row lock: uses
+ * already redeemed plus live claims of other unpaid sessions stay under the
+ * usage limit, and the same for this buyer under the per-buyer limit. The
+ * checkout opens a payment only for a held claim. A database error answers
+ * `null`: the caller refuses the coupon (fail closed), never skips the claim.
+ */
+export async function claimCouponForSession(admin: Admin, sessionId: string): Promise<CouponClaimResult | null> {
+  const { data, error } = await admin.rpc('claim_coupon_for_session', { p_session_id: sessionId })
+  if (error) {
+    console.error('[claimCouponForSession]', sessionId, error.message)
+    return null
+  }
+  return isCouponClaimResult(data) ? data : null
+}
 
-  const { data: coupon } = await admin.from('coupons').select('id').eq('code', code).maybeSingle()
-  if (!coupon) return
-
-  // Already recorded? (idempotent second guard)
-  const { data: existing } = await admin
-    .from('coupon_redemptions')
-    .select('coupon_id')
-    .eq('coupon_id', coupon.id)
-    .eq('order_id', orderId)
-    .maybeSingle()
-  if (existing) return
-
-  const { error: insErr } = await admin.from('coupon_redemptions').insert({
-    coupon_id: coupon.id,
-    order_id: orderId,
-    msme_id: order.msme_id,
-  })
-  // Unique violation = a racing duplicate already counted it; don't double-bump.
-  if (insErr) return
-
-  // Bump used_count atomically via SQL increment.
-  await admin.rpc('increment_coupon_usage', { p_coupon_id: coupon.id }).then(
-    () => {},
-    async () => {
-      // Fallback if the RPC isn't present: read-modify-write (best-effort).
-      const { data: c } = await admin.from('coupons').select('used_count').eq('id', coupon.id).maybeSingle()
-      await admin.from('coupons').update({ used_count: (c?.used_count ?? 0) + 1 }).eq('id', coupon.id)
-    },
-  )
+/** How many times this buyer business has redeemed the coupon (the per-buyer pre-check). */
+export async function buyerRedemptions(admin: Admin, couponId: string, msmeId: string): Promise<number> {
+  const { count } = await admin.from('coupon_redemptions').select('order_id', { count: 'exact', head: true }).eq('coupon_id', couponId).eq('msme_id', msmeId)
+  return count ?? 0
 }
