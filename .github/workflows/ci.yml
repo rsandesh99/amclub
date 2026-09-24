@@ -1,10 +1,18 @@
 name: CI
 
+# Minutes economy (Actions is metered on this private repo): CI runs on a PR
+# once it is ready for review — drafts run nothing — and not again on the merge
+# push to master (the PR run already built the merged tree). A newer push
+# cancels the older run. Run it on master by hand with workflow_dispatch.
 on:
-  push:
-    branches: [master, main, develop]
   pull_request:
     branches: [master, main, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   # Stub env vars so Next.js build doesn't fail on missing vars in CI.
@@ -17,6 +25,8 @@ env:
 jobs:
   ci:
     name: Lint · Typecheck · Test · Build
+    # Minutes economy: drafts run nothing; a PR runs once when it is marked ready (and on later pushes).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -91,6 +101,8 @@ jobs:
 
   a11y:
     name: Accessibility (axe — public surfaces)
+    # Minutes economy: drafts run nothing; a PR runs once when it is marked ready (and on later pushes).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # BLOCKING since run 29016513054 went green (Phase 8 §1 rollout:

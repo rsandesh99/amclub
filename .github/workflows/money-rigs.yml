@@ -7,11 +7,12 @@
 # `mart:static` in the main CI job.
 name: Money rigs
 
+# Minutes economy: once per PR when it is ready for review (drafts run nothing),
+# not again on the merge push to master; workflow_dispatch runs it by hand.
 on:
   pull_request:
     branches: [master, main, develop]
-  push:
-    branches: [master, main, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 concurrency:
@@ -21,6 +22,8 @@ concurrency:
 jobs:
   rigs:
     name: Money rigs · disposable Supabase
+    # Minutes economy: drafts run nothing; a PR runs once when it is marked ready (and on later pushes).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Rate limiting is part of what verify-authz proves (the admin limiter must
