@@ -336,9 +336,22 @@ async function main() {
 
     console.log('S1.5 verifications route — one admin gate + limiter:')
     {
+      // Audit M11: only a pending application is decided here, so each decision
+      // below starts from under_review (provB is seeded active).
+      const toReview = () => admin.from('provider_profiles').update({ status: 'under_review' }).eq('id', provBId)
+      eq('admin Bearer POST on an ACTIVE provider → 409 not_pending', (await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'approve' })).status, 409)
+      await admin.from('provider_profiles').update({ status: 'suspended' }).eq('id', provBId)
+      eq('approve a SUSPENDED provider from the queue → 409 (reactivation is the audited suspend/reactivate path)', (await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'approve' })).status, 409)
+      const { data: stillSuspended } = await admin.from('provider_profiles').select('status').eq('id', provBId).single()
+      eq('…and the provider stays suspended', stillSuspended?.status, 'suspended')
+      await toReview()
       denied('provider Bearer POST /admin/verifications/{provB}', (await api(provA.token, `/api/v1/admin/verifications/${provBId}`, { action: 'reject', reason: 'killtest' })).status)
       const okBearer = await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'reject', reason: 'killtest' })
       eq('admin Bearer POST → 200', okBearer.status, 200)
+      eq('a second decision on the same application → 409 not_pending', (await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'approve' })).status, 409)
+      const { data: decided } = await admin.from('audit_logs').select('action').eq('entity_id', provBId).eq('action', 'provider_verification_reject')
+      eq('the decision is audit-logged (provider_verification_reject)', (decided ?? []).length, 1)
+      await toReview()
       // Cookie session (the admin browser path) must also pass — requireAdmin
       // accepts both. Mint a cookie jar for the admin fixture.
       const ajar: Record<string, string> = {}
