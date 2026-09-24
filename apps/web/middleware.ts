@@ -26,7 +26,8 @@ function guestCheckoutOn(): boolean {
 
 // next-intl 3.x open redirect (GHSA-8f24-v5vv-gm5j, audit M25): for
 // /en/%09/evil.example the locale redirect drops "/en", and URL parsing then
-// drops the tab, leaving "//evil.example" (another host). Until next-intl 4:
+// drops the tab, leaving "//evil.example" (another host). next-intl >= 4.9.1
+// strips tab / CR / LF itself; these two guards stay as defence in depth:
 // refuse paths with control characters or backslashes (encoded or not) before
 // next-intl sees them, and never pass on a redirect that leaves this origin.
 const HOSTILE_PATH_CHARS = /[\u0000-\u001F\u007F\\]/
