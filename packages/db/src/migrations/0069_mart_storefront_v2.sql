@@ -112,6 +112,12 @@ DROP POLICY IF EXISTS "mart_reorder_reminders: owner read" ON mart_reorder_remin
 CREATE POLICY "mart_reorder_reminders: owner read" ON mart_reorder_reminders FOR SELECT USING (user_id = auth_user_id());
 --> statement-breakpoint
 
+-- N41 badge rule (registered in shared MART_SETTING_DEFS): the default the app
+-- falls back to, seeded so the Launch Gate preflight finds every registry key.
+INSERT INTO mart_settings (key, value) VALUES ('promise_breach_limit', '{"count": 3, "window_days": 90}')
+ON CONFLICT (key) DO NOTHING;
+--> statement-breakpoint
+
 -- Seed: typed attributes for two launch categories (config — edited later by admins).
 INSERT INTO mart_category_attributes (category_slug, key, label_i18n, type, unit, options, facetable, required, sort) VALUES
   ('fasteners', 'material', '{"en":"Material","hi":"सामग्री"}', 'enum', NULL, '["MS","SS 304","SS 316","Brass","High tensile"]', true, true, 1),
