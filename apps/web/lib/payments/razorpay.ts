@@ -85,14 +85,16 @@ export function makeRazorpayGateway(keyId: string, keySecret: string): PaymentGa
       }
     },
 
-    async findTransfer({ payoutId, sinceUnixSeconds }): Promise<GatewayTransfer | null> {
+    async findTransfer({ payoutId, sinceUnixSeconds, excludeTransferIds }): Promise<GatewayTransfer | null> {
       // Newest first, 100 a page; ten pages bound the scan. Past that the answer
-      // is unknown, never "none".
+      // is unknown, never "none". ADR 027: a transfer that failed or was reversed
+      // (or that the webhook reported so) never settles a payout.
+      const dead = new Set(excludeTransferIds ?? [])
       /* eslint-disable @typescript-eslint/no-explicit-any */
       for (let page = 0; page < 10; page++) {
         const res = await (rzp as any).transfers.all({ from: sinceUnixSeconds, count: 100, skip: page * 100 })
         const items: any[] = res?.items ?? []
-        const hit = items.find((t) => t?.notes?.payout_id === payoutId)
+        const hit = items.find((t) => t?.notes?.payout_id === payoutId && !dead.has(String(t.id)) && t.status !== 'failed' && t.status !== 'reversed')
         if (hit) return { razorpayTransferId: String(hit.id), amountPaise: Number(hit.amount), status: String(hit.status), simulated: false }
         if (items.length < 100) return null
       }

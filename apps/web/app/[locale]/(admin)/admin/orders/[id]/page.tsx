@@ -33,8 +33,17 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     setBusy(true)
     const res = await fetch(`/api/v1/admin/orders/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setBusy(false)
-    if (res.ok) { await load(); toast(t('action_done'), 'success') }
-    else { const d = await res.json().catch(() => ({})); toast(moneyError(d) ?? (typeof d.error === 'string' ? d.error : t('action_failed')), 'error') }
+    if (res.ok) { await load(); toast(t('action_done'), 'success'); return }
+    const d = await res.json().catch(() => ({}))
+    // ADR 027 (L1) — the provider is already paid: refunding now means the platform bears it
+    // (ADR-014 §2). Only an explicit confirmation sends it again with platformAbsorbs.
+    if (body.action === 'manual_refund' && !body.platformAbsorbs && d.error === 'provider_already_paid') {
+      if (window.confirm(t('manual_refund_provider_paid_confirm', { existing: formatINR(Number(d.existingPaise ?? 0)), refund: formatINR(Number(d.refundPaise ?? 0)) }))) {
+        await act({ ...body, platformAbsorbs: true })
+      }
+      return
+    }
+    toast(moneyError(d) ?? (typeof d.error === 'string' ? d.error : t('action_failed')), 'error')
   }
   function manualRefund() {
     const r = window.prompt(t('refund_amount'))

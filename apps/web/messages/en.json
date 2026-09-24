@@ -135,7 +135,8 @@
     "err_network": "No connection. Check your internet and try again.",
     "err_rate_limited": "Too many attempts. Please wait a minute and try again.",
     "err_addon_changed": "An add-on changed since you chose it. Go back to the package to see the new total.",
-    "err_payments_unavailable": "Payments are not available right now. Please try again later — you have not been charged."
+    "err_payments_unavailable": "Payments are not available right now. Please try again later — you have not been charged.",
+    "err_checkout_expired": "This checkout timed out, so its price and terms are no longer held. Tap Pay again to continue at the current price. You have not been charged."
   },
   "orders": {
     "nudge_button": "Send a reminder",
@@ -1890,6 +1891,12 @@
     "hold_dispute_open": "dispute open",
     "hold_provider_suspended": "provider suspended",
     "hold_bank_unverified": "bank unverified",
+    "hold_payment_simulated": "simulated payment",
+    "hold_refund_exists": "refund on the order",
+    "hold_manual_refund": "manual refund",
+    "hold_nothing_to_pay": "nothing to pay",
+    "hold_chargeback": "chargeback",
+    "hold_chargeback_open": "chargeback open",
     "payout_ready_tile": "Payout-ready providers",
     "payout_ready_todo": "{n, plural, one {# active provider} other {# active providers}} need a Route account / bank check →",
     "payout_ready_ok": "Every active provider can be paid",
@@ -1971,7 +1978,11 @@
     "money_err_order_not_releasable": "The order is not in a state that allows a payout (for example, it is disputed). Nothing was paid.",
     "money_err_order_changed": "The order changed while you were looking. Reload and check it again.",
     "money_err_refund_failed": "The refund did not go through, so the order stays cancelled with the refund owed. It is retried automatically every hour, or try again here.",
-    "money_err_not_refund_owed": "This order is not a cancelled order that is owed a refund."
+    "money_err_not_refund_owed": "This order is not a cancelled order that is owed a refund.",
+    "money_err_payments_unavailable": "Payments are not connected on this deployment (no live Razorpay keys), so no money moved and nothing changed. Add the Razorpay keys, then try again.",
+    "money_err_payment_simulated": "This order was paid in simulation, so no real refund or transfer can be made for it. Nothing changed. Simulation-era orders are voided at the payment cutover.",
+    "manual_refund_provider_paid_confirm": "The provider has already been paid {existing}, and there is no way yet to take money back from a provider. Refunding {refund} now means the platform bears it. Refund the buyer anyway?",
+    "payout_simulated_badge": "simulated"
   },
   "gateway": {
     "meta_title": "AMClub — Verified business services for MSMEs",
@@ -3825,6 +3836,11 @@
       "title": "We noticed a duplicate payment",
       "body_refunded": "You paid twice for the same request. We cancelled order {ref} and refunded it in full; your bank usually shows it within 5–7 working days. Your other order stands.",
       "body_pending": "You paid twice for the same request. Our team will refund order {ref} in full; your other order stands."
+    },
+    "capture_refund": {
+      "title": "Your payment is being refunded",
+      "body_expired": "We received your payment of {amount} after the checkout had expired, so no order was placed. We are refunding it in full; your bank usually shows it within 5–7 working days.",
+      "body_duplicate": "We received a second payment of {amount} for order {ref}, which was already paid. We are refunding the second payment in full; your bank usually shows it within 5–7 working days. Your order is not affected."
     },
     "new_quote": {
       "title": "New quote received"

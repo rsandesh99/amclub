@@ -4,7 +4,7 @@ import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getPaymentGateway } from '@/lib/payments'
-import { paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
+import { checkoutTimeoutSeconds, MIN_RESUME_SECONDS, paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { prepareMemberCheckout } from '@/lib/mart/pools'
 import { serverError } from '@/lib/api/errors'
@@ -33,9 +33,14 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
   const c = r.checkout
 
-  const { data: session } = await admin.from('checkout_sessions').select('id, razorpay_order_id, total_paise, order_id').eq('id', c.sessionId).maybeSingle()
+  const { data: session } = await admin.from('checkout_sessions').select('id, razorpay_order_id, total_paise, order_id, status, expires_at').eq('id', c.sessionId).maybeSingle()
   if (!session) return serverError('[pool/checkout] session missing', c.sessionId)
   if (session.order_id) return NextResponse.json({ error: 'already_paid', orderId: session.order_id }, { status: 409 })
+  // ADR 027 (M21) — a lapsed session (the member's pay window) is never handed out again.
+  const timeout = checkoutTimeoutSeconds(session.expires_at as string | null)
+  if (session.status !== 'created' || (timeout !== null && timeout < MIN_RESUME_SECONDS)) {
+    return NextResponse.json({ error: 'pay_window_lapsed', code: 'checkout_expired' }, { status: 409 })
+  }
   const gateway = getPaymentGateway()
   let razorpayOrderId = session.razorpay_order_id as string | null
   if (!razorpayOrderId) {
@@ -58,6 +63,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     amountPaise: c.amounts.totalPaise,
     keyId: process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'] ?? '',
     simulated: !gateway.isReal,
+    ...(timeout !== null ? { checkoutTimeoutSeconds: timeout } : {}),
     amounts: c.amounts,
     lineItems: c.lineItems,
     sellerName: c.sellerName,

@@ -14,7 +14,7 @@ import { RefundLine } from '@/components/packages-v3/BuyBox'
 import { useAnalytics } from '@/components/providers/posthog'
 import { readSearchAttribution } from '@/components/search-v3/SearchAttributionCapture'
 import { acceptLegalDocs } from '@/lib/legal/client'
-import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
+import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, isCheckoutExpired, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 
 // Loaded only when needed: the sign-in panel (guests) and the success moment (after paying).
 const AuthPanel = dynamic(() => import('@/components/auth/AuthPanel').then((m) => m.AuthPanel), { ssr: false })
@@ -203,6 +203,8 @@ export function CheckoutV3({
         onDismiss: () => setError(t('payment_cancelled')),
       })
     } catch (e: unknown) {
+      // ADR 027 — an expired session is never resumed: the next tap starts a fresh one.
+      if (isCheckoutExpired(e)) intent.current = null
       setError(t(checkoutErrorKey(e, CHECKOUT_ERROR_KEYS, 'failed') as 'failed'))
     } finally {
       setLoading(false)

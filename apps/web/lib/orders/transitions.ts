@@ -6,11 +6,14 @@ import {
   PAYOUT_RELEASE_STATUSES,
   ORDER_REFUND_OWED_STATUSES,
   DISPUTABLE_STATUSES,
+  REFUND_STATUS,
+  disputeSettlementPaise,
   type OrderStatus,
   type DisputeResolution,
 } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { getPaymentGateway } from '@/lib/payments'
+import { moneyMovementBlock, MoneyPathBlockedError, paymentsAvailable } from '@/lib/payments/simulation'
 import { PAYOUT_AUTO_RELEASE } from '@/lib/flags'
 import { generateInvoices } from '@/lib/invoices/generate'
 import { notifyOrderTransition, notifyAutoCancelled, notifyAutoAccepted } from '@/lib/notifications/events'
@@ -125,6 +128,26 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
     const ev = await getServicesEvidence(admin, order)
     if (ev.enforced && !ev.gate.ok) holdReasons.push(...ev.gate.reasons)
   }
+
+  // ADR 027 (audit L1) — a refund already made on this order (an admin manual
+  // refund before completion) leaves the provider only their share of what the
+  // buyer kept (the ADR-014 formula), and the payout is held for a release: a
+  // refund and a full payout never both go out.
+  let amountPaise = Number(order.provider_earning_paise)
+  const payment = await paymentForOrder<{ id: string }>(admin, order, 'id')
+  const refund = payment ? await refundForOrder<{ amount_paise: number }>(admin, order, payment.id, 'amount_paise') : null
+  const refundedPaise = Number(refund?.amount_paise ?? 0)
+  if (refundedPaise > 0) {
+    const totalPaise = Number(order.total_paise)
+    amountPaise = disputeSettlementPaise({ totalPaise, earningPaise: amountPaise, resolution: refundedPaise >= totalPaise ? 'refund_full' : 'refund_partial', amountPaise: refundedPaise }).providerPaidPaise
+    holdReasons.push('refund_exists')
+    if (amountPaise <= 0) {
+      // Refunded in full: the provider is owed nothing, so no payout row (as a refund_full resolution voids it).
+      const { data: prior } = await admin.from('order_events').select('id').eq('order_id', order.id).eq('event', 'payout_voided').limit(1)
+      if (!(prior ?? []).length) await addEvent(admin, order.id, 'payout_voided', null, { reason: 'refund_full', refunded_paise: refundedPaise })
+      return
+    }
+  }
   const held = holdReasons.length > 0
 
   const scheduledFor = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().slice(0, 10) // T+2
@@ -134,7 +157,7 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
       {
         provider_id: order.provider_id,
         order_id: order.id,
-        amount_paise: order.provider_earning_paise,
+        amount_paise: amountPaise,
         status: held ? 'held' : 'scheduled',
         scheduled_for: scheduledFor,
         ...(tds ?? {}),
@@ -148,9 +171,10 @@ export async function schedulePayout(admin: Admin, order: any): Promise<void> {
   if (payoutId) {
     await addEvent(admin, order.id, held ? 'payout_held' : 'payout_scheduled', null, {
       payout_id: payoutId,
-      amount_paise: order.provider_earning_paise,
+      amount_paise: amountPaise,
       scheduled_for: scheduledFor,
       ...(held ? { reasons: holdReasons } : {}),
+      ...(refundedPaise > 0 ? { refunded_paise: refundedPaise } : {}),
     })
     // S1.4 — Payout-Evidence agent: assemble a dossier for a payout born HELD.
     // Best-effort, after the money write, never inside it; a no-op unless
@@ -176,8 +200,16 @@ export async function processRefund(
   if (refundPaise <= 0) return 0
 
   // E12c — a bundle child refunds against its purchase's ONE payment; its refund row is its own (by key).
-  const payment = await paymentForOrder<{ id: string; razorpay_payment_id: string | null }>(admin, order, 'id, razorpay_payment_id')
+  const payment = await paymentForOrder<{ id: string; razorpay_payment_id: string | null; simulated: unknown }>(admin, order, 'id, razorpay_payment_id, simulated:webhook_payload->simulated')
   if (!payment) return 0
+
+  // ADR 027 (audit M2) — no refund through the simulation gateway on production,
+  // and no real refund of a simulated payment. Refused BEFORE anything is
+  // written: the row (if any) stays as it is, and the callers record the failure
+  // (refund_failed) for the sweeper / ops once payments are available again.
+  const gateway = getPaymentGateway()
+  const blocked = moneyMovementBlock(gateway.isReal, payment)
+  if (blocked) throw new MoneyPathBlockedError(blocked)
 
   // Phase 2f — money truth. ONE refund per order, keyed deterministically, and
   // the row is written BEFORE the gateway call (status 'pending'). A crash
@@ -190,7 +222,10 @@ export async function processRefund(
   let amountPaise = refundPaise
   const existing = await refundForOrder<{ id: string; status: string; amount_paise: number }>(admin, order, payment.id, 'id, status, amount_paise')
   if (existing) {
-    if (existing.status === 'processed') return Number(existing.amount_paise)
+    if (existing.status === REFUND_STATUS.processed) return Number(existing.amount_paise)
+    // ADR 027 — the gateway reported this refund failed (refund.failed webhook): the
+    // buyer did not get it. Never re-read it as done and never re-send it blind; ops re-sends.
+    if (existing.status === REFUND_STATUS.failed) throw new Error('refund_failed_at_gateway')
     rowId = existing.id // pending from an earlier attempt → complete it
     amountPaise = Number(existing.amount_paise)
   } else {
@@ -200,7 +235,7 @@ export async function processRefund(
         payment_id: payment.id,
         amount_paise: refundPaise,
         reason: resolution ?? 'cancellation',
-        status: 'pending',
+        status: REFUND_STATUS.pending,
         idempotency_key: key,
       })
       .select('id')
@@ -209,7 +244,8 @@ export async function processRefund(
       // Unique-key race: a concurrent caller inserted first — re-read and defer to it.
       const again = await refundForOrder<{ id: string; status: string; amount_paise: number }>(admin, order, payment.id, 'id, status, amount_paise')
       if (!again) throw new Error(`refund insert failed: ${insErr?.message ?? 'unknown'}`)
-      if (again.status === 'processed') return Number(again.amount_paise)
+      if (again.status === REFUND_STATUS.processed) return Number(again.amount_paise)
+      if (again.status === REFUND_STATUS.failed) throw new Error('refund_failed_at_gateway')
       rowId = again.id
       amountPaise = Number(again.amount_paise)
     } else {
@@ -217,10 +253,9 @@ export async function processRefund(
     }
   }
 
-  const gateway = getPaymentGateway()
   const razorpayPaymentId = payment.razorpay_payment_id ?? `pay_sim_${order.id}`
-  // Retry path: reuse a refund the gateway already created for this key.
-  const prior = (await gateway.listRefunds(razorpayPaymentId)).find((r) => r.receipt === key)
+  // Retry path: reuse a refund the gateway already created for this key (a failed one is not a refund).
+  const prior = (await gateway.listRefunds(razorpayPaymentId)).find((r) => r.receipt === key && r.status !== REFUND_STATUS.failed)
   const r =
     prior ??
     (await gateway.createRefund({
@@ -229,11 +264,13 @@ export async function processRefund(
       receipt: key,
       notes: { order_id: order.id },
     }))
+  // A refund the gateway itself reports failed is not recorded as processed (the row stays pending for the retry).
+  if (r.status === REFUND_STATUS.failed) throw new Error('refund_failed_at_gateway')
   await admin
     .from('refunds')
-    .update({ status: 'processed', razorpay_refund_id: r.razorpayRefundId, updated_at: nowIso })
+    .update({ status: REFUND_STATUS.processed, razorpay_refund_id: r.razorpayRefundId, updated_at: nowIso })
     .eq('id', rowId)
-    .eq('status', 'pending')
+    .eq('status', REFUND_STATUS.pending)
   return amountPaise
 }
 
@@ -488,7 +525,10 @@ export async function finishRefund(
 }
 
 /** Sweeper (auto-cancel cron): cancelled orders from the last 30 days still owed a refund, idle ≥ 10 minutes. */
-export async function redriveCancellationRefunds(admin: Admin): Promise<{ checked: number; refunded: number; failed: number }> {
+export async function redriveCancellationRefunds(admin: Admin): Promise<{ checked: number; refunded: number; failed: number; unavailable?: true }> {
+  // ADR 027 (audit M2): no re-drive through the simulation gateway on production;
+  // the refunds stay owed (and visible) until real keys are configured.
+  if (!paymentsAvailable(getPaymentGateway().isReal)) return { checked: 0, refunded: 0, failed: 0, unavailable: true }
   const idle = new Date(Date.now() - 10 * 60 * 1000).toISOString()
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
   const { data: rows } = await admin
@@ -502,8 +542,10 @@ export async function redriveCancellationRefunds(admin: Admin): Promise<{ checke
   let refunded = 0
   let failed = 0
   for (const o of rows ?? []) {
-    const payment = await paymentForOrder<{ id: string }>(admin, o, 'id')
+    const payment = await paymentForOrder<{ id: string; razorpay_payment_id: string | null; simulated: unknown }>(admin, o, 'id, razorpay_payment_id, simulated:webhook_payload->simulated')
     if (!payment) continue
+    // ADR 027 — a simulated payment is never refunded by a real gateway; the cutover voids those orders.
+    if (moneyMovementBlock(getPaymentGateway().isReal, payment)) continue
     // A processed refund whose order never moved is healed too: processRefund
     // returns the processed amount without calling the gateway again.
     const r = await finishRefund(admin, o)

@@ -6,7 +6,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { getPaymentGateway } from '@/lib/payments'
-import { paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
+import { checkoutTimeoutSeconds, MIN_RESUME_SECONDS, paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon } from '@/lib/coupons/apply'
 import { COUPONS_ENABLED } from '@/lib/flags'
@@ -69,6 +69,7 @@ type CheckoutErrorCode =
   | 'addon_changed'
   | 'option_not_found'
   | 'payments_unavailable'
+  | 'checkout_expired'
 
 function fail(status: number, code: CheckoutErrorCode, error: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error, code, ...(extra ?? {}) }, { status })
@@ -80,8 +81,9 @@ interface SessionRow {
   total_paise: number
   status: string
   order_id: string | null
+  expires_at: string | null
 }
-const SESSION_COLS = 'id, razorpay_order_id, total_paise, status, order_id'
+const SESSION_COLS = 'id, razorpay_order_id, total_paise, status, order_id, expires_at'
 /** A session whose payment was captured (materialize_order claimed it). */
 const isPaidSession = (s: SessionRow) => !!s.order_id || s.status === 'materializing' || s.status === 'materialized'
 
@@ -89,6 +91,10 @@ const isPaidSession = (s: SessionRow) => !!s.order_id || s.status === 'materiali
  * Resume an existing session (same idempotency key, or a live session for the
  * SAME quote). Never mints a second Razorpay order; once the session is paid
  * the client is sent to the order instead of re-opening the payment sheet.
+ * ADR 027 (audit M21): an unpaid session that has expired (or has less than a
+ * minute left) is never resumed — its frozen price, quote or coupon lapsed; the
+ * client starts a fresh checkout (409 `checkout_expired`). A live one carries
+ * the Razorpay Checkout `timeout` so the sheet closes when the session does.
  */
 function resumeResponse(s: SessionRow) {
   if (isPaidSession(s)) {
@@ -101,6 +107,10 @@ function resumeResponse(s: SessionRow) {
       idempotent: true,
     })
   }
+  const timeout = checkoutTimeoutSeconds(s.expires_at)
+  if (s.status !== 'created' || (timeout !== null && timeout < MIN_RESUME_SECONDS)) {
+    return fail(409, 'checkout_expired', 'This checkout has expired; start again for the current price', { retryAfter: s.expires_at })
+  }
   return NextResponse.json({
     checkoutSessionId: s.id,
     razorpayOrderId: s.razorpay_order_id,
@@ -110,6 +120,7 @@ function resumeResponse(s: SessionRow) {
     // The resume path must say whether to simulate, or a stable client key
     // would open the Razorpay sheet on a simulated order id.
     simulated: !getPaymentGateway().isReal,
+    ...(timeout !== null ? { checkoutTimeoutSeconds: timeout } : {}),
   })
 }
 
@@ -304,11 +315,11 @@ export async function POST(request: NextRequest) {
       if (siblingIds.length > 0) {
         const { data: sessions } = await admin
           .from('checkout_sessions')
-          .select(SESSION_COLS + ', quote_id, expires_at, created_at')
+          .select(SESSION_COLS + ', quote_id, created_at')
           .in('quote_id', siblingIds)
           .in('status', ['created', 'materializing', 'materialized'])
           .order('created_at', { ascending: false })
-        const rows = (sessions ?? []) as unknown as (SessionRow & { quote_id: string; expires_at: string | null })[]
+        const rows = (sessions ?? []) as unknown as (SessionRow & { quote_id: string })[]
         const paid = rows.find(isPaidSession)
         if (paid) {
           if (paid.quote_id === quote.id) return resumeResponse(paid)
@@ -437,17 +448,17 @@ export async function POST(request: NextRequest) {
       },
       { onConflict: 'idempotency_key', ignoreDuplicates: true },
     )
-    .select('id, total_paise')
+    .select('id, total_paise, expires_at')
     .maybeSingle()
 
   // ignoreDuplicates returns no row when this key already has a session (a
   // racing double-submit, or a retry after the gateway call below failed).
   // Re-read it so the SAME frozen session is bound — never a second one.
-  let bound = (session as { id: string; total_paise: number } | null) ?? null
+  let bound = (session as { id: string; total_paise: number; expires_at: string | null } | null) ?? null
   if (!bound && !insErr) {
     const { data: again } = await supabase.from('checkout_sessions').select(SESSION_COLS).eq('idempotency_key', idempotencyKey).maybeSingle()
     if (again?.razorpay_order_id) return resumeResponse(again as SessionRow)
-    bound = again ? { id: again.id as string, total_paise: Number(again.total_paise) } : null
+    bound = again ? { id: again.id as string, total_paise: Number(again.total_paise), expires_at: (again.expires_at as string | null) ?? null } : null
   }
   if (insErr || !bound) {
     console.error('[checkout] session insert', insErr)
@@ -476,11 +487,14 @@ export async function POST(request: NextRequest) {
   const { data: final } = await supabase.from('checkout_sessions').select('razorpay_order_id').eq('id', bound.id).maybeSingle()
   const razorpayOrderId = (final?.razorpay_order_id as string | null | undefined) ?? order.razorpayOrderId
 
+  const timeout = checkoutTimeoutSeconds(bound.expires_at)
   return NextResponse.json({
     checkoutSessionId: bound.id,
     razorpayOrderId,
     amountPaise: Number(bound.total_paise),
     keyId: process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'] ?? '',
     simulated: !gateway.isReal,
+    // ADR 027 (M21) — the Razorpay sheet closes when the frozen session expires.
+    ...(timeout !== null ? { checkoutTimeoutSeconds: timeout } : {}),
   })
 }

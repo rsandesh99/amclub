@@ -47,8 +47,10 @@ export const mockGateway: PaymentGateway = {
     return transfer
   },
 
-  async findTransfer({ payoutId }): Promise<GatewayTransfer | null> {
-    return mockTransfers.get(payoutId) ?? null
+  async findTransfer({ payoutId, excludeTransferIds }): Promise<GatewayTransfer | null> {
+    const t = mockTransfers.get(payoutId) ?? null
+    // ADR 027 — a transfer the webhook reported failed / reversed never settles a payout.
+    return t && !(excludeTransferIds ?? []).includes(t.razorpayTransferId) ? t : null
   },
 
   async fetchPayment(razorpayPaymentId: string): Promise<GatewayPayment | null> {

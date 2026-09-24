@@ -22,6 +22,9 @@ const MONEY_ERROR_CODES = [
   'order_changed',
   'refund_failed',
   'not_refund_owed',
+  // ADR 027 — money cannot really move (simulation gateway on production / a simulated payment).
+  'payments_unavailable',
+  'payment_simulated',
 ] as const
 type MoneyErrorCode = (typeof MONEY_ERROR_CODES)[number]
 

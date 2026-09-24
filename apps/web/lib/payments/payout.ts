@@ -4,6 +4,7 @@ import { notifyPayoutPaid } from '@/lib/notifications/events'
 import { assertFeeHeadroom, FeeHeadroomError } from './fees'
 import { payoutRunBlockers } from './release-gate'
 import { reportOpsError, reportOpsIssue } from '@/lib/observability'
+import { paymentsAvailable } from './simulation'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -45,7 +46,23 @@ async function attemptedBefore(admin: Admin, payout: any): Promise<boolean> {
 /** Look-back for findTransfer: from a day before the payout row was created. */
 const lookbackUnix = (payout: any) => Math.floor(new Date(payout.created_at ?? Date.now()).getTime() / 1000) - 24 * 3600
 
-async function markPaid(admin: Admin, payout: any, transfer: GatewayTransfer, recovered: boolean): Promise<boolean> {
+/**
+ * ADR 027 — transfers the gateway reported failed or reversed for this payout
+ * (the webhook records them as `payout_failed` with `source: 'gateway'`). They
+ * never settle the payout again: a retry sends a new transfer instead.
+ */
+export async function deadTransferIds(admin: Admin, payout: { id: string; order_id: string }): Promise<string[]> {
+  const { data } = await admin
+    .from('order_events')
+    .select('payload')
+    .eq('order_id', payout.order_id)
+    .eq('event', 'payout_failed')
+    .eq('payload->>payout_id', payout.id)
+    .eq('payload->>source', 'gateway')
+  return (data ?? []).map((e) => (e.payload as { razorpay_transfer_id?: string } | null)?.razorpay_transfer_id).filter((x): x is string => typeof x === 'string')
+}
+
+export async function markPaid(admin: Admin, payout: any, transfer: GatewayTransfer, recovered: boolean, extra?: Record<string, unknown>): Promise<boolean> {
   const { data: paid } = await admin
     .from('payouts')
     .update({ status: 'paid', razorpay_transfer_id: transfer.razorpayTransferId, paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -63,6 +80,7 @@ async function markPaid(admin: Admin, payout: any, transfer: GatewayTransfer, re
       razorpay_transfer_id: transfer.razorpayTransferId,
       simulated: Boolean(transfer.simulated),
       ...(recovered ? { recovered: true } : {}),
+      ...(extra ?? {}),
     },
   })
   try { await notifyPayoutPaid(admin, payout.provider_id, Number(payout.amount_paise), payout.order_id) } catch (e) { console.error('[notifyPayoutPaid]', e) }
@@ -75,12 +93,19 @@ async function markPaid(admin: Admin, payout: any, transfer: GatewayTransfer, re
  * double-pays. ADR 026: every claimed payout passes the ONE release rule
  * (payoutRunBlockers) before money moves; a payout sent before is looked up at
  * the gateway first; an ambiguous transfer error stays 'processing' (unconfirmed).
+ * ADR 027 (audit M2): with the simulation gateway on the production deployment
+ * nothing is claimed at all (`unavailable`), so no payout is ever recorded as
+ * paid by a transfer that moved no money; the rows stay 'scheduled'.
  */
 export async function runPayouts(
   admin: Admin,
   gateway: PaymentGateway,
   opts?: { allScheduled?: boolean; orderId?: string },
-): Promise<{ processed: number; transferIds: string[]; simulated: boolean; held: number; unconfirmed: number; failed: number }> {
+): Promise<{ processed: number; transferIds: string[]; simulated: boolean; held: number; unconfirmed: number; failed: number; unavailable?: true }> {
+  if (!paymentsAvailable(gateway.isReal)) {
+    console.error('[runPayouts] payments unavailable (simulation gateway on production) — no payout claimed')
+    return { processed: 0, transferIds: [], simulated: false, held: 0, unconfirmed: 0, failed: 0, unavailable: true }
+  }
   const today = new Date().toISOString().slice(0, 10)
   let query = admin.from('payouts').select('*').eq('status', 'scheduled')
   // Single-order settlement (dispute resolution / manual retry) reuses this same
@@ -107,7 +132,7 @@ export async function runPayouts(
 
     // ADR 026 — the one release rule, re-read at the moment money would move.
     const { data: ord } = await admin.from('orders').select('*').eq('id', p.order_id).maybeSingle()
-    const blockers = await payoutRunBlockers(admin, ord)
+    const blockers = await payoutRunBlockers(admin, ord, { payoutPaise: Number(p.amount_paise), gatewayIsReal: gateway.isReal })
     if (blockers.length > 0) {
       await admin.from('payouts').update({ status: 'held', updated_at: new Date().toISOString() }).eq('id', p.id).eq('status', 'processing')
       await admin.from('order_events').insert({
@@ -126,7 +151,7 @@ export async function runPayouts(
     let recovered = false
     if (await attemptedBefore(admin, p)) {
       try {
-        transfer = await gateway.findTransfer({ payoutId: p.id, sinceUnixSeconds: lookbackUnix(p) })
+        transfer = await gateway.findTransfer({ payoutId: p.id, sinceUnixSeconds: lookbackUnix(p), excludeTransferIds: await deadTransferIds(admin, p) })
         recovered = Boolean(transfer)
       } catch (e) {
         await admin.from('order_events').insert({
@@ -216,7 +241,10 @@ export async function settleUnconfirmedPayouts(
   admin: Admin,
   gateway: PaymentGateway,
   olderThanMinutes = 30,
-): Promise<{ paid: number; failed: number; unknown: number }> {
+): Promise<{ paid: number; failed: number; unknown: number; unavailable?: true }> {
+  // ADR 027 (audit M2): the simulation mock cannot answer for a real transfer
+  // (its ledger is process-local), so on production without keys nothing is settled.
+  if (!paymentsAvailable(gateway.isReal)) return { paid: 0, failed: 0, unknown: 0, unavailable: true }
   const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000).toISOString()
   const { data: stuck } = await admin.from('payouts').select('*').eq('status', 'processing').lt('updated_at', cutoff).limit(200)
   let paid = 0
@@ -225,7 +253,7 @@ export async function settleUnconfirmedPayouts(
   for (const p of stuck ?? []) {
     let transfer: GatewayTransfer | null
     try {
-      transfer = await gateway.findTransfer({ payoutId: p.id, sinceUnixSeconds: lookbackUnix(p) })
+      transfer = await gateway.findTransfer({ payoutId: p.id, sinceUnixSeconds: lookbackUnix(p), excludeTransferIds: await deadTransferIds(admin, p) })
     } catch (e) {
       console.error('[settleUnconfirmedPayouts] lookup failed', p.id, describe(e))
       unknown++

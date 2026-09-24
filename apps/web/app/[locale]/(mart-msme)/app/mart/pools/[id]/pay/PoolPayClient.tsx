@@ -20,6 +20,8 @@ interface Checkout {
   amountPaise: number
   keyId: string
   simulated?: boolean
+  /** ADR 027 (M21) — seconds until the member's session expires; the sheet closes then. */
+  checkoutTimeoutSeconds?: number
   amounts: { taxablePaise: number; gstPaise: number; totalPaise: number; afterItcPaise: number }
   lineItems: { name: string; qty: number; unit: string; tier_unit_price_paise: number; line_taxable_paise: number }[]
   sellerName: string
@@ -70,6 +72,7 @@ export function PoolPayClient({ poolId, title, unit }: { poolId: string; title: 
       await loadRazorpay()
       const rzp = new window.Razorpay!({
         key: co.keyId, order_id: co.razorpayOrderId, amount: co.amountPaise, currency: 'INR', name: 'AMClub', description: title,
+        ...(co.checkoutTimeoutSeconds && co.checkoutTimeoutSeconds > 0 ? { timeout: co.checkoutTimeoutSeconds } : {}),
         handler: () => router.push('/app/orders?processing=1' as '/app'),
         modal: { ondismiss: () => setError(t('payment_cancelled')) },
       })

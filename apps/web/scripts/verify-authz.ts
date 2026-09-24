@@ -584,6 +584,11 @@ async function main() {
       if (quoteId) deniedRows('provA rewrites OWN quote price directly', await uProv.from('quotes').update({ price_paise: 1 }).eq('id', quoteId).select('id'))
       deniedRows('buyerA INSERTs a review directly', await uBuyer.from('reviews').insert({ order_id: orderA, msme_id: msmeA!.id, provider_id: provAId, rating: 5 }).select('id'))
       deniedRows('provA INSERTs a payout row', await uProv.from('payouts').insert({ provider_id: provAId, order_id: orderA, amount_paise: 1, status: 'scheduled' }).select('id'))
+      // ADR 027 (0078) — captures that created no order are service-role only, and so is the capture RPC.
+      deniedRows('buyerA direct-reads capture_exceptions', await uBuyer.from('capture_exceptions').select('id'))
+      deniedRows('buyerA INSERTs a capture exception', await uBuyer.from('capture_exceptions').insert({ razorpay_payment_id: `pay_forged_ce_${tag}`, razorpay_order_id: 'order_forged', amount_paise: 1, reason: 'session_expired', refund_key: `rfcap_forged_${Date.now()}` }).select('id'))
+      const capRpc = await uBuyer.rpc('capture_payment', { p_razorpay_order_id: 'order_forged', p_razorpay_payment_id: `pay_forged_cp_${tag}`, p_amount_paise: 1, p_method: 'upi', p_payload: {}, p_grace_seconds: 900 })
+      eq('buyerA cannot call capture_payment', Boolean(capRpc.error), true)
     }
 
     // ── 7a2. E12a / ADR 019 — package add-ons: owner-only, server-written, public reads active only ──

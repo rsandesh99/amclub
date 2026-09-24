@@ -65,13 +65,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ orderId: session.order_id, alreadyPaid: true })
   }
 
-  const { orderId, error } = await materializeFromCapture(admin, {
+  const { orderId, error, outcome } = await materializeFromCapture(admin, {
     razorpayOrderId: session.razorpay_order_id,
     razorpayPaymentId: `pay_sim_${session.id}`,
     amountPaise: session.total_paise,
     method: 'upi',
     payload: { simulated: true },
   })
+  // ADR 027 (M21) — the session expired: no order; the (simulated) capture is refunded in full.
+  if (outcome === 'session_expired') {
+    return NextResponse.json({ error: 'This checkout has expired', code: 'checkout_expired' }, { status: 409 })
+  }
   if (error || !orderId) {
     return NextResponse.json({ error: error ?? 'Materialization failed' }, { status: 500 })
   }

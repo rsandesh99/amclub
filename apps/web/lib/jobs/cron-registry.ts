@@ -70,7 +70,7 @@ const enqueueIssues = (r: Result): CronIssue[] =>
 
 export const CRON_JOBS: readonly CronJobDef[] = [
   // Money (ADR 026): a refund still failing, a payout refused / held / unconfirmed is amber.
-  { name: 'auto-cancel', staleAfterMs: 3 * H, issues: (r) => issue('refunds_failing', r['refundsStillFailing']) },
+  { name: 'auto-cancel', staleAfterMs: 3 * H, issues: (r) => [...issue('refunds_failing', r['refundsStillFailing']), ...issue('capture_refunds_failing', r['captureRefundsFailing'])] },
   { name: 'auto-accept', staleAfterMs: 3 * H },
   {
     name: 'payouts',

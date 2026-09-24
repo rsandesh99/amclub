@@ -17,8 +17,9 @@ import { randomUUID } from 'crypto'
 config({ path: path.resolve(__dirname, '../.env.local') })
 
 import { createClient } from '@supabase/supabase-js'
-import { paymentsAvailable } from '../lib/payments/simulation'
-import { bundlePlan, computeOrderAmounts, computeRefundPaise, packageCharge, type BundleMilestoneRow, type PackageAddonRow } from '@amclub/shared'
+import { checkoutTimeoutSeconds, isSimulatedPayment, moneyMovementBlock, paymentsAvailable } from '../lib/payments/simulation'
+import { signWebhookBody } from '../lib/payments/signature'
+import { bundlePlan, computeOrderAmounts, computeRefundPaise, disputeSettlementPaise, packageCharge, type BundleMilestoneRow, type PackageAddonRow } from '@amclub/shared'
 
 const URL = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -119,6 +120,18 @@ async function main() {
   check('real keys on production → payments available', paymentsAvailable(true, 'production') === true)
   check('no real keys on a preview → simulation allowed', paymentsAvailable(false, 'preview') === true)
   check('no real keys off Vercel (CI, the rigs, local) → simulation allowed', paymentsAvailable(false, undefined) === true)
+
+  // ── ADR 027 (audit M2): the same rule after checkout — refunds, payouts, reconcile ──
+  console.log('ADR 027 — no refund or transfer through the simulation gateway on production, none for a simulated payment:')
+  const simPay = { razorpay_payment_id: 'pay_sim_00000000-0000-0000-0000-000000000000', simulated: true }
+  const realPay = { razorpay_payment_id: 'pay_Nx1Qk2WmHq9Zr0', simulated: null }
+  check('a pay_sim_ id or payload.simulated marks a simulated payment; a Razorpay id does not', isSimulatedPayment(simPay) && isSimulatedPayment({ razorpay_payment_id: 'pay_x', webhook_payload: { simulated: true } }) && !isSimulatedPayment(realPay))
+  check('mock gateway on production → payments_unavailable (the row is left as it is)', moneyMovementBlock(false, realPay, 'production') === 'payments_unavailable')
+  check('real gateway + a simulated payment → payment_simulated (no real refund / transfer)', moneyMovementBlock(true, simPay, 'production') === 'payment_simulated')
+  check('real gateway + a real payment → money may move', moneyMovementBlock(true, realPay, 'production') === null)
+  check('CI / previews / the rigs (mock, not production) → simulation keeps working', moneyMovementBlock(false, simPay, undefined) === null && moneyMovementBlock(false, simPay, 'preview') === null)
+  const t0 = Date.UTC(2026, 8, 24, 10, 0, 0)
+  check('the Razorpay Checkout timeout is the time left on the session (M21); an expired one is 0', checkoutTimeoutSeconds(new Date(t0 + 600_000).toISOString(), t0) === 600 && checkoutTimeoutSeconds(new Date(t0 - 1).toISOString(), t0) === 0 && checkoutTimeoutSeconds(null, t0) === null)
 
   const { commissionBps, providerToken, buyerToken } = await setup()
 
@@ -543,6 +556,188 @@ async function main() {
     check(`"Finish refund" refunds the owed ${want10} paise (policy for 'accepted'), one keyed row, order refunded`, fin10.status === 200 && o10row?.status === 'refunded' && rf10?.length === 1 && rf10[0]!.status === 'processed' && Number(rf10[0]!.amount_paise) === want10 && rf10[0]!.idempotency_key === `rfnd_${o10}`)
     const fin10b = await adminPost(`/api/v1/admin/orders/${o10}`, { action: 'finish_refund' })
     check('a second "Finish refund" is refused (409 not_refund_owed) and refunds nothing more', fin10b.status === 409 && (await admin.from('refunds').select('id', { count: 'exact', head: true }).eq('payment_id', pm10!.id)).count === 1)
+  }
+
+  // ── DC 12 (ADR 027): payment truth — refund / transfer / chargeback webhooks, captures with no order, manual refund + the release rule ──
+  console.log('\nDC12 — ADR 027: gateway webhooks settle rows once; expired / second captures create no order and are refunded; manual refund holds the payout:')
+  {
+    const exceptionIds: string[] = []
+    const sessionIds: string[] = []
+    const adminPost = async (p: string, body: unknown) => {
+      const res = await fetch(`${BASE}${p}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` }, body: JSON.stringify(body) })
+      return { status: res.status, body: (await res.json().catch(() => ({}))) as Record<string, unknown> }
+    }
+    const hook = async (payload: unknown) => {
+      const raw = JSON.stringify(payload)
+      const res = await fetch(`${BASE}/api/v1/webhooks/razorpay`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-razorpay-signature': signWebhookBody(raw) }, body: raw })
+      return { status: res.status, body: (await res.json().catch(() => ({}))) as Record<string, unknown> }
+    }
+    const completed = async (o: string) => {
+      for (const [action, token] of [['accept', providerToken], ['submit_requirements', buyerToken], ['start', providerToken], ['deliver', providerToken], ['accept_delivery', buyerToken]] as const) await transition(o, action, token)
+    }
+    const payoutOf = async (o: string) => (await admin.from('payouts').select('id, status, amount_paise, razorpay_transfer_id').eq('order_id', o).maybeSingle()).data
+    const eventCount = async (o: string, event: string, key?: [string, string]) => {
+      let q = admin.from('order_events').select('id', { count: 'exact', head: true }).eq('order_id', o).eq('event', event)
+      if (key) q = q.eq(`payload->>${key[0]}`, key[1])
+      return (await q).count ?? 0
+    }
+    const rzpPaymentOf = async (o: string) => (await admin.from('payments').select('id, razorpay_payment_id, razorpay_order_id, amount_paise').eq('order_id', o).single()).data!
+    try {
+      // (a) M20 — refund.processed heals a pending row once; refund.failed marks it failed once (ops re-sends; never read as done).
+      const o11 = await makePaidOrder(commissionBps)
+      const pm11 = await rzpPaymentOf(o11)
+      await admin.from('refunds').insert({ payment_id: pm11.id, amount_paise: pm11.amount_paise, reason: 'cancellation', status: 'pending', idempotency_key: `rfnd_${o11}` })
+      const rf11 = `rfnd_kt_${randomUUID().slice(0, 12)}`
+      const refundEntity = (status: string) => ({ event: `refund.${status}`, payload: { refund: { entity: { id: rf11, entity: 'refund', amount: Number(pm11.amount_paise), payment_id: pm11.razorpay_payment_id, receipt: `rfnd_${o11}`, status } } } })
+      const p1 = await hook(refundEntity('processed'))
+      const p2 = await hook(refundEntity('processed'))
+      const { data: row11 } = await admin.from('refunds').select('status, razorpay_refund_id').eq('payment_id', pm11.id)
+      check('refund.processed completes a pending refund row by our receipt; the replay changes nothing (one confirmation event)', p1.status === 200 && p1.body['changed'] === true && p2.status === 200 && p2.body['changed'] === false && row11?.length === 1 && row11[0]!.status === 'processed' && row11[0]!.razorpay_refund_id === rf11 && (await eventCount(o11, 'refund_confirmed')) === 1)
+      const f1 = await hook(refundEntity('failed'))
+      const f2 = await hook(refundEntity('failed'))
+      const { data: row11f } = await admin.from('refunds').select('status').eq('payment_id', pm11.id).single()
+      check('refund.failed marks the row failed and records it once for ops; the replay changes nothing', f1.status === 200 && f1.body['changed'] === true && f2.body['changed'] === false && row11f?.status === 'failed' && (await eventCount(o11, 'refund_failed', ['razorpay_refund_id', rf11])) === 1)
+
+      // (b) M20 — transfer webhooks: a paid payout whose transfer failed goes back to failed once; the dead transfer never settles it again.
+      const o12 = await makePaidOrder(commissionBps)
+      await completed(o12)
+      const p12 = await payoutOf(o12)
+      await admin.from('payouts').update({ status: 'held' }).eq('id', p12!.id)
+      await adminPost(`/api/v1/admin/payouts/${p12!.id}`, { action: 'retry' })
+      const paid12 = await payoutOf(o12)
+      const t12 = paid12?.razorpay_transfer_id as string
+      const transfer = (event: string, id: string, extra: Record<string, unknown> = {}) => ({ event, payload: { transfer: { entity: { id, entity: 'transfer', amount: Number(paid12?.amount_paise), notes: { payout_id: p12!.id, order_id: o12 }, status: event.split('.')[1], ...extra } } } })
+      const tp = await hook(transfer('transfer.processed', t12))
+      check('transfer.processed on a paid payout changes nothing', paid12?.status === 'paid' && tp.status === 200 && tp.body['changed'] === false && (await payoutOf(o12))?.status === 'paid')
+      const tf1 = await hook(transfer('transfer.failed', t12))
+      const tf2 = await hook(transfer('transfer.failed', t12))
+      const late = await hook(transfer('transfer.processed', t12))
+      const failed12 = await payoutOf(o12)
+      check('transfer.failed: paid → failed once (gateway event), the replay and a late processed for the dead transfer change nothing', tf1.body['changed'] === true && tf2.body['changed'] === false && late.body['changed'] === false && failed12?.status === 'failed' && !failed12?.razorpay_transfer_id && (await eventCount(o12, 'payout_failed', ['razorpay_transfer_id', t12])) === 1)
+      const retry12 = await adminPost(`/api/v1/admin/orders/${o12}`, { action: 'retry_payout' })
+      const re12 = await payoutOf(o12)
+      check('the retry sends a NEW transfer (the dead one is never taken as the payment)', retry12.status === 200 && re12?.status === 'paid' && Boolean(re12?.razorpay_transfer_id) && re12?.razorpay_transfer_id !== t12)
+      // An unconfirmed transfer (processing, ADR 026) settled by transfer.processed; replayed, still one paid event for it.
+      await admin.from('payouts').update({ status: 'processing', razorpay_transfer_id: null, paid_at: null }).eq('id', p12!.id)
+      const t12b = `trf_kt_${randomUUID().slice(0, 12)}`
+      const pr1 = await hook(transfer('transfer.processed', t12b))
+      const pr2 = await hook(transfer('transfer.processed', t12b))
+      const settled12 = await payoutOf(o12)
+      check('transfer.processed settles a processing payout as paid with that transfer; the replay changes nothing', pr1.body['changed'] === true && pr2.body['changed'] === false && settled12?.status === 'paid' && settled12?.razorpay_transfer_id === t12b && (await eventCount(o12, 'payout_paid', ['razorpay_transfer_id', t12b])) === 1)
+
+      // (c) M20 — a chargeback holds an unpaid payout, is recorded once, and blocks the payout run until decided.
+      const o13 = await makePaidOrder(commissionBps)
+      await completed(o13)
+      const p13 = await payoutOf(o13)
+      await admin.from('payouts').update({ status: 'scheduled' }).eq('id', p13!.id)
+      const pm13 = await rzpPaymentOf(o13)
+      const cbId = `disp_kt_${randomUUID().slice(0, 12)}`
+      const chargeback = (event: string) => ({ event, payload: { payment: { entity: { id: pm13.razorpay_payment_id } }, dispute: { entity: { id: cbId, entity: 'dispute', payment_id: pm13.razorpay_payment_id, amount: Number(pm13.amount_paise), reason_code: 'fraud', phase: 'chargeback', status: event.split('.')[2] } } } })
+      const c1 = await hook(chargeback('payment.dispute.created'))
+      const c2 = await hook(chargeback('payment.dispute.created'))
+      check('payment.dispute.created holds the scheduled payout and is recorded once; the replay changes nothing', c1.body['changed'] === true && c2.body['changed'] === false && (await payoutOf(o13))?.status === 'held' && (await eventCount(o13, 'chargeback_opened', ['razorpay_dispute_id', cbId])) === 1)
+      await admin.from('payouts').update({ status: 'held' }).eq('id', p13!.id)
+      const rel13 = await adminPost(`/api/v1/admin/payouts/${p13!.id}`, { action: 'retry' })
+      const { data: held13 } = await admin.from('order_events').select('payload').eq('order_id', o13).eq('event', 'payout_held')
+      check('while the chargeback is open the release rule holds the payout (reason chargeback_open, no transfer)', rel13.status === 200 && (await payoutOf(o13))?.status === 'held' && !(await payoutOf(o13))?.razorpay_transfer_id && (held13 ?? []).some((e) => ((e.payload as { reasons?: string[] } | null)?.reasons ?? []).includes('chargeback_open')))
+      const l1 = await hook(chargeback('payment.dispute.lost'))
+      const l2 = await hook(chargeback('payment.dispute.lost'))
+      check('payment.dispute.lost is recorded once for ops', l1.body['changed'] === true && l2.body['changed'] === false && (await eventCount(o13, 'chargeback_lost', ['razorpay_dispute_id', cbId])) === 1)
+
+      // (d) M21 — a capture on an expired session records the payment, creates no order, and refunds it in full; the replay creates nothing.
+      const expAmounts = computeOrderAmounts({ pricePaise: 500000, discountBps: 1000, commissionBps })
+      const expRzp = `order_exp_${randomUUID().slice(0, 8)}`
+      const expPay = `pay_exp_${randomUUID().slice(0, 8)}`
+      const { data: expSess } = await admin.from('checkout_sessions').insert({
+        razorpay_order_id: expRzp, msme_id: msmeId, provider_id: providerId, source: 'package', package_id: packageId,
+        title: 'KT expired session', scope_snapshot: { title: { en: 'KT Service' } },
+        price_paise: expAmounts.pricePaise, discount_paise: expAmounts.discountPaise, gst_paise: expAmounts.gstPaise, total_paise: expAmounts.totalPaise,
+        commission_bps: expAmounts.commissionBps, commission_paise: expAmounts.commissionPaise, provider_earning_paise: expAmounts.providerEarningPaise,
+        delivery_days: 5, revision_max: 1, idempotency_key: randomUUID(), status: 'created', expires_at: new Date(Date.now() - 3600_000).toISOString(),
+      }).select('id').single()
+      if (expSess?.id) sessionIds.push(expSess.id as string)
+      const captured = { event: 'payment.captured', payload: { payment: { entity: { id: expPay, order_id: expRzp, amount: expAmounts.totalPaise, method: 'upi' } } } }
+      const e1 = await hook(captured)
+      const e2 = await hook(captured)
+      const { data: expAfter } = await admin.from('checkout_sessions').select('status, order_id').eq('id', expSess!.id).single()
+      const { data: excs } = await admin.from('capture_exceptions').select('id, reason, status, razorpay_refund_id, amount_paise, order_id').eq('razorpay_payment_id', expPay)
+      for (const x of excs ?? []) exceptionIds.push(x.id as string)
+      const { count: expPayments } = await admin.from('payments').select('id', { count: 'exact', head: true }).eq('razorpay_order_id', expRzp)
+      check('a capture past expires_at + grace: 200, no order, no payments row, session expired', e1.status === 200 && !e1.body['orderId'] && e1.body['outcome'] === 'session_expired' && expAfter?.status === 'expired' && !expAfter?.order_id && expPayments === 0)
+      check('… recorded once as a session_expired capture exception and refunded in full (one refund); the replay changes nothing', e2.status === 200 && !e2.body['orderId'] && (excs ?? []).length === 1 && excs![0]!.reason === 'session_expired' && excs![0]!.status === 'refunded' && Boolean(excs![0]!.razorpay_refund_id) && Number(excs![0]!.amount_paise) === expAmounts.totalPaise && !excs![0]!.order_id)
+      const { count: notices } = await admin.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', buyerUserId).eq('kind', 'payment_refunded_no_order')
+      check('the buyer is told once that no order was placed and the payment is refunded', notices === 1)
+      // The refund webhook for that refund settles nothing twice.
+      const excRefund = { event: 'refund.processed', payload: { refund: { entity: { id: excs![0]!.razorpay_refund_id, entity: 'refund', amount: expAmounts.totalPaise, payment_id: expPay, status: 'processed' } } } }
+      const er = await hook(excRefund)
+      check('refund.processed for a capture-exception refund changes nothing when already refunded', er.status === 200 && er.body['changed'] === false)
+
+      // (e) M39 — a second capture on a session another payment already paid: no second order or payment; refunded in full; replay-safe.
+      const o14 = await makePaidOrder(commissionBps)
+      const pm14 = await rzpPaymentOf(o14)
+      const dupPay = `pay_dup_${randomUUID().slice(0, 8)}`
+      const dup = { event: 'payment.captured', payload: { payment: { entity: { id: dupPay, order_id: pm14.razorpay_order_id, amount: Number(pm14.amount_paise), method: 'upi' } } } }
+      const d1 = await hook(dup)
+      const d2 = await hook(dup)
+      const { count: pays14 } = await admin.from('payments').select('id', { count: 'exact', head: true }).eq('razorpay_order_id', pm14.razorpay_order_id)
+      const { count: orders14 } = await admin.from('orders').select('id', { count: 'exact', head: true }).eq('id', o14)
+      const { data: dexc } = await admin.from('capture_exceptions').select('id, reason, status, order_id').eq('razorpay_payment_id', dupPay)
+      for (const x of dexc ?? []) exceptionIds.push(x.id as string)
+      check('a second capture on a paid session: no second payment or order, one duplicate_capture exception on the order, refunded', d1.status === 200 && d1.body['outcome'] === 'duplicate_capture' && d2.status === 200 && pays14 === 1 && orders14 === 1 && (dexc ?? []).length === 1 && dexc![0]!.reason === 'duplicate_capture' && dexc![0]!.order_id === o14 && dexc![0]!.status === 'refunded' && (await eventCount(o14, 'duplicate_capture')) === 1)
+
+      // (f) L1 — a manual refund follows the ADR-014 rules: an unpaid payout is cut to the provider's share and HELD in the same action.
+      await completed(o14)
+      const p14 = await payoutOf(o14)
+      await admin.from('payouts').update({ status: 'scheduled' }).eq('id', p14!.id)
+      const { data: o14row } = await admin.from('orders').select('total_paise, provider_earning_paise').eq('id', o14).single()
+      const share14 = disputeSettlementPaise({ totalPaise: Number(o14row!.total_paise), earningPaise: Number(o14row!.provider_earning_paise), resolution: 'refund_partial', amountPaise: 100_000 }).providerPaidPaise
+      const man14 = await adminPost(`/api/v1/admin/orders/${o14}`, { action: 'manual_refund', amountPaise: 100_000 })
+      const p14after = await payoutOf(o14)
+      const { data: mrHeld } = await admin.from('order_events').select('payload').eq('order_id', o14).eq('event', 'payout_held')
+      const heldForRefund = (mrHeld ?? []).some((e) => ((e.payload as { reasons?: string[] } | null)?.reasons ?? []).includes('manual_refund'))
+      check(`manual refund on an unpaid payout: 200, payout HELD at the provider's share (${share14}) in the same action`, man14.status === 200 && p14after?.status === 'held' && Number(p14after?.amount_paise) === share14 && heldForRefund)
+      // (g) L1 — the release rule refuses a full payout beside a refund; the planner's share goes out.
+      await admin.from('payouts').update({ amount_paise: Number(o14row!.provider_earning_paise) }).eq('id', p14!.id)
+      const rel14 = await adminPost(`/api/v1/admin/payouts/${p14!.id}`, { action: 'retry' })
+      const { data: held14 } = await admin.from('order_events').select('payload').eq('order_id', o14).eq('event', 'payout_held')
+      check('a payout run refuses a FULL payout when a refund exists (held, reason refund_exists, no transfer)', rel14.status === 200 && (await payoutOf(o14))?.status === 'held' && !(await payoutOf(o14))?.razorpay_transfer_id && (held14 ?? []).some((e) => ((e.payload as { reasons?: string[] } | null)?.reasons ?? []).includes('refund_exists')))
+      await admin.from('payouts').update({ amount_paise: share14 }).eq('id', p14!.id)
+      const rel14b = await adminPost(`/api/v1/admin/payouts/${p14!.id}`, { action: 'retry' })
+      const paid14 = await payoutOf(o14)
+      check('… and releases the provider’s share (the planner allows it)', rel14b.status === 200 && paid14?.status === 'paid' && Number(paid14?.amount_paise) === share14)
+      // A paid payout → 409 provider_already_paid, no refund; a transfer in flight → 409 payout_in_flight.
+      const man12 = await adminPost(`/api/v1/admin/orders/${o12}`, { action: 'manual_refund', amountPaise: 50_000 })
+      const { count: rf12 } = await admin.from('refunds').select('id', { count: 'exact', head: true }).eq('payment_id', (await rzpPaymentOf(o12)).id)
+      check('manual refund on a PAID payout → 409 provider_already_paid, nothing refunded', man12.status === 409 && man12.body['error'] === 'provider_already_paid' && rf12 === 0)
+      await admin.from('payouts').update({ status: 'processing' }).eq('id', p13!.id)
+      const man13 = await adminPost(`/api/v1/admin/orders/${o13}`, { action: 'manual_refund', amountPaise: 50_000 })
+      const { count: rf13 } = await admin.from('refunds').select('id', { count: 'exact', head: true }).eq('payment_id', pm13.id)
+      check('manual refund while a transfer is in flight → 409 payout_in_flight, nothing refunded', man13.status === 409 && man13.body['error'] === 'payout_in_flight' && rf13 === 0)
+      await admin.from('payouts').update({ status: 'held' }).eq('id', p13!.id)
+
+      // (h) M21 — an expired unpaid session is never resumed: the same key answers 409 checkout_expired; a fresh session carries the sheet timeout.
+      const key = randomUUID()
+      const coRes = await fetch(`${BASE}/api/v1/checkout`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${buyerToken}` }, body: JSON.stringify({ packageId, idempotencyKey: key }) })
+      const co = (await coRes.json().catch(() => ({}))) as { checkoutSessionId?: string; checkoutTimeoutSeconds?: number; simulated?: boolean }
+      if (co.checkoutSessionId) sessionIds.push(co.checkoutSessionId)
+      check('a fresh checkout carries the Razorpay timeout (≈ 30 minutes)', coRes.status === 200 && (co.checkoutTimeoutSeconds ?? 0) > 1700 && (co.checkoutTimeoutSeconds ?? 0) <= 1800)
+      // Past expires_at AND the 15-minute capture grace, so a late capture is refused too.
+      await admin.from('checkout_sessions').update({ expires_at: new Date(Date.now() - 20 * 60_000).toISOString() }).eq('id', co.checkoutSessionId ?? '')
+      const again = await fetch(`${BASE}/api/v1/checkout`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${buyerToken}` }, body: JSON.stringify({ packageId, idempotencyKey: key }) })
+      const againBody = (await again.json().catch(() => ({}))) as { code?: string }
+      check('the same key on an expired session → 409 checkout_expired (never resumed)', again.status === 409 && againBody.code === 'checkout_expired')
+      if (co.simulated && co.checkoutSessionId) {
+        const sim = await fetch(`${BASE}/api/v1/checkout/simulate`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${buyerToken}` }, body: JSON.stringify({ checkoutSessionId: co.checkoutSessionId }) })
+        const simBody = (await sim.json().catch(() => ({}))) as { code?: string; orderId?: string }
+        const { data: simSess } = await admin.from('checkout_sessions').select('order_id, status').eq('id', co.checkoutSessionId).single()
+        const { data: simExc } = await admin.from('capture_exceptions').select('id, simulated, status').eq('checkout_session_id', co.checkoutSessionId)
+        for (const x of simExc ?? []) exceptionIds.push(x.id as string)
+        check('a (simulated) capture on the expired session → 409 checkout_expired, no order, one simulated exception refunded', sim.status === 409 && simBody.code === 'checkout_expired' && !simSess?.order_id && (simExc ?? []).length === 1 && simExc![0]!.simulated === true && simExc![0]!.status === 'refunded')
+      }
+    } finally {
+      if (exceptionIds.length) await admin.from('capture_exceptions').delete().in('id', exceptionIds)
+      if (sessionIds.length) await admin.from('checkout_sessions').delete().in('id', sessionIds)
+    }
   }
 
   // ── DC 8: auto-accept after shortened timer ──

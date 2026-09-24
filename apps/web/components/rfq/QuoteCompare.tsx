@@ -24,7 +24,7 @@ import type { RfqDetailForBuyer, QuoteForBuyer } from '@/lib/rfq/queries'
 import { formatINR, formatINRExact, formatResponseTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { ConfirmSheet } from '@/components/ui/confirm-sheet'
-import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
+import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, isCheckoutExpired, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 import { QuoteTermsRow } from './QuoteTermsRow'
 import { useAnalytics } from '@/components/providers/posthog'
 import type { BenchmarkView, QuoteChoice } from '@amclub/shared'
@@ -242,10 +242,11 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     if (v3) posthog.capture('quote_accepted', { device: 'web' })
     setAccepting(q.id)
     setConfirmErr('')
+    // E12b — the picked option rides to checkout, which re-reads and re-prices it; each choice has its own key.
+    const optionId = choiceOf(q)?.optionId ?? null
+    const keyName = optionId ? `${q.id}:${optionId}` : q.id
     try {
-      // E12b — the picked option rides to checkout, which re-reads and re-prices it; each choice has its own key.
-      const optionId = choiceOf(q)?.optionId ?? null
-      const data = await startCheckout('/api/v1/checkout', { quoteId: q.id, idempotencyKey: keyForQuote(optionId ? `${q.id}:${optionId}` : q.id), ...(optionId ? { optionId } : {}) })
+      const data = await startCheckout('/api/v1/checkout', { quoteId: q.id, idempotencyKey: keyForQuote(keyName), ...(optionId ? { optionId } : {}) })
       await payCheckout(data, {
         description: rfq.title,
         onPaid: (o) => router.push(o.kind === 'order' ? `/app/orders/${o.orderId}?first=1` : '/app/orders?processing=1'),
@@ -254,6 +255,8 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
       // The sheet is open (or we are navigating) — the confirm has done its job.
       setConfirming(null)
     } catch (e: unknown) {
+      // ADR 027 — an expired session is never resumed: the next tap starts a fresh one.
+      if (isCheckoutExpired(e)) quoteKeys.current.delete(keyName)
       setConfirmErr(tc(checkoutErrorKey(e, CHECKOUT_ERROR_KEYS, 'failed') as 'failed'))
       setAccepting(null)
     }

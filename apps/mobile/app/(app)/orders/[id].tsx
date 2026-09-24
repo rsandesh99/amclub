@@ -75,7 +75,11 @@ const EVENT_LABEL: Record<string, string> = {
   payout_paid: 'orders.event_payout_paid', payout_failed: 'orders.event_payout_failed', payout_voided: 'orders.event_payout_voided',
 }
 // Same set as web OrderWorkspace: internal markers and ops-only retries (ADR 026) never show.
-const HIDDEN_EVENTS = new Set(['placed_side_effects', 'requirements_data', 'duplicate_rfq_order', 'quote_not_live_at_payment', 'refund_failed', 'invoice_failed', 'payout_unconfirmed'])
+const HIDDEN_EVENTS = new Set([
+  'placed_side_effects', 'requirements_data', 'duplicate_rfq_order', 'quote_not_live_at_payment', 'refund_failed', 'invoice_failed', 'payout_unconfirmed',
+  // ADR 027: gateway truth recorded for ops (a second capture, a closed RFQ at payment, refund / transfer / chargeback webhooks).
+  'duplicate_capture', 'rfq_not_live_at_payment', 'refund_confirmed', 'payout_partially_reversed', 'chargeback_opened', 'chargeback_lost', 'chargeback_won', 'chargeback_closed',
+])
 const PROVIDER_ONLY_EVENTS = new Set(['payout_held', 'payout_scheduled', 'payout_released', 'payout_paid', 'payout_failed', 'payout_voided'])
 
 function istDateTime(iso: string): string {

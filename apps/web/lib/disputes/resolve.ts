@@ -13,6 +13,7 @@ import { getPaymentGateway } from '@/lib/payments'
 import { processRefund } from '@/lib/orders/transitions'
 import { runPayouts } from '@/lib/payments/payout'
 import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
+import { moneyMovementBlock, PAYMENTS_UNAVAILABLE, type PAYMENT_SIMULATED } from '@/lib/payments/simulation'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -24,6 +25,9 @@ export type ResolveErrorCode =
   | 'no_payment'
   | 'resolution_in_progress'
   | 'resolution_conflict'
+  // ADR 027 (audit M2): 503 when the gateway is the simulation mock on production; 409 for a simulated payment.
+  | typeof PAYMENTS_UNAVAILABLE
+  | typeof PAYMENT_SIMULATED
 
 export interface ResolveResult {
   ok: boolean
@@ -123,7 +127,7 @@ export async function resolveDispute(
   // Read what already happened to the payout and refund rows, then plan.
   const [{ data: payout }, { data: payment }] = await Promise.all([
     admin.from('payouts').select('id, status, amount_paise').eq('order_id', order.id).maybeSingle(),
-    paymentForOrder<{ id: string }>(admin, order, 'id').then((data) => ({ data })),
+    paymentForOrder<{ id: string; razorpay_payment_id: string | null; simulated: unknown }>(admin, order, 'id, razorpay_payment_id, simulated:webhook_payload->simulated').then((data) => ({ data })),
   ])
   const refundRow = payment ? await refundForOrder<{ id: string; status: string; amount_paise: number }>(admin, order, payment.id, 'id, status, amount_paise') : null
 
@@ -142,6 +146,12 @@ export async function resolveDispute(
   const { refundPaise, providerPaidPaise } = plan
   // A refund needs the captured payment; refuse before anything is written.
   if (plan.refund && !payment) return conflict('no_payment', { refundPaise })
+  // ADR 027 (audit M2) — a settlement that moves money (a refund, or a transfer)
+  // needs a real gateway on production and a real payment; refused before the claim.
+  if (plan.refund || plan.payoutStep === 'schedule') {
+    const blocked = moneyMovementBlock(getPaymentGateway().isReal, payment)
+    if (blocked) return { ok: false, status: blocked === PAYMENTS_UNAVAILABLE ? 503 : 409, error: blocked, details: {} }
+  }
   const nowIso = new Date().toISOString()
 
   // 1. Claim. Fresh: move the order out of 'disputed' — exactly one caller wins.

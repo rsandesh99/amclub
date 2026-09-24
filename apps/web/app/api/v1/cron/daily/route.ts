@@ -6,6 +6,7 @@ import { autoCancelOrder, staleOrdersForAutoCancel, autoAcceptOrder, redriveCanc
 import { getPaymentGateway } from '@/lib/payments'
 import { runPayouts, settleUnconfirmedPayouts } from '@/lib/payments/payout'
 import { reconcileCapturedPayments } from '@/lib/payments/materialize'
+import { sweepCaptureExceptions } from '@/lib/payments/capture-exceptions'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -43,6 +44,8 @@ export async function GET(request: NextRequest) {
   const refunds = await redriveCancellationRefunds(admin)
   const unconfirmed = await settleUnconfirmedPayouts(admin, getPaymentGateway())
   const invoices = await generateMissingInvoices(admin)
+  // ADR 027 — captures that created no order are refunded in full.
+  const captures = await sweepCaptureExceptions(admin, getPaymentGateway())
 
-  return NextResponse.json({ cancelled, completed, payouts: payouts.processed, reconciled: recon.recovered, refundsRedriven: refunds.refunded, unconfirmedPayouts: unconfirmed, invoicesGenerated: invoices.generated })
+  return NextResponse.json({ cancelled, completed, payouts: payouts.processed, reconciled: recon.recovered, refundsRedriven: refunds.refunded, unconfirmedPayouts: unconfirmed, invoicesGenerated: invoices.generated, captureRefunds: captures.refunded })
 }

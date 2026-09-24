@@ -8,7 +8,7 @@ import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
+import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, isCheckoutExpired, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 import { readSearchAttribution } from '@/components/search-v3/SearchAttributionCapture'
 
 export function CheckoutClient({
@@ -112,6 +112,8 @@ export function CheckoutClient({
         onDismiss: () => setError(t('payment_cancelled')),
       })
     } catch (e: unknown) {
+      // ADR 027 — an expired session is never resumed: the next tap starts a fresh one.
+      if (isCheckoutExpired(e)) intent.current = null
       setError(t(checkoutErrorKey(e, CHECKOUT_ERROR_KEYS, 'failed') as 'failed'))
     } finally {
       setLoading(false)
