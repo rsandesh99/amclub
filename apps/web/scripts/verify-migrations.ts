@@ -479,6 +479,11 @@ const MANIFEST: Entry[] = [
     functions: ['claim_coupon_for_session', 'record_coupon_redemption'],
     note: 'Audit M10 + M22 / ADR 029: coupons.per_buyer_limit; checkout_sessions.coupon_claimed_at; claim_coupon_for_session (usage + per-buyer limits decided under the coupon row lock) and record_coupon_redemption (atomic insert + used_count), service_role only; no client privilege on coupons; service_pool_members skip_reason self_dealing',
   },
+  {
+    file: '0082_kyc_ownership.sql',
+    tables: ['udyam_verifications', 'bank_account_verifications'],
+    note: 'Audit M12 / ADR 028: udyam_verifications.outcome + released_at, one active verified claim per Udyam number (unique partial index on upper(udyam_number); earlier duplicates moved to udyam_already_claimed first); bank_account_verifications.outcome; review indexes; udyam_verifications SELECT for authenticated only',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

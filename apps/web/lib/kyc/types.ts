@@ -19,6 +19,9 @@ export interface UdyamVerifyResult {
   majorActivity?: string
   state?: string
   registrationDate?: string
+  /** ADR 028 — the enterprise's PAN / GSTIN when the vendor returns them (an ID match proves ownership). */
+  pan?: string
+  gstin?: string
   error?: string
   stub?: boolean
 }

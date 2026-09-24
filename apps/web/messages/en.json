@@ -3174,7 +3174,19 @@
     "gstin_flags_body": "The nightly re-check found these GSTINs cancelled or suspended. Nothing was changed automatically — review each provider.",
     "category_flags": "{count, plural, one {# provider works mostly outside their declared categories} other {# providers work mostly outside their declared categories}}",
     "category_flags_body": "From the nightly check: more than half of their paid orders in the last 180 days (at least 5) are in categories they did not declare. Review their categories; nothing changes for the provider until you act.",
-    "category_flag_line": "{pct} % of {n} paid orders outside"
+    "category_flag_line": "{pct} % of {n} paid orders outside",
+    "kyc_flags": "{count, plural, one {# KYC check needs review} other {# KYC checks need review}}",
+    "kyc_flags_body": "The vendor's record did not match the account's GST-registered name or IDs, or another account already holds the Udyam number. No Udyam chip was granted and the bank account stays unverified, so payouts hold. Nothing changes until you act.",
+    "kyc_flag_udyam": "Udyam {number}",
+    "kyc_flag_bank": "Bank account ({ifsc})",
+    "kyc_flag_buyer": "Buyer: {name}",
+    "kyc_flag_no_profile": "No profile yet",
+    "kyc_flag_claimed": "Held by another account",
+    "kyc_flag_names": "Vendor record: {vendor} · On file: {reference}",
+    "kyc_reason_mismatch": "Name does not match",
+    "kyc_reason_no_reference": "No GST-verified name on file",
+    "kyc_reason_no_vendor_name": "Vendor returned no name",
+    "kyc_reason_id_conflict": "Vendor PAN / GSTIN differs"
   },
   "packages_v3": {
     "included": "Included",
@@ -3556,6 +3568,7 @@
     "primary_category": "Main category",
     "more_categories": "Also offer (optional)",
     "holder_from_bank": "Account holder: {name}",
+    "bank_name_review": "The account holder's name does not match your GST-registered name. You can still submit; payouts stay on hold until our team checks the account.",
     "edit": "Edit",
     "go_dashboard": "Go to your dashboard",
     "typed": "Typed by the provider",

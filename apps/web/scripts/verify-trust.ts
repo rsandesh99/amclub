@@ -13,7 +13,10 @@
  *      untouched.
  *   4. Udyam: the dev stub NEVER sets udyam_verified (chip=false); with the
  *      server started under KYC_FAKE=verified (pass VERIFY_KYC_FAKE=1 here) the
- *      real path sets it (chip=true). Skipped, not failed, when not armed.
+ *      real path sets it (chip=true) ONLY once the enterprise name matches the
+ *      buyer's GST-locked name (ADR 028: 422 udyam_name_mismatch before), and a
+ *      second account is refused (409 udyam_already_claimed). Skipped, not
+ *      failed, when not armed.
  *
  * Zero prod residue: every user/profile/rfq/match/notification/verification row
  * and the settings key touched are removed in finally (settings restored).
@@ -147,11 +150,34 @@ async function main() {
     }
 
     // ── 4. Udyam ──────────────────────────────────────────────────────────────
-    const udyam = 'UDYAM-KA-03-0001234'
+    // A number of our own per run: since ADR 028 one account holds a Udyam number.
+    const udyam = `UDYAM-KA-03-${String(Date.now()).slice(-7)}`
+    if (KYC_FAKE_ARMED) {
+      // ADR 028 — the fake vendor answers "Fake Verified Enterprise". With no GST-locked name on file that is not ours.
+      r = await api(buyer.token, '/api/v1/kyc/verify-udyam', { udyam_number: udyam, target: 'msme' }); d = await json(r)
+      const { data: mm } = await admin.from('udyam_verifications').select('outcome').eq('user_id', buyer.uid).eq('outcome', 'name_mismatch')
+      check('KYC_FAKE, no GST-locked name -> 422 udyam_name_mismatch, recorded for review', r.status === 422 && d.error === 'udyam_name_mismatch' && (mm ?? []).length === 1, `status ${r.status} ${d.error}`)
+      // Lock the buyer's GST name to the enterprise's (as a real verify-gstin would) and retry.
+      const gstin = '29AAAAA0000A1Z9'
+      await admin.from('msme_profiles').update({ gstin }).eq('id', msme!.id)
+      await admin.from('gstin_verifications').insert({ user_id: buyer.uid, gstin, verified: true, stub: false, provider: 'surepass', result: { legalName: 'FAKE VERIFIED ENTERPRISE PRIVATE LIMITED', tradeName: null } })
+    }
     r = await api(buyer.token, '/api/v1/kyc/verify-udyam', { udyam_number: udyam, target: 'msme' }); d = await json(r)
     const { data: msmeRow } = await admin.from('msme_profiles').select('udyam_verified').eq('id', msme!.id).single()
     if (KYC_FAKE_ARMED) {
-      check('KYC_FAKE real path -> chip set', r.status === 200 && d.chip === true && msmeRow?.udyam_verified === true, `status ${r.status} chip=${d.chip}`)
+      check('KYC_FAKE real path, GST-locked name matches -> chip set', r.status === 200 && d.chip === true && d.basis === 'name' && msmeRow?.udyam_verified === true, `status ${r.status} chip=${d.chip}`)
+      // A second account with the same GST-locked name cannot take the number.
+      const buyer2 = await mkUser('buyer2', ['msme'])
+      const { data: msme2 } = await admin.from('msme_profiles').insert({ user_id: buyer2.uid, business_name: 'Trust Buyer Two', state: 'KA', sector: 'services', gstin: '29AAAAA0000A1Z9' }).select('id').single()
+      created.msmeIds.push(msme2!.id)
+      await admin.from('gstin_verifications').insert({ user_id: buyer2.uid, gstin: '29AAAAA0000A1Z9', verified: true, stub: false, provider: 'surepass', result: { legalName: 'FAKE VERIFIED ENTERPRISE PRIVATE LIMITED' } })
+      r = await api(buyer2.token, '/api/v1/kyc/verify-udyam', { udyam_number: udyam, target: 'msme' }); d = await json(r)
+      const { data: m2 } = await admin.from('msme_profiles').select('udyam_verified').eq('id', msme2!.id).single()
+      check('second account -> 409 udyam_already_claimed, no chip', r.status === 409 && d.error === 'udyam_already_claimed' && m2?.udyam_verified === false, `status ${r.status} ${d.error}`)
+      // The holder re-verifying keeps the claim (a born-released repeat row).
+      r = await api(buyer.token, '/api/v1/kyc/verify-udyam', { udyam_number: udyam, target: 'msme' }); d = await json(r)
+      const { data: claims } = await admin.from('udyam_verifications').select('user_id').ilike('udyam_number', udyam).eq('outcome', 'verified').is('released_at', null)
+      check('holder repeat -> 200, still exactly one active claim (the holder)', r.status === 200 && (claims ?? []).length === 1 && claims?.[0]?.user_id === buyer.uid, `status ${r.status} claims=${(claims ?? []).length}`)
     } else {
       check('stub Udyam answers verified but NEVER sets the boolean', r.status === 200 && d.stub === true && d.chip === false && msmeRow?.udyam_verified === false, `status ${r.status} stub=${d.stub} chip=${d.chip}`)
       skip('real-path chip set', 'start the server with KYC_FAKE=verified and pass VERIFY_KYC_FAKE=1')
@@ -168,6 +194,7 @@ async function main() {
     for (const uid of created.users) {
       await admin.from('notifications').delete().eq('user_id', uid)
       await admin.from('udyam_verifications').delete().eq('user_id', uid)
+      await admin.from('gstin_verifications').delete().eq('user_id', uid)
     }
     for (const id of created.providerIds) { await admin.from('provider_categories').delete().eq('provider_id', id); await admin.from('provider_profiles').delete().eq('id', id) }
     for (const id of created.msmeIds) await admin.from('msme_profiles').delete().eq('id', id)

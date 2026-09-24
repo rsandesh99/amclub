@@ -39,6 +39,8 @@ export * from './states'
 
 // GSTIN format + mod-36 checksum validation
 export * from './gstin'
+// Audit M12 / ADR 028 — KYC ownership: a vendor record earns a chip only when it is the claimant's own
+export * from './kyc-ownership'
 
 // Experience v3 rollout flags (closed registry, server-evaluated)
 export * from './experiments'
