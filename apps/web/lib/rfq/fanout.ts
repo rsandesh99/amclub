@@ -36,7 +36,7 @@ export async function fanoutRfq(admin: Admin, rfqId: string): Promise<{ matched:
     .eq('id', rfq.msme_id)
     .maybeSingle()
   const state = msme?.state ?? null
-  // Audit M22 (ADR 027) — the buyer's own provider profile is never matched to their request.
+  // Audit M22 (ADR 029) — the buyer's own provider profile is never matched to their request.
   const buyerUserId = (msme?.user_id as string | undefined) ?? null
 
   // Providers in this category, active, not paused, in the buyer's state.

@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 type Admin = SupabaseClient
 
 /**
- * Audit M22 (ADR 027) — no self-dealing. One person may hold a buyer profile and
+ * Audit M22 (ADR 029) — no self-dealing. One person may hold a buyer profile and
  * a provider profile (both keyed by user_id), but may never be both sides of one
  * deal: buy from, quote to, act on both sides of, or review their own provider
  * profile. Refusals answer 409 with this code.

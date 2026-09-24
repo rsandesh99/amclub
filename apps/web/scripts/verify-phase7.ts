@@ -308,7 +308,7 @@ async function main() {
     }
   }
 
-  // ── Criterion 8 (audit M38, ADR 027): a completion whose payout was never written is swept, once ──
+  // ── Criterion 8 (audit M38, ADR 029): a completion whose payout was never written is swept, once ──
   // The status is written before the payout; a crash in between used to leave the
   // provider unpaid with nothing for ops to release. The reconcile cron re-drives it.
   {

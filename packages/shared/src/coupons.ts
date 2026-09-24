@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * Coupons (§5.5; audit M10, ADR 027).
+ * Coupons (§5.5; audit M10, ADR 029).
  *
  * The admin form's schema lives here (Zod first): `value` is in human units — a
  * percentage (10 → 1000 bps) or rupees (500 → 50,000 paise) — and the admin route

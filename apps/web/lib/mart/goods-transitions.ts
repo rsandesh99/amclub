@@ -100,7 +100,7 @@ export async function applyGoodsTransition(
   if (!(rule.actor === 'msme' ? isMsme : isProvider)) {
     return { ok: false, status: 403, error: `Only the ${rule.actor === 'msme' ? 'buyer' : 'seller'} can ${action}` }
   }
-  // Audit M22 (ADR 027) — the same rule as services: only the buyer's cancel (a refund to the payer).
+  // Audit M22 (ADR 029) — the same rule as services: only the buyer's cancel (a refund to the payer).
   if (action !== 'cancel' && (await isSelfDealtOrder(admin, order, actor.userId))) {
     return { ok: false, status: 409, error: SELF_DEALING }
   }

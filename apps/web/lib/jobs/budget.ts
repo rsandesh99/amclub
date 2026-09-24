@@ -1,5 +1,5 @@
 /**
- * Audit M38 (ADR 027) — a money cron works in bounded batches inside a time
+ * Audit M38 (ADR 029) — a money cron works in bounded batches inside a time
  * budget. It stops taking new items once the budget is spent, leaving `reserve`
  * seconds before the route's `maxDuration` to finish the item in hand and
  * record its heartbeat. Whatever it leaves is picked up by the next run: every

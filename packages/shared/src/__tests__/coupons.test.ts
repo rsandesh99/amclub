@@ -9,7 +9,7 @@ const base = {
   validTo: '2026-10-24T00:00:00.000Z',
 }
 
-describe('coupons (audit M10, ADR 027)', () => {
+describe('coupons (audit M10, ADR 029)', () => {
   it('admin schema: code upper-cased, limits optional, per-buyer limit a positive integer', () => {
     const ok = adminCouponCreateSchema.parse({ ...base, usageLimit: 100, perBuyerLimit: 1 })
     expect(ok.code).toBe('WELCOME10')

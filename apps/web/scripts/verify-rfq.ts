@@ -347,7 +347,7 @@ async function main() {
   // UPSTASH_* is set, graceful no-op otherwise (security-pass design).
   check('7. Rate limiting applied on RFQ-create + quote-submit', true, 'enforce() wired on both routes; active when UPSTASH_REDIS_REST_* is set')
 
-  // ── Criterion 12 (audit M22, ADR 027): no self-dealing ──────────────────────
+  // ── Criterion 12 (audit M22, ADR 029): no self-dealing ──────────────────────
   // One person holds a buyer profile AND an active provider profile in the same
   // category and state: they may never be both sides of one deal.
   {

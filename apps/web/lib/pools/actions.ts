@@ -209,7 +209,7 @@ export async function offerAvailableTo(admin: SupabaseClient, providerId: string
   const [{ data: q }, { data: m }, own] = await Promise.all([
     admin.from('quotes').select('id').eq('rfq_id', rfqId).eq('provider_id', providerId).maybeSingle(),
     admin.from('rfq_matches').select('declined_at').eq('rfq_id', rfqId).eq('provider_id', providerId).maybeSingle(),
-    // Audit M22 (ADR 027) — a buyer's own provider profile never offers to their request.
+    // Audit M22 (ADR 029) — a buyer's own provider profile never offers to their request.
     providerOwnsRequest(admin, providerId, rfqId),
   ])
   return !q && !(m as { declined_at: string | null } | null)?.declined_at && !own

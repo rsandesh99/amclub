@@ -118,7 +118,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // window lapse) can no longer quote — enforced here, not only in the UI, so
   // mobile/direct callers cannot bypass it and the score never double-counts.
   if (match.declined_at) return NextResponse.json({ error: 'declined', declined_at: match.declined_at }, { status: 409 })
-  // Audit M22 (ADR 027) — never a quote to your own request (fan-out no longer matches
+  // Audit M22 (ADR 029) — never a quote to your own request (fan-out no longer matches
   // it; a match written before that, or by hand, is refused here).
   if (await providerOwnsRequest(admin, actor.providerId, rfqId)) return NextResponse.json({ error: SELF_DEALING }, { status: 409 })
 

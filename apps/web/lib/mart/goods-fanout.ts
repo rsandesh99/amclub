@@ -17,7 +17,7 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
 export async function fanoutGoodsRfq(admin: Admin, rfq: { id: string; msme_id: string; title: string; mart_category_slug: string | null }): Promise<{ matched: number }> {
   const { data: msme } = await admin.from('msme_profiles').select('state, user_id').eq('id', rfq.msme_id).maybeSingle()
   const state = msme?.state ?? null
-  // Audit M22 (ADR 027) — the buyer's own seller profile is never matched to their request.
+  // Audit M22 (ADR 029) — the buyer's own seller profile is never matched to their request.
   const buyerUserId = (msme?.user_id as string | undefined) ?? null
   const { data: sellers } = await admin
     .from('provider_profiles')

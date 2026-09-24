@@ -242,7 +242,7 @@ jobs:
           AGENT_BASE_URL: http://localhost:3001
         run: pnpm exec tsx scripts/verify-experience.ts --only=e18
 
-      - name: Coupons (audit M10 / M11, ADR 027 — last use claimed once, per-buyer limit, audit row; coupons on)
+      - name: Coupons (audit M10 / M11, ADR 029 — last use claimed once, per-buyer limit, audit row; coupons on)
         if: ${{ !cancelled() && steps.agentapp.outcome == 'success' }}
         working-directory: apps/web
         env:

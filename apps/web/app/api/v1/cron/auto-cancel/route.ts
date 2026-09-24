@@ -15,7 +15,7 @@ export const maxDuration = 300
 /** Orders in 'placed' for >24h → auto_cancelled → refunded (100%); then any
  *  cancellation refund that failed earlier is re-driven (ADR 026), and any
  *  capture that created no order (expired session / second capture) is
- *  refunded in full (ADR 027). All in bounded batches inside the time budget;
+ *  refunded in full (ADR 029). All in bounded batches inside the time budget;
  *  the next hourly run takes the rest. A refund still failing marks the run
  *  degraded (M35). */
 export async function GET(request: NextRequest) {

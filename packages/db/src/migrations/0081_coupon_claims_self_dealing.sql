@@ -1,5 +1,5 @@
 -- 0081 — Coupon claims and per-buyer limits; the self-dealing pool skip
--- (architecture + security audit, 2026-09-24: M10 parts 2–3, M22). ADR 027.
+-- (architecture + security audit, 2026-09-24: M10 parts 2–3, M22). ADR 029.
 -- Idempotent: every statement can run twice. No data changes.
 --
 -- M10: a coupon's usage limit was checked at checkout (used_count < usage_limit)

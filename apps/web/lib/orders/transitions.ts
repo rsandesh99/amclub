@@ -306,7 +306,7 @@ export async function applyTransition(
     rule.actor === 'either' ? isMsme || isProvider : rule.actor === 'msme' ? isMsme : isProvider
   if (!actorOk) return { ok: false, status: 403, error: `Only the ${rule.actor} can ${action}` }
 
-  // Audit M22 (ADR 027) — one person on both sides of an order acts on neither side
+  // Audit M22 (ADR 029) — one person on both sides of an order acts on neither side
   // (checkout refuses such an order now; this covers any made before). The buyer's
   // cancel stays open: it only refunds the payer, and an unaccepted order also
   // auto-cancels in full after 24 h.
@@ -603,7 +603,7 @@ export async function generateMissingInvoices(admin: Admin, budget: TimeBudget =
 }
 
 /**
- * Sweeper (reconcile cron; audit M38, ADR 027): a completed order whose payout row
+ * Sweeper (reconcile cron; audit M38, ADR 029): a completed order whose payout row
  * was never written. The status is written first and the payout after it
  * (accept-delivery, the auto-accept cron, the goods receipt), so a crash or a
  * timeout in between left the provider unpaid with nothing for ops to release.

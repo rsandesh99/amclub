@@ -385,7 +385,7 @@ export async function joinPool(
     // live verification passes; refusing here is the only safe behaviour.
     return { ok: false, status: 503, error: 'block_capture_not_live' }
   }
-  // Audit M22 (ADR 027) — a seller never commits to buy from their own pool.
+  // Audit M22 (ADR 029) — a seller never commits to buy from their own pool.
   if (pool.seller_id && (await isOwnProvider(admin, pool.seller_id, args.userId))) return { ok: false, status: 409, error: SELF_DEALING }
   const existing = await getMember(admin, args.poolId, args.msmeId)
   const now = new Date().toISOString()
@@ -549,7 +549,7 @@ export async function prepareMemberCheckout(
   if (!product || product.status !== 'active' || product.deleted_at || !seller || seller.status !== 'active' || !seller.sells_goods) {
     return { ok: false, status: 422, error: 'product_unavailable' }
   }
-  // Audit M22 (ADR 027) — never a checkout from a member's own seller profile.
+  // Audit M22 (ADR 029) — never a checkout from a member's own seller profile.
   if ((seller as { user_id?: string }).user_id === member.user_id) return { ok: false, status: 409, error: SELF_DEALING }
   const cat = await getMartCategory(admin, product.category_slug)
   if (!cat || !cat.is_active || cat.bis_blocked) return { ok: false, status: 422, error: 'category_blocked' }

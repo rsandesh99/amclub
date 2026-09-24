@@ -421,7 +421,7 @@ export async function POST(request: NextRequest) {
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  // Audit M22 (ADR 027) — nobody buys from their own provider profile: a package,
+  // Audit M22 (ADR 029) — nobody buys from their own provider profile: a package,
   // a quote on their own request, services or goods. Checked before any session exists.
   if (await isOwnProvider(await createAdminClient(), prep.providerId, userId)) {
     return fail(409, SELF_DEALING, 'You cannot buy from your own provider profile')
@@ -491,7 +491,7 @@ export async function POST(request: NextRequest) {
     console.error('[checkout] session insert', insErr)
     return fail(500, 'checkout_failed', 'Checkout failed')
   }
-  // Audit M10 / ADR 027 — a session that applied a coupon holds one of its uses
+  // Audit M10 / ADR 029 — a session that applied a coupon holds one of its uses
   // BEFORE any payment opens: claim_coupon_for_session decides under the coupon's
   // row lock, so two buyers at the last use get one claim and one 409. A re-read
   // session (a racing double-submit) is claimed too: the claim is idempotent.

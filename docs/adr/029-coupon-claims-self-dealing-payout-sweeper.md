@@ -1,4 +1,4 @@
-# ADR 027 — Coupon claims at checkout, the self-dealing guard, and the payout sweeper
+# ADR 029 — Coupon claims at checkout, the self-dealing guard, and the payout sweeper
 
 **Status:** Accepted 2026-09-24. Touches money (coupons, payouts) and who may act on an order (§8.4); no order transition is added, removed or repurposed. Migration **0081**. Decides audit findings **M10** (parts 2 and 3), **M22** and **M38** (`docs/audit/2026-09-24-architecture-security-audit.md`). Builds on ADR 018 (server-written money rows) and ADR 026 (compare-and-set order writes, durable refunds and invoices).
 

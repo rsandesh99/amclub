@@ -1,5 +1,5 @@
 /**
- * Audit M10 (parts 2–3) + M11 (coupons) — ADR 027 — against a server with
+ * Audit M10 (parts 2–3) + M11 (coupons) — ADR 029 — against a server with
  * COUPONS_ENABLED=true (production has it on; CI runs this on the
  * production-flags server, :3001). Drives the real checkout with per-user Bearer
  * tokens in simulate-payment mode.
@@ -59,7 +59,7 @@ async function pay(token: string, co: Co): Promise<string | null> {
 }
 
 async function main() {
-  console.log(`\nCoupons (audit M10 / M11, ADR 027) → ${BASE}\n`)
+  console.log(`\nCoupons (audit M10 / M11, ADR 029) → ${BASE}\n`)
   try {
     const adminUser = await mkUser('admin', ['admin', 'ops'])
     const probe = await api(adminUser.token, '/api/v1/admin/coupons', undefined, 'GET')

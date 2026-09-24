@@ -86,7 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!me || me.id !== order.msme_id) {
     return NextResponse.json({ error: 'You can only review your own completed order' }, { status: 403 })
   }
-  // Audit M22 (ADR 027) — nobody rates their own provider profile.
+  // Audit M22 (ADR 029) — nobody rates their own provider profile.
   if (await isOwnProvider(admin, order.provider_id as string, userId)) {
     return NextResponse.json({ error: SELF_DEALING }, { status: 409 })
   }

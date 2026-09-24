@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   const prepared = await prepareGoodsCheckout(admin, items, { sample: !!sample })
   if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status })
   const { prep } = prepared
-  // Audit M22 (ADR 027) — a seller never buys their own listings.
+  // Audit M22 (ADR 029) — a seller never buys their own listings.
   if (await isOwnProvider(admin, prep.sellerId, userId)) return NextResponse.json({ error: { code: SELF_DEALING } }, { status: 409 })
   const deliveryDays = Number(await getMartSetting<number | string>(admin, 'goods_delivery_days', 3))
 

@@ -75,7 +75,7 @@ async function precheck(admin: SupabaseClient, m: MemberRow, providerId: string,
   if (!r || r.deleted_at || (r.status !== 'open' && r.status !== 'quoted') || Date.parse(r.expires_at) <= Date.now()) return 'rfq_closed'
   if (quote) return 'already_quoted'
   if ((match as { declined_at: string | null } | null)?.declined_at) return 'declined'
-  // Audit M22 (ADR 027) — never a quote from the member's own provider profile.
+  // Audit M22 (ADR 029) — never a quote from the member's own provider profile.
   if (await providerOwnsRequest(admin, providerId, m.rfq_id)) return 'self_dealing'
   return null
 }
