@@ -39,7 +39,7 @@
 | State machines with server-enforced transitions | ✅ | `packages/shared/src/state-machines.ts`; illegal transitions rejected (kill-test green); payout retry validates via `isValidPayoutTransition` |
 | Webhooks as payment truth + idempotency | ✅ | signature check + idempotent `materialize_order`; replay kill-tests (`killtest-webhook-replay.ts`) |
 | Rate limiting on cost/abuse paths | ✅ | `lib/rate-limit.ts` (OTP, search, checkout, RFQ, voice, admin); **verified live in prod** — §2 voice ceiling run returned 6×429/0×5xx |
-| Contact-info leakage pre-payment | ✅ | `redactContactInfo` on quote messages (unit-tested; masks phones/emails/handles) |
+| Contact-info leakage pre-payment | ✅ | `redactContactInfo` on quote messages, clarifications, order messages and statements; since audit M30 it and `stripContactInfo` and the agent output contract share ONE rule set (`packages/shared/src/contact-mask.ts`: phones incl. Indic / spaced / spelled-out digits, emails, UPI ids, links, handles), driven by one fixture table |
 
 ## A05 Security Misconfiguration
 

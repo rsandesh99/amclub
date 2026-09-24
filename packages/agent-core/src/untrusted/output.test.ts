@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { checkCustomerFacing, collectStrings, customerFacingText } from './output'
+import { CONTACT_CASES } from '@amclub/shared/test-fixtures/contact-cases'
 
 const msg = customerFacingText(z.object({ message: z.string(), locale: z.string() }).strict(), { fields: ['message'], forbid: ['contact', 'payment', 'urls'] })
 const pointers = customerFacingText(z.object({ pointers: z.array(z.object({ quote_id: z.string(), lines: z.array(z.string()) })), locale: z.string() }), { fields: ['pointers[].lines[]'], forbid: ['contact', 'payment', 'ranking', 'urls'] })
@@ -47,6 +48,15 @@ describe('S2.1 output contract — contact', () => {
     ['a year and a quantity pass', 'In 2026 we need 1200 kg of MS angle.'],
   ])('%s', (_l, text) => {
     expect(codes(msg.safeParse({ message: text, locale: 'en' }))).not.toContain('contact_info')
+  })
+})
+
+// Audit M30 — the ONE contact fixture table, shared with the storage masker's tests in packages/shared.
+describe('M30 output contract — the shared contact fixtures (contact + urls)', () => {
+  const both = customerFacingText(z.object({ message: z.string() }), { fields: ['message'], forbid: ['contact', 'urls'], locale: 'en' })
+  it.each(CONTACT_CASES.map((c) => [c.from, c.text, c.refuse] as const))('[%s] %s', (_from, text, refuse) => {
+    const got = codes(both.safeParse({ message: text }))
+    expect(got.some((c) => c === 'contact_info' || c === 'url')).toBe(refuse)
   })
 })
 

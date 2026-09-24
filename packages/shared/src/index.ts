@@ -17,6 +17,8 @@ export * from './credentials'
 
 // RFQ template fields + contact masking
 export * from './rfq'
+// Audit M30 — the ONE contact rule set (storage masker + output refuser + Indic digit fold)
+export * from './contact-mask'
 export * from './clarifications'
 export * from './rfq-quality'
 

@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./messages/*": "./src/messages/*.json"
+    "./messages/*": "./src/messages/*.json",
+    "./test-fixtures/contact-cases": "./src/__tests__/fixtures/contact-cases.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
