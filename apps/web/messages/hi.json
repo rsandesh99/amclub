@@ -2759,7 +2759,9 @@
     "proc_total": "30 दिनों में {n}",
     "proc_proposals": "सुझाव: {approved} स्वीकृत · {edited} बदले · {declined} मना",
     "proc_outcomes": "{rfqs} माँगें बनीं · {orders} पूरे ऑर्डर",
-    "proc_cost": "प्रति पूरा ऑर्डर मॉडल लागत"
+    "proc_cost": "प्रति पूरा ऑर्डर मॉडल लागत",
+    "runtime_missing_title": "एजेंट रनटाइम कॉन्फ़िगर नहीं है",
+    "runtime_missing_body": "जब तक Vercel में AGENT_RUNTIME_URL, AGENT_RUNTIME_SECRET और SUPABASE_JWT_SECRET सेट नहीं होते और रनटाइम डिप्लॉय नहीं होता, ये एजेंट बंद रहेंगे: {agents}। नीचे के स्विच वैसे ही रहेंगे; रनटाइम तैयार होते ही ये अपने-आप चालू हो जाएँगे।"
   },
   "suspended": {
     "title": "आपका खरीदार खाता निलंबित है",

@@ -1,4 +1,6 @@
+import { RUNTIME_AGENTS } from '@amclub/shared'
 import { agentPageGate } from '@/lib/agent/gate'
+import { agentRuntimeReady } from '@/lib/agent/runtime-client'
 import { AgentsConsoleClient } from './AgentsConsoleClient'
 
 /**
@@ -8,5 +10,6 @@ import { AgentsConsoleClient } from './AgentsConsoleClient'
  */
 export default function AdminAgentsPage() {
   agentPageGate()
-  return <AgentsConsoleClient />
+  // Runtime agents read as off until the runtime is configured (shared agentRunnable); say so here.
+  return <AgentsConsoleClient runtimeReady={agentRuntimeReady()} runtimeAgents={RUNTIME_AGENTS} />
 }

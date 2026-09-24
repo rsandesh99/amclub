@@ -30,7 +30,7 @@ interface MunshiStats {
   cost_per_approved_paise: number | null
 }
 
-export function AgentsConsoleClient() {
+export function AgentsConsoleClient({ runtimeReady = true, runtimeAgents = [] }: { runtimeReady?: boolean; runtimeAgents?: readonly string[] }) {
   const t = useTranslations('admin_agents')
   const tScore = useTranslations('admin_score')
   const tBench = useTranslations('admin_benchmarks')
@@ -132,6 +132,13 @@ export function AgentsConsoleClient() {
         </div>
         <Link href={'/admin/agents/runs' as '/admin'} className="text-sm font-medium text-primary underline underline-offset-2">{t('runs_link')}</Link>
       </div>
+
+      {!runtimeReady && (
+        <div role="status" className="rounded-card border border-warning/40 bg-warning/10 p-4 text-sm" data-testid="runtime-missing">
+          <p className="font-semibold">{t('runtime_missing_title')}</p>
+          <p className="mt-1 text-foreground-secondary">{t('runtime_missing_body', { agents: runtimeAgents.join(', ') })}</p>
+        </div>
+      )}
 
       {loading ? <p className="text-sm text-foreground-secondary">{t('loading')}</p> : (
         <>
