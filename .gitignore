@@ -71,3 +71,6 @@ next-env.d.ts
 android/
 ios/
 web-build/
+
+# Browser journeys (screenshots of failed steps, a11y report)
+apps/web/e2e-artifacts/
