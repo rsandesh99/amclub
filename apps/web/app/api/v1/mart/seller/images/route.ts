@@ -7,9 +7,8 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getSellerCtx } from '@/lib/mart/seller'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { serverError } from '@/lib/api/errors'
-import sharp from 'sharp'
+import { UPLOAD_IMAGE_TYPES, openUploadImage } from '@/lib/images/untrusted'
 
-const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_BYTES = 8 * 1024 * 1024
 /** Longest edge after resize — enough for a 2× product hero, ~40–80 KB as WebP. */
 const MAX_EDGE = 1200
@@ -27,16 +26,18 @@ export async function POST(request: NextRequest) {
   const form = await request.formData().catch(() => null)
   const file = form?.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
-  if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'Unsupported image type' }, { status: 422 })
+  if (!UPLOAD_IMAGE_TYPES.has(file.type)) return NextResponse.json({ error: 'Unsupported image type' }, { status: 422 })
   if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Image exceeds 8 MB' }, { status: 422 })
 
   // Phone photos arrive at 3–6 MB; the catalogue never needs more than 1200px.
   // Resize + WebP here so every later render (cards, product hero, admin
   // queue) pays for ~60 KB instead of the raw capture. EXIF orientation is
   // honoured (rotate()) so shop-floor portrait shots stay upright.
+  const img = openUploadImage(Buffer.from(await file.arrayBuffer()), file.type)
+  if (!img) return NextResponse.json({ error: 'Image content does not match its type' }, { status: 422 })
   let body: Buffer
   try {
-    body = await sharp(Buffer.from(await file.arrayBuffer()))
+    body = await img
       .rotate()
       .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 80 })

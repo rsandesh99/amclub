@@ -20,6 +20,11 @@ section is gated on the web `AGENT_ENABLED`.
 - **Adapter**: `packages/agent-core/src/whatsapp` — `WhatsAppProvider` interface;
   drivers `meta_cloud`, `interakt`, `stub`; picked by `WHATSAPP_DRIVER` **and**
   the driver's credentials (missing creds ⇒ stub).
+- **The webhook only accepts signed requests.** With the stub (no live driver)
+  `POST /webhooks/whatsapp` answers 401 `webhook_not_configured`, because the stub
+  cannot check a signature and anyone could otherwise post a message "from" any
+  registered number (audit H4). For local testing only, set
+  `WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=true` with `NODE_ENV` other than `production`.
 - **Templates**: `templates.ts` — one entry per notification kind, per-locale
   approved names, param builders. An unregistered kind can never reach the vendor.
 - **Opt-in policy**: order/payment events to a party of the order
@@ -69,8 +74,8 @@ section is gated on the web `AGENT_ENABLED`.
 ## Rollback
 
 `WHATSAPP_DRIVER=stub` (or remove the credentials) on web + runtime: outbound
-becomes a logged stub instantly; the webhook keeps storing inbound messages.
-Scale the runtime to 0 to stop ingesting.
+becomes a logged stub instantly, and the webhook refuses every inbound POST
+(401), so nothing is ingested. Scale the runtime to 0 to stop it entirely.
 
 ## Privacy
 

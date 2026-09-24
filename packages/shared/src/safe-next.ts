@@ -16,6 +16,15 @@ export function safeNext(next: string | null | undefined): string | null {
   if (!value.startsWith('/')) return null
   // …but not protocol-relative ("//evil.com") or backslash tricks ("/\evil").
   if (value.startsWith('//') || value.startsWith('/\\')) return null
+  // URL parsers drop tab / CR / LF and read "\" as "/", so "/<TAB>/evil.com"
+  // becomes "//evil.com" in the browser (audit M6). No control characters or
+  // backslashes anywhere, and the value must resolve to this origin.
+  if (/[\u0000-\u001F\u007F\\]/.test(value)) return null
+  try {
+    if (new URL(value, 'https://amclub.invalid').origin !== 'https://amclub.invalid') return null
+  } catch {
+    return null
+  }
   // Never bounce back into auth routes (avoids loops).
   if (/^\/(login|signup|partner\/signup)(\/|\?|$)/.test(value)) return null
   return value

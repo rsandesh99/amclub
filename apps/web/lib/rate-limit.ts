@@ -56,6 +56,8 @@ export const limiters = {
   otp: build(5, '15 m', 'rl:otp'),
   /** OTP send per IP — blunts spraying many identifiers from one host. */
   otpIp: build(15, '15 m', 'rl:otp-ip'),
+  /** Supabase SMS hook — every OTP SMS per number, however it was requested (audit H3). */
+  smsHookPhone: build(5, '15 m', 'rl:sms-hook'),
   /** Paid KYC verification (GSTIN/bank) per user. */
   kyc: build(8, '1 m', 'rl:kyc'),
   /** Checkout creation per user (idempotency already prevents double-charge). */

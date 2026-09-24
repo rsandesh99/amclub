@@ -24,6 +24,12 @@ import {
 import { admin } from '../../deps'
 import { RUNTIME_ENV } from '../../env'
 
+// Delivery photos are provider uploads (audit H10): decode JPEG, PNG and WebP
+// only. Every other libvips loader (HEIF / AVIF, TIFF, GIF, SVG, …) is blocked
+// for this process, dhashFromImage's lazily loaded sharp included.
+sharp.block({ operation: ['VipsForeignLoad'] })
+sharp.unblock({ operation: ['VipsForeignLoadJpeg', 'VipsForeignLoadPng', 'VipsForeignLoadWebp'] })
+
 /**
  * Payout-Evidence agent (BUILD_PROMPTS S1.4). Persona ops; READ-ONLY.
  *

@@ -64,12 +64,21 @@ export interface InboundHooks {
   enqueueProcurementDecide?: (job: Omit<ProcurementDecideJob, 'kind'>) => Promise<string | null>
 }
 
+/** Unsigned (stub-driver) webhooks: only outside production, and only when a developer opts in. */
+export function acceptsUnsignedWebhooks(env: Record<string, string | undefined> = process.env): boolean {
+  return env['NODE_ENV'] !== 'production' && env['WHATSAPP_WEBHOOK_ALLOW_UNSIGNED'] === 'true'
+}
+
 export async function ingestWaWebhook(rawBody: string, headers: Record<string, string | undefined>, enqueue: EnqueueFn): Promise<IngestResult> {
   const cfg = whatsappConfigFromEnv()
   const provider = createWhatsAppProvider(cfg)
-  // A live driver must prove the vendor signature; the stub accepts (dev only).
-  if (whatsappIsLive(cfg) && !provider.verifySignature(rawBody, headers)) {
-    return { ok: false, status: 401, error: 'bad_signature', stored: 0, statuses: 0 }
+  // A live driver must prove the vendor signature. The stub cannot, so it
+  // accepts nothing unless a developer opts in outside production (audit H4):
+  // otherwise anyone could post a message "from" any registered number.
+  if (whatsappIsLive(cfg)) {
+    if (!provider.verifySignature(rawBody, headers)) return { ok: false, status: 401, error: 'bad_signature', stored: 0, statuses: 0 }
+  } else if (!acceptsUnsignedWebhooks()) {
+    return { ok: false, status: 401, error: 'webhook_not_configured', stored: 0, statuses: 0 }
   }
   let body: unknown
   try {

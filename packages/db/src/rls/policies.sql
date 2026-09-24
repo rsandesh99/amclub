@@ -5,13 +5,16 @@
 
 -- ─── Helper functions ─────────────────────────────────────────────────────────
 
+-- search_path pinned (0074): a re-run of this file must not undo it.
 CREATE OR REPLACE FUNCTION auth_user_id()
-RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER AS $$
+RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public, pg_temp AS $$
   SELECT auth.uid()
 $$;
 
 CREATE OR REPLACE FUNCTION has_role(r text)
-RETURNS bool LANGUAGE sql STABLE SECURITY DEFINER AS $$
+RETURNS bool LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public, pg_temp AS $$
   SELECT EXISTS (
     SELECT 1 FROM users WHERE id = auth.uid() AND r = ANY(roles)
   )
