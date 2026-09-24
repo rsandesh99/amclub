@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { resolveActor } from '@/lib/orders/actor'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'application/zip']
 const MAX_BYTES = 15 * 1024 * 1024 // 15 MB
@@ -50,6 +51,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('POST /orders/[id]/documents')
+  if (delegated) return delegated
   const { id } = await params
   const admin = await createAdminClient()
   const check = await partyCheck(admin, id, userId)

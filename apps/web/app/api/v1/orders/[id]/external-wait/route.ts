@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { resolveActor } from '@/lib/orders/actor'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * Toggle the "Pending Government Portal Processing" sub-state on an in-progress
@@ -18,6 +19,9 @@ const bodySchema = z.object({ active: z.boolean() })
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('POST /orders/[id]/external-wait')
+  if (delegated) return delegated
 
   const { id } = await params
   const json = await request.json().catch(() => null)

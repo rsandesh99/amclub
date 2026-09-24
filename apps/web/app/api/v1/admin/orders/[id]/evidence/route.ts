@@ -25,7 +25,7 @@ const SIGNED_TTL_SEC = 15 * 60
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireAdmin()
+  const gate = await requireAdmin({ agentTool: 'read_order_evidence' })
   if (gate.error) return gate.error
   const scope = await requireToolScope('read_order_evidence')
   if (scope) return scope

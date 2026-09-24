@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * Quote-or-decline (S0.4). A matched provider declines an RFQ with a reason so
@@ -20,6 +21,9 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('POST /rfq/[id]/decline')
+  if (delegated) return delegated
   const { id: rfqId } = await params
   const rl = await enforce(limiters.authed, `rfq-decline:${userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)

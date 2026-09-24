@@ -451,6 +451,10 @@ const MANIFEST: Entry[] = [
     functions: ['generate_order_number'],
     note: 'Audit M1 + advisors: generate_order_number not callable by clients (and no longer truncates past 999,999); the definer trigger functions not callable over RPC; search_path pinned on 14 functions',
   },
+  {
+    file: '0075_client_read_narrowing.sql',
+    note: 'Audit M17 + M10: rfq_clarifications.provider_id / answered_by not client-readable (column grant); coupons not client-readable',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

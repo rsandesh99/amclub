@@ -16,7 +16,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { createCipheriv, randomBytes } from 'crypto'
+import { createCipheriv, createHmac, randomBytes } from 'crypto'
 import { signStandardWebhook } from '../lib/auth/standard-webhook'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
@@ -974,6 +974,71 @@ async function main() {
       eq('logo: SVG bytes declared as image/png → 422', (await upload(svg, 'image/png')).status, 422)
       eq('logo: PNG bytes declared as image/jpeg → 422', (await upload(png, 'image/jpeg')).status, 422)
       eq('logo: a real PNG → 200 (control)', (await upload(png, 'image/png')).status, 200)
+    }
+
+    // ── 10. Audit wave 3 (2026-09-24): delegated agent tokens, suspended providers ──
+    console.log('\naudit wave 3 — delegated tokens deny by default, suspended providers:')
+    {
+      // M7 / M8 / M3 — a delegated token is honoured only where an agent tool wraps
+      // the route, and only for that tool. Signed like lib/agent/token.ts mints them.
+      const jwtSecret = process.env['AUTHZ_JWT_SECRET']
+      if (jwtSecret) {
+        const b64u = (v: string | Buffer) => Buffer.from(v).toString('base64url')
+        const delegated = (sub: string, persona: string, scopes?: string[]) => {
+          const iat = Math.floor(Date.now() / 1000)
+          const head = b64u(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+          const body = b64u(JSON.stringify({ sub, role: 'authenticated', aud: 'authenticated', iat, exp: iat + 600, amc_persona: persona, ...(scopes ? { amc_scopes: scopes } : {}) }))
+          return `${head}.${body}.${createHmac('sha256', jwtSecret).update(`${head}.${body}`).digest('base64url')}`
+        }
+        const opsAdmin = await mkUser('opsDelegator', ['msme', 'admin'])
+        const opsEvidence = delegated(opsAdmin.uid, 'ops', ['read_order_evidence'])
+        denied('ops token (evidence scope) → POST /admin/orders/{id} retry_payout', (await api(opsEvidence, `/api/v1/admin/orders/${orderA}`, { action: 'retry_payout' })).status)
+        denied('ops token (evidence scope) → POST /admin/providers/{id} suspend', (await api(opsEvidence, `/api/v1/admin/providers/${provBId}`, { action: 'suspend', reason: 'agent' })).status)
+        denied('ops token (evidence scope) → GET /admin/payouts (another tool)', (await api(opsEvidence, '/api/v1/admin/payouts', undefined, 'GET')).status)
+        denied('full-persona ops token → POST /admin/orders/{id} manual_refund', (await api(delegated(opsAdmin.uid, 'ops'), `/api/v1/admin/orders/${orderA}`, { action: 'manual_refund', amountPaise: 100 })).status)
+        eq('ops token (evidence scope) → GET its own tool route (control)', (await api(opsEvidence, `/api/v1/admin/orders/${orderA}/evidence`, undefined, 'GET')).status, 200)
+        const buyerDispute = delegated(buyerA.uid, 'buyer', ['draft_dispute'])
+        denied('buyer token (draft_dispute) → transition cancel', (await api(buyerDispute, `/api/v1/orders/${orderA}/transition`, { action: 'cancel' })).status)
+        denied('buyer token (draft_dispute) → transition accept_delivery', (await api(buyerDispute, `/api/v1/orders/${orderA}/transition`, { action: 'accept_delivery' })).status)
+        denied('buyer token → POST /orders/{id}/review', (await api(delegated(buyerA.uid, 'buyer'), `/api/v1/orders/${orderA}/review`, { rating: 5 })).status)
+        denied('buyer token → POST /profile/msme', (await api(delegated(buyerA.uid, 'buyer'), '/api/v1/profile/msme', { business_name: 'agent-renamed', state: 'KA' })).status)
+        denied('provider token → PATCH /profile/provider/settings', (await api(delegated(provA.uid, 'provider'), '/api/v1/profile/provider/settings', { capacityPaused: false }, 'PATCH')).status)
+        denied('a delegated token cannot mint another (token endpoint session path)', (await api(delegated(buyerA.uid, 'buyer'), '/api/v1/agent/token', { persona: 'buyer' })).status)
+      } else {
+        console.log('  (AUTHZ_JWT_SECRET unset — delegated-token probes skipped; CI sets it)')
+      }
+
+      // M13 — a suspended provider has no provider identity until reactivated.
+      const suspAdmin2 = await mkUser('adminSuspProv', ['msme', 'admin'])
+      eq('provA reads OWN order before suspension (control)', (await api(provA.token, `/api/v1/orders/${orderA}`, undefined, 'GET')).status, 200)
+      const sp = await api(suspAdmin2.token, `/api/v1/admin/providers/${provAId}`, { action: 'suspend', reason: 'authz wave 3' })
+      try {
+        eq('admin suspends provA → 200', sp.status, 200)
+        denied('suspended provA reads its order', (await api(provA.token, `/api/v1/orders/${orderA}`, undefined, 'GET')).status)
+        denied('suspended provA delivers its order', (await api(provA.token, `/api/v1/orders/${orderA}/transition`, { action: 'deliver' })).status)
+      } finally {
+        const re = await api(suspAdmin2.token, `/api/v1/admin/providers/${provAId}`, { action: 'reactivate', reason: 'authz wave 3 done' })
+        eq('admin reactivates provA → 200', re.status, 200)
+      }
+      eq('reactivated provA reads its order again (control)', (await api(provA.token, `/api/v1/orders/${orderA}`, undefined, 'GET')).status, 200)
+
+      // M17 — the clarification thread is shared, but who asked (and the buyer's user id) is not.
+      const { data: clar } = await admin.from('rfq_clarifications').insert({ rfq_id: rfqA, provider_id: provAId, question: 'authz wave 3: which year?' }).select('id').single()
+      try {
+        const buyerThread = await asUser(buyerA.token).from('rfq_clarifications').select('id, question').eq('rfq_id', rfqA)
+        eq('buyerA reads the thread (id, question) on OWN rfq (control)', !buyerThread.error && (buyerThread.data ?? []).length >= 1, true)
+        eq('buyerA cannot read who asked (provider_id)', Boolean((await asUser(buyerA.token).from('rfq_clarifications').select('provider_id').eq('rfq_id', rfqA)).error), true)
+        eq('a matched provider cannot read who asked (provider_id)', Boolean((await asUser(provA.token).from('rfq_clarifications').select('provider_id').eq('rfq_id', rfqA)).error), true)
+        eq('nobody reads answered_by (the buyer’s user id)', Boolean((await asUser(provA.token).from('rfq_clarifications').select('answered_by').eq('rfq_id', rfqA)).error), true)
+      } finally {
+        if (clar?.id) await admin.from('rfq_clarifications').delete().eq('id', clar.id)
+      }
+
+      // M10 — coupon codes are not listable by anyone but the server.
+      const anonCoupons = await createClient(URL_, ANON, { auth: { persistSession: false } }).from('coupons').select('code')
+      eq('anon cannot list coupon codes', Boolean(anonCoupons.error) || (anonCoupons.data ?? []).length === 0, true)
+      const buyerCoupons = await asUser(buyerA.token).from('coupons').select('code')
+      eq('a signed-in buyer cannot list coupon codes', Boolean(buyerCoupons.error) || (buyerCoupons.data ?? []).length === 0, true)
     }
   } finally {
     // Cleanup — children before parents; loud on error.

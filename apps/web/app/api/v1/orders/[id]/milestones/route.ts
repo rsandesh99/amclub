@@ -8,6 +8,7 @@ import { applyTransition } from '@/lib/orders/transitions'
 import { notifyMilestone } from '@/lib/notifications/events'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * Services evidence engine (S0.3). POST adds the next milestone (provider only;
@@ -44,6 +45,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('POST /orders/[id]/milestones')
+  if (delegated) return delegated
   const { id } = await params
   const rl = await enforce(limiters.authed, `milestone:${userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)

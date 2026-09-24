@@ -8,10 +8,16 @@ import { serverError } from '@/lib/api/errors'
 
 const bodySchema = z.object({ reason: z.string().trim().max(500).optional() })
 
+/** Distinct reporters (other than the reviewed provider) before a review is hidden pending ops. */
+const HIDE_AFTER_REPORTERS = 3
+
 /**
- * POST — flag a published review for moderation (A4). Moves it to 'flagged'
- * (drops out of the public average + listing) and routes it to /admin/reviews.
- * Any authenticated user may report; ops makes the final call (remove/restore).
+ * POST — report a published review for moderation (A4). Every report is
+ * recorded (audit_logs 'review_flagged'). Audit M9: one report no longer hides
+ * the review. It moves to 'flagged' (out of the public average + listing, into
+ * /admin/reviews) only when HIDE_AFTER_REPORTERS distinct users reported it,
+ * not counting the provider the review is about, and never again once ops
+ * restored it: ops makes the final call (remove/restore).
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
@@ -26,16 +32,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
 
   const admin = await createAdminClient()
-  const { data: review } = await admin.from('reviews').select('id, status').eq('id', reviewId).maybeSingle()
+  const { data: review } = await admin.from('reviews').select('id, status, provider_id').eq('id', reviewId).maybeSingle()
   if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 })
   if (review.status === 'removed') return NextResponse.json({ error: 'Review already removed' }, { status: 409 })
-
-  const { error } = await admin
-    .from('reviews')
-    .update({ status: 'flagged', updated_at: new Date().toISOString() })
-    .eq('id', reviewId)
-    .neq('status', 'removed')
-  if (error) return serverError('[review flag POST]', error)
 
   await admin.from('audit_logs').insert({
     actor_id: userId,
@@ -44,6 +43,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     entity_id: reviewId,
     after: { reason: parsed.data.reason ?? null },
   })
+  if (review.status !== 'published') return NextResponse.json({ ok: true, status: review.status })
 
-  return NextResponse.json({ ok: true })
+  const [{ data: reports }, { data: restored }, { data: subject }] = await Promise.all([
+    admin.from('audit_logs').select('actor_id').eq('entity', 'reviews').eq('entity_id', reviewId).eq('action', 'review_flagged').limit(200),
+    admin.from('audit_logs').select('id').eq('entity', 'reviews').eq('entity_id', reviewId).eq('action', 'review_restored').limit(1),
+    admin.from('provider_profiles').select('user_id').eq('id', review.provider_id).maybeSingle(),
+  ])
+  const reporters = new Set((reports ?? []).map((r) => r.actor_id as string).filter((a) => a && a !== subject?.user_id))
+  if ((restored ?? []).length > 0 || reporters.size < HIDE_AFTER_REPORTERS) {
+    return NextResponse.json({ ok: true, status: 'published', reported: true })
+  }
+
+  const { error } = await admin
+    .from('reviews')
+    .update({ status: 'flagged', updated_at: new Date().toISOString() })
+    .eq('id', reviewId)
+    .eq('status', 'published')
+  if (error) return serverError('[review flag POST]', error)
+  return NextResponse.json({ ok: true, status: 'flagged' })
 }

@@ -10,6 +10,7 @@ import { notifyDisputeStatement } from '@/lib/notifications/events'
 import { maybeEnqueueDisputeTriage } from '@/lib/agent/triage-trigger'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * /api/v1/orders/[id]/dispute/statement (S1.7, SPINE — not flag-gated).
@@ -48,6 +49,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 }
 
 async function write(request: NextRequest, orderId: string, mode: 'create' | 'edit') {
+  // Audit M8 — a party's own statement: no agent tool wraps it, so a delegated token is refused.
+  const delegated = await requireNotDelegated(`${mode === 'create' ? 'POST' : 'PATCH'} /orders/[id]/dispute/statement`)
+  if (delegated) return delegated
   const ctx = await load(orderId)
   if ('error' in ctx) return ctx.error
   const { admin, userId, party } = ctx

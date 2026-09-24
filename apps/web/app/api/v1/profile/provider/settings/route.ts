@@ -5,6 +5,7 @@ import { PROVIDER_LANGUAGES } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * Lightweight edits to a provider's PUBLIC profile. Deliberately does NOT touch
@@ -25,6 +26,9 @@ const bodySchema = z.object({
 export async function PATCH(request: NextRequest) {
   const { userId } = await getAuthedSupabase()
   if (!userId) {
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('PATCH /profile/provider/settings')
+  if (delegated) return delegated
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

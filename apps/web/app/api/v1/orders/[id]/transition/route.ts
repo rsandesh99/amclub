@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
-import { requireToolScope } from '@/lib/agent/scope'
+import { requireNotDelegated, requireToolScope } from '@/lib/agent/scope'
 import { resolveActor } from '@/lib/orders/actor'
 import { applyTransition, type OrderAction } from '@/lib/orders/transitions'
 
@@ -27,14 +27,17 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  // Only the buyer 'draft_dispute' tool wraps this route (AGENT_TOOLS); no-op for sessions.
-  const scope = await requireToolScope('draft_dispute')
-  if (scope) return scope
 
   const { id } = await params
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
+  // The buyer 'draft_dispute' tool wraps raise_dispute ONLY (AGENT_TOOLS, audit M8):
+  // every other action refuses a delegated token. Both are no-ops for sessions.
+  const scope = parsed.data.action === 'raise_dispute'
+    ? await requireToolScope('draft_dispute')
+    : await requireNotDelegated(`POST /orders/[id]/transition (${parsed.data.action})`)
+  if (scope) return scope
 
   const admin = await createAdminClient()
   const actor = await resolveActor(admin, userId)
