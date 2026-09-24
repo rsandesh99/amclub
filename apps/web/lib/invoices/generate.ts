@@ -8,9 +8,11 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
 const BUCKET = 'invoices'
 // StandardFonts can't encode ₹ — use "INR " in PDFs.
 const inr = (paise: number) => 'INR ' + (paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })
-// …nor Indic scripts: a line label (a title, a provider-typed add-on label) keeps
-// only what the standard font encodes, so a label can never fail the invoice.
-const pdfSafe = (text: string) => text.replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '?')
+// …nor Indic scripts: EVERY drawn string (header values such as the buyer's and
+// provider's names, line labels, totals) keeps only what the standard font
+// encodes, so no name can fail the invoice (ADR 026 / audit H8). Proper Indic
+// rendering needs a shaping-capable renderer (follow-up).
+export const pdfSafe = (text: string) => text.replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '?')
 
 interface Line {
   label: string
@@ -26,12 +28,12 @@ async function buildPdf(title: string, header: Record<string, string>, lines: Li
   let y = 800
 
   page.drawText('AMClub', { x: 50, y, size: 22, font: bold, color: green })
-  page.drawText(title, { x: 50, y: y - 26, size: 13, font: bold })
+  page.drawText(pdfSafe(title), { x: 50, y: y - 26, size: 13, font: bold })
   y -= 70
 
   for (const [k, v] of Object.entries(header)) {
-    page.drawText(`${k}:`, { x: 50, y, size: 10, font: bold })
-    page.drawText(v, { x: 180, y, size: 10, font })
+    page.drawText(pdfSafe(`${k}:`), { x: 50, y, size: 10, font: bold })
+    page.drawText(pdfSafe(v), { x: 180, y, size: 10, font })
     y -= 18
   }
   y -= 12
@@ -40,14 +42,14 @@ async function buildPdf(title: string, header: Record<string, string>, lines: Li
 
   for (const line of lines) {
     page.drawText(pdfSafe(line.label), { x: 50, y, size: 11, font })
-    page.drawText(line.value, { x: 400, y, size: 11, font })
+    page.drawText(pdfSafe(line.value), { x: 400, y, size: 11, font })
     y -= 22
   }
   y -= 6
   page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) })
   y -= 26
-  page.drawText(totalLabel, { x: 50, y, size: 13, font: bold })
-  page.drawText(totalValue, { x: 400, y, size: 13, font: bold, color: green })
+  page.drawText(pdfSafe(totalLabel), { x: 50, y, size: 13, font: bold })
+  page.drawText(pdfSafe(totalValue), { x: 400, y, size: 13, font: bold, color: green })
 
   page.drawText('Provisional GST structure (SAC 9985/9997) — pending CA sign-off. TEST MODE.', {
     x: 50, y: 40, size: 8, font, color: rgb(0.5, 0.5, 0.5),

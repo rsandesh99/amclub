@@ -1952,7 +1952,16 @@
     "confirm_release_body": "The provider’s payout of {amount} is scheduled and the buyer receives no refund.",
     "confirm_refund_partial_title": "Issue a partial refund?",
     "confirm_refund_partial_body": "The buyer is refunded {amount} of the {total} order total; the provider’s payout is reduced accordingly.",
-    "confirm_resolution_final": "This resolves the dispute and moves money. It cannot be undone from this screen."
+    "confirm_resolution_final": "This resolves the dispute and moves money. It cannot be undone from this screen.",
+    "finish_refund": "Finish refund",
+    "release_in_payouts": "Release from Payouts",
+    "money_err_payout_held_use_release": "This payout is on hold. Release it from Payouts, where its checks and evidence are shown.",
+    "money_err_payout_not_failed": "Only a failed payout can be retried here. This one is not failed.",
+    "money_err_payout_changed": "The payout changed while you were looking. Reload and check it again.",
+    "money_err_order_not_releasable": "The order is not in a state that allows a payout (for example, it is disputed). Nothing was paid.",
+    "money_err_order_changed": "The order changed while you were looking. Reload and check it again.",
+    "money_err_refund_failed": "The refund did not go through, so the order stays cancelled with the refund owed. It is retried automatically every hour, or try again here.",
+    "money_err_not_refund_owed": "This order is not a cancelled order that is owed a refund."
   },
   "gateway": {
     "meta_title": "AMClub — Verified business services for MSMEs",

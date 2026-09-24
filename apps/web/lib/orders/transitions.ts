@@ -4,6 +4,7 @@ import {
   isValidOrderTransition,
   computeRefundPaise,
   PAYOUT_RELEASE_STATUSES,
+  ORDER_REFUND_OWED_STATUSES,
   DISPUTABLE_STATUSES,
   type OrderStatus,
   type DisputeResolution,
@@ -301,17 +302,23 @@ export async function applyTransition(
   }
   if (action === 'cancel') patch['cancelled_reason'] = 'buyer_cancelled'
 
-  const { error: updErr } = await admin.from('orders').update(patch).eq('id', orderId)
+  // ADR 026 (H6) — compare-and-set: the write lands only if the order is still
+  // in the status this action was validated against. The loser of a race (a
+  // cron, the other party) gets 409 and runs no side effect.
+  const { data: moved, error: updErr } = await admin.from('orders').update(patch).eq('id', orderId).eq('status', from).select('id')
   if (updErr) return { ok: false, status: 500, error: updErr.message }
+  if (!moved?.length) return { ok: false, status: 409, error: 'order_changed' }
 
-  await addEvent(admin, orderId, action, actor.userId, extra ?? null)
+  // A cancel records the status it left: the refund policy % depends on it, and a
+  // re-driven refund (finishRefund) reads it back.
+  await addEvent(admin, orderId, action, actor.userId, action === 'cancel' ? { ...(extra ?? {}), from } : extra ?? null)
 
   const updated = { ...order, ...patch }
 
   // Side effects after the state change.
   if (action === 'accept_delivery') {
     await schedulePayout(admin, updated)
-    await generateInvoices(admin, orderId)
+    await safeGenerateInvoices(admin, orderId)
     // E12c — a bundle child's completion (its own payout above, like any order).
     if (updated.bundle_seq) captureServerEvent(actor.userId, 'bundle_milestone_completed', { seq: updated.bundle_seq })
   }
@@ -346,12 +353,8 @@ export async function applyTransition(
     }
   }
   if (action === 'cancel') {
-    const refunded = await processRefund(admin, updated, from)
-    if (refunded > 0) {
-      await admin.from('orders').update({ status: 'refunded' }).eq('id', orderId)
-      await addEvent(admin, orderId, 'refunded', null, { amount_paise: refunded })
-      updated.status = 'refunded'
-    }
+    const r = await settleCancellationRefund(admin, updated, from)
+    updated.status = r.status
   }
 
   // Notify the counterparty (+ review prompt on completion). Never block the txn.
@@ -385,13 +388,16 @@ export async function autoCancelOrder(admin: Admin, order: any): Promise<boolean
   // E12c — a bundle child's 24 h starts when it becomes actionable.
   if (order.available_at && new Date(order.available_at).getTime() > Date.now() - 24 * 3600 * 1000) return false
   if (!isValidOrderTransition('placed', 'auto_cancelled')) return false
-  await admin.from('orders').update({ status: 'auto_cancelled', cancelled_reason: 'no_accept_24h', updated_at: new Date().toISOString() }).eq('id', order.id)
-  await addEvent(admin, order.id, 'auto_cancelled', null, { reason: 'no_accept_24h' })
-  const refunded = await processRefund(admin, order, 'placed')
-  if (refunded > 0) {
-    await admin.from('orders').update({ status: 'refunded' }).eq('id', order.id)
-    await addEvent(admin, order.id, 'refunded', null, { amount_paise: refunded })
-  }
+  // ADR 026 (H6) — compare-and-set: a provider who accepted a moment ago wins.
+  const { data: moved } = await admin
+    .from('orders')
+    .update({ status: 'auto_cancelled', cancelled_reason: 'no_accept_24h', updated_at: new Date().toISOString() })
+    .eq('id', order.id)
+    .eq('status', 'placed')
+    .select('id')
+  if (!moved?.length) return false
+  await addEvent(admin, order.id, 'auto_cancelled', null, { reason: 'no_accept_24h', from: 'placed' })
+  await settleCancellationRefund(admin, { ...order, status: 'auto_cancelled' }, 'placed')
   try { await notifyAutoCancelled(admin, order) } catch (e) { console.error('[notifyAutoCancelled]', e) }
   return true
 }
@@ -401,13 +407,141 @@ export async function autoAcceptOrder(admin: Admin, order: any): Promise<boolean
   if (order.status !== 'delivered') return false
   if (!isValidOrderTransition('delivered', 'completed')) return false
   const completedAt = new Date().toISOString()
-  await admin.from('orders').update({ status: 'completed', completed_at: completedAt, updated_at: completedAt }).eq('id', order.id)
+  // ADR 026 (H6) — compare-and-set: a dispute or revision raised since the cron
+  // read this row wins; the cron completes nothing and schedules no payout.
+  const { data: moved } = await admin
+    .from('orders')
+    .update({ status: 'completed', completed_at: completedAt, updated_at: completedAt })
+    .eq('id', order.id)
+    .eq('status', 'delivered')
+    .select('id')
+  if (!moved?.length) return false
   await addEvent(admin, order.id, 'auto_accepted', null, { reason: '72h_auto_accept' })
   const updated = { ...order, status: 'completed', completed_at: completedAt }
   await schedulePayout(admin, updated)
-  await generateInvoices(admin, order.id)
+  await safeGenerateInvoices(admin, order.id)
   if (order.bundle_seq) captureServerEvent('system', 'bundle_milestone_completed', { seq: order.bundle_seq })
   try { await notifyAutoAccepted(admin, updated) } catch (e) { console.error('[notifyAutoAccepted]', e) }
   return true
+}
+
+// ── ADR 026 — durable refunds and invoices ───────────────────────────────────
+
+
+/**
+ * Refund a cancelled order and move it to 'refunded'. Never throws: a refund
+ * failure leaves the order in its cancelled status with a 'refund_failed' event,
+ * and finishRefund (the auto-cancel cron's sweeper, or ops) completes it later.
+ * processRefund is key-guarded and finds a refund the gateway already made, so a
+ * re-drive never refunds twice.
+ */
+export async function settleCancellationRefund(
+  admin: Admin,
+  order: any,
+  fromStatus: OrderStatus,
+): Promise<{ status: string; refundedPaise: number; error?: string }> {
+  let refunded = 0
+  try {
+    refunded = await processRefund(admin, order, fromStatus)
+  } catch (e) {
+    const reason = e instanceof Error ? e.message.slice(0, 200) : 'refund_error'
+    console.error('[settleCancellationRefund] refund failed', order.id, reason)
+    await addEvent(admin, order.id, 'refund_failed', null, { reason, from: fromStatus })
+    return { status: order.status, refundedPaise: 0, error: 'refund_failed' }
+  }
+  if (refunded <= 0) return { status: order.status, refundedPaise: 0 }
+  const { data: moved } = await admin
+    .from('orders')
+    .update({ status: 'refunded', updated_at: new Date().toISOString() })
+    .eq('id', order.id)
+    .eq('status', order.status)
+    .select('id')
+  if (moved?.length) {
+    await addEvent(admin, order.id, 'refunded', null, { amount_paise: refunded })
+    return { status: 'refunded', refundedPaise: refunded }
+  }
+  const { data: now } = await admin.from('orders').select('status').eq('id', order.id).maybeSingle()
+  return { status: (now?.status as string) ?? order.status, refundedPaise: refunded }
+}
+
+/** The status a cancelled order left: the cancel event records it; older rows fall back to the timeline. */
+async function cancelledFrom(admin: Admin, order: any): Promise<OrderStatus> {
+  if (order.status !== 'cancelled_by_buyer') return 'placed' // auto_cancelled / cancelled_duplicate leave 'placed'
+  const { data: ev } = await admin.from('order_events').select('payload').eq('order_id', order.id).eq('event', 'cancel').order('created_at', { ascending: false }).limit(1).maybeSingle()
+  const recorded = (ev?.payload as { from?: string } | null)?.from
+  if (recorded === 'placed' || recorded === 'accepted') return recorded
+  const { data: accepted } = await admin.from('order_events').select('id').eq('order_id', order.id).eq('event', 'accept').limit(1)
+  return (accepted ?? []).length > 0 ? 'accepted' : 'placed'
+}
+
+/** Complete the refund a cancelled order is still owed (ops "Finish refund", and the sweeper). */
+export async function finishRefund(
+  admin: Admin,
+  order: any,
+): Promise<{ ok: boolean; error?: string; refundedPaise?: number; status?: string }> {
+  if (!ORDER_REFUND_OWED_STATUSES.includes(order.status)) return { ok: false, error: 'not_refund_owed' }
+  const r = await settleCancellationRefund(admin, order, await cancelledFrom(admin, order))
+  if (r.error) return { ok: false, error: r.error }
+  return { ok: true, refundedPaise: r.refundedPaise, status: r.status }
+}
+
+/** Sweeper (auto-cancel cron): cancelled orders from the last 30 days still owed a refund, idle ≥ 10 minutes. */
+export async function redriveCancellationRefunds(admin: Admin): Promise<{ checked: number; refunded: number; failed: number }> {
+  const idle = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+  const { data: rows } = await admin
+    .from('orders')
+    .select('*')
+    .in('status', [...ORDER_REFUND_OWED_STATUSES])
+    .lt('updated_at', idle)
+    .gt('updated_at', since)
+    .order('updated_at', { ascending: true })
+    .limit(100)
+  let refunded = 0
+  let failed = 0
+  for (const o of rows ?? []) {
+    const payment = await paymentForOrder<{ id: string }>(admin, o, 'id')
+    if (!payment) continue
+    // A processed refund whose order never moved is healed too: processRefund
+    // returns the processed amount without calling the gateway again.
+    const r = await finishRefund(admin, o)
+    if (r.ok && (r.refundedPaise ?? 0) > 0) refunded++
+    else if (!r.ok) failed++
+  }
+  return { checked: (rows ?? []).length, refunded, failed }
+}
+
+/** Invoices never fail an order action (ADR 026 / H8): a failure is recorded and swept later. */
+export async function safeGenerateInvoices(admin: Admin, orderId: string): Promise<void> {
+  try {
+    await generateInvoices(admin, orderId)
+  } catch (e) {
+    const reason = e instanceof Error ? e.message.slice(0, 200) : 'invoice_error'
+    console.error('[generateInvoices]', orderId, reason)
+    await addEvent(admin, orderId, 'invoice_failed', null, { reason })
+  }
+}
+
+/** Sweeper (reconcile cron): orders completed in the last 30 days with no invoice yet. */
+export async function generateMissingInvoices(admin: Admin): Promise<{ checked: number; generated: number }> {
+  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+  const { data: rows } = await admin
+    .from('orders')
+    .select('id')
+    .in('status', [...PAYOUT_RELEASE_STATUSES, 'reviewed'])
+    .gt('completed_at', since)
+    .order('completed_at', { ascending: false })
+    .limit(500)
+  const ids = (rows ?? []).map((r) => r.id as string)
+  if (ids.length === 0) return { checked: 0, generated: 0 }
+  const { data: have } = await admin.from('invoices').select('order_id').in('order_id', ids)
+  const invoiced = new Set((have ?? []).map((r) => r.order_id as string))
+  let generated = 0
+  for (const id of ids) {
+    if (invoiced.has(id)) continue
+    await safeGenerateInvoices(admin, id)
+    generated++
+  }
+  return { checked: ids.length, generated }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

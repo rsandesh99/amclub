@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, use } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
+import { ORDER_REFUND_OWED_STATUSES } from '@amclub/shared'
 import { formatINR } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
@@ -43,7 +44,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
   if (loading || !data) return <p className="text-sm text-foreground-secondary">{t('loading')}</p>
   const { order, events, payment, payout, refund, dossier } = data
-  const payoutStuck = payout && (payout.status === 'failed' || payout.status === 'held')
+  // ADR 026 — retry here is for FAILED payouts; a held one is released from Payouts.
+  const payoutFailed = payout?.status === 'failed'
+  const payoutHeld = payout?.status === 'held'
+  const refundOwed = Boolean(payment) && ORDER_REFUND_OWED_STATUSES.includes(order.status) && refund?.status !== 'processed'
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -61,8 +65,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <div className="flex flex-wrap gap-2 rounded-card border border-border bg-surface p-4">
-        {payoutStuck && <Button onClick={() => act({ action: 'retry_payout' })} loading={busy}>{t('retry_payout')}</Button>}
-        {payment && !refund && <Button variant="outline" onClick={manualRefund} loading={busy}>{t('manual_refund')}</Button>}
+        {payoutFailed && <Button onClick={() => act({ action: 'retry_payout' })} loading={busy}>{t('retry_payout')}</Button>}
+        {payoutHeld && <Button variant="outline" onClick={() => router.push('/admin/payouts')}>{t('release_in_payouts')}</Button>}
+        {refundOwed && <Button onClick={() => act({ action: 'finish_refund' })} loading={busy}>{t('finish_refund')}</Button>}
+        {payment && !refund && !refundOwed && <Button variant="outline" onClick={manualRefund} loading={busy}>{t('manual_refund')}</Button>}
       </div>
 
       {/* S1.4 — the Payout-Evidence agent's dossier (the detail route returns `dossier` only while AGENT_ENABLED). */}

@@ -18,7 +18,7 @@ config({ path: path.resolve(__dirname, '../.env.local') })
 
 import { createClient } from '@supabase/supabase-js'
 import { paymentsAvailable } from '../lib/payments/simulation'
-import { bundlePlan, computeOrderAmounts, packageCharge, type BundleMilestoneRow, type PackageAddonRow } from '@amclub/shared'
+import { bundlePlan, computeOrderAmounts, computeRefundPaise, packageCharge, type BundleMilestoneRow, type PackageAddonRow } from '@amclub/shared'
 
 const URL = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -451,6 +451,99 @@ async function main() {
   const { data: ev5 } = await admin.from('order_events').select('payload').eq('order_id', o5).eq('event', 'payout_failed').maybeSingle()
   const fee5 = (ev5?.payload as { reason?: string; fee?: { estimatedFeePaise?: number; commissionPaise?: number; reason?: string } } | null)
   check("payout_failed event says fee_headroom with the numbers (fee > commission)", fee5?.reason === 'fee_headroom' && fee5?.fee?.reason === 'exceeds_commission' && (fee5?.fee?.estimatedFeePaise ?? 0) > (fee5?.fee?.commissionPaise ?? -1))
+
+  // ── DC 11 (ADR 026): one release rule, confirmed transfers, compare-and-set, durable refunds + invoices ──
+  console.log('\nDC11 — ADR 026: release rule, confirmed transfers, compare-and-set, durable refunds and invoices:')
+  {
+    const adminPost = (path: string, body: unknown) => fetch(`${BASE}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` }, body: JSON.stringify(body) })
+    const toDelivered = async (o: string) => {
+      await transition(o, 'accept', providerToken)
+      await transition(o, 'submit_requirements', buyerToken)
+      await transition(o, 'start', providerToken)
+      await transition(o, 'deliver', providerToken)
+    }
+    const payoutOf = async (o: string) => (await admin.from('payouts').select('id, status, razorpay_transfer_id').eq('order_id', o).maybeSingle()).data
+
+    // H8 — an Indic business name no longer fails the invoice (or the accept that triggers it).
+    await admin.from('msme_profiles').update({ business_name: 'शर्मा ट्रेडर्स' }).eq('id', msmeId)
+    const o7 = await makePaidOrder(commissionBps)
+    await toDelivered(o7)
+    const acc7 = await transition(o7, 'accept_delivery', buyerToken)
+    const { count: inv7 } = await admin.from('invoices').select('id', { count: 'exact', head: true }).eq('order_id', o7)
+    check('an Indic business name: accept-delivery → 200 and both invoices generated', acc7.status === 200 && inv7 === 2)
+    await admin.from('msme_profiles').update({ business_name: 'KT Buyer' }).eq('id', msmeId)
+
+    // H5 — the order-page retry retries FAILED payouts only; a held one is released from Payouts.
+    const p7 = await payoutOf(o7)
+    await admin.from('payouts').update({ status: 'held' }).eq('id', p7!.id)
+    const r7 = await adminPost(`/api/v1/admin/orders/${o7}`, { action: 'retry_payout' })
+    const r7body = await r7.json().catch(() => ({}))
+    check('"Retry payout" refuses a HELD payout (409 payout_held_use_release) and moves nothing', r7.status === 409 && r7body.error === 'payout_held_use_release' && (await payoutOf(o7))?.status === 'held')
+    const rel7 = await adminPost(`/api/v1/admin/payouts/${p7!.id}`, { action: 'retry' })
+    const p7paid = await payoutOf(o7)
+    check('the admin release pays it (the release rule passes a completed order)', rel7.status === 200 && p7paid?.status === 'paid' && Boolean(p7paid?.razorpay_transfer_id))
+
+    // H9 — the transfer went through but a failure was recorded: the retry asks the gateway
+    // first and settles on the SAME transfer instead of sending a second one.
+    await admin.from('payouts').update({ status: 'failed', razorpay_transfer_id: null, paid_at: null }).eq('id', p7!.id)
+    await admin.from('order_events').insert({ order_id: o7, actor_id: null, event: 'payout_failed', payload: { payout_id: p7!.id, reason: 'killtest: timeout after the gateway accepted' } })
+    const retry7 = await adminPost(`/api/v1/admin/orders/${o7}`, { action: 'retry_payout' })
+    const p7re = await payoutOf(o7)
+    const { data: paid7 } = await admin.from('order_events').select('payload').eq('order_id', o7).eq('event', 'payout_paid')
+    const recovered = (paid7 ?? []).some((e) => (e.payload as { recovered?: boolean } | null)?.recovered === true)
+    check('a retry after an ambiguous failure finds the existing transfer: paid with the SAME transfer id, recorded as recovered', retry7.status === 200 && p7re?.status === 'paid' && p7re?.razorpay_transfer_id === p7paid?.razorpay_transfer_id && recovered)
+
+    // M19 / H5 — a disputed order's payout is never released, by the admin or by the run.
+    const o8 = await makePaidOrder(commissionBps)
+    await toDelivered(o8)
+    await transition(o8, 'accept_delivery', buyerToken)
+    const disp8 = await fetch(`${BASE}/api/v1/orders/${o8}/transition`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${buyerToken}` }, body: JSON.stringify({ action: 'raise_dispute', disputeReason: 'killtest ADR 026' }) })
+    const p8 = await payoutOf(o8)
+    await admin.from('payouts').update({ status: 'held' }).eq('id', p8!.id)
+    const rel8 = await adminPost(`/api/v1/admin/payouts/${p8!.id}`, { action: 'retry' })
+    const rel8body = await rel8.json().catch(() => ({}))
+    check('admin release refuses a payout whose order is disputed (409 order_not_releasable)', disp8.status === 200 && rel8.status === 409 && rel8body.error === 'order_not_releasable' && (await payoutOf(o8))?.status === 'held')
+    if (cronSecret) {
+      // A payout scheduled before the dispute landed: the run itself must hold it.
+      await admin.from('payouts').update({ status: 'scheduled' }).eq('id', p8!.id)
+      const run8 = await fetch(`${BASE}/api/v1/cron/payouts?all=true`, { headers: cronHeaders })
+      const p8after = await payoutOf(o8)
+      const { data: held8 } = await admin.from('order_events').select('payload').eq('order_id', o8).eq('event', 'payout_held')
+      const releaseHold = (held8 ?? []).some((e) => ((e.payload as { reasons?: string[]; at?: string } | null)?.reasons ?? []).includes('order_status:disputed'))
+      check('the payout run holds a scheduled payout whose order is disputed (reason order_status:disputed, no transfer)', run8.status === 200 && p8after?.status === 'held' && !p8after?.razorpay_transfer_id && releaseHold)
+    } else {
+      console.log('  ⏭ payout-run hold leg SKIPPED (no CRON_SECRET in env)')
+    }
+
+    // H6 — two accept-deliveries at once: one wins, the other is refused, one payout.
+    const o9 = await makePaidOrder(commissionBps)
+    await toDelivered(o9)
+    const [a9, b9] = await Promise.all([transition(o9, 'accept_delivery', buyerToken), transition(o9, 'accept_delivery', buyerToken)])
+    const { count: done9 } = await admin.from('order_events').select('id', { count: 'exact', head: true }).eq('order_id', o9).eq('event', 'accept_delivery')
+    const { count: pays9 } = await admin.from('payouts').select('id', { count: 'exact', head: true }).eq('order_id', o9)
+    const codes9 = [a9.status, b9.status].sort().join(',')
+    check('two concurrent accept-deliveries: 200 + 409, exactly one completion event and one payout', codes9 === '200,409' && done9 === 1 && pays9 === 1)
+
+    // H7 — a cancellation left without its refund is finished by the one refund engine,
+    // at the policy % of the status it was cancelled FROM (recorded on the cancel event).
+    const o10 = await makePaidOrder(commissionBps)
+    await transition(o10, 'accept', providerToken)
+    await admin.from('orders').update({ status: 'cancelled_by_buyer', cancelled_reason: 'buyer_cancelled' }).eq('id', o10)
+    await admin.from('order_events').insert({ order_id: o10, actor_id: buyerUserId, event: 'cancel', payload: { from: 'accepted' } })
+    if (cronSecret) {
+      const sweep = await fetch(`${BASE}/api/v1/cron/auto-cancel`, { headers: cronHeaders })
+      const { data: o10mid } = await admin.from('orders').select('status').eq('id', o10).single()
+      check('the sweeper leaves a just-cancelled order alone (10-minute idle guard)', sweep.status === 200 && o10mid?.status === 'cancelled_by_buyer')
+    }
+    const fin10 = await adminPost(`/api/v1/admin/orders/${o10}`, { action: 'finish_refund' })
+    const { data: o10row } = await admin.from('orders').select('status, total_paise').eq('id', o10).single()
+    const { data: pm10 } = await admin.from('payments').select('id').eq('order_id', o10).single()
+    const { data: rf10 } = await admin.from('refunds').select('status, amount_paise, idempotency_key').eq('payment_id', pm10!.id)
+    const want10 = computeRefundPaise({ totalPaise: Number(o10row!.total_paise), fromStatus: 'accepted' })
+    check(`"Finish refund" refunds the owed ${want10} paise (policy for 'accepted'), one keyed row, order refunded`, fin10.status === 200 && o10row?.status === 'refunded' && rf10?.length === 1 && rf10[0]!.status === 'processed' && Number(rf10[0]!.amount_paise) === want10 && rf10[0]!.idempotency_key === `rfnd_${o10}`)
+    const fin10b = await adminPost(`/api/v1/admin/orders/${o10}`, { action: 'finish_refund' })
+    check('a second "Finish refund" is refused (409 not_refund_owed) and refunds nothing more', fin10b.status === 409 && (await admin.from('refunds').select('id', { count: 'exact', head: true }).eq('payment_id', pm10!.id)).count === 1)
+  }
 
   // ── DC 8: auto-accept after shortened timer ──
   console.log('\nDC8 — auto-accept job (shortened timer):')
