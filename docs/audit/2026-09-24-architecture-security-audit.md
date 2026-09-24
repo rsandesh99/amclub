@@ -113,8 +113,8 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M20 | Only `payment.captured` is consumed; refund, transfer and chargeback outcomes are never reconciled | Fixed (wave 5b, PR #64, ADR 027) |
 | M21 | Checkout sessions never expire at payment time (withdrawn quotes, lapsed pools, expired coupons honoured) | Fixed (wave 5b, PR #64, ADR 027); migration 0078 (applied 2026-09-24) |
 | M22 | No self-dealing guard: one person can buy from, quote to, review and settle with their own provider profile | Fixed (wave 5b, PR #64, ADR 029); shared-account flagging open |
-| M23 | The model-provider residency and retention guard is off by default | Open |
-| M24 | The platform AI budget can be drained from outside the cohort; the Mart catalog agent and speech-to-text bypass it | Open |
+| M23 | The model-provider residency and retention guard is off by default | Partly fixed (wave 5d): fail-closed held for the founder's env decision |
+| M24 | The platform AI budget can be drained from outside the cohort; the Mart catalog agent and speech-to-text bypass it | Fixed in code (wave 5d); clarify TTS open |
 | M25 | next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j) | Fixed (wave 5a, PR #63): next-intl 4.14.7 |
 | M26 | The agent-runtime deploy workflow trusts a mutable action ref and `latest` flyctl next to FLY_API_TOKEN | Fixed (wave 5a, PR #63); Environment + Fly token are operator steps |
 | M27 | next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories) | Fixed (wave 1, PR #59) |
@@ -122,18 +122,18 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M29 | Tax and money formulas are duplicated outside shared, on different bases | Open |
 | M30 | Three different contact-masking rule sets; the weakest one guards pre-payment human messages | Fixed in code (wave 5c) |
 | M31 | CI does not exercise the production configuration, and apps/web has no unit tests | Partly fixed (wave 5a, PR #63): mart:static in CI; web unit tests open |
-| M32 | The pg-boss queue `agent.munshi.growth` is never created, so the weekly job is silently dropped | Open |
-| M33 | Inbound WhatsApp messages can be stored but never processed, invisibly to the health check | Open |
-| M34 | The public WhatsApp webhook downloads media synchronously, with no size cap or timeout, before its duplicate check | Open |
+| M32 | The pg-boss queue `agent.munshi.growth` is never created, so the weekly job is silently dropped | Fixed in code (wave 5d) |
+| M33 | Inbound WhatsApp messages can be stored but never processed, invisibly to the health check | Fixed in code (wave 5d); migration 0079 |
+| M34 | The public WhatsApp webhook downloads media synchronously, with no size cap or timeout, before its duplicate check | Fixed in code (wave 5d) |
 | M35 | Cron heartbeats only prove the job ran; failed runs stay green and handled errors never reach Sentry | Fixed (wave 5a, PR #63) |
 | M36 | An Upstash error makes every rate-limited route return 500, and a slow Upstash adds 5 s per request | Fixed (wave 5a, PR #63) |
 | M37 | Outbound calls (Resend, Surepass, MSG91, WhatsApp, Razorpay) have no timeouts and run inline in money paths | Partly fixed (wave 5a, PR #63): timeouts; outbox open |
 | M38 | Crons write the new status first and are never re-driven when the side effects fail; money crons set no maxDuration | Fixed (wave 5b, PR #64, ADR 029) |
 | M39 | Reconciliation reads only the first 100 Razorpay payments and never flags a second capture | Fixed (waves 2 + 5b, PR #64) |
 | M40 | Quote and group-offer scope / message text reaches buyers without contact masking | Fixed (wave 4, PR #62) |
-| M41 | A WhatsApp conversation stays bound to a user after a phone change | Open |
-| M42 | A typed or spoken "yes" is captured by Munshi before procurement and approves the wrong proposal | Open |
-| M43 | The payout dossier puts party-authored order titles in TRUSTED prompt parts | Open |
+| M41 | A WhatsApp conversation stays bound to a user after a phone change | Fixed in code (wave 5d); auth.users phone sync open |
+| M42 | A typed or spoken "yes" is captured by Munshi before procurement and approves the wrong proposal | Fixed in code (wave 5d) |
+| M43 | The payout dossier puts party-authored order titles in TRUSTED prompt parts | Fixed in code (wave 5d) |
 | M44 | A group (pool) quote can be re-priced, or its GST mode flipped, after close via the ordinary quote PATCH | Fixed in code (wave 5c) |
 | M45 | A provider can read competitors' sealed pool offers by joining the pool through their own buyer profile | Fixed in code (wave 5c) |
 | L1 | Admin `manual_refund` does not hold the payout, so a refund and a full payout can both go out | Fixed (wave 5b, PR #64, ADR 027) |
@@ -167,6 +167,10 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 - `price_benchmarks` has no primary key. It deliberately has no id column; see S3.2, where a composite key would do.
 
 None of these blocks the pilot. The `notifications` index (L7) and the foreign-key indexes on `orders`, `rfq_matches` and `quotes` are the ones worth doing first.
+
+## Found during remediation
+
+- **The agent runtime could not start (fixed in wave 5d).** The image's `node --import tsx src/main.ts` died at the first import ("@amclub/shared does not provide an export named agentSettingDefault"): an ESM runtime package cannot see the named exports the CommonJS-compiled source packages re-export. The Dockerfile's `pnpm deploy --legacy` was also an unknown option in the pinned pnpm 9.15, so no image could build. Most likely the runtime has never served production traffic; the agent crons read it as "not configured". The runtime package is now CommonJS, the Dockerfile builds, and a boot against a scratch database created all 15 queues.
 
 ## Refuted, recorded as a data-classification question
 
@@ -467,7 +471,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M23. The model-provider residency and retention guard is off by default
 
-- **Status:** Open
+- **Status:** Partly fixed (wave 5d). `residencyPosture()` reports the decision (enforced / waived / unconfigured) on /admin/agents and runtime /health; support prompts mask contact details. **Held by the founder (2026-09-24):** an undecided production posture refuses user-data model calls only with `AGENT_RESIDENCY_FAIL_CLOSED=true`, and the OpenRouter ZDR preference starts with the recorded decision. Closes when AGENT_RESIDENCY_WAIVER (or ENFORCE + hosts) and AGENT_RESIDENCY_FAIL_CLOSED=true are set on Vercel and the runtime
 - **Where:** `packages/agent-core/src/llm/gateway.ts:187`
 - **Raised by:** 1 finding from 1 audit team (AI agents and LLM security)
 - **Impact:** Buyer and provider personal data (DPDP-scoped) may be exported and retained by third parties, contrary to the SECURITY.md commitments. Whether this is actually happening depends on production env and account settings that the code does not enforce.
@@ -475,7 +479,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M24. The platform AI budget can be drained from outside the cohort; the Mart catalog agent and speech-to-text bypass it
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5d). The Mart catalog agent and the group-buy pitch go through the bounded helper (budget + ledger); catalog drafts need an active `sells_goods` provider (403 `not_a_seller`); speech-to-text is budget-checked and charged; users outside the cohort spend from a separate `budget_month_open_paise` envelope. The cohort-only clarify TTS is not on the budget
 - **Where:** `apps/web/lib/mart/catalog-agent.ts:152`
 - **Raised by:** 1 finding from 1 audit team (AI agents and LLM security)
 - **Impact:** Low-cost denial of service of every AI feature, plus unbounded vendor spend on the paths that skip the budget. SECURITY.md claims the budget 'cannot be bypassed', which these paths contradict.
@@ -539,7 +543,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M32. The pg-boss queue `agent.munshi.growth` is never created, so the weekly job is silently dropped
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5d). One queue registry (`queues.ts`); the worker creates every queue before sending (`agent.munshi.growth` was never created); a send that queues nothing is 503 `enqueue_dropped`; crons record `enqueued` only with a job id; a unit test proves every queue used is created
 - **Where:** `apps/agent-runtime/src/worker.ts:260`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** S2.4's weekly growth nudges never run in production, and the monitoring shows the job as healthy. Any future queue added the same way would fail silently too.
@@ -547,7 +551,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M33. Inbound WhatsApp messages can be stored but never processed, invisibly to the health check
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5d). The process exits when the worker cannot start (Fly restarts it); /health reports the worker, DATABASE_URL and the last sweep; the webhook answers 5xx when storing fails; a sweep every minute re-queues unprocessed inbound messages (job id = message id, `wa_messages.processed_at`, 0079)
 - **Where:** `apps/agent-runtime/src/whatsapp/inbound.ts:106`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** STOP requests, onboarding answers and procurement or support replies are never handled, and no one is alerted. An unhonoured STOP is a consent-compliance problem.
@@ -555,7 +559,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M34. The public WhatsApp webhook downloads media synchronously, with no size cap or timeout, before its duplicate check
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5d). The webhook stores the message and never downloads; the job downloads media only for a known, opted-in number, with a type allow-list, a size check, a streamed byte cap and a timeout; Interakt media URLs must be https on a public host
 - **Where:** `apps/agent-runtime/src/whatsapp/inbound.ts:85`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** The only runtime machine can run out of memory and restart, which interrupts every agent job and the webhook. The wa-media bucket also fills with files from unknown numbers.
@@ -611,7 +615,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M41. A WhatsApp conversation stays bound to a user after a phone change
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5d). Every inbound message re-derives the phone's owner and unbinds / revokes / cancels on a change; WhatsApp consent must come from the conversation's phone everywhere it is resolved; outbound goes only to the user's current phone; a trigger (0079) unbinds on `users.phone` change. Keeping `public.users.phone` in sync with `auth.users.phone` (a trigger in the auth schema) is open
 - **Where:** `apps/agent-runtime/src/whatsapp/inbound.ts:125`
 - **Raised by:** 1 finding from 1 audit team (Agent runtime job handlers and WhatsApp identity binding (about 3,000 unread lines on the service role))
 - **Impact:** A third party can read another account's private order and RFQ data and take agent actions in its name: send binding quotes and messages to buyers, create RFQs, decline quotes. It also receives all proactive agent messages meant for the account. No money moves, because payment still needs the web session. Consent and STOP state can be changed by the wrong person.
@@ -619,7 +623,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M42. A typed or spoken "yes" is captured by Munshi before procurement and approves the wrong proposal
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5d). A typed / spoken yes binds to at most one open proposal across Munshi, procurement and support (a quoted card binds to that card; otherwise only a single open proposal, Munshi within 30 minutes); anything ambiguous re-sends the cards; the jobs refuse a text approval the dispatcher did not bind. Eval set `confirmation_binding` 20/20
 - **Where:** `apps/agent-runtime/src/agents/munshi/index.ts:917`
 - **Raised by:** 1 finding from 1 audit team (Agent runtime job handlers and WhatsApp identity binding (about 3,000 unread lines on the service role))
 - **Impact:** The confirmation gate for a money-adjacent, binding action (a price quote or a message to a buyer) can be met by a 'yes' meant for a different proposal or a different agent. The platform then sends an offer the provider did not intend, and the buyer's own request is silently dropped.
@@ -627,7 +631,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M43. The payout dossier puts party-authored order titles in TRUSTED prompt parts
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5d). The payout dossier prompt is built in agent-core (`buildPhotoPlausibilityParts`) with the party-authored order title as an Envelope; the eval harness uses the same builder with attack text in the title and the note
 - **Where:** `apps/agent-runtime/src/agents/payout-dossier/index.ts:183`
 - **Raised by:** 1 finding from 1 audit team (Agent runtime job handlers and WhatsApp identity binding (about 3,000 unread lines on the service role))
 - **Impact:** The recommendation shown to the founder for releasing held payouts, and the later dispute-triage card, can be steered by one party. PAYOUT_AUTO_RELEASE is off, so a human still decides. The risk is to the integrity of a money decision aid.
