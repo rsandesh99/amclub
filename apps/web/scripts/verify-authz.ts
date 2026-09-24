@@ -630,6 +630,23 @@ async function main() {
     deniedRows('provA INSERTs a milestone directly', await asUser(provA.token).from('bundle_milestones').insert({ package_id: pkgA!.id, seq: 1, label_i18n: { en: 'x' }, due_offset_days: 10, share_bps: 5000 }).select('id'))
     deniedRows('buyerA INSERTs a bundle purchase directly', await asUser(buyerA.token).from('bundle_purchases').insert({ msme_id: msmeA!.id, provider_id: provAId, checkout_session_id: crypto.randomUUID(), total_paise: 1, title: 'forged' }).select('id'))
 
+    // ── 7a5. ADR 022 (0070) — order_safe_view applies the caller's RLS (it ran as its BYPASSRLS owner) ──
+    console.log('order_safe_view (ADR 022, direct PostgREST):')
+    {
+      const anonClient = createClient(URL_, ANON, { auth: { persistSession: false } })
+      deniedRows('anon reads order_safe_view (any order)', await anonClient.from('order_safe_view').select('id, msme_phone'))
+      deniedRows('anon reads order A through order_safe_view', await anonClient.from('order_safe_view').select('id').eq('id', orderA))
+      deniedRows('buyerB reads A’s order through order_safe_view', await bClient.from('order_safe_view').select('id, msme_phone').eq('id', orderA))
+      deniedRows('provB reads A’s order through order_safe_view', await asUser(provB.token).from('order_safe_view').select('id').eq('id', orderA))
+      eq('buyerA reads OWN order through order_safe_view → 1 row (control)', ((await asUser(buyerA.token).from('order_safe_view').select('id').eq('id', orderA)).data ?? []).length, 1)
+      const provRows = ((await asUser(provA.token).from('order_safe_view').select('id, msme_phone').eq('id', orderA)).data ?? []) as { id: string; msme_phone: string | null }[]
+      eq('provA reads OWN order through the view, buyer phone never exposed', provRows.length === 1 && provRows[0]!.msme_phone === null, true)
+      const { data: ordBefore } = await admin.from('orders').select('status, total_paise').eq('id', orderA).single()
+      deniedRows('buyerA rewrites OWN order total through order_safe_view', await asUser(buyerA.token).from('order_safe_view').update({ total_paise: 1 }).eq('id', orderA).select('id'))
+      const { data: ordAfter } = await admin.from('orders').select('status, total_paise').eq('id', orderA).single()
+      eq('order A unchanged after the view write attempt', JSON.stringify(ordAfter), JSON.stringify(ordBefore))
+    }
+
     // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
     console.log('users privilege guard (0042, direct PostgREST):')
     eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)

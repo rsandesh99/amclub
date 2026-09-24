@@ -774,8 +774,12 @@ CREATE POLICY "orders: admin all" ON orders
 -- DROP first: the view is `o.*`, so any new orders column shifts the column
 -- list and CREATE OR REPLACE errors (42P16) — found by the Phase 8 restore
 -- drill, where the freshly-migrated schema had a column live's view lacked.
+-- security_invoker (ADR 022, 0070): the caller's RLS on orders / users /
+-- msme_profiles applies — without it the view ran as its BYPASSRLS owner and
+-- anon read every order. The REVOKE follows the CREATE because default
+-- privileges re-grant ALL to the client roles on every new view.
 DROP VIEW IF EXISTS order_safe_view;
-CREATE VIEW order_safe_view AS
+CREATE VIEW order_safe_view WITH (security_invoker = true) AS
   SELECT
     o.*,
     CASE
@@ -791,6 +795,8 @@ CREATE VIEW order_safe_view AS
       )
     END AS msme_phone
   FROM orders o;
+REVOKE ALL ON order_safe_view FROM anon, authenticated;
+GRANT SELECT ON order_safe_view TO authenticated;
 
 -- ─── order_events ─────────────────────────────────────────────────────────────
 

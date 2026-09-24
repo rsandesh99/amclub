@@ -61,7 +61,10 @@ Stop if any suite is red or the preflight has a FAIL. WARN rows are the founder'
 
 1. **Freeze.** No other deploys. Confirm `/admin/payouts` has no aged held payouts and no
    open incident (preflight item 6).
-2. **Apply migrations** to prod in order, each idempotent: `0022_mart_catalog.sql`,
+2. **Apply migrations.** *Status 2026-09-24: done on prod.* 0022–0025 and 0069 are applied
+   (Mart launches together with services), and so are 0070 (ADR 022) and every services migration.
+   On flip day, run only the `verify-migrations.ts` check below. The original procedure, for any
+   other database: apply to prod in order, each idempotent: `0022_mart_catalog.sql`,
    `0023_mart_pools.sql`, `0024_mart_goods_rfq.sql`, `0025_mart_launch_config.sql`,
    `0069_mart_storefront_v2.sql` (E16: typed attributes, promises, samples, returnable / ITC flags,
    reorder reminders — Mart tables only), then `rls/policies.sql`. Use `packages/db/src/scripts/apply-sql.ts` with `DATABASE_URL`, or
