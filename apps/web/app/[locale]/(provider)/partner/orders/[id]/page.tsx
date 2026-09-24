@@ -21,7 +21,7 @@ export default async function PartnerOrderPage({ params, searchParams }: { param
   // in parallel with each other — services orders never touch the Mart path.
   const [documents, goods] = await Promise.all([
     getOrderDocuments(id),
-    detail.order['kind'] === 'goods' ? getGoodsOrderExtras(await createAdminClient(), detail.order) : Promise.resolve(undefined),
+    detail.order['kind'] === 'goods' ? getGoodsOrderExtras(await createAdminClient(), detail.order, detail.viewerRole) : Promise.resolve(undefined),
   ])
 
   // E9b (FR-9.5, dark): the provider records the certificate a registration order produced.

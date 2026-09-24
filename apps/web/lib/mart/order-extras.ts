@@ -1,5 +1,6 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
+import type { OrderDetail } from '@/lib/orders/queries'
 import { orderReturnable, returnWindowHoursForOrder } from './release'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -14,17 +15,25 @@ export interface GoodsOrderExtras {
   returnWindowHours: number
   /** E16 N43 — false: only damaged / wrong / short claims can be opened. */
   returnable: boolean
+  /** The seller's payout: only for the seller. Always null for the buyer (audit L8). */
   payout: { status: string; scheduledFor: string | null; amountPaise: number } | null
   sellerName: string
   sellerSlug: string
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export async function getGoodsOrderExtras(admin: Admin, order: any): Promise<GoodsOrderExtras> {
+/**
+ * `viewerRole` is getOrderDetail's: the payout (the seller's net take, its status —
+ * a hold hints at a dispute, a suspension or an unverified bank — and its date) is
+ * read only for the provider, mirroring the services gate in lib/orders/queries.ts.
+ */
+export async function getGoodsOrderExtras(admin: Admin, order: any, viewerRole: OrderDetail['viewerRole']): Promise<GoodsOrderExtras> {
   const [returnWindowHours, returnable, { data: payout }, { data: seller }] = await Promise.all([
     returnWindowHoursForOrder(admin, order),
     orderReturnable(admin, order),
-    admin.from('payouts').select('status, scheduled_for, amount_paise').eq('order_id', order.id).maybeSingle(),
+    viewerRole === 'provider'
+      ? admin.from('payouts').select('status, scheduled_for, amount_paise').eq('order_id', order.id).maybeSingle()
+      : Promise.resolve({ data: null }),
     admin.from('provider_profiles').select('display_name, slug').eq('id', order.provider_id).maybeSingle(),
   ])
   return {
