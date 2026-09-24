@@ -172,7 +172,21 @@ async function nextStep(page: Page, label: string | RegExp): Promise<void> {
   const bar = page.getByTestId('order-next-step-bar').filter({ visible: true }).first()
   await bar.waitFor()
   const n = await page.getByTestId('order-next-step-bar').count()
-  if (n > 1) console.log(`    ! ${n} next-step bars in the DOM on ${new URL(page.url()).pathname}`)
+  if (n > 1) {
+    // Where each copy lives: visible or not, and its nearest identifiable ancestors.
+    const where = await page.getByTestId('order-next-step-bar').evaluateAll((els) => els.map((el) => {
+      const chain: string[] = []
+      for (let p = el.parentElement; p && chain.length < 6; p = p.parentElement) {
+        const id = p.id ? `#${p.id}` : ''
+        const tid = p.getAttribute('data-testid') ? `[${p.getAttribute('data-testid')}]` : ''
+        const hid = p.hidden || p.getAttribute('aria-hidden') === 'true' ? '(hidden)' : ''
+        if (id || tid || hid) chain.push(`${p.tagName.toLowerCase()}${id}${tid}${hid}`)
+      }
+      const r = el.getBoundingClientRect()
+      return `${r.width > 0 && r.height > 0 ? 'visible' : 'not visible'} next=${el.getAttribute('data-next')} in ${chain.join(' < ') || '(no marked ancestor)'}`
+    }))
+    console.log(`    ! ${n} next-step bars in the DOM on ${new URL(page.url()).pathname}: ${where.join(' | ')}`)
+  }
   await bar.getByRole('button', { name: label }).click()
 }
 
