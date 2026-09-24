@@ -142,7 +142,7 @@ any → held               (dispute open, provider suspended, or bank verificati
   - One review report never hides a review: three distinct reporters, never the reviewed provider, never after an ops restore.
   - 0075: clients cannot read `rfq_clarifications.provider_id` / `answered_by` (column grant) or `coupons`. `verify-authz` §10 proves it with hand-signed delegated tokens.
 - **Audit wave 4 landed (privacy, migration 0076; applied to production 2026-09-24):** a matched seller sees where, not who (shared `goodsSpecForSeller` strips the buyer's contact name, phone and street address from a goods request). Quote and group-offer text is contact-masked before storage (`quoteRowColumns`, `redactContactInfo`). The public pool API never returns the agent rationale (`publicPool`; 0076 withdraws the column from clients). RFQ attachments must be the buyer's own uploads and are signed only under the owner's prefix (`attachmentRefAllowed`); licence certificates only under `<msme_id>/<licence_id>/`.
-- **Audit wave 5a landed (operations, migration 0080):**
+- **Audit wave 5a landed (operations, migration 0080; applied to production 2026-09-24):**
   - **Every scheduled cron runs through `runCronJob`** and is listed in `lib/jobs/cron-registry.ts` with its degraded rule; a new cron is added to `vercel.json`, its route folder and the registry together (`pnpm lint` fails otherwise). Heartbeats store ok / degraded / failed; failures reach Sentry.
   - Rate limiting never 500s: `enforce()` fails open on an Upstash error for ordinary limiters; cost-bearing limiters keep enforcing in memory. **Every outbound fetch carries a timeout.**
   - CI supply chain: pin every action to a commit SHA; the Fly deploy runs only from master in the `production` environment.
