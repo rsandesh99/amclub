@@ -770,6 +770,23 @@ REVOKE INSERT, UPDATE, DELETE ON orders, checkout_sessions, payments, payouts, r
 REVOKE EXECUTE ON FUNCTION materialize_order(text, text, bigint, text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION materialize_order(text, text, bigint, text, jsonb) TO service_role;
 
+-- ─── capture_exceptions + capture_payment() (0078, ADR 027) — service role only ──
+-- A captured payment that created no order (expired session, second capture):
+-- no client role reads or writes it; capture_payment() is the capture path's RPC.
+DO $capture_truth$
+BEGIN
+  IF to_regclass('public.capture_exceptions') IS NOT NULL THEN
+    ALTER TABLE capture_exceptions ENABLE ROW LEVEL SECURITY;
+    REVOKE ALL ON capture_exceptions FROM PUBLIC, anon, authenticated;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON capture_exceptions TO service_role;
+  END IF;
+  IF to_regprocedure('public.capture_payment(text, text, bigint, text, jsonb, integer)') IS NOT NULL THEN
+    REVOKE EXECUTE ON FUNCTION capture_payment(text, text, bigint, text, jsonb, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION capture_payment(text, text, bigint, text, jsonb, integer) TO service_role;
+  END IF;
+END
+$capture_truth$;
+
 -- ─── orders ───────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "orders: msme all own" ON orders;

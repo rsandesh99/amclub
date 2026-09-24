@@ -121,7 +121,8 @@ export const RFQ_TRANSITIONS: Record<RfqStatus, readonly RfqStatus[]> = {
   cancelled: [],
 }
 
-/** Live requirements: still collecting or choosing quotes (dashboards, "open requirements"). */
+/** Live requirements: still collecting or choosing quotes (dashboards, "open requirements").
+ *  ADR 027 (audit M21): also the only statuses a paid quote order may claim as `accepted`. */
 export const RFQ_LIVE_STATUSES: readonly RfqStatus[] = ['open', 'quoted']
 
 export function isValidRfqTransition(from: RfqStatus, to: RfqStatus): boolean {
@@ -187,13 +188,69 @@ export const PAYOUT_STATUS = {
 export const PAYOUT_TRANSITIONS: Record<PayoutStatus, readonly PayoutStatus[]> = {
   scheduled: ['processing', 'held'],
   processing: ['paid', 'failed', 'held'],
-  paid: [],
+  // ADR 027 (audit M20) — ONLY the gateway's transfer.failed / transfer.reversed
+  // webhook takes this edge: the money came back to the platform, so the payout
+  // is recorded as failed (ops decides the retry). Nothing else rewrites a paid payout.
+  paid: ['failed'],
   failed: ['scheduled'],
   held: ['scheduled'],
 }
 
 export function isValidPayoutTransition(from: PayoutStatus, to: PayoutStatus): boolean {
   return (PAYOUT_TRANSITIONS[from] as readonly string[]).includes(to)
+}
+
+// ── Refund row (one per order, ADR-014) ───────────────────────────────────────
+
+/** pending = written before the gateway call; processed = the gateway made it;
+ *  failed = the gateway reported refund.failed (ADR 027) — ops re-sends it. */
+export const REFUND_STATUSES = ['pending', 'processed', 'failed'] as const
+export type RefundStatus = (typeof REFUND_STATUSES)[number]
+
+/** Named refund statuses (rule 8), mirroring REFUND_STATUSES one-to-one. */
+export const REFUND_STATUS = {
+  pending: 'pending',
+  processed: 'processed',
+  failed: 'failed',
+} as const satisfies { [K in RefundStatus]: K }
+
+export const REFUND_TRANSITIONS: Record<RefundStatus, readonly RefundStatus[]> = {
+  pending: ['processed', 'failed'],
+  // refund.failed can land after our own create call already recorded "processed".
+  processed: ['failed'],
+  failed: [],
+}
+
+// ── Capture exception (ADR 027, audit M21 / M39) ─────────────────────────────
+// A captured payment that created NO order: the checkout session had expired
+// (plus a grace period) or had already been paid by another payment. The money
+// is recorded, never an order, and refunded in full through the gateway.
+
+export const CAPTURE_EXCEPTION_REASONS = ['session_expired', 'duplicate_capture'] as const
+export type CaptureExceptionReason = (typeof CAPTURE_EXCEPTION_REASONS)[number]
+
+export const CAPTURE_EXCEPTION_STATUSES = ['refund_pending', 'refunding', 'refunded', 'refund_failed'] as const
+export type CaptureExceptionStatus = (typeof CAPTURE_EXCEPTION_STATUSES)[number]
+
+/** Named capture-exception statuses (rule 8), mirroring CAPTURE_EXCEPTION_STATUSES. */
+export const CAPTURE_EXCEPTION_STATUS = {
+  refund_pending: 'refund_pending',
+  refunding: 'refunding',
+  refunded: 'refunded',
+  refund_failed: 'refund_failed',
+} as const satisfies { [K in CaptureExceptionStatus]: K }
+
+export const CAPTURE_EXCEPTION_TRANSITIONS: Record<CaptureExceptionStatus, readonly CaptureExceptionStatus[]> = {
+  refund_pending: ['refunding'],
+  // a stale claim (a run that died mid-refund) is re-claimed; the gateway lookup by receipt makes that safe
+  refunding: ['refunded', 'refund_failed', 'refunding'],
+  // refund.failed from the gateway after we recorded the refund
+  refunded: ['refund_failed'],
+  refund_failed: ['refunding'],
+}
+
+export function isValidCaptureExceptionTransition(from: CaptureExceptionStatus, to: CaptureExceptionStatus): boolean {
+  return (CAPTURE_EXCEPTION_TRANSITIONS[from] as readonly string[]).includes(to)
 }
 
 // ── Procurement session (S3.1) ────────────────────────────────────────────────

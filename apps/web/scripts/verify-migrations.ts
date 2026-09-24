@@ -460,6 +460,12 @@ const MANIFEST: Entry[] = [
     note: 'Audit M15: pools.rationale (source order ids, seller 30-day volume) not client-readable; column grant built from the catalogue; no-op without the Mart tables',
   },
   {
+    file: '0078_payment_truth.sql',
+    tables: ['capture_exceptions'],
+    functions: ['capture_payment'],
+    note: 'ADR 027 (audit M21 / M39): a capture on an expired or already-paid session is recorded in capture_exceptions and refunded, never an order; capture_payment() locks the session and calls materialize_order for a live one (replay-safe); both service-role only',
+  },
+  {
     file: '0080_ops_heartbeat_status_hot_indexes.sql',
     tables: ['cron_heartbeats'],
     note: 'Audit M35 + L7: cron_heartbeats.status / summary (run outcome; no client grant) + hot-table indexes (notifications, payments, checkout_sessions, orders, quotes, rfq_matches, payouts)',
