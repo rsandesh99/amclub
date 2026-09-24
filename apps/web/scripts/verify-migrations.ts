@@ -425,6 +425,11 @@ const MANIFEST: Entry[] = [
     note: 'E16 Mart storefront v2 (STAGED with 0022–0025): typed category attributes + products.attributes (N40), promises + breaches (N41), sample price (N42), mart_categories.returnable / itc_eligible (N43), reorder reminders (N44)',
     staged: true,
   },
+  {
+    file: '0070_order_safe_view_invoker.sql',
+    views: ['order_safe_view'],
+    note: 'ADR 022 security hotfix: order_safe_view security_invoker (the caller’s RLS applies; it ran as its BYPASSRLS owner), nothing for anon, SELECT only for authenticated',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

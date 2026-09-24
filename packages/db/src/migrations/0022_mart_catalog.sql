@@ -200,10 +200,11 @@ ALTER TABLE payouts ADD COLUMN IF NOT EXISTS tds_bps integer;
 --> statement-breakpoint
 ALTER TABLE payouts ADD COLUMN IF NOT EXISTS tds_paise bigint;
 --> statement-breakpoint
--- order_safe_view is `o.*` — DROP + CREATE verbatim from rls/policies.sql (0020 lesson).
+-- order_safe_view is `o.*` — DROP + CREATE verbatim from rls/policies.sql (0020 lesson),
+-- including ADR 022's security_invoker + grants (0070), so a re-run stays closed.
 DROP VIEW IF EXISTS order_safe_view;
 --> statement-breakpoint
-CREATE VIEW order_safe_view AS
+CREATE VIEW order_safe_view WITH (security_invoker = true) AS
   SELECT
     o.*,
     CASE
@@ -219,6 +220,10 @@ CREATE VIEW order_safe_view AS
       )
     END AS msme_phone
   FROM orders o;
+--> statement-breakpoint
+REVOKE ALL ON order_safe_view FROM anon, authenticated;
+--> statement-breakpoint
+GRANT SELECT ON order_safe_view TO authenticated;
 
 -- ─── 6. materialize_order copies kind + goods snapshots ─────────────────────
 -- Full restatement of 0003 with EXACTLY three added columns (kind, line_items,
