@@ -1,6 +1,6 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { QuoteRevisionInput } from '@amclub/shared'
+import { redactContactInfo, type QuoteRevisionInput } from '@amclub/shared'
 import { RFQ_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 
 /**
@@ -106,8 +106,10 @@ export function quoteRowColumns(resolved: ResolvedQuoteTerms, d: QuoteTermsBody)
   return {
     price_paise: resolved.pricePaise,
     delivery_days: d.delivery_days,
-    scope: d.scope,
-    message: d.message ?? null,
+    // Audit M40 — a quote reaches the buyer before payment: contact details are
+    // masked here, the ONE writer of quote rows (submit, revision, pool close).
+    scope: redactContactInfo(d.scope).text,
+    message: d.message ? redactContactInfo(d.message).text : null,
     ...resolved.terms,
     ...(resolved.goods
       ? { unit_price_paise: resolved.goods.unit_price_paise, qty: resolved.goods.qty, gst_rate_bps: resolved.goods.gst_rate_bps, hsn_code: resolved.goods.hsn_code, product_id: resolved.goods.product_id }

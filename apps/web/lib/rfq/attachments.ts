@@ -1,7 +1,7 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { RFQ_ATTACHMENTS_BUCKET, RFQ_ATTACHMENT_MAX_BYTES, classifyIntakeFile, type IntakeFileKind, type RfqAttachmentExt } from '@amclub/shared'
+import { RFQ_ATTACHMENTS_BUCKET, RFQ_ATTACHMENT_EXTS, RFQ_ATTACHMENT_MAX_BYTES, classifyIntakeFile, type IntakeFileKind, type RfqAttachmentExt } from '@amclub/shared'
 
 /**
  * S1.8 — RFQ attachments (SPINE). One private bucket, one upload helper shared
@@ -73,14 +73,32 @@ export interface SignedRfqAttachment {
   stored: boolean
 }
 
-/** Resolve bucket references to 15-minute signed URLs; anything else passes through. */
-export async function signRfqAttachments(admin: SupabaseClient, attachments: ReadonlyArray<{ url: string; name: string }>): Promise<SignedRfqAttachment[]> {
-  return Promise.all(
-    attachments.map(async (a) => {
-      if (!a.url.startsWith(RFQ_ATTACHMENT_PREFIX)) return { url: a.url, name: a.name, stored: false }
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+const EXTS = RFQ_ATTACHMENT_EXTS.join('|')
+
+/**
+ * Audit M5 — an RFQ may reference only files the buyer uploaded: exactly
+ * `rfq-attachments/<their msmeId>/<uuid>.<ext>`, the shape storeRfqAttachment
+ * writes. Anything else (another buyer's path, "..", a foreign link) is refused.
+ */
+export function attachmentRefAllowed(url: string, msmeId: string): boolean {
+  return new RegExp(`^${RFQ_ATTACHMENTS_BUCKET}/${msmeId}/${UUID}\\.(?:${EXTS})$`, 'i').test(url)
+}
+
+/**
+ * Resolve bucket references to 15-minute signed URLs. Audit M5: only paths under
+ * the RFQ owner's own prefix are signed; a legacy external link passes through
+ * only when it is https://. Anything else is dropped, never signed.
+ */
+export async function signRfqAttachments(admin: SupabaseClient, attachments: ReadonlyArray<{ url: string; name: string }>, ownerMsmeId: string): Promise<SignedRfqAttachment[]> {
+  const out = await Promise.all(
+    attachments.map(async (a): Promise<SignedRfqAttachment | null> => {
+      if (!a.url.startsWith(RFQ_ATTACHMENT_PREFIX)) return /^https:\/\//i.test(a.url) ? { url: a.url, name: safeAttachmentName(a.name), stored: false } : null
+      if (!attachmentRefAllowed(a.url, ownerMsmeId)) return null
       const path = a.url.slice(RFQ_ATTACHMENT_PREFIX.length)
       const { data } = await admin.storage.from(RFQ_ATTACHMENTS_BUCKET).createSignedUrl(path, SIGNED_TTL_S)
-      return { url: data?.signedUrl ?? '', name: a.name, stored: true }
+      return { url: data?.signedUrl ?? '', name: safeAttachmentName(a.name), stored: true }
     }),
   )
+  return out.filter((a): a is SignedRfqAttachment => a !== null)
 }

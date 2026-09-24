@@ -455,6 +455,10 @@ const MANIFEST: Entry[] = [
     file: '0075_client_read_narrowing.sql',
     note: 'Audit M17 + M10: rfq_clarifications.provider_id / answered_by not client-readable (column grant); coupons not client-readable',
   },
+  {
+    file: '0076_pool_rationale_private.sql',
+    note: 'Audit M15: pools.rationale (source order ids, seller 30-day volume) not client-readable; column grant built from the catalogue; no-op without the Mart tables',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

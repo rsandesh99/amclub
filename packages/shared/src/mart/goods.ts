@@ -273,6 +273,22 @@ export const goodsRfqSpecSchema = z.object({
 export type GoodsRfqSpec = z.infer<typeof goodsRfqSpecSchema>
 
 /**
+ * Audit M4 — what a matched seller sees of a goods request before any order
+ * exists: WHERE it goes (city, state, pincode, pickup), never WHO or the street
+ * address. The contact reaches the seller on the goods order's delivery
+ * snapshot, after the buyer pays.
+ */
+export function goodsSpecForSeller(spec: unknown): Record<string, unknown> | null {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return null
+  const s = spec as Record<string, unknown>
+  const d = s['delivery']
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return { ...s }
+  const hidden = new Set(['contact_name', 'contact_phone', 'address'])
+  const where = Object.fromEntries(Object.entries(d as Record<string, unknown>).filter(([k]) => !hidden.has(k)))
+  return { ...s, delivery: where }
+}
+
+/**
  * Goods quote terms. The seller states a UNIT price (excl. GST) at the RFQ's
  * quantity plus the tax facts the order needs; the server computes
  * price_paise = qty × unit price and never trusts a client total.

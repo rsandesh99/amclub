@@ -141,6 +141,18 @@ export async function removeLicence(supabase: SupabaseClient, id: string): Promi
 }
 
 // ── Certificate (private bucket; owner-only signed reads) ───────────────────────
+
+/**
+ * Audit L2 — certificate_path is writable by the owner's session (RLS), so a
+ * stored value is trusted only when it is the shape storeLicenceCertificate
+ * writes: `<msme_id>/<licence_id>/<file>`. Anything else is never signed or deleted.
+ */
+function ownCertificatePath(lic: { msme_id?: unknown; certificate_path?: unknown }, licenceId: string): string | null {
+  const path = typeof lic.certificate_path === 'string' ? lic.certificate_path : null
+  if (!path || typeof lic.msme_id !== 'string') return null
+  const prefix = `${lic.msme_id}/${licenceId}/`
+  return path.startsWith(prefix) && !path.slice(prefix.length).includes('/') && !path.includes('..') ? path : null
+}
 export async function storeLicenceCertificate(supabase: SupabaseClient, licenceId: string, file: File | null): Promise<{ ok: true } | { ok: false; status: 404 | 413 | 415 | 422 | 500; code: string }> {
   if (!file || file.size === 0) return { ok: false, status: 422, code: 'file_required' }
   if (file.size > LICENCE_CERT_MAX_BYTES) return { ok: false, status: 413, code: 'file_too_large' }
@@ -156,16 +168,18 @@ export async function storeLicenceCertificate(supabase: SupabaseClient, licenceI
   if (error) return { ok: false, status: 500, code: 'upload_failed' }
   const { error: uErr } = await supabase.from('buyer_licences').update({ certificate_path: path }).eq('id', licenceId)
   if (uErr) { await admin.storage.from(LICENCE_CERT_BUCKET).remove([path]); return { ok: false, status: 500, code: 'update_failed' } }
-  if (lic.certificate_path) await admin.storage.from(LICENCE_CERT_BUCKET).remove([lic.certificate_path as string])
+  const previous = ownCertificatePath(lic, licenceId)
+  if (previous) await admin.storage.from(LICENCE_CERT_BUCKET).remove([previous])
   return { ok: true }
 }
 
 /** A 15-minute signed link to the owner's own certificate, or null. */
 export async function signedCertificateUrl(supabase: SupabaseClient, licenceId: string): Promise<string | null> {
-  const { data: lic } = await supabase.from('buyer_licences').select('certificate_path').eq('id', licenceId).is('deleted_at', null).maybeSingle()
-  if (!lic?.certificate_path) return null
+  const { data: lic } = await supabase.from('buyer_licences').select('msme_id, certificate_path').eq('id', licenceId).is('deleted_at', null).maybeSingle()
+  const path = lic ? ownCertificatePath(lic, licenceId) : null
+  if (!path) return null
   const admin = await createAdminClient()
-  const { data } = await admin.storage.from(LICENCE_CERT_BUCKET).createSignedUrl(lic.certificate_path as string, 15 * 60)
+  const { data } = await admin.storage.from(LICENCE_CERT_BUCKET).createSignedUrl(path, 15 * 60)
   return data?.signedUrl ?? null
 }
 

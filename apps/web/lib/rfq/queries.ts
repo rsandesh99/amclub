@@ -2,7 +2,7 @@ import { signRfqAttachments } from '@/lib/rfq/attachments'
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
-import { effectiveCostAfterItcPaise, goodsQuoteMoney, QUOTE_STATUS, resolveDeclineLocale, rfqIsActive, rfqQualityDeadline, rfqQualityReportSchema, type ClarificationView, type QuoteOptionRow, type QuoteStatus, type RfqQualityReport, type RfqStatus } from '@amclub/shared'
+import { effectiveCostAfterItcPaise, goodsQuoteMoney, goodsSpecForSeller, QUOTE_STATUS, resolveDeclineLocale, rfqIsActive, rfqQualityDeadline, rfqQualityReportSchema, type ClarificationView, type QuoteOptionRow, type QuoteStatus, type RfqQualityReport, type RfqStatus } from '@amclub/shared'
 import { RFQ_GOODS_LIST_COLS, QUOTE_GOODS_COLS } from '@/lib/mart/staged-columns'
 import { countOpenQuestions, listClarifications, rfqsWithMyOpenQuestion } from '@/lib/rfq/clarifications'
 import { getRfqQualityHoldMinutes } from '@/lib/agent/rfq-quality'
@@ -247,7 +247,7 @@ export async function getRfqForBuyer(userId: string, rfqId: string): Promise<Rfq
 
   return {
     quality,
-    id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: await signRfqAttachments(admin, (r.attachments ?? []) as { url: string; name: string }[]),
+    id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: await signRfqAttachments(admin, (r.attachments ?? []) as { url: string; name: string }[], r.msme_id as string),
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
     categoryId: r.category_id ?? null, categorySlug: r.category?.slug ?? null,
     kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
@@ -534,10 +534,11 @@ export async function getRfqForProvider(userId: string, rfqId: string): Promise<
   return {
     outcome,
     orderId,
-    id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: await signRfqAttachments(admin, (r.attachments ?? []) as { url: string; name: string }[]),
+    id: r.id, title: r.title, status: r.status, details: r.details ?? {}, attachments: await signRfqAttachments(admin, (r.attachments ?? []) as { url: string; name: string }[], r.msme_id as string),
     budgetMinPaise: r.budget_min_paise, budgetMaxPaise: r.budget_max_paise, neededBy: r.needed_by,
     categorySlug: r.category?.slug ?? null,
-    kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: r.goods_spec ?? null,
+    // Audit M4 — a seller sees where the goods go, never the buyer's contact or street address.
+    kind: r.kind === 'goods' ? 'goods' : 'service', martCategorySlug: r.mart_category_slug ?? null, goodsSpec: goodsSpecForSeller(r.goods_spec),
     quoteCount: r.quote_count, maxQuotes: r.max_quotes, expiresAt: r.expires_at,
     canQuote: active && slotsLeft && notExpired && !myQuote && !match.declined_at,
     declinedAt: (match as any).declined_at ?? null,
