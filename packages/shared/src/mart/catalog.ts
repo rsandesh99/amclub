@@ -13,6 +13,8 @@
  *    the repo's money/rates convention (DEFAULT_GST_BPS, commission_bps).
  */
 import { z } from 'zod'
+import { productAttributesSchema } from './attributes'
+import { martPromisesSchema } from './promises'
 
 // ── Product status machine ───────────────────────────────────────────────────
 
@@ -174,6 +176,12 @@ export const productInputSchema = z.object({
   min_order_qty: z.number().int().positive().max(1_000_000).default(1),
   country_of_origin: z.string().length(2).default('IN'),
   tiers: priceTiersSchema,
+  /** E16 N40 — typed attributes; the route validates them against the category's definitions. */
+  attributes: productAttributesSchema,
+  /** E16 N41 — seller opt-in promises (badges are removed automatically after repeated breaches). */
+  promises: martPromisesSchema,
+  /** E16 N42 — a sample is an ordinary goods order of qty 1 at this price (paise, pre-GST); null = no samples. */
+  sample_price_paise: z.number().int().positive().max(100_000_000).nullable().default(null),
 })
 export type ProductInput = z.infer<typeof productInputSchema>
 

@@ -2,6 +2,7 @@ import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
 import type { MilestoneKind } from '@amclub/shared'
 import { createNotification } from './create'
+import { notifyText } from '@/lib/i18n/notify'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -30,8 +31,8 @@ export async function notifyOrderPlaced(admin: Admin, orderId: string): Promise<
     await createNotification(admin, {
       userId: providerUserId,
       kind: 'order_placed',
-      titleI18n: { en: 'New order received', hi: 'नया ऑर्डर मिला' },
-      bodyI18n: { en: `Order ${r} is awaiting your acceptance.`, hi: `ऑर्डर ${r} आपकी स्वीकृति की प्रतीक्षा में है।` },
+      titleI18n: notifyText('order_placed_provider.title'),
+      bodyI18n: notifyText('order_placed_provider.body', { ref: r }),
       link: `/partner/orders/${orderId}`,
       channels: ['email', 'sms', 'whatsapp'],
     })
@@ -40,8 +41,8 @@ export async function notifyOrderPlaced(admin: Admin, orderId: string): Promise<
     await createNotification(admin, {
       userId: msmeUserId,
       kind: 'order_placed',
-      titleI18n: { en: 'Payment received — order placed', hi: 'भुगतान प्राप्त — ऑर्डर दर्ज' },
-      bodyI18n: { en: `Your order ${r} is placed.`, hi: `आपका ऑर्डर ${r} दर्ज हो गया है।` },
+      titleI18n: notifyText('order_placed_buyer.title'),
+      bodyI18n: notifyText('order_placed_buyer.body', { ref: r }),
       link: `/app/orders/${orderId}`,
       channels: ['email'],
     })
@@ -51,46 +52,30 @@ export async function notifyOrderPlaced(admin: Admin, orderId: string): Promise<
 interface EventCopy {
   to: 'msme' | 'provider'
   kind: string
-  en: { title: string; body: string }
-  hi: { title: string; body: string }
+  /** The `notify.<key>` pair (title / body with {ref}). */
+  key: string
   channels: string[]
 }
 
-/** Per-action notification copy + recipient. One place; mirrors §3.7 actions. */
-function copyFor(action: string, r: string): EventCopy | null {
+/** Per-action notification copy + recipient. One place; mirrors §3.7 actions. Copy: messages `notify.*` (E14). */
+function copyFor(action: string): EventCopy | null {
   switch (action) {
     case 'accept':
-      return { to: 'msme', kind: 'order_accepted', channels: ['email', 'sms'],
-        en: { title: 'Provider accepted your order', body: `Submit your requirements to start ${r}.` },
-        hi: { title: 'प्रदाता ने आपका ऑर्डर स्वीकार किया', body: `${r} शुरू करने के लिए अपनी आवश्यकताएँ जमा करें।` } }
+      return { to: 'msme', kind: 'order_accepted', key: 'order_accepted', channels: ['email', 'sms'] }
     case 'submit_requirements':
-      return { to: 'provider', kind: 'requirements_submitted', channels: ['email'],
-        en: { title: 'Requirements submitted', body: `The buyer submitted requirements for ${r}.` },
-        hi: { title: 'आवश्यकताएँ जमा की गईं', body: `खरीदार ने ${r} के लिए आवश्यकताएँ जमा कीं।` } }
+      return { to: 'provider', kind: 'requirements_submitted', key: 'requirements_submitted', channels: ['email'] }
     case 'start':
-      return { to: 'msme', kind: 'order_in_progress', channels: ['email'],
-        en: { title: 'Work has started', body: `Your provider started work on ${r}.` },
-        hi: { title: 'काम शुरू हो गया', body: `आपके प्रदाता ने ${r} पर काम शुरू कर दिया।` } }
+      return { to: 'msme', kind: 'order_in_progress', key: 'order_started', channels: ['email'] }
     case 'deliver':
-      return { to: 'msme', kind: 'order_delivered', channels: ['email', 'sms'],
-        en: { title: 'Delivery ready for review', body: `Review and accept the delivery for ${r}.` },
-        hi: { title: 'डिलीवरी समीक्षा के लिए तैयार', body: `${r} की डिलीवरी की समीक्षा करें और स्वीकार करें।` } }
+      return { to: 'msme', kind: 'order_delivered', key: 'order_delivered', channels: ['email', 'sms'] }
     case 'accept_delivery':
-      return { to: 'provider', kind: 'order_completed', channels: ['email', 'sms'],
-        en: { title: 'Order completed', body: `${r} is complete — your payout is scheduled.` },
-        hi: { title: 'ऑर्डर पूर्ण', body: `${r} पूर्ण हुआ — आपका भुगतान निर्धारित है।` } }
+      return { to: 'provider', kind: 'order_completed', key: 'order_completed', channels: ['email', 'sms'] }
     case 'request_revision':
-      return { to: 'provider', kind: 'revision_requested', channels: ['email'],
-        en: { title: 'Revision requested', body: `The buyer requested a revision on ${r}.` },
-        hi: { title: 'संशोधन का अनुरोध', body: `खरीदार ने ${r} पर संशोधन का अनुरोध किया।` } }
+      return { to: 'provider', kind: 'revision_requested', key: 'revision_requested', channels: ['email'] }
     case 'resume':
-      return { to: 'msme', kind: 'order_in_progress', channels: ['email'],
-        en: { title: 'Revision in progress', body: `Your provider is working on the revision for ${r}.` },
-        hi: { title: 'संशोधन जारी', body: `आपका प्रदाता ${r} के संशोधन पर काम कर रहा है।` } }
+      return { to: 'msme', kind: 'order_in_progress', key: 'revision_in_progress', channels: ['email'] }
     case 'cancel':
-      return { to: 'provider', kind: 'order_cancelled', channels: ['email'],
-        en: { title: 'Order cancelled by buyer', body: `${r} was cancelled by the buyer.` },
-        hi: { title: 'खरीदार ने ऑर्डर रद्द किया', body: `${r} खरीदार द्वारा रद्द कर दिया गया।` } }
+      return { to: 'provider', kind: 'order_cancelled', key: 'order_cancelled', channels: ['email'] }
     default:
       return null
   }
@@ -101,7 +86,7 @@ function copyFor(action: string, r: string): EventCopy | null {
  * `accept_delivery` also fires the review prompt to the buyer (separately).
  */
 export async function notifyOrderTransition(admin: Admin, order: any, action: string): Promise<void> {
-  const c = copyFor(action, ref(order))
+  const c = copyFor(action)
   if (!c) {
     if (action === 'raise_dispute') await notifyDispute(admin, order)
     return
@@ -112,8 +97,8 @@ export async function notifyOrderTransition(admin: Admin, order: any, action: st
     await createNotification(admin, {
       userId,
       kind: c.kind,
-      titleI18n: { en: c.en.title, hi: c.hi.title },
-      bodyI18n: { en: c.en.body, hi: c.hi.body },
+      titleI18n: notifyText(`${c.key}.title`),
+      bodyI18n: notifyText(`${c.key}.body`, { ref: ref(order) }),
       link: c.to === 'msme' ? `/app/orders/${order.id}` : `/partner/orders/${order.id}`,
       channels: c.channels,
     })
@@ -128,8 +113,8 @@ async function notifyDispute(admin: Admin, order: any): Promise<void> {
     await createNotification(admin, {
       userId,
       kind: 'order_disputed',
-      titleI18n: { en: 'A dispute was opened', hi: 'एक विवाद खोला गया' },
-      bodyI18n: { en: `A dispute was opened on ${ref(order)}. Our team will review it.`, hi: `${ref(order)} पर विवाद खोला गया। हमारी टीम इसकी समीक्षा करेगी।` },
+      titleI18n: notifyText('order_disputed.title'),
+      bodyI18n: notifyText('order_disputed.body', { ref: ref(order) }),
       link: userId === msmeUserId ? `/app/orders/${order.id}` : `/partner/orders/${order.id}`,
       channels: ['email'],
     })
@@ -142,25 +127,15 @@ export async function notifyQuoteWindowLapsed(admin: Admin, rfq: any, counts: { 
   const { data: m } = await admin.from('msme_profiles').select('user_id').eq('id', rfq.msme_id).maybeSingle()
   const userId = m?.user_id as string | undefined
   if (!userId) return
-  const title = rfq.title ?? 'your request'
+  const title = rfq.title ?? notifyText('your_request')
   await createNotification(admin, {
     userId,
     kind: 'rfq_providers_unavailable',
-    titleI18n: { en: 'An update on your request', hi: 'आपके अनुरोध पर एक अपडेट' },
-    bodyI18n: {
-      en: `${counts.unavailable} of ${counts.total} providers could not take up "${title}". The others can still quote — you can also rebroadcast to reach more.`,
-      hi: `"${title}" के लिए ${counts.total} में से ${counts.unavailable} प्रदाता इसे नहीं ले सके। बाकी अभी भी कोट कर सकते हैं — आप और प्रदाताओं तक पहुँचने के लिए दोबारा भेज भी सकते हैं।`,
-    },
+    titleI18n: notifyText('providers_unavailable.title'),
+    bodyI18n: notifyText('providers_unavailable.body', { unavailable: counts.unavailable, total: counts.total, title }),
     link: `/app/rfq/${rfq.id}`,
     channels: ['email'],
   })
-}
-
-const MILESTONE_LABELS: Record<MilestoneKind, { en: string; hi: string }> = {
-  accepted: { en: 'Provider accepted', hi: 'प्रदाता ने स्वीकार किया' },
-  site_or_materials: { en: 'Reached site / materials ready', hi: 'साइट पर पहुँचे / सामग्री तैयार' },
-  in_progress: { en: 'Work in progress', hi: 'काम जारी है' },
-  work_complete: { en: 'Work complete', hi: 'काम पूरा हुआ' },
 }
 
 /** Services evidence engine (S0.3): notify the buyer on each milestone. Best-effort.
@@ -168,12 +143,12 @@ const MILESTONE_LABELS: Record<MilestoneKind, { en: string; hi: string }> = {
 export async function notifyMilestone(admin: Admin, order: any, kind: MilestoneKind): Promise<void> {
   const { msmeUserId } = await parties(admin, order)
   if (!msmeUserId) return
-  const l = MILESTONE_LABELS[kind]
+  const label = notifyText(`milestone_label.${kind}`)
   await createNotification(admin, {
     userId: msmeUserId,
     kind: 'milestone_added',
-    titleI18n: { en: `Update: ${l.en}`, hi: `अपडेट: ${l.hi}` },
-    bodyI18n: { en: `${ref(order)}: ${l.en}.`, hi: `${ref(order)}: ${l.hi}।` },
+    titleI18n: notifyText('milestone.title', { label }),
+    bodyI18n: notifyText('milestone.body', { ref: ref(order), label }),
     link: `/app/orders/${order.id}`,
     channels: ['email'],
   })
@@ -186,8 +161,8 @@ export async function notifyReviewPrompt(admin: Admin, order: any): Promise<void
   await createNotification(admin, {
     userId: msmeUserId,
     kind: 'review_prompt',
-    titleI18n: { en: 'How was your experience?', hi: 'आपका अनुभव कैसा रहा?' },
-    bodyI18n: { en: `Leave a review for ${ref(order)}.`, hi: `${ref(order)} के लिए समीक्षा छोड़ें।` },
+    titleI18n: notifyText('review_prompt.title'),
+    bodyI18n: notifyText('review_prompt.body', { ref: ref(order) }),
     link: `/app/orders/${order.id}`,
     channels: ['email'],
   })
@@ -200,8 +175,8 @@ export async function notifyAutoCancelled(admin: Admin, order: any): Promise<voi
     await createNotification(admin, {
       userId: msmeUserId,
       kind: 'order_auto_cancelled',
-      titleI18n: { en: 'Order cancelled & refunded', hi: 'ऑर्डर रद्द और धनवापसी' },
-      bodyI18n: { en: `${ref(order)} was not accepted in time and has been fully refunded.`, hi: `${ref(order)} समय पर स्वीकार नहीं हुआ और पूरी धनवापसी कर दी गई है।` },
+      titleI18n: notifyText('auto_cancelled_buyer.title'),
+      bodyI18n: notifyText('auto_cancelled_buyer.body', { ref: ref(order) }),
       link: `/app/orders/${order.id}`,
       channels: ['email', 'sms'],
     })
@@ -210,11 +185,8 @@ export async function notifyAutoCancelled(admin: Admin, order: any): Promise<voi
     await createNotification(admin, {
       userId: providerUserId,
       kind: 'order_auto_cancelled',
-      titleI18n: { en: 'Order auto-cancelled', hi: 'ऑर्डर स्वतः रद्द हुआ' },
-      bodyI18n: {
-        en: `${ref(order)} was cancelled because it was not accepted within 24 hours. The buyer has been refunded in full.`,
-        hi: `${ref(order)} रद्द हो गया क्योंकि इसे 24 घंटे के भीतर स्वीकार नहीं किया गया। खरीदार को पूरी धनवापसी कर दी गई है।`,
-      },
+      titleI18n: notifyText('auto_cancelled_provider.title'),
+      bodyI18n: notifyText('auto_cancelled_provider.body', { ref: ref(order) }),
       link: `/partner/orders/${order.id}`,
       channels: ['email'],
     })
@@ -228,8 +200,8 @@ export async function notifyAutoAccepted(admin: Admin, order: any): Promise<void
     await createNotification(admin, {
       userId: providerUserId,
       kind: 'order_completed',
-      titleI18n: { en: 'Order auto-completed', hi: 'ऑर्डर स्वतः पूर्ण' },
-      bodyI18n: { en: `${ref(order)} was auto-accepted after 72h — payout scheduled.`, hi: `${ref(order)} 72 घंटे बाद स्वतः स्वीकार — भुगतान निर्धारित।` },
+      titleI18n: notifyText('auto_completed_provider.title'),
+      bodyI18n: notifyText('auto_completed_provider.body', { ref: ref(order) }),
       link: `/partner/orders/${order.id}`,
       channels: ['email'],
     })
@@ -238,11 +210,8 @@ export async function notifyAutoAccepted(admin: Admin, order: any): Promise<void
     await createNotification(admin, {
       userId: msmeUserId,
       kind: 'order_auto_accepted',
-      titleI18n: { en: 'Delivery auto-accepted', hi: 'डिलीवरी स्वतः स्वीकार हुई' },
-      bodyI18n: {
-        en: `The delivery for ${ref(order)} was accepted automatically after 72 hours without a response, and the order is complete.`,
-        hi: `${ref(order)} की डिलीवरी 72 घंटे तक कोई जवाब न मिलने पर स्वतः स्वीकार कर ली गई, और ऑर्डर पूरा हो गया है।`,
-      },
+      titleI18n: notifyText('auto_accepted_buyer.title'),
+      bodyI18n: notifyText('auto_accepted_buyer.body', { ref: ref(order) }),
       link: `/app/orders/${order.id}`,
       channels: ['email'],
     })
@@ -256,12 +225,12 @@ export async function notifyQuoteWithdrawn(admin: Admin, rfqId: string): Promise
   const r = data as any
   const userId = r?.msme?.user_id as string | undefined
   if (!userId) return
-  const title = r.title ?? 'your request'
+  const title = (r.title as string | null) ?? notifyText('your_request')
   await createNotification(admin, {
     userId,
     kind: 'quote_withdrawn',
-    titleI18n: { en: 'A provider withdrew their quote', hi: 'एक प्रदाता ने अपना कोटेशन वापस ले लिया' },
-    bodyI18n: { en: `A quote on "${title}" is no longer available. Your other quotes are unaffected.`, hi: `"${title}" पर एक कोटेशन अब उपलब्ध नहीं है। आपके बाकी कोटेशन पर कोई असर नहीं है।` },
+    titleI18n: notifyText('quote_withdrawn.title'),
+    bodyI18n: notifyText('quote_withdrawn.body', { title }),
     link: `/app/rfq/${rfqId}`,
     channels: ['sms'],
   })
@@ -272,15 +241,12 @@ export async function notifyRfqExpired(admin: Admin, rfq: { id: string; title: s
   const { data: m } = await admin.from('msme_profiles').select('user_id').eq('id', rfq.msme_id).maybeSingle()
   const userId = m?.user_id as string | undefined
   if (!userId) return
-  const title = rfq.title ?? 'your request'
+  const title = rfq.title ?? notifyText('your_request')
   await createNotification(admin, {
     userId,
     kind: 'rfq_expired',
-    titleI18n: { en: 'Your request expired', hi: 'आपका अनुरोध समाप्त हो गया' },
-    bodyI18n: {
-      en: `"${title}" closed without an accepted quote. Post it again to reach providers afresh.`,
-      hi: `"${title}" बिना किसी स्वीकृत कोटेशन के बंद हो गया। प्रदाताओं तक फिर से पहुँचने के लिए इसे दोबारा पोस्ट करें।`,
-    },
+    titleI18n: notifyText('rfq_expired.title'),
+    bodyI18n: notifyText('rfq_expired.body', { title }),
     link: `/app/rfq/new?from=${rfq.id}`,
     channels: ['email'],
   })
@@ -294,15 +260,12 @@ export async function notifyQuotesExpired(admin: Admin, quotes: { providerId: st
   for (const q of quotes) {
     const userId = userOf.get(q.providerId)
     if (!userId) continue
-    const title = q.rfqTitle ?? 'a request'
+    const title = q.rfqTitle ?? notifyText('a_request')
     await createNotification(admin, {
       userId,
       kind: 'quote_expired',
-      titleI18n: { en: 'Your quote expired', hi: 'आपका कोटेशन समाप्त हो गया' },
-      bodyI18n: {
-        en: `"${title}" closed before the buyer chose a quote, so your quote has expired.`,
-        hi: `"${title}" खरीदार के कोटेशन चुनने से पहले बंद हो गया, इसलिए आपका कोटेशन समाप्त हो गया है।`,
-      },
+      titleI18n: notifyText('quote_expired.title'),
+      bodyI18n: notifyText('quote_expired.body', { title }),
       link: `/partner/rfqs/${q.rfqId}`,
     })
   }
@@ -316,8 +279,8 @@ export async function notifyPayoutPaid(admin: Admin, providerId: string, amountP
   await createNotification(admin, {
     userId: p.user_id,
     kind: 'payout_paid',
-    titleI18n: { en: 'Payout sent', hi: 'भुगतान भेजा गया' },
-    bodyI18n: { en: `₹${rupees} has been transferred to your bank account.`, hi: `₹${rupees} आपके बैंक खाते में स्थानांतरित कर दिए गए हैं।` },
+    titleI18n: notifyText('payout_paid.title'),
+    bodyI18n: notifyText('payout_paid.body', { amount: rupees }),
     link: orderId ? `/partner/orders/${orderId}` : `/partner/earnings`,
     channels: ['email', 'sms'],
   })
@@ -330,8 +293,8 @@ export async function notifyReviewReply(admin: Admin, review: any): Promise<void
   await createNotification(admin, {
     userId: m.user_id,
     kind: 'review_reply',
-    titleI18n: { en: 'The provider replied to your review', hi: 'प्रदाता ने आपकी समीक्षा का उत्तर दिया' },
-    bodyI18n: { en: 'See the provider’s response to your review.', hi: 'अपनी समीक्षा पर प्रदाता की प्रतिक्रिया देखें।' },
+    titleI18n: notifyText('review_reply.title'),
+    bodyI18n: notifyText('review_reply.body'),
     link: `/app/orders/${review.order_id}`,
     channels: ['email'],
   })
@@ -354,8 +317,8 @@ export async function notifyDisputeStatement(
     await createNotification(admin, {
       userId: counterparty,
       kind: 'dispute_statement',
-      titleI18n: { en: `${who.en} ${d.edited ? 'updated their' : 'submitted a'} statement on ${r}`, hi: `${who.hi} ने ${r} पर अपना पक्ष ${d.edited ? 'अपडेट किया' : 'दर्ज किया'}` },
-      bodyI18n: { en: 'You can read it on the order and add or edit your own statement while the dispute is open.', hi: 'आप इसे ऑर्डर पर पढ़ सकते हैं और विवाद खुला रहने तक अपना पक्ष जोड़ या बदल सकते हैं।' },
+      titleI18n: notifyText('dispute_statement.title', { who: d.role, edited: d.edited ? 'yes' : 'no', ref: r }),
+      bodyI18n: notifyText('dispute_statement.body'),
       link: d.role === 'buyer' ? `/partner/orders/${d.order.id}` : `/app/orders/${d.order.id}`,
       channels: ['email'],
     })

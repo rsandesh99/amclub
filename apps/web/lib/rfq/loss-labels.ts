@@ -42,7 +42,7 @@ function asLabelQuote(q: QuoteRow): LossLabelQuote {
  * logged and leaves the order, the quotes and the RFQ exactly as they are.
  * Dark until the `compare` experience is live (0058 must be applied first).
  */
-export async function labelLostQuotes(admin: Admin, args: { rfqId: string; acceptedQuoteId: string }): Promise<number> {
+export async function labelLostQuotes(admin: Admin, args: { rfqId: string; acceptedQuoteId: string; winnerTerms?: { pricePaise: number; deliveryDays: number } }): Promise<number> {
   if (!isExperienceLive('compare')) return 0
   try {
     const { data, error } = await admin
@@ -65,7 +65,8 @@ export async function labelLostQuotes(admin: Admin, args: { rfqId: string; accep
       return 0
     }
     const done = new Set((have ?? []).map((h) => h.quote_id as string))
-    const w = { id: winner.id, ...asLabelQuote(winner) }
+    // E12b — deltas are against the option the buyer paid for (same GST mode), not the quote's Standard row.
+    const w = { id: winner.id, ...asLabelQuote(winner), ...(args.winnerTerms ? { pricePaise: args.winnerTerms.pricePaise, deliveryDays: args.winnerTerms.deliveryDays } : {}) }
     const inserts = losers
       .filter((l) => !done.has(l.id))
       .map((l) => ({ quote_id: l.id, event_type: 'lost', actor: 'system', reason: PASSED_OVER_REASON, payload: quoteLossLabel(asLabelQuote(l), w) }))

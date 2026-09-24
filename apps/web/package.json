@@ -15,6 +15,10 @@
     "mart:preflight": "tsx scripts/verify-launch-gate.ts",
     "mart:smoke": "tsx scripts/mart-launch-smoke.ts",
     "mart:static": "tsx scripts/verify-mart-static-inert.ts",
+    "i18n:coverage": "tsx scripts/i18n-coverage.ts",
+    "i18n:promote": "tsx scripts/i18n-promote.ts",
+    "voice:eval": "tsx scripts/voice-eval.ts",
+    "eval:search": "tsx scripts/eval-search.ts",
     "agents:verify": "tsx scripts/verify-agents.ts",
     "trust:verify": "tsx scripts/verify-trust.ts",
     "whatsapp:verify": "tsx scripts/verify-whatsapp.ts",
@@ -31,6 +35,7 @@
     "agents:verify:procurement": "tsx scripts/verify-procurement.ts",
     "trust:verify:score": "tsx scripts/verify-score.ts",
     "trust:verify:benchmarks": "tsx scripts/verify-benchmarks.ts",
+    "trust:verify:content-translation": "tsx scripts/verify-content-translation.ts",
     "voice:verify:v2": "tsx scripts/verify-voice-v2.ts"
   },
   "dependencies": {
@@ -63,6 +68,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
+    "@formatjs/icu-messageformat-parser": "2.11.4",
     "@types/node": "^22.0.0",
     "@types/pdf-parse": "1.1.5",
     "@types/react": "^19.0.0",

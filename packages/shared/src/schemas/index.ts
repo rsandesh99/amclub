@@ -5,6 +5,7 @@ import { SUPPORTED_LOCALES, PROVIDER_LANGUAGES } from '../locales'
 import { goodsRfqSpecSchema, goodsQuoteTermsSchema } from '../mart/goods'
 import { quoteDeclineReasonSchema } from '../decline-message'
 import { rfqMustHavesSchema } from '../rfq-v3'
+import { quoteOptionsSchema } from '../quote-options-schema'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -285,6 +286,8 @@ export const quoteSchema = z.object({
   extraction_id: uuidSchema.optional(),
   /** S2.2 — the Munshi draft this submit came from (delegated run → `approved`; the provider's own composer → `edited`). */
   munshi_draft_id: uuidSchema.optional(),
+  /** E12b / ADR 020 — Economy / Express beside this (Standard) price; services only, behind quote_options_enabled. */
+  options: quoteOptionsSchema.optional(),
 })
 
 export type QuoteInput = z.infer<typeof quoteSchema>

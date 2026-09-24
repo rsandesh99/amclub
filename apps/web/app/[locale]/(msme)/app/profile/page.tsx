@@ -1,11 +1,15 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { MsmeProfileForm, type MsmeProfileInitial } from '@/components/profile/MsmeProfileForm'
 import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
 import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
 import { AGENT_ENABLED } from '@/lib/flags'
+import { CorpusConsentSection } from '@/components/profile/CorpusConsentSection'
+import { corpusConsentOffered } from '@/lib/corpus'
+import { PrivacyChoices } from '@/components/consent/PrivacyChoices'
+import { ANALYTICS_CONSENT_REQUIRED } from '@/lib/public-flags'
 
 export default async function MsmeProfilePage() {
   const t = await getTranslations('profile')
@@ -34,6 +38,12 @@ export default async function MsmeProfilePage() {
     preferredLocale: user.preferredLocale ?? 'en',
   }
 
+  // E15 F6 — the corpus opt-in: shown while the switch is on, or to a buyer who
+  // already opted in (so revoking always works). Tolerant: absent column / row = off.
+  const admin = await createAdminClient()
+  const [{ data: consent }, offered] = await Promise.all([admin.from('users').select('corpus_consent_at').eq('id', user.id).maybeSingle(), corpusConsentOffered(admin)])
+  const consented = !!consent?.corpus_consent_at
+
   return (
     <div className="mx-auto max-w-lg px-4 py-6 space-y-6">
       <div>
@@ -59,6 +69,10 @@ export default async function MsmeProfilePage() {
       </section>
 
       <MsmeProfileForm initial={initial} />
+
+      {(offered || consented) && <CorpusConsentSection initialOn={consented} />}
+      {/* E17 (gated D-UX2) — "Privacy choices": the analytics choice, changeable any time. */}
+      {ANALYTICS_CONSENT_REQUIRED && <PrivacyChoices />}
 
       {AGENT_ENABLED && <AgentGrantsSection persona="buyer" />}
       {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}

@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
   const json = await request.json().catch(() => null)
   const parsed = goodsCheckoutSchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
-  const { items, delivery, gstInvoice, idempotencyKey } = parsed.data
+  const { items, delivery, gstInvoice, idempotencyKey, sample } = parsed.data
+  // E16 N42 — a sample is exactly one listing at qty 1.
+  if (sample && (items.length !== 1 || items[0]!.qty !== 1)) return NextResponse.json({ error: { code: 'sample_one_unit' } }, { status: 422 })
 
   // Idempotent replay → existing session.
   const { data: existing } = await supabase
@@ -52,12 +54,13 @@ export async function POST(request: NextRequest) {
   if (msme.deleted_at) return accountSuspendedResponse()
 
   const admin = await createAdminClient()
-  const prepared = await prepareGoodsCheckout(admin, items)
+  const prepared = await prepareGoodsCheckout(admin, items, { sample: !!sample })
   if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status })
   const { prep } = prepared
   const deliveryDays = Number(await getMartSetting<number | string>(admin, 'goods_delivery_days', 3))
 
-  const { data: session, error: insErr } = await supabase
+  // ADR 018 — sessions are server-written only (the buyer is authorised above).
+  const { data: session, error: insErr } = await admin
     .from('checkout_sessions')
     .upsert(
       {
@@ -99,7 +102,7 @@ export async function POST(request: NextRequest) {
     notes: { checkout_session_id: session.id, source: 'catalog', msme_id: msme.id, kind: 'goods' },
     idempotencyKey,
   })
-  await supabase
+  await admin
     .from('checkout_sessions')
     .update({ razorpay_order_id: order.razorpayOrderId })
     .eq('id', session.id)
@@ -116,9 +119,12 @@ export async function POST(request: NextRequest) {
       taxablePaise: prep.amounts.taxablePaise,
       gstPaise: prep.amounts.gstPaise,
       totalPaise: prep.amounts.totalPaise,
-      afterItcPaise: prep.amounts.taxablePaise,
+      afterItcPaise: prep.afterItcPaise,
+      itcPaise: prep.itcPaise,
     },
     lineItems: prep.lineItems,
+    nonReturnableProductIds: prep.nonReturnableProductIds,
+    itcIneligibleProductIds: prep.itcIneligibleProductIds,
     sellerName: prep.sellerName,
     deliveryDays,
   })

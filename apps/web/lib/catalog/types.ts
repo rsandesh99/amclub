@@ -1,4 +1,4 @@
-import type { PriceDisplay } from '@amclub/shared'
+import type { I18nText, PackageDeliverable, PriceDisplay } from '@amclub/shared'
 
 /**
  * Shared catalog DTOs. These are the shapes the search RPC and query helpers
@@ -7,10 +7,8 @@ import type { PriceDisplay } from '@amclub/shared'
 
 export type Locale = 'en' | 'hi'
 
-export interface I18nText {
-  en: string
-  hi?: string
-}
+/** E14 FR-14.2 — the shared four-language map ({ en, hi?, te?, ta? }). */
+export type { I18nText }
 
 export type SortOption = 'rating' | 'price_asc' | 'price_desc' | 'newest'
 
@@ -109,7 +107,8 @@ export interface PackageDetail {
   titleI18n: I18nText
   scopeIncluded: string[]
   scopeExcluded: string[]
-  deliverables: string[]
+  /** E15 F3 — typed `{ label_i18n, format }` rows or the older prose strings; render with `deliverableLabel`. */
+  deliverables: PackageDeliverable[]
   requirementsTemplate: unknown
   pricePaise: number
   discountBps: number

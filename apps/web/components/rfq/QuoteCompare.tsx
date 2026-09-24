@@ -27,7 +27,8 @@ import { ConfirmSheet } from '@/components/ui/confirm-sheet'
 import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 import { QuoteTermsRow } from './QuoteTermsRow'
 import { useAnalytics } from '@/components/providers/posthog'
-import type { BenchmarkView } from '@amclub/shared'
+import type { BenchmarkView, QuoteChoice } from '@amclub/shared'
+import type { CompareChoices } from '@/lib/rfq/compare'
 import { BenchmarkLine } from './BenchmarkLine'
 import { SegmentedControl } from '@/components/ui-v3/SegmentedControl'
 
@@ -59,6 +60,11 @@ export interface QuoteCompareProps {
    * scope on desktop, Compact by default, grouped cards below md. Same data, money and actions as v2.
    */
   v3?: boolean
+  /**
+   * E12b / ADR 020 — Economy · Standard · Express per quote, each with its checkout total and flags (server-computed),
+   * and the lowest / fastest across them. Null / absent = no quote has options: the screen exactly as before.
+   */
+  choices?: CompareChoices | null
 }
 
 /**
@@ -69,7 +75,7 @@ export interface QuoteCompareProps {
  * Decline opens a sheet: reason, optional private note, the template preview
  * in the provider's language, no undo (the quote machine has no way back).
  */
-export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering, payQuoteId = null, benchmark = null, v3 = false }: QuoteCompareProps) {
+export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointersEnabled, ordering, payQuoteId = null, benchmark = null, v3 = false, choices = null }: QuoteCompareProps) {
   const t = useTranslations('rfq')
   const tc = useTranslations('checkout')
   const locale = useLocale()
@@ -101,6 +107,8 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
   // resumes the same session instead of minting a second payable order.
   const [confirming, setConfirming] = useState<QuoteForBuyer | null>(null)
   const [confirmErr, setConfirmErr] = useState('')
+  // E12b — the option picked per quote (null / absent = Standard, the quote itself).
+  const [picked, setPicked] = useState<Record<string, string | null>>({})
   const quoteKeys = useRef(new Map<string, string>())
   const closeConfirm = useCallback(() => { setConfirming(null); setConfirmErr('') }, [])
   // S3.1 — open the ORDINARY confirm sheet for the agent-chosen quote once (a submitted quote on an undecided request only)
@@ -113,6 +121,12 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     setConfirming(q)
     posthog.capture('procurement_checkout_opened', { rfq_id: rfq.id, device: 'web' })
   }, [payQuoteId, rfq, posthog])
+  /** E12b — the chosen option's server figures for this quote, or null (no options → the quote as before). */
+  const choiceOf = (q: QuoteForBuyer): QuoteChoice | null => {
+    const cs = choices?.byQuote[q.id]
+    if (!cs || cs.length < 2) return null
+    return cs.find((c) => c.optionId === (picked[q.id] ?? null)) ?? null
+  }
   const keyForQuote = (quoteId: string) => {
     let k = quoteKeys.current.get(quoteId)
     if (!k) { k = newIdempotencyKey(); quoteKeys.current.set(quoteId, k) }
@@ -151,7 +165,10 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     if (!v3 || viewed.current || rfq.quotes.length === 0) return
     viewed.current = true
     posthog.capture('compare_viewed', { quotes: rfq.quotes.length, device: 'web' })
-  }, [v3, rfq.quotes.length, posthog])
+    // E15 F1 — which deterministic flags the buyer saw (one event per flag kind per view): the outcome labels' inputs.
+    const kinds = new Set(compare.flatMap((r) => r.flags))
+    for (const flag of kinds) posthog.capture('compare_flag_viewed', { flag, device: 'web' })
+  }, [v3, rfq.quotes.length, posthog, compare])
 
   // Pointers load after mount when enabled and not cached — the table never waits on the model.
   useEffect(() => {
@@ -226,7 +243,9 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     setAccepting(q.id)
     setConfirmErr('')
     try {
-      const data = await startCheckout('/api/v1/checkout', { quoteId: q.id, idempotencyKey: keyForQuote(q.id) })
+      // E12b — the picked option rides to checkout, which re-reads and re-prices it; each choice has its own key.
+      const optionId = choiceOf(q)?.optionId ?? null
+      const data = await startCheckout('/api/v1/checkout', { quoteId: q.id, idempotencyKey: keyForQuote(optionId ? `${q.id}:${optionId}` : q.id), ...(optionId ? { optionId } : {}) })
       await payCheckout(data, {
         description: rfq.title,
         onPaid: (o) => router.push(o.kind === 'order' ? `/app/orders/${o.orderId}?first=1` : '/app/orders?processing=1'),
@@ -243,8 +262,35 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
   const decided = rfq.status === 'accepted'
   const statusOf = (q: QuoteForBuyer) => (localDeclined[q.id] ? 'declined' : q.status)
   const reasonOf = (q: QuoteForBuyer) => localDeclined[q.id] ?? q.declineReason
-  const flagsOf = (q: QuoteForBuyer): CompareFlag[] => resultById.get(q.id)?.flags ?? []
-  const totalOf = (q: QuoteForBuyer) => resultById.get(q.id)?.normalizedTotalPaise ?? q.pricePaise
+  const flagsOf = (q: QuoteForBuyer): CompareFlag[] => choiceOf(q)?.flags ?? resultById.get(q.id)?.flags ?? []
+  const totalOf = (q: QuoteForBuyer) => choiceOf(q)?.normalizedTotalPaise ?? resultById.get(q.id)?.normalizedTotalPaise ?? q.pricePaise
+  const daysOf = (q: QuoteForBuyer) => choiceOf(q)?.deliveryDays ?? q.deliveryDays
+  const pricePaiseOf = (q: QuoteForBuyer) => choiceOf(q)?.pricePaise ?? q.pricePaise
+  // E12b — Economy · Standard · Express, picked per quote (the figures are the server's).
+  const OptionChips = ({ q }: { q: QuoteForBuyer }) => {
+    const cs = choices?.byQuote[q.id]
+    if (!cs || cs.length < 2) return <span className="text-xs text-foreground-secondary">{t('cmp3_option_standard_only')}</span>
+    const current = picked[q.id] ?? null
+    return (
+      <div className="flex flex-wrap gap-1" role="group" aria-label={t('cmp3_options')} data-testid="quote-options">
+        {cs.map((c) => (
+          <button
+            key={c.label}
+            type="button"
+            aria-pressed={current === c.optionId}
+            data-option={c.label}
+            onClick={() => {
+              setPicked((p) => ({ ...p, [q.id]: c.optionId }))
+              posthog.capture('quote_option_selected', { device: 'web', label: c.label })
+            }}
+            className={`rounded-chip border px-2 py-0.5 text-[11px] font-medium ${current === c.optionId ? 'border-primary bg-primary/10 text-primary' : 'border-border text-foreground-secondary'}`}
+          >
+            {t(`cmp3_option_${c.label}`)} · {t('delivery_days', { days: c.deliveryDays })}
+          </button>
+        ))}
+      </div>
+    )
+  }
   const notesOf = (q: QuoteForBuyer) => resultById.get(q.id)?.normalizationNotes ?? []
   const noteText = (n: { code: string; paise?: number }) => (n.paise != null ? `${t(`compare_note_${n.code}` as 'compare_note_gst_added')} ${formatINRExact(n.paise)}` : t(`compare_note_${n.code}` as 'compare_note_gst_added'))
 
@@ -311,7 +357,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
       </p>
     </div>
   )
-  const price = (q: QuoteForBuyer) => (goods && q.goods ? `${formatINRExact(q.goods.unitPricePaise)} ${t('goods_per_unit', { unit: specUnit })}` : formatINR(q.pricePaise))
+  const price = (q: QuoteForBuyer) => (goods && q.goods ? `${formatINRExact(q.goods.unitPricePaise)} ${t('goods_per_unit', { unit: specUnit })}` : formatINR(pricePaiseOf(q)))
   // S1.3 — "rev N" beside the price once revised; the popover lists quote_events.revised (before → after).
   const RevChip = ({ q }: { q: QuoteForBuyer }) => {
     if (q.revision <= 1) return null
@@ -338,7 +384,8 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     { key: 'provider', label: t('compare_table_provider'), cell: (q) => <Provider q={q} /> },
     { key: 'price', label: t('compare_table_price'), cell: (q) => <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-display text-base font-bold text-primary tabular-nums">{price(q)}</span><RevChip q={q} /></span> },
     { key: 'total', label: t('compare_normalized'), cell: (q) => <span className="tabular-nums font-semibold" title={notesOf(q).length ? `${t('compare_normalized_why')}: ${notesOf(q).map(noteText).join('; ')}` : t('compare_normalized_why_none')}>{formatINRExact(totalOf(q))}{notesOf(q).length > 0 && <span className="ml-1 text-[11px] font-normal text-foreground-secondary" aria-hidden>ⓘ</span>}</span> },
-    { key: 'delivery', label: t('compare_delivery'), cell: (q) => <span>{t('delivery_days', { days: q.deliveryDays })}</span> },
+    ...(choices ? [{ key: 'options', label: t('cmp3_options'), cell: (q: QuoteForBuyer) => <OptionChips q={q} /> }] : []),
+    { key: 'delivery', label: t('compare_delivery'), cell: (q) => <span>{t('delivery_days', { days: daysOf(q) })}</span> },
     { key: 'gst', label: t('term_gst'), cell: (q) => <span>{goods && q.goods ? `${q.goods.gstRateBps / 100}%` : yesNoUnstated(q.gstIncluded)}</span> },
     { key: 'transport', label: t('term_transport'), cell: (q) => <span>{yesNoUnstated(q.transportIncluded)}</span> },
     { key: 'valid', label: t('term_valid_until'), cell: (q) => <span>{dateOrUnstated(q.validUntil)}</span> },
@@ -376,6 +423,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
   const v3Groups: { key: string; label: string; rows: V3Row[] }[] = [
     {
       key: 'price', label: t('cmp3_group_price'), rows: [
+        ...(choices ? [{ key: 'options', label: t('cmp3_options'), cell: (q: QuoteForBuyer) => <OptionChips q={q} /> }] : []),
         { key: 'as_quoted', label: t('compare_table_price'), cell: (q) => <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-display text-base font-bold text-primary tabular-nums">{price(q)}</span><RevChip q={q} /></span> },
         { key: 'gst', label: t('term_gst'), cell: gstCell },
         ...(goods ? [{ key: 'goods', label: t('goods_col_incl'), cell: (q: QuoteForBuyer) => (q.goods ? <span className="text-xs tabular-nums">{q.goods.qty} {specUnit}{specQty && q.goods.qty !== specQty ? ' *' : ''} · {formatINRExact(q.goods.totalInclGstPaise)} · {t('goods_col_after_itc')} {formatINRExact(q.goods.afterItcPaise)}</span> : null) }] : []),
@@ -384,7 +432,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
     },
     {
       key: 'time', label: t('cmp3_group_time'), rows: [
-        { key: 'delivery', label: t('compare_delivery'), cell: (q) => <span>{t('delivery_days', { days: q.deliveryDays })}{has(q, 'fastest') && <Tag tone="fact">{t('cmp3_fastest')}</Tag>}</span> },
+        { key: 'delivery', label: t('compare_delivery'), cell: (q) => <span>{t('delivery_days', { days: daysOf(q) })}{has(q, 'fastest') && <Tag tone="fact">{t('cmp3_fastest')}</Tag>}</span> },
         { key: 'valid', label: t('term_valid_until'), cell: (q) => <span>{dateOrUnstated(q.validUntil)}{has(q, 'validity_short') && <Tag tone="attention">{t('cmp3_soon')}</Tag>}{has(q, 'validity_expired') && <Tag tone="attention">{t('flag_validity_expired_label')}</Tag>}</span> },
       ],
     },
@@ -462,6 +510,22 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
 
       {/* S3.2 — the fair price range above the table (the same line the matched providers see); nothing when there is none */}
       {benchmark && <BenchmarkLine view={benchmark} role="buyer" />}
+      {/* E12b — the lowest and fastest across every option of every quote (server-computed). */}
+      {choices && (choices.lowest || choices.fastest) && (() => {
+        const name = (ref: { quoteId: string; optionId: string | null }) => {
+          const c = choices.byQuote[ref.quoteId]?.find((x) => x.optionId === ref.optionId)
+          return c ? { who: t('compare_quote_label', { label: labelById.get(ref.quoteId) ?? '' }), c } : null
+        }
+        const lo = choices.lowest ? name(choices.lowest) : null
+        const fa = choices.fastest ? name(choices.fastest) : null
+        return (
+          <p className="text-xs text-foreground-secondary" data-testid="option-extremes">
+            {lo && t('cmp3_options_lowest', { who: lo.who, option: t(`cmp3_option_${lo.c.label}`), total: formatINRExact(lo.c.normalizedTotalPaise) })}
+            {lo && fa && ' · '}
+            {fa && t('cmp3_options_fastest', { who: fa.who, option: t(`cmp3_option_${fa.c.label}`), days: fa.c.deliveryDays })}
+          </p>
+        )
+      })()}
 
       {/* S2.4 — one fixed line, never a number; price is one tap away */}
       {sort === 'reliability' && (
@@ -576,7 +640,7 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
               <div className="text-right">
                 <p className="flex flex-wrap items-center justify-end gap-1.5 font-display text-lg font-bold text-primary tabular-nums">{price(q)}<RevChip q={q} /></p>
                 <p className="text-xs text-foreground-secondary">{t('compare_normalized')}: <span className="font-semibold text-foreground">{formatINRExact(totalOf(q))}</span></p>
-                <p className="text-xs text-foreground-secondary">{t('delivery_days', { days: q.deliveryDays })}{formatResponseTime(q.provider.medianResponseMinutes) ? ` · ${t('responds_in', { time: formatResponseTime(q.provider.medianResponseMinutes) as string })}` : ''}</p>
+                <p className="text-xs text-foreground-secondary">{t('delivery_days', { days: daysOf(q) })}{formatResponseTime(q.provider.medianResponseMinutes) ? ` · ${t('responds_in', { time: formatResponseTime(q.provider.medianResponseMinutes) as string })}` : ''}</p>
               </div>
             </div>
             {goods && q.goods && (
@@ -628,10 +692,11 @@ export function QuoteCompare({ rfq, compare, pointers: initialPointers, pointers
                 ) : (
                   <div className="flex justify-between gap-3">
                     <dt className="text-foreground-secondary">{t(q.gstIncluded === true ? 'accept_confirm_price_incl_gst' : 'accept_confirm_price')}</dt>
-                    <dd className="text-right font-display text-base font-bold text-primary tabular-nums">{formatINRExact(q.pricePaise)}</dd>
+                    <dd className="text-right font-display text-base font-bold text-primary tabular-nums">{formatINRExact(pricePaiseOf(q))}</dd>
                   </div>
                 )}
-                <div className="flex justify-between gap-3"><dt className="text-foreground-secondary">{t('compare_delivery')}</dt><dd className="text-right">{t('delivery_days', { days: q.deliveryDays })}</dd></div>
+                {choiceOf(q) && <div className="flex justify-between gap-3"><dt className="text-foreground-secondary">{t('cmp3_options')}</dt><dd className="text-right font-medium">{t(`cmp3_option_${choiceOf(q)!.label}`)}</dd></div>}
+                <div className="flex justify-between gap-3"><dt className="text-foreground-secondary">{t('compare_delivery')}</dt><dd className="text-right">{t('delivery_days', { days: daysOf(q) })}</dd></div>
               </dl>
               {!(goods && q.goods) && <p className="text-xs text-foreground-secondary">{t(q.gstIncluded === true ? 'accept_confirm_gst_included_note' : 'accept_confirm_gst_note')}</p>}
               <p className="flex items-start gap-1.5 text-foreground"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-trust" aria-hidden />{t('accept_confirm_escrow')}</p>

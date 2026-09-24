@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
+import { readSearchAttribution } from '@/components/search-v3/SearchAttributionCapture'
 
 export function CheckoutClient({
   packageId,
@@ -91,12 +92,15 @@ export function CheckoutClient({
     setError('')
     const couponCode = coupon.trim()
     const gst = gstin.trim().toUpperCase()
+    const attribution = readSearchAttribution(packageId)
     try {
       const data = await startCheckout('/api/v1/checkout', {
         packageId,
         idempotencyKey: keyFor(`${couponCode}|${gst}`),
         ...(couponCode ? { couponCode } : {}),
         ...(gst ? { gstInvoice: { gstin: gst } } : {}),
+        // E15 F5 — the search that led here (never part of the charge).
+        ...(attribution ? { attribution } : {}),
       })
       // Simulation completes the captured-payment path server-side; real keys
       // open the Razorpay sheet and the WEBHOOK creates the order.

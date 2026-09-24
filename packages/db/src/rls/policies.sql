@@ -742,6 +742,16 @@ CREATE TRIGGER order_events_no_update
   FOR EACH ROW EXECUTE FUNCTION raise_append_only();
 REVOKE UPDATE, DELETE ON order_events FROM anon, authenticated;
 
+-- ─── money + order-state rows: server-written only (ADR 018, migration 0064) ──
+-- The row policies below still decide what a party READS; no client role holds
+-- a write grant on these tables, so the FOR ALL policies are read-only in effect
+-- (every writer is a /api/v1 route or job on the service role).
+REVOKE INSERT, UPDATE, DELETE ON orders, checkout_sessions, payments, payouts, refunds, invoices,
+  disputes, order_documents, rfqs, quotes, rfq_matches, coupons, coupon_redemptions,
+  provider_bank_accounts, reviews FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION materialize_order(text, text, bigint, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION materialize_order(text, text, bigint, text, jsonb) TO service_role;
+
 -- ─── orders ───────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "orders: msme all own" ON orders;
@@ -1039,6 +1049,14 @@ GRANT SELECT (
   median_response_minutes, capacity_paused, top_rated,
   created_at, updated_at, deleted_at
 ) ON provider_profiles TO anon, authenticated;
+-- E14 (0061): the About in hi / te / ta and which slots are approved machine translations — public like `about`.
+DO $e14$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'provider_profiles' AND column_name = 'about_i18n') THEN
+    GRANT SELECT (about_i18n, i18n_sources) ON provider_profiles TO anon, authenticated;
+  END IF;
+END
+$e14$;
 
 -- ═══ AMC Mart (0022) — mirrors migration 0022 §7 verbatim ═══════════════════
 -- Guarded: bootstrap applies migrations first, so these tables exist; on a

@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { useCart, groupBySeller } from '@/lib/mart/cart-store'
+import { useCart, groupBySeller, type CartLine } from '@/lib/mart/cart-store'
 import { SheetCard, EmeraldCard, GoldNumeral } from '@/components/mart/primitives'
+import { LineFlags } from '@/components/mart/LineFlags'
 import type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
 import { CHECKOUT_ERROR_KEYS, CheckoutError, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 
@@ -20,6 +21,9 @@ interface Preview {
   amounts: { taxablePaise: number; gstPaise: number; totalPaise: number; afterItcPaise: number }
   lineItems: { product_id: string; name: string; qty: number; unit: string; tier_unit_price_paise: number; line_taxable_paise: number; line_gst_paise: number }[]
   returnWindowHours: number
+  /** E16 N43 — server flags per line. */
+  nonReturnableProductIds?: string[]
+  itcIneligibleProductIds?: string[]
 }
 
 export type { DeliveryDefaults } from '@/lib/mart/delivery-defaults'
@@ -31,6 +35,7 @@ function deliveryDate(days: number): string {
 
 const ERR_KEYS: Record<string, string> = {
   product_unavailable: 'item_unavailable', below_min_qty: 'below_min_qty', category_blocked: 'category_blocked', multiple_sellers: 'multiple_sellers', no_tier: 'below_min_qty',
+  no_sample: 'item_unavailable', sample_one_unit: 'item_unavailable',
 }
 
 /**
@@ -50,7 +55,7 @@ function normalizeIndianPhone(raw: string): string {
  * services CheckoutClient flow (simulate in test mode; the WEBHOOK creates the
  * order with real keys). No motion while money is uncertain (FRONTEND.md §3.2).
  */
-export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: string | null; states: { value: string; label: string }[]; defaults: DeliveryDefaults | null }) {
+export function GoodsCheckoutClient({ sellerId, states, defaults, sample }: { sellerId: string | null; states: { value: string; label: string }[]; defaults: DeliveryDefaults | null; sample?: Omit<CartLine, 'qty' | 'minOrderQty'> | undefined }) {
   const t = useTranslations('mart')
   const tc = useTranslations('checkout')
   const router = useRouter()
@@ -58,7 +63,12 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
   const removeMany = useCart((s) => s.remove)
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => setHydrated(true), [])
-  const group = useMemo(() => groupBySeller(lines).find((g) => (sellerId ? g.sellerId === sellerId : true)) ?? null, [lines, sellerId])
+  // E16 N42 — a sample is one unit of one listing, outside the cart (the cart is left as it is).
+  const group = useMemo(
+    () => (sample ? { sellerId: sample.sellerId, sellerName: sample.sellerName, lines: [{ ...sample, qty: 1, minOrderQty: 1 }] } : groupBySeller(lines).find((g) => (sellerId ? g.sellerId === sellerId : true)) ?? null),
+    [lines, sellerId, sample],
+  )
+  const sampleFlag = sample ? { sample: true } : {}
 
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewErr, setPreviewErr] = useState('')
@@ -85,7 +95,7 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
     setPreviewErr('')
     fetch('/api/v1/mart/cart/preview', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: group.lines.map((l) => ({ product_id: l.productId, qty: l.qty })), ...(form.state ? { state: form.state } : {}) }),
+      body: JSON.stringify({ items: group.lines.map((l) => ({ product_id: l.productId, qty: l.qty })), ...sampleFlag, ...(form.state ? { state: form.state } : {}) }),
     })
       .then(async (r) => {
         const d = await r.json().catch(() => null)
@@ -118,9 +128,10 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
         items: group!.lines.map((l) => ({ product_id: l.productId, qty: l.qty })),
         delivery: { ...form, contact_phone: phone10 },
         idempotencyKey: newIdempotencyKey(),
+        ...sampleFlag,
         ...(gstinTyped ? { gstInvoice: { gstin: gstinTyped } } : {}),
       })
-      const clearLines = () => group!.lines.forEach((l) => removeMany(l.productId))
+      const clearLines = () => { if (!sample) group!.lines.forEach((l) => removeMany(l.productId)) }
       await payCheckout(data, {
         description: preview?.sellerName ?? group!.sellerName,
         onPaid: (o) => {
@@ -158,7 +169,10 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
           <ul className="mt-3 divide-y divide-brass/20 text-sm">
             {preview.lineItems.map((li) => (
               <li key={li.product_id} className="flex justify-between py-2">
-                <span className="text-emerald-ink">{t('qty_unit', { qty: li.qty, unit: li.unit })} {li.name}</span>
+                <span className="text-emerald-ink">
+                  {t('qty_unit', { qty: li.qty, unit: li.unit })} {li.name}
+                  <LineFlags nonReturnable={!!preview.nonReturnableProductIds?.includes(li.product_id)} itcIneligible={!!preview.itcIneligibleProductIds?.includes(li.product_id)} />
+                </span>
                 <span className="tabular-nums">{formatINRExact(li.line_taxable_paise)}</span>
               </li>
             ))}
@@ -209,7 +223,10 @@ export function GoodsCheckoutClient({ sellerId, states, defaults }: { sellerId: 
             <div className="flex justify-between text-xs"><dt className="text-ivory/80">{t('after_itc')}</dt><dd className="tabular-nums">{formatINR(preview.amounts.afterItcPaise)}</dd></div>
           </dl>
           <p className="mt-3 text-meta font-medium text-ivory">{form.pickup ? t('pickup_label') : t('delivery_by', { date: deliveryDate(preview.deliveryDays) })}</p>
-          <p className="mt-1 text-xs text-ivory/80">{t('return_window_note', { hours: preview.returnWindowHours })}</p>
+          <p className="mt-1 text-xs text-ivory/80">
+            {/* E16 N43 — nothing returnable in this order: say so instead of a window. */}
+            {preview.nonReturnableProductIds && preview.nonReturnableProductIds.length === preview.lineItems.length ? `${t('not_returnable')} · ${t('not_returnable_claims_only')}` : t('return_window_note', { hours: preview.returnWindowHours })}
+          </p>
         </EmeraldCard>
       )}
 

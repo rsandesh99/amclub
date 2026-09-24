@@ -26,11 +26,8 @@ export function formatINRExact(paise: number): string {
 // Experience v3 N16: package prices are the server's `display` (shared
 // priceDisplay); the client-side computePricing was removed.
 
-export function pickI18n(map: { en: string; hi?: string } | null | undefined, locale: string): string {
-  if (!map) return ''
-  if (locale === 'hi' && map.hi) return map.hi
-  return map.en
-}
+/** E14 FR-14.2 — the ONE picker ({ en, hi?, te?, ta? }, own slot else English), shared with the web. */
+export { pickI18n } from '@amclub/shared'
 
 export function initials(name: string): string {
   return name

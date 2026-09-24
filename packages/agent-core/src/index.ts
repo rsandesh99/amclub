@@ -49,6 +49,8 @@ export * from './score/parts'
 export { scoreNoteSchema } from './prompts/score_note/schema'
 export * from './benchmark/parts'
 export { benchmarkExplainSchema } from './prompts/benchmark_explain/schema'
+export * from './content-translate/parts'
+export { contentTranslateSchema } from './prompts/provider_content_translate/schema'
 // S3.1 — the Buyer Procurement Agent (the turn + watch definitions, the session rules both the runtime and the harness apply, parts, keyless producers)
 export * from './procurement/parts'
 export * from './procurement/stub'

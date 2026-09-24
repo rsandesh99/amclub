@@ -1,12 +1,14 @@
 import { redirect, notFound } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
-import { createClient, createPublicClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient, createPublicClient } from '@/lib/supabase/server'
+import { activeAddonsFor, addonsOn } from '@/lib/addons'
+import { offeredMilestones } from '@/lib/bundles'
 import { getSessionUser, getMsmeProfile, type SessionUser } from '@/lib/auth/session'
-import { computeOrderAmounts, isValidGstin, ORDER_ACCEPT_WINDOW_HOURS, priceDisplay, rfqFieldLabel } from '@amclub/shared'
+import { addonIdsSchema, bundlePlan, computeOrderAmounts, isValidGstin, ORDER_ACCEPT_WINDOW_HOURS, packageCharge, packageChargeDisplay, priceDisplay, resolveAddonSelection, rfqFieldLabel } from '@amclub/shared'
 import { pickI18n } from '@/lib/format'
 import { COUPONS_ENABLED } from '@/lib/flags'
 import { isOnFor, isOnForEveryone } from '@/lib/experiments'
-import { CheckoutV3, type CheckoutMode } from '@/components/checkout-v3/CheckoutV3'
+import { CheckoutV3, type CheckoutAddonLine, type CheckoutMode, type CheckoutPlanLine } from '@/components/checkout-v3/CheckoutV3'
 import { CheckoutClient } from './CheckoutClient'
 
 interface RequirementField {
@@ -20,14 +22,14 @@ interface RequirementField {
  * package through the anon client (public, active rows only); the buyer's own
  * GSTIN decides the ITC line (checksum-valid only; shown masked).
  */
-async function CheckoutV3Page({ packageId, user }: { packageId: string; user: SessionUser | null }) {
+async function CheckoutV3Page({ packageId, user, addonParam }: { packageId: string; user: SessionUser | null; addonParam: string | undefined }) {
   const t = await getTranslations('checkout')
   const tv = await getTranslations('checkout_v3')
   const locale = await getLocale()
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const { data: pkg } = await createPublicClient()
     .from('packages')
-    .select('id, title_i18n, price_paise, discount_bps, delivery_days, requirements_template, provider:provider_profiles!inner(display_name, status, capacity_paused)')
+    .select('id, title_i18n, price_paise, discount_bps, delivery_days, revision_count, requirements_template, provider:provider_profiles!inner(display_name, status, capacity_paused)')
     .eq('id', packageId)
     .eq('status', 'active')
     .is('deleted_at', null)
@@ -44,8 +46,37 @@ async function CheckoutV3Page({ packageId, user }: { packageId: string; user: Se
     profileGstin = (data?.gstin as string | null | undefined)?.trim().toUpperCase() ?? null
   }
   const itc = !!profileGstin && isValidGstin(profileGstin)
+  // E12a / ADR 019 — add-ons chosen in the buy box (`?addons=`), re-read and
+  // priced here with the SAME packageCharge checkout freezes. Anything that is
+  // no longer an active add-on of this package is dropped with a note.
+  // E12c / ADR 021 — a plan: one payment, one order per milestone (add-ons are not offered on plans).
+  const milestones = await offeredMilestones(await createAdminClient(), p.id)
+  const wanted = addonIdsSchema.safeParse(milestones.length ? [] : (addonParam ?? '').split(',').filter(Boolean))
+  let addonLines: CheckoutAddonLine[] = []
+  let addonIds: string[] = []
+  let addonsDropped = false
+  let charge: ReturnType<typeof packageCharge> | null = null
+  if (wanted.success && wanted.data.length) {
+    const admin = await createAdminClient()
+    const sel = (await addonsOn(admin)) ? resolveAddonSelection(await activeAddonsFor(admin, p.id), wanted.data) : ({ ok: false } as const)
+    if (sel.ok) {
+      charge = packageCharge({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, commissionBps: 0, deliveryDays: p.delivery_days, revisionCount: p.revision_count ?? null, addons: sel.rows })
+      addonIds = sel.rows.map((r) => r.id)
+      addonLines = sel.rows.map((r) => ({ id: r.id, label: pickI18n(r.label_i18n, locale), pricePaise: Number(r.price_paise) }))
+    } else {
+      addonsDropped = true
+    }
+  } else if (addonParam) {
+    addonsDropped = true
+  }
+  const planLines: CheckoutPlanLine[] = milestones.length
+    ? bundlePlan((charge ?? packageCharge({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, commissionBps: 0, deliveryDays: p.delivery_days, revisionCount: p.revision_count ?? null, addons: [] })).amounts, milestones)
+        .map((c) => ({ label: pickI18n(c.label, locale), dueOffsetDays: c.dueOffsetDays, totalPaise: c.amounts.totalPaise }))
+    : []
   // Exactly what checkout charges (no coupon, no member price) — N16.
-  const display = priceDisplay({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, buyerHasGstin: itc })
+  const display = charge
+    ? packageChargeDisplay(charge, { discountBps: p.discount_bps, buyerHasGstin: itc })
+    : priceDisplay({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, buyerHasGstin: itc })
   const fields: RequirementField[] = (p.requirements_template as { fields?: RequirementField[] } | null)?.fields ?? []
   const labels = fields.map((f) => rfqFieldLabel(f, locale) || f.name).filter(Boolean).slice(0, 4)
   const nextSteps = [
@@ -64,8 +95,12 @@ async function CheckoutV3Page({ packageId, user }: { packageId: string; user: Se
         packageId={p.id}
         title={pickI18n(p.title_i18n, locale)}
         providerName={p.provider.display_name}
-        deliveryDays={p.delivery_days}
+        deliveryDays={charge?.deliveryDays ?? p.delivery_days}
         display={display}
+        addonIds={addonIds}
+        addonLines={addonLines}
+        addonsDropped={addonsDropped}
+        planLines={planLines}
         itcGstinMasked={itc ? `${profileGstin!.slice(0, 4)}…${profileGstin!.slice(-2)}` : null}
         profileGstin={profileGstin}
         providerPaused={!!p.provider.capacity_paused}
@@ -76,12 +111,14 @@ async function CheckoutV3Page({ packageId, user }: { packageId: string; user: Se
   )
 }
 
-export default async function CheckoutPage({ params }: { params: Promise<{ packageId: string }> }) {
+export default async function CheckoutPage({ params, searchParams }: { params: Promise<{ packageId: string }>; searchParams: Promise<{ addons?: string | string[] }> }) {
   const { packageId } = await params
+  const addonParam = (await searchParams).addons
+  const addonsRaw = Array.isArray(addonParam) ? addonParam.join(',') : addonParam
   const user = await getSessionUser()
   if (user ? isOnFor('checkout', user.id) : isOnForEveryone('checkout')) {
     if (!/^[0-9a-f-]{36}$/i.test(packageId)) notFound()
-    return <CheckoutV3Page packageId={packageId} user={user} />
+    return <CheckoutV3Page packageId={packageId} user={user} addonParam={addonsRaw} />
   }
   if (!user) redirect(`/login?next=/app/checkout/${packageId}`)
 

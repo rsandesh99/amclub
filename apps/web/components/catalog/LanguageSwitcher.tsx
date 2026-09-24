@@ -4,6 +4,7 @@ import { ChevronDown, Languages } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { cn } from '@/lib/utils'
+import { useAnalytics } from '@/components/providers/posthog'
 import type { AppLocale } from '@/i18n/routing'
 
 /**
@@ -33,9 +34,11 @@ export function LanguageSwitcher({ className }: { className?: string }) {
   const locale = useLocale() as AppLocale
   const pathname = usePathname()
   const router = useRouter()
+  const analytics = useAnalytics()
 
   function switchTo(next: AppLocale) {
     if (next === locale) return
+    analytics.capture('locale_changed', { from: locale, to: next, device: 'web' }) // E14
     router.replace(pathname, { locale: next })
   }
 

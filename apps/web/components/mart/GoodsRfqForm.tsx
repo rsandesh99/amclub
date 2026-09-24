@@ -17,7 +17,15 @@ import { IntakeDocumentButton } from '@/components/rfq/IntakeDocumentButton'
 import type { IntakeResult } from '@amclub/shared'
 
 export interface GoodsRfqCategoryOption { slug: string; name: string }
-export interface GoodsRfqPrefill { productId: string | null; item: string; unit: string; categorySlug: string; productName: string | null }
+export interface GoodsRfqPrefill {
+  productId: string | null
+  item: string
+  unit: string
+  categorySlug: string
+  productName: string | null
+  /** E16 N42 "Customise" — the listing's typed attributes + specs as starting spec rows (the buyer edits them). */
+  spec?: SpecRow[]
+}
 
 interface SpecRow { k: string; v: string }
 
@@ -38,7 +46,7 @@ export function GoodsRfqForm({ categories, states, defaults, prefill, documentIn
   const [item, setItem] = useState(prefill?.item ?? '')
   const [qty, setQty] = useState('')
   const [unit, setUnit] = useState(prefill?.unit ?? 'pcs')
-  const [rows, setRows] = useState<SpecRow[]>([{ k: '', v: '' }])
+  const [rows, setRows] = useState<SpecRow[]>(prefill?.spec?.length ? prefill.spec : [{ k: '', v: '' }])
   const [brand, setBrand] = useState('')
   const [target, setTarget] = useState('')
   const [details, setDetails] = useState('')

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { computeOrderAmounts, isValidGstin, quoteChargeAmounts } from '@amclub/shared'
+import { addonIdsSchema, addonSelectionKey, bundlePlan, bundlePlanSnapshot, couponBasePaise, isValidGstin, packageCharge, quoteChargeAmounts, resolveAddonSelection, type AddonSnapshot, type BundleMilestoneRow, type BundlePlanSnapshot, type OrderAmounts, type PackageAddonRow } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
@@ -11,6 +11,11 @@ import { evaluateCoupon } from '@/lib/coupons/apply'
 import { COUPONS_ENABLED } from '@/lib/flags'
 import { createAdminClient } from '@/lib/supabase/server'
 import { prepareGoodsQuoteCheckout, type GoodsQuotePrep } from '@/lib/mart/goods-rfq'
+import { searchAttributionSchema } from '@amclub/shared'
+import { storeCheckoutAttribution } from '@/lib/search/attribution'
+import { activeAddonsFor, addonsOn } from '@/lib/addons'
+import { optionForCheckout, quoteOptionsOn } from '@/lib/rfq/quote-options'
+import { offeredMilestones } from '@/lib/bundles'
 
 const bodySchema = z
   .object({
@@ -26,11 +31,19 @@ const bodySchema = z
       .optional(),
     // Client-generated; dedupes a double-submit into one checkout session + order.
     idempotencyKey: z.string().uuid(),
+    // E15 F5 — the search that led here; stored best-effort, never part of the charge.
+    attribution: searchAttributionSchema.optional(),
+    // E12a / ADR 019 — the chosen add-ons (ids only; the server prices them).
+    addonIds: addonIdsSchema.optional(),
+    // E12b / ADR 020 — the quote option the buyer picked (absent = Standard, the quote itself).
+    optionId: z.string().uuid().optional(),
   })
   // Exactly one source — package (Buy Now) OR quote (accepted RFQ quote).
   .refine((d) => !!d.packageId !== !!d.quoteId, {
     message: 'Provide exactly one of packageId or quoteId',
   })
+  .refine((d) => !d.addonIds?.length || !!d.packageId, { message: 'Add-ons apply to packages only' })
+  .refine((d) => !d.optionId || !!d.quoteId, { message: 'Options apply to quotes only' })
 
 /**
  * Stable machine codes on every error body (`{ error, code }`). Clients map the
@@ -52,6 +65,8 @@ type CheckoutErrorCode =
   | 'rfq_already_paid'
   | 'checkout_failed'
   | 'goods_quote_unavailable'
+  | 'addon_changed'
+  | 'option_not_found'
 
 function fail(status: number, code: CheckoutErrorCode, error: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error, code, ...(extra ?? {}) }, { status })
@@ -106,7 +121,13 @@ interface Prep {
   scopeSnapshot: Record<string, unknown>
   deliveryDays: number
   revisionMax: number | null
-  amounts: ReturnType<typeof computeOrderAmounts>
+  amounts: OrderAmounts
+  /** E12a — the frozen add-on snapshot (package branch only; empty = none). */
+  addons: AddonSnapshot
+  /** E12b — the quote option the session is frozen on (quote branch; null = Standard). */
+  quoteOptionId?: string | null
+  /** E12c — the frozen per-milestone plan (a bundle package; null = a single order). */
+  bundlePlan?: BundlePlanSnapshot | null
 }
 
 export async function POST(request: NextRequest) {
@@ -123,6 +144,7 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten(), code: 'invalid_body' }, { status: 422 })
   const { packageId, quoteId, idempotencyKey } = parsed.data
+  const addonIds = parsed.data.addonIds ?? []
   // GSTIN typed at checkout: normalised and checksum-validated HERE — the
   // invoice (lib/invoices/generate.ts) prefers it over the profile GSTIN, so
   // the server is the authority on what gets frozen into the session.
@@ -147,7 +169,16 @@ export async function POST(request: NextRequest) {
     .select(SESSION_COLS)
     .eq('idempotency_key', idempotencyKey)
     .maybeSingle()
-  if (existing?.razorpay_order_id) return resumeResponse(existing as SessionRow)
+  if (existing?.razorpay_order_id) {
+    // E12a — a resumed session never answers a different add-on selection
+    // (the web client keys its idempotency on the selection).
+    if (addonIds.length || (await addonsOn(await createAdminClient()))) {
+      const { data: frozen } = await supabase.from('checkout_sessions').select('addons').eq('id', existing.id).maybeSingle()
+      const had = ((frozen?.addons ?? []) as AddonSnapshot).map((a) => a.id)
+      if (addonSelectionKey(had) !== addonSelectionKey(addonIds)) return fail(409, 'addon_changed', 'Your add-ons changed; review the total and pay again')
+    }
+    return resumeResponse(existing as SessionRow)
+  }
 
   // Buyer's MSME profile (RLS: owner read).
   const { data: msme } = await supabase.from('msme_profiles').select('id, deleted_at').eq('user_id', userId).maybeSingle()
@@ -180,12 +211,42 @@ export async function POST(request: NextRequest) {
     }
     const commissionBps: number = p.category?.commission_bps ?? 1000
 
+    // E12a / ADR 019 — the chosen add-ons, re-read from the package's ACTIVE
+    // add-ons (client prices, if any were sent, are never read). An id that is
+    // not one of them — removed since the preview, another package's, or the
+    // switch is off — is refused, never silently dropped.
+    // E12c / ADR 021 — a package with milestones (switch on) sells as ONE payment for N child orders.
+    const milestones: BundleMilestoneRow[] = await offeredMilestones(await createAdminClient(), p.id)
+    if (milestones.length && addonIds.length) return fail(409, 'addon_changed', 'Add-ons are not offered on plans')
+
+    let addonRows: PackageAddonRow[] = []
+    if (addonIds.length) {
+      const admin = await createAdminClient()
+      const sel = (await addonsOn(admin)) ? resolveAddonSelection(await activeAddonsFor(admin, p.id), addonIds) : ({ ok: false } as const)
+      if (!sel.ok) return fail(409, 'addon_changed', 'An add-on changed; review the total and pay again')
+      addonRows = sel.rows
+    }
+
     let extraDiscountPaise = 0
     if (couponCode) {
       const { data: coupon } = await supabase.from('coupons').select('*').eq('code', couponCode).maybeSingle()
-      const taxableBeforeCoupon = p.price_paise - Math.round((p.price_paise * p.discount_bps) / 10000)
+      // The coupon applies to the whole pre-GST subtotal (package after its discount + add-ons).
+      const taxableBeforeCoupon = couponBasePaise({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, addons: addonRows })
       extraDiscountPaise = evaluateCoupon(coupon, taxableBeforeCoupon, p.category_id).discountPaise
     }
+    // ONE rule (shared packageCharge): with no add-ons it is exactly computeOrderAmounts as before.
+    const charge = packageCharge({
+      pricePaise: Number(p.price_paise),
+      discountBps: p.discount_bps,
+      commissionBps,
+      deliveryDays: p.delivery_days,
+      revisionCount: p.revision_count ?? null,
+      addons: addonRows,
+      couponDiscountPaise: extraDiscountPaise,
+    })
+    // The split is computed ONCE here (every column sums exactly to the whole) and frozen on the session;
+    // the materialisation trigger copies it, never recomputes.
+    const plan = milestones.length ? bundlePlan(charge.amounts, milestones) : null
 
     prep = {
       providerId: p.provider_id,
@@ -200,21 +261,18 @@ export async function POST(request: NextRequest) {
         deliverables: p.deliverables ?? [],
         requirementsTemplate: p.requirements_template ?? null,
       },
-      deliveryDays: p.delivery_days,
-      revisionMax: p.revision_count,
-      amounts: computeOrderAmounts({
-        pricePaise: Number(p.price_paise),
-        discountBps: p.discount_bps,
-        commissionBps,
-        extraDiscountPaise,
-      }),
+      deliveryDays: plan ? plan[0]!.deliveryDays : charge.deliveryDays,
+      revisionMax: charge.revisionMax,
+      amounts: charge.amounts,
+      addons: charge.addons,
+      bundlePlan: plan ? bundlePlanSnapshot(plan) : null,
     }
   } else {
     // Quote branch — accepting a submitted quote on the buyer's own RFQ.
     const { data: q } = await supabase
       .from('quotes')
       .select(
-        'id, status, provider_id, price_paise, gst_included, delivery_days, scope' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_COLS + ')',
+        'id, status, provider_id, price_paise, gst_included, delivery_days, scope, revision' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_COLS + ')',
       )
       .eq('id', quoteId!)
       .maybeSingle()
@@ -254,7 +312,16 @@ export async function POST(request: NextRequest) {
         const now = Date.now()
         const live = rows.filter((r) => r.razorpay_order_id && (!r.expires_at || new Date(r.expires_at).getTime() > now))
         const same = live.find((r) => r.quote_id === quote.id)
-        if (same) return resumeResponse(same)
+        if (same) {
+          // E12b — a live session on ANOTHER option of this quote is another payment in flight: the same rule as another quote.
+          if (parsed.data.optionId || (await quoteOptionsOn(admin))) {
+            const { data: so } = await admin.from('checkout_sessions').select('quote_option_id').eq('id', same.id).maybeSingle()
+            if (((so as { quote_option_id?: string | null } | null)?.quote_option_id ?? null) !== (parsed.data.optionId ?? null)) {
+              return fail(409, 'rfq_checkout_in_progress', 'A payment for another option of this quote is in progress', { retryAfter: same.expires_at })
+            }
+          }
+          return resumeResponse(same)
+        }
         const other = live.find((r) => r.quote_id !== quote.id)
         if (other) {
           return fail(409, 'rfq_checkout_in_progress', 'A payment for another quote on this request is in progress', { retryAfter: other.expires_at })
@@ -262,6 +329,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (isGoodsRow(rfq) && parsed.data.optionId) return fail(404, 'option_not_found', 'Goods quotes have no options')
     if (isGoodsRow(rfq)) {
       // AMC Mart M2 — an accepted GOODS quote becomes an ordinary goods order:
       // one line at the quoted unit price, the buyer's delivery snapshot from
@@ -279,11 +347,20 @@ export async function POST(request: NextRequest) {
         scopeSnapshot: { kind: 'goods', title: { en: rfq.title, hi: rfq.title }, scope: quote.scope, rfq_id: rfq.id, categories: [rfq.mart_category_slug], seller_name: g.prep.sellerName },
         deliveryDays: quote.delivery_days,
         revisionMax: null,
-        amounts: g.prep.amounts as unknown as ReturnType<typeof computeOrderAmounts>,
+        amounts: g.prep.amounts as unknown as OrderAmounts,
+        addons: [],
       }
     } else {
     const { data: cat } = await supabase.from('categories').select('commission_bps').eq('id', rfq.category_id).maybeSingle()
     const commissionBps: number = cat?.commission_bps ?? 1000
+    // E12b / ADR 020 — a picked option must be THIS quote's, at its current revision, with the switch on;
+    // its price and days replace the Standard ones (ADR-015 per option: the quote's gst_included covers all).
+    let option: { id: string; pricePaise: number; deliveryDays: number } | null = null
+    if (parsed.data.optionId) {
+      const admin = await createAdminClient()
+      option = (await quoteOptionsOn(admin)) ? await optionForCheckout(admin, quote.id, parsed.data.optionId, Number(quote.revision ?? 1)) : null
+      if (!option) return fail(404, 'option_not_found', 'That option is not on this quote')
+    }
 
     prep = {
       providerId: quote.provider_id,
@@ -297,13 +374,15 @@ export async function POST(request: NextRequest) {
         rfqDetails: rfq.details ?? null,
         deliverables: [],
       },
-      deliveryDays: quote.delivery_days,
+      deliveryDays: option?.deliveryDays ?? quote.delivery_days,
       revisionMax: null,
+      quoteOptionId: option?.id ?? null,
       // ADR-015 — a price the provider marked "GST included" is what the buyer
       // pays: GST is carved out of it, never added on top. Excluded or unstated
       // (the confirm sheet says GST is applied at checkout) adds it as before.
       // ADR-017 — the ONE shared rule (quoteChargeAmounts); compare and the provider preview use it too.
-      amounts: quoteChargeAmounts({ pricePaise: Number(quote.price_paise), gstIncluded: quote.gst_included ?? null, commissionBps }),
+      amounts: quoteChargeAmounts({ pricePaise: option?.pricePaise ?? Number(quote.price_paise), gstIncluded: quote.gst_included ?? null, commissionBps }),
+      addons: [],
     }
     }
   }
@@ -312,7 +391,11 @@ export async function POST(request: NextRequest) {
   const { amounts } = prep
 
   // Create the checkout session (frozen). ON CONFLICT guards a racing double-submit.
-  const { data: session, error: insErr } = await supabase
+  // ADR 018 — sessions are server-written only: the buyer is authorised above
+  // (their own msme profile, their own RFQ), and clients hold no write grant on
+  // checkout_sessions, so nothing frozen here can be rewritten from the client.
+  const writer = await createAdminClient()
+  const { data: session, error: insErr } = await writer
     .from('checkout_sessions')
     .upsert(
       {
@@ -337,6 +420,12 @@ export async function POST(request: NextRequest) {
         // Goods-quote sessions carry the goods columns; every other session
         // leaves them at their defaults exactly as before.
         ...(goodsPrep ? { kind: 'goods', line_items: goodsPrep.lineItems, delivery_snapshot: goodsPrep.delivery } : {}),
+        // E12a — only a session with add-ons names the column (0065), so checkout is unchanged before it.
+        ...(prep.addons.length ? { addons: prep.addons } : {}),
+        // E12b — only an option session names the column (0066).
+        ...(prep.quoteOptionId ? { quote_option_id: prep.quoteOptionId } : {}),
+        // E12c — only a bundle session names the column (0067).
+        ...(prep.bundlePlan ? { bundle_plan: prep.bundlePlan } : {}),
         idempotency_key: idempotencyKey,
         status: 'created',
         expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
@@ -359,6 +448,7 @@ export async function POST(request: NextRequest) {
     console.error('[checkout] session insert', insErr)
     return fail(500, 'checkout_failed', 'Checkout failed')
   }
+  if (parsed.data.attribution) await storeCheckoutAttribution(bound.id, parsed.data.attribution)
 
   // Create the Razorpay order (TEST mode or simulation) and bind it to the
   // session. The amount is the session's FROZEN total.
@@ -370,7 +460,7 @@ export async function POST(request: NextRequest) {
     idempotencyKey,
   })
 
-  await supabase
+  await writer
     .from('checkout_sessions')
     .update({ razorpay_order_id: order.razorpayOrderId })
     .eq('id', bound.id)

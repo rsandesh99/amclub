@@ -82,6 +82,8 @@ export const packages = pgTable('packages', {
   govtDependentOverride: boolean('govt_dependent_override'),
   // Experience v3 E2 (0051): the level-2 service (shared SPECIALIZATIONS slug).
   serviceSlug: text('service_slug'),
+  // E14 N32b (0061): which i18n slots are approved machine translations ({ title: { te: 'machine_approved' } }).
+  i18nSources: jsonb('i18n_sources'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -94,6 +96,41 @@ export const packages = pgTable('packages', {
 
 // Experience v3 E2 N6 (0051): "Did you find what you need?" — service role
 // writes only; no client reads.
+// E12a / ADR 019 (0065) — up to 3 active priced extras per package (trigger
+// package_addons_limit). Public reads active rows of active packages; the
+// provider reads their own; no client writes (the partner routes use the
+// service role).
+export const packageAddons = pgTable('package_addons', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  packageId: uuid('package_id').notNull().references(() => packages.id, { onDelete: 'cascade' }),
+  labelI18n: jsonb('label_i18n').notNull(),
+  pricePaise: bigint('price_paise', { mode: 'number' }).notNull(),
+  daysDelta: integer('days_delta').default(0).notNull(),
+  extraRevisions: integer('extra_revisions').default(0).notNull(),
+  active: boolean('active').default(true).notNull(),
+  sort: integer('sort').default(0).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (t) => [
+  index('package_addons_package_idx').on(t.packageId).where(sql`deleted_at IS NULL`),
+  check('package_addons_price_positive', sql`price_paise > 0`),
+  check('package_addons_days_delta', sql`days_delta BETWEEN -30 AND 30`),
+  check('package_addons_extra_revisions', sql`extra_revisions BETWEEN 0 AND 5`),
+])
+
+// E12c / ADR 021 (0067) — a package is a bundle when it has 2..6 milestones (shares sum to 10,000 bps, ≤ 92 days).
+export const bundleMilestones = pgTable('bundle_milestones', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  packageId: uuid('package_id').notNull().references(() => packages.id, { onDelete: 'cascade' }),
+  seq: integer('seq').notNull(),
+  labelI18n: jsonb('label_i18n').notNull(),
+  dueOffsetDays: integer('due_offset_days').notNull(),
+  shareBps: integer('share_bps').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [unique('bundle_milestones_package_id_seq_key').on(t.packageId, t.seq)])
+
 export const searchFeedback = pgTable('search_feedback', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid('user_id'),

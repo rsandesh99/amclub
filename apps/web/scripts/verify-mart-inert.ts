@@ -45,8 +45,11 @@ const API_404 = [
   ['POST', `/api/v1/mart/orders/${randomUUID()}/transition`],
   ['GET', '/api/v1/mart/admin/products'],
   ['GET', `/api/v1/mart/admin/orders/${randomUUID()}/dossier`],
+  // E16 N44
+  ['GET', '/api/v1/mart/reorder'],
+  ['POST', '/api/v1/mart/reorder/reminders'],
 ] as const
-const PAGES_404 = ['/mart', `/mart/p/${randomUUID()}`, '/app/mart/cart', '/app/mart/checkout', '/partner/goods', '/partner/goods/new', '/admin/mart']
+const PAGES_404 = ['/mart', `/mart/p/${randomUUID()}`, '/app/mart/cart', '/app/mart/checkout', '/app/mart/reorder', '/partner/goods', '/partner/goods/new', '/admin/mart']
 
 async function main() {
   console.log(`\nMart inertness (MART_ENABLED=false expected) → ${BASE}\n`)
@@ -64,6 +67,11 @@ async function main() {
       // authenticated probe below asserts the true 404.
       ok(`${locale || '/en'}${p}`, res.status === 404 || res.status === 307, String(res.status))
     }
+  }
+  // E16 N39 — the Services | Goods switch renders only with the flag on.
+  for (const p of ['/services', '/services?query=gst']) {
+    const html = await (await fetch(`${BASE}${p}`)).text()
+    ok(`${p} has no Services | Goods switch`, !html.includes('data-testid="mode-switch"'))
   }
   const me = await fetch(`${BASE}/api/v1/profile/me`)
   ok('profile/me unauthenticated → 401 (contract unchanged)', me.status === 401)

@@ -133,7 +133,8 @@
     "err_rfq_already_paid": "You have already paid for a quote on this request. You will find the order under My orders.",
     "err_razorpay_load_failed": "The payment window could not load. Check your connection and try again — you have not been charged.",
     "err_network": "No connection. Check your internet and try again.",
-    "err_rate_limited": "Too many attempts. Please wait a minute and try again."
+    "err_rate_limited": "Too many attempts. Please wait a minute and try again.",
+    "err_addon_changed": "An add-on changed since you chose it. Go back to the package to see the new total."
   },
   "orders": {
     "nudge_button": "Send a reminder",
@@ -403,7 +404,10 @@
     "repeat_buyer": "Repeat buyer",
     "price_equation": "{price} + {pct} % GST = {total}",
     "itc_claim": " · claim {amount} as ITC",
-    "new": "New"
+    "new": "New",
+    "translated": "Translated",
+    "view_original": "View original",
+    "view_translation": "View translation"
   },
   "landing": {
     "hero_title": "Every service your business needs. Verified. Transparent.",
@@ -691,7 +695,12 @@
     "capacity_pause_label": "Pause new orders",
     "capacity_pause_hint": "Your listings stay visible but buyers can't place new orders while paused.",
     "kyc_locked_note": "Legal name, GSTIN, PAN and bank details are locked after verification. Contact support to change them.",
-    "view_public_page": "View public page"
+    "view_public_page": "View public page",
+    "corpus_title": "Help improve AMClub's Hindi and Telugu understanding",
+    "corpus_body": "When you describe a need by voice or send a document, we keep the words (never the audio) and your final request to teach AMClub your language. Off by default; turning it off deletes everything kept.",
+    "corpus_on_note": "Thank you — you can turn this off any time.",
+    "corpus_off_note": "Off. Everything kept under it has been deleted.",
+    "corpus_error": "Couldn't save that. Try again."
   },
   "msme_home": {
     "greeting_morning": "Good morning",
@@ -1310,7 +1319,14 @@
     "cmp3_row_col": "Compared on",
     "cmp3_sort_total": "Total",
     "cmp3_sort_response": "Response",
-    "cmp3_sort_reliability": "Reliability"
+    "cmp3_sort_reliability": "Reliability",
+    "cmp3_options": "Options",
+    "cmp3_option_standard_only": "Standard only",
+    "cmp3_option_economy": "Economy",
+    "cmp3_option_standard": "Standard",
+    "cmp3_option_express": "Express",
+    "cmp3_options_lowest": "Lowest: {who} {option}, {total}",
+    "cmp3_options_fastest": "Fastest: {who} {option}, {days, plural, one {# day} other {# days}}"
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -1427,7 +1443,8 @@
     "coupon_not_started": "This coupon isn't active yet.",
     "coupon_expired": "This coupon has expired.",
     "coupon_usage_exceeded": "This coupon has reached its usage limit.",
-    "coupon_category_mismatch": "This coupon doesn't apply to this service."
+    "coupon_category_mismatch": "This coupon doesn't apply to this service.",
+    "addon_changed": "An add-on changed. Go back to the package to see the new total."
   },
   "admin_support": {
     "title": "Support queue",
@@ -1490,7 +1507,8 @@
     "audit": "Audit log",
     "payouts": "Payouts",
     "mart": "Mart",
-    "agents": "Agents"
+    "agents": "Agents",
+    "shadow": "Shadow"
   },
   "admin_agents": {
     "munshi_title": "Digital Munshi (S2.2)",
@@ -2086,7 +2104,8 @@
     "clarify_skip": "Skip",
     "clarify_skip_back": "Back",
     "clarify_answered_note": "Thanks — the form was updated with your answer.",
-    "clarify_skipped_note": "Skipped — check the form and fill anything missing."
+    "clarify_skipped_note": "Skipped — check the form and fill anything missing.",
+    "err_language_unavailable": "Voice search isn't available in this language yet — please type your search."
   },
   "legal": {
     "help_link": "Help & support",
@@ -2546,7 +2565,56 @@
     "pay_blocked_phone": "Enter a valid 10-digit mobile number.",
     "pay_blocked_gstin": "Correct the GSTIN, or clear it to continue without a GST invoice.",
     "pay_blocked_form": "Fill in the delivery details above to continue.",
-    "gstin_check_hint": "This GSTIN does not pass the checksum — please re-check it."
+    "gstin_check_hint": "This GSTIN does not pass the checksum — please re-check it.",
+    "mode_label": "Search services or goods",
+    "mode_services": "Services",
+    "mode_goods": "Goods",
+    "attr_yes": "Yes",
+    "attr_no": "No",
+    "attr_any": "Any",
+    "attr_choose": "Choose",
+    "attributes_title": "Product details",
+    "attributes_hint": "Buyers filter by these. Fields marked * are required.",
+    "err_attributes": "Check the product details: fill the required ones and use numbers where a unit is shown.",
+    "make_to_order_body": "Need it made to your drawing or spec? Verified sellers quote on it.",
+    "make_to_order_cta": "Make to order",
+    "weak_results_title": "Not quite what you need?",
+    "weak_results_body": "Tell verified sellers what you need, and how many. They send quotes to compare.",
+    "promises_label": "Seller promises",
+    "promises_title": "Promises you make on this product",
+    "promises_hint": "Buyers see these as badges. We measure them on every order; after repeated misses a badge comes off by itself.",
+    "promise_ships_48h": "Ships in 48 h",
+    "promise_ships_48h_hint": "A dispatch photo on the order within 48 hours of it being placed.",
+    "promise_return_shipping_covered": "Return shipping covered",
+    "promise_return_shipping_covered_hint": "You pay the freight on any return of this product.",
+    "promise_gst_invoice_24h": "GST invoice within 24 h",
+    "promise_gst_invoice_24h_hint": "Your GST invoice attached to the order within 24 hours of dispatch.",
+    "not_returnable": "Not returnable",
+    "not_returnable_claims_only": "Damaged, wrong or short deliveries can still be claimed.",
+    "itc_not_available": "ITC may not be available on this item",
+    "promise_badge_removed": "“{promise}” is hidden from buyers after repeated misses. It comes back as recent orders keep it.",
+    "request_sample": "Request a sample · {price} + GST",
+    "customise": "Customise",
+    "sample_checkout_title": "Order a sample",
+    "sample_checkout_subtitle": "One unit at the seller's sample price, delivered like any order. Your cart stays as it is.",
+    "sample_price_rupees": "Sample price (₹ per unit, optional)",
+    "sample_price_none": "Leave empty for no samples",
+    "sample_price_hint": "Buyers can order one unit at this price (plus GST) before a bulk order. It is an ordinary order: you ship it and are paid as usual.",
+    "err_sample_price": "Enter a sample price above ₹0, or leave it empty.",
+    "reorder_title": "Reorder",
+    "reorder_subtitle": "What you have bought before, at today's price for the same quantity.",
+    "reorder_empty": "Items from your completed goods orders will appear here.",
+    "reorder_browse": "Browse AMC Mart",
+    "reorder_last": "Last: {qty} {unit} on {date} · {orders, plural, one {# order} other {# orders}}",
+    "reorder_then": "You paid",
+    "reorder_today": "Today",
+    "reorder_unavailable": "No longer listed",
+    "reorder_price_changed": "price changed",
+    "reorder_cta": "Reorder {qty}",
+    "reorder_reminder_off": "Remind me every {days} days",
+    "reorder_reminder_on": "Reminder on · every {days} days · next {date}",
+    "reorder_reminder_failed": "Could not change the reminder. Try again.",
+    "reorder_link": "Your usual orders"
   },
   "admin_mart": {
     "title": "AMC Mart",
@@ -2731,7 +2799,9 @@
     "updated_at": "Updated {date}",
     "not_set": "Not set — the code default applies",
     "block_capture_warning": "block_capture is refused at pool join until docs/mart/PSP_BLOCK_CAPTURE_REPORT.md §5 is signed off. Saving it here does not enable it.",
-    "save": "Save"
+    "save": "Save",
+    "col_returnable": "Returnable",
+    "col_itc": "ITC eligible"
   },
   "suspended": {
     "title": "Your buyer account is suspended",
@@ -2922,7 +2992,7 @@
   },
   "dev_ui": {
     "title": "UI v3 — Precision",
-    "subtitle": "Every component, both densities. Change the locale in the URL to review hi / te / ta.",
+    "subtitle": "Every component, both densities. Review each language with the links below.",
     "segmented": "Segmented control",
     "gst": "GST",
     "gst_extra": "Extra",
@@ -2959,7 +3029,10 @@
     "sheet_title": "Filters",
     "sheet_body": "A sheet keeps the page behind it.",
     "sheet_content": "Drag the handle down on a phone, or press Escape, to close.",
-    "done": "Done"
+    "done": "Done",
+    "locales": "Review in",
+    "stress": "Long labels (Tamil runs longest)",
+    "stress_button": "Continue to secure payment"
   },
   "public_nav": {
     "services": "Services",
@@ -3036,7 +3109,10 @@
     "approve": "Approve",
     "reject": "Reject",
     "gstin_flags": "GSTINs reported inactive ({count})",
-    "gstin_flags_body": "The nightly re-check found these GSTINs cancelled or suspended. Nothing was changed automatically — review each provider."
+    "gstin_flags_body": "The nightly re-check found these GSTINs cancelled or suspended. Nothing was changed automatically — review each provider.",
+    "category_flags": "{count, plural, one {# provider works mostly outside their declared categories} other {# providers work mostly outside their declared categories}}",
+    "category_flags_body": "From the nightly check: more than half of their paid orders in the last 180 days (at least 5) are in categories they did not declare. Review their categories; nothing changes for the provider until you act.",
+    "category_flag_line": "{pct} % of {n} paid orders outside"
   },
   "packages_v3": {
     "included": "Included",
@@ -3057,7 +3133,18 @@
     "refund_line": "Full refund before work starts · 50 % while in progress · disputes after delivery.",
     "refund_policy_link": "Refund policy",
     "govt_line": "Approval depends on the government portal. We can't guarantee it, and your provider's clock pauses while the portal is processing.",
-    "govt_link": "How this works"
+    "govt_link": "How this works",
+    "addons_title": "Add-ons",
+    "addon_price": "+{price}",
+    "addon_faster": "{days, plural, one {# day faster} other {# days faster}}",
+    "addon_slower": "{days, plural, one {# extra day} other {# extra days}}",
+    "addon_revisions": "{count, plural, one {+# revision} other {+# revisions}}",
+    "addons_updating": "Updating the total…",
+    "addons_changed": "An add-on changed since the page loaded. Choose again to see the new total.",
+    "addons_failed": "Couldn't update the total. Please try again.",
+    "plan_title": "Pay once · {n} milestones over {days} days",
+    "plan_by_day": "by day {day}",
+    "plan_escrow_note": "Each milestone is its own order: the provider is paid for it only when it's done, and milestones not yet started can be cancelled for a full refund."
   },
   "tier_editor": {
     "title": "Offer tiers",
@@ -3251,7 +3338,12 @@
     "business_name": "Business name",
     "continue_to_pay": "Continue to payment",
     "err_details": "Enter your name and business name.",
-    "err_save": "Couldn't save your details. Please try again."
+    "err_save": "Couldn't save your details. Please try again.",
+    "addon_included": "Includes: {label}",
+    "addons_dropped": "An add-on you picked is no longer offered, so it isn't included. The total below is what you'll pay.",
+    "plan_title": "Paid once, delivered in {n} milestones",
+    "plan_by_day": "by day {day}",
+    "plan_note": "Each milestone becomes its own order. You can cancel milestones that haven't started for a full refund."
   },
   "rfq_v3": {
     "or_type": "or type",
@@ -3513,7 +3605,18 @@
     "scaffold": "Included:\n- \nNot included:\n- \nYou’ll need to share:\n- ",
     "buyer_sees_extra": "Buyer sees {price} + {pct} % GST = {total} all-in",
     "buyer_sees_included": "Buyer pays {total} all-in (GST {gst} included)",
-    "you_receive": "You receive ≈ {amount} after AMClub’s fee · paid {days} days after the buyer accepts"
+    "you_receive": "You receive ≈ {amount} after AMClub’s fee · paid {days} days after the buyer accepts",
+    "options_toggle": "Offer faster or cheaper options",
+    "options_hint": "Your price above is Standard. Add Express (faster, never cheaper) or Economy (slower, never dearer). The buyer picks one.",
+    "option_express": "Express",
+    "option_economy": "Economy",
+    "option_express_rule": "fewer days, same or higher price",
+    "option_economy_rule": "more days, same or lower price",
+    "option_price": "Price (₹)",
+    "option_days": "Delivery (days)",
+    "option_buyer_sees": "Buyer sees {total} all-in",
+    "options_err_incoherent": "Express must be faster and not cheaper than your price; Economy slower and not dearer.",
+    "options_err_unavailable": "Options aren't available right now. Submit without them."
   },
   "orders_v3": {
     "next_label": "Next:",
@@ -3564,6 +3667,263 @@
     "msg_label": "Your message",
     "msg_placeholder": "Write a message…",
     "msg_attach": "Attach order documents (up to {max})",
-    "msg_send": "Send"
+    "msg_send": "Send",
+    "addons_title": "Add-ons bought",
+    "milestone_line": "Milestone {seq} of your plan",
+    "milestone_starts": "starts {date}",
+    "milestone_view_plan": "View plan"
+  },
+  "notify": {
+    "your_request": "your request",
+    "a_request": "a request",
+    "order_placed_provider": {
+      "title": "New order received",
+      "body": "Order {ref} is awaiting your acceptance."
+    },
+    "order_placed_buyer": {
+      "title": "Payment received — order placed",
+      "body": "Your order {ref} is placed."
+    },
+    "order_accepted": {
+      "title": "Provider accepted your order",
+      "body": "Submit your requirements to start {ref}."
+    },
+    "requirements_submitted": {
+      "title": "Requirements submitted",
+      "body": "The buyer submitted requirements for {ref}."
+    },
+    "order_started": {
+      "title": "Work has started",
+      "body": "Your provider started work on {ref}."
+    },
+    "order_delivered": {
+      "title": "Delivery ready for review",
+      "body": "Review and accept the delivery for {ref}."
+    },
+    "order_completed": {
+      "title": "Order completed",
+      "body": "{ref} is complete — your payout is scheduled."
+    },
+    "revision_requested": {
+      "title": "Revision requested",
+      "body": "The buyer requested a revision on {ref}."
+    },
+    "revision_in_progress": {
+      "title": "Revision in progress",
+      "body": "Your provider is working on the revision for {ref}."
+    },
+    "order_cancelled": {
+      "title": "Order cancelled by buyer",
+      "body": "{ref} was cancelled by the buyer."
+    },
+    "order_disputed": {
+      "title": "A dispute was opened",
+      "body": "A dispute was opened on {ref}. Our team will review it."
+    },
+    "providers_unavailable": {
+      "title": "An update on your request",
+      "body": "{unavailable} of {total} providers could not take up \"{title}\". The others can still quote — you can also rebroadcast to reach more."
+    },
+    "milestone": {
+      "title": "Update: {label}",
+      "body": "{ref}: {label}."
+    },
+    "milestone_label": {
+      "accepted": "Provider accepted",
+      "site_or_materials": "Reached site / materials ready",
+      "in_progress": "Work in progress",
+      "work_complete": "Work complete"
+    },
+    "review_prompt": {
+      "title": "How was your experience?",
+      "body": "Leave a review for {ref}."
+    },
+    "auto_cancelled_buyer": {
+      "title": "Order cancelled & refunded",
+      "body": "{ref} was not accepted in time and has been fully refunded."
+    },
+    "auto_cancelled_provider": {
+      "title": "Order auto-cancelled",
+      "body": "{ref} was cancelled because it was not accepted within 24 hours. The buyer has been refunded in full."
+    },
+    "auto_completed_provider": {
+      "title": "Order auto-completed",
+      "body": "{ref} was auto-accepted after 72h — payout scheduled."
+    },
+    "auto_accepted_buyer": {
+      "title": "Delivery auto-accepted",
+      "body": "The delivery for {ref} was accepted automatically after 72 hours without a response, and the order is complete."
+    },
+    "quote_withdrawn": {
+      "title": "A provider withdrew their quote",
+      "body": "A quote on \"{title}\" is no longer available. Your other quotes are unaffected."
+    },
+    "rfq_expired": {
+      "title": "Your request expired",
+      "body": "\"{title}\" closed without an accepted quote. Post it again to reach providers afresh."
+    },
+    "quote_expired": {
+      "title": "Your quote expired",
+      "body": "\"{title}\" closed before the buyer chose a quote, so your quote has expired."
+    },
+    "payout_paid": {
+      "title": "Payout sent",
+      "body": "₹{amount} has been transferred to your bank account."
+    },
+    "review_reply": {
+      "title": "The provider replied to your review",
+      "body": "See the provider’s response to your review."
+    },
+    "dispute_statement": {
+      "title": "{who, select, buyer {The buyer} other {The provider}} {edited, select, yes {updated their} other {submitted a}} statement on {ref}",
+      "body": "You can read it on the order and add or edit your own statement while the dispute is open."
+    },
+    "rfq_matched": {
+      "title": "New request matched to you"
+    },
+    "quote_accepted": {
+      "title": "Your quote was accepted"
+    },
+    "quote_lost": {
+      "title": "A request you quoted on was awarded to another provider"
+    },
+    "duplicate_payment": {
+      "title": "We noticed a duplicate payment",
+      "body_refunded": "You paid twice for the same request. We cancelled order {ref} and refunded it in full; your bank usually shows it within 5–7 working days. Your other order stands.",
+      "body_pending": "You paid twice for the same request. Our team will refund order {ref} in full; your other order stands."
+    },
+    "new_quote": {
+      "title": "New quote received"
+    },
+    "quote_revised": {
+      "title": "A quote was updated"
+    },
+    "quote_declined": {
+      "title": "An update on your quote"
+    },
+    "rfq_question": {
+      "title": "A provider asked a question"
+    },
+    "rfq_answer": {
+      "title": "The buyer answered a question"
+    },
+    "quote_message": {
+      "title": "New message on a quote"
+    },
+    "order_message": {
+      "title": "New message on order {ref}"
+    },
+    "rfq_sent_as_is": {
+      "title": "We sent your request",
+      "body": "We sent your request to {matched} providers; you can still answer questions from them."
+    }
+  },
+  "content_translate": {
+    "title": "Translate your listings",
+    "subtitle": "Show buyers your packages and About in Hindi, Telugu and Tamil. We draft; you check, edit and approve each one — nothing changes until you approve.",
+    "language": "Language",
+    "rules": "Numbers stay exactly as in your English. Phone numbers, links and payment details are never translated.",
+    "empty": "Add a package or an About first — then you can translate them here.",
+    "profile_about": "Your About",
+    "draft": "Draft in {lang}",
+    "drafting": "Drafting…",
+    "field_title": "Title",
+    "field_ideal_for": "Choose this if…",
+    "field_about": "About",
+    "translated_badge": "Translated",
+    "none_yet": "Not translated yet — buyers see your English.",
+    "draft_label": "Draft translation of {field}",
+    "draft_note": "A draft — buyers don't see it until you approve.",
+    "approve": "Approve",
+    "discard": "Discard",
+    "skipped": "{n, plural, one {# field could not be drafted} other {# fields could not be drafted}} (numbers, links or contact details). Edit the English, then try again.",
+    "err_rate": "Too many drafts in a minute — try again shortly.",
+    "err_draft": "Couldn't draft this now. Try again.",
+    "err_rejected": "This text can't be approved: keep every number as in the English, and leave out phone numbers, links and payment details.",
+    "err_source_changed": "Your English changed since this draft — draft again.",
+    "err_decide": "Couldn't save that. Try again.",
+    "open": "Translate your listings"
+  },
+  "admin_shadow": {
+    "title": "Shadow predictions",
+    "subtitle": "Rules-first predictions logged and checked against what happened. Nobody else sees them; a feature ships only when its error is acceptable.",
+    "feature_cad_price_band": "CAD price band (vs the winning quote)",
+    "feature_provider_fit": "Provider fit % (vs quoted)",
+    "on": "writer on",
+    "off": "writer off",
+    "col_week": "Week from",
+    "col_predicted": "Predicted",
+    "col_resolved": "Resolved",
+    "col_error": "Mean error"
+  },
+  "addons": {
+    "editor_title": "Add-ons",
+    "editor_body": "Offer up to 3 priced extras on this package, like faster delivery or one more revision. You set every price; buyers pick them at checkout. Prices are before GST.",
+    "active_count": "{count} of {max} active",
+    "label": "What the buyer gets",
+    "label_hint": "e.g. Delivered 2 days faster",
+    "label_hi": "Same in Hindi (optional)",
+    "price": "Price in ₹ (before GST)",
+    "days": "Change to delivery time (days)",
+    "days_hint": "Use a minus sign for faster, e.g. -2",
+    "revisions": "Extra revisions",
+    "add": "Add this add-on",
+    "pause": "Pause",
+    "resume": "Resume",
+    "remove": "Remove",
+    "paused": "Paused",
+    "price_line": "+{price}",
+    "faster": "{days, plural, one {# day faster} other {# days faster}}",
+    "slower": "{days, plural, one {# extra day} other {# extra days}}",
+    "more_revisions": "{count, plural, one {+# revision} other {+# revisions}}",
+    "err_fields": "Add a short description and a price above ₹0.",
+    "err_limit": "You can have 3 active add-ons. Pause one first.",
+    "err_save": "Couldn't save. Please try again."
+  },
+  "bundles": {
+    "editor_title": "Sell as a plan",
+    "editor_body": "Split this package into 2–6 milestones due within {days} days. The buyer pays once; each milestone becomes its own order and is paid out when it's done. Shares must add up to 100 %.",
+    "label": "Milestone {n}",
+    "label_hi": "In Hindi (optional)",
+    "due_day": "Due by day",
+    "share_pct": "Share %",
+    "add": "Add a milestone",
+    "remove": "Remove",
+    "save": "Save plan",
+    "clear": "Sell as a single order",
+    "saved": "Plan saved. New purchases use it.",
+    "cleared": "This package sells as a single order again.",
+    "err_shares": "Shares must add up to exactly 100 %.",
+    "err_order": "Each milestone must be due after the one before it.",
+    "err_save": "Couldn't save the plan. Check the milestones and try again."
+  },
+  "plans": {
+    "title": "Your plans",
+    "subtitle": "Paid once, delivered in milestones. Each milestone is its own order.",
+    "empty": "You don't have any plans yet.",
+    "purchased_on": "Bought {date}",
+    "paid": "Paid",
+    "held": "Still held for you",
+    "next_due": "Next milestone",
+    "next_line": "Milestone {seq}, due {date}",
+    "next_line_nodate": "Milestone {seq}",
+    "due_on": "due {date}",
+    "cancel_remaining": "{count, plural, one {Cancel the # remaining milestone} other {Cancel the # remaining milestones}}",
+    "cancel_title": "Cancel the remaining milestones?",
+    "cancel_body": "{count, plural, one {The # milestone that hasn't started is cancelled and refunded in full.} other {The # milestones that haven't started are cancelled and refunded in full.}} Milestones already in progress or done stay as they are.",
+    "cancel_confirm": "Cancel and refund",
+    "cancel_keep": "Keep my plan",
+    "cancel_error": "Couldn't cancel. Please try again."
+  },
+  "consent": {
+    "aria": "Analytics choice",
+    "notice": "We'd like to measure how AMClub is used so we can improve it. Nothing is measured unless you accept.",
+    "learn_more": "Privacy policy",
+    "accept": "Accept",
+    "decline": "Decline",
+    "choices_title": "Privacy choices",
+    "state_granted": "Usage measurement: on. You can turn it off any time.",
+    "state_denied": "Usage measurement: off. Nothing is measured.",
+    "state_unset": "You haven't chosen yet. Nothing is measured until you accept."
   }
 }

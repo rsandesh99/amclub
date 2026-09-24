@@ -1,12 +1,17 @@
-import { ScrollView, Text, View, ActivityIndicator, TouchableOpacity, Alert, TextInput } from 'react-native'
+import { ScrollView, Text, View, ActivityIndicator, TouchableOpacity, Alert, TextInput, Modal } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useState, useEffect, useCallback } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { ORDER_TRANSITIONS, DISPUTABLE_STATUSES, REFUND_POLICY_BPS, type OrderStatus } from '@amclub/shared'
 import { useI18n } from '@/lib/i18n'
-import { fetchOrder, transitionOrder, fetchOrderReview, submitReview, replyReview, fetchDisputeStatements, submitDisputeStatement, type OrderTransitionExtra } from '@/lib/api'
+import { fetchOrder, transitionOrder, uploadOrderDocument, fetchOrderReview, submitReview, replyReview, fetchDisputeStatements, submitDisputeStatement, type OrderTransitionExtra } from '@/lib/api'
 import { formatINR } from '@/lib/format'
+import { confirmHaptic } from '@/lib/haptics'
+import * as DocumentPicker from 'expo-document-picker'
+import { GoldStamp } from '@/components/motion/GoldStamp'
+import { currentMobileRole } from '@/lib/role'
+import { track } from '@/lib/analytics'
 
 type ActionKey =
   | 'accept' | 'start' | 'deliver' | 'resume'
@@ -84,6 +89,10 @@ export default function OrderScreen() {
   const [busy, setBusy] = useState(false)
   const [compose, setCompose] = useState<ActionKey | null>(null)
   const [text, setText] = useState('')
+  // E13 FR-13.2 — deliver with upload (the web's documents route, kind 'deliverable'); only while `mobile` is on.
+  const [uploading, setUploading] = useState(false)
+  const [uploaded, setUploaded] = useState<string | null>(null)
+  const [stamped, setStamped] = useState(false)
 
   const load = useCallback(async () => {
     const d = await fetchOrder(id)
@@ -97,10 +106,26 @@ export default function OrderScreen() {
 
   async function act(action: ActionKey, extra?: OrderTransitionExtra) {
     setBusy(true)
+    confirmHaptic()
     const { ok, data: res } = await transitionOrder(id, action, extra)
     setBusy(false)
     if (!ok) { Alert.alert(t('common.error'), res.error === 'dispute_window_closed' ? t('orders.dispute_window_closed') : typeof res.error === 'string' ? res.error : t('order_actions.failed')); return }
     setCompose(null); setText('')
+    // E13 FR-13.5 — the buyer's confirm lands with the Gold Stamp (≤ 700 ms) while `mobile` is on.
+    if (action === 'accept_delivery' && currentMobileRole() !== null) setStamped(true)
+    load()
+  }
+
+  async function attachDeliverable() {
+    const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: false })
+    if (picked.canceled || !picked.assets?.[0]) return
+    const f = picked.assets[0]
+    setUploading(true)
+    const r = await uploadOrderDocument(id, 'deliverable', { uri: f.uri, name: f.name, mimeType: f.mimeType ?? 'application/octet-stream' })
+    setUploading(false)
+    if (!r.ok) { Alert.alert(t('common.error'), t('orders_v3.upload_failed')); return }
+    setUploaded(f.name)
+    track('deliverable_uploaded', { platform: 'android' })
     load()
   }
 
@@ -193,6 +218,13 @@ export default function OrderScreen() {
         <Text className="flex-1 text-lg font-bold text-foreground" numberOfLines={1}>{o.title}</Text>
       </View>
 
+      <Modal visible={stamped} transparent animationType="fade" onRequestClose={() => setStamped(false)}>
+        <View className="flex-1 items-center justify-center bg-black/30">
+          <View className="rounded-2xl bg-surface px-10 py-8">
+            <GoldStamp label={t('orders_v3.stamp_accepted')} onDone={() => setTimeout(() => setStamped(false), 600)} />
+          </View>
+        </View>
+      </Modal>
       <ScrollView contentContainerClassName="px-4 py-4 gap-4">
         <View className="rounded-xl border border-gray-200 bg-surface p-4">
           <Text className="text-xs text-foreground-secondary">{o.order_number}</Text>
@@ -211,6 +243,17 @@ export default function OrderScreen() {
             <Text className="mt-2 text-sm text-foreground-secondary">{t('orders.revisions')}: {t('orders.revisions_used', { used: revisionUsed, max: revisionMax })}</Text>
           )}
         </View>
+
+        {role === 'provider' && orderStatus === IN_PROGRESS && currentMobileRole() !== null && (
+          <View className="gap-2 rounded-xl border border-gray-200 bg-surface p-4" testID="deliverable-upload">
+            <Text className="text-sm font-semibold text-foreground">{t('orders_v3.deliverable_title')}</Text>
+            <Text className="text-xs text-foreground-secondary">{t('orders_v3.deliverable_hint')}</Text>
+            <TouchableOpacity onPress={() => void attachDeliverable()} disabled={uploading} className="items-center rounded-lg border border-gray-200 py-3" accessibilityRole="button">
+              {uploading ? <ActivityIndicator color="#1B4D3E" /> : <Text className="text-sm font-semibold text-primary">{t('orders_v3.attach_deliverable')}</Text>}
+            </TouchableOpacity>
+            {uploaded ? <Text className="text-xs text-success">{t('orders_v3.uploaded', { name: uploaded })}</Text> : null}
+          </View>
+        )}
 
         {actions.length > 0 && (
           <View className="rounded-xl border border-gray-200 bg-surface p-4 gap-2">

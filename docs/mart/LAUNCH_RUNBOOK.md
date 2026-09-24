@@ -11,7 +11,7 @@ only prod-visible change is `MART_ENABLED=true` plus the staged migrations that 
 | # | Gate item | How it is proven | Who |
 |---|---|---|---|
 | 1 | M0–M2 acceptance green on a preview with the flag ON; inertness proven with it OFF | `pnpm --filter @amclub/web mart:acceptance` against the preview; `… mart:acceptance -- --inert` against prod | eng |
-| 2 | Staged migrations 0022–0025 applied **with** the enabling deploy | Step 3 below; `verify-migrations.ts` with `MART_MIGRATIONS_EXPECTED=true` afterwards | eng |
+| 2 | Staged migrations 0022–0025 and 0069 applied **with** the enabling deploy | Step 3 below; `verify-migrations.ts` with `MART_MIGRATIONS_EXPECTED=true` afterwards | eng |
 | 3 | Founder decisions §9 encoded in config | `/admin/mart/settings` (every write audited); preflight item 3 | founder |
 | 4 | Provider addendum goods schedule shipped via the version bump | Automatic with the flag (`effectiveLegalVersions`); counsel sign-off on sections 6–8 first (`docs/COMPLIANCE.md`) | founder + counsel |
 | 5 | Seed supply: founder's plant + 2–3 distributor sellers with approved listings; Kurnool pilot buyer list | preflight item 5 (`SEED_SELLERS_MIN`, `PILOT_STATE`) | founder |
@@ -42,7 +42,7 @@ machine can check and prints the rest. It is read-only and safe to run any numbe
 ## 2. T-1 day — acceptance
 
 ```bash
-# Preview deployment with MART_ENABLED=true and 0022–0025 applied to a STAGING database
+# Preview deployment with MART_ENABLED=true and 0022–0025 + 0069 applied to a STAGING database
 BASE_URL=https://<preview>.vercel.app pnpm --filter @amclub/web mart:acceptance
 # Prod (flag OFF) — proves nothing leaks and services are byte-identical
 BASE_URL=https://amclub.in pnpm --filter @amclub/web mart:acceptance -- --inert
@@ -62,8 +62,9 @@ Stop if any suite is red or the preflight has a FAIL. WARN rows are the founder'
 1. **Freeze.** No other deploys. Confirm `/admin/payouts` has no aged held payouts and no
    open incident (preflight item 6).
 2. **Apply migrations** to prod in order, each idempotent: `0022_mart_catalog.sql`,
-   `0023_mart_pools.sql`, `0024_mart_goods_rfq.sql`, `0025_mart_launch_config.sql`, then
-   `rls/policies.sql`. Use `packages/db/src/scripts/apply-sql.ts` with `DATABASE_URL`, or
+   `0023_mart_pools.sql`, `0024_mart_goods_rfq.sql`, `0025_mart_launch_config.sql`,
+   `0069_mart_storefront_v2.sql` (E16: typed attributes, promises, samples, returnable / ITC flags,
+   reorder reminders — Mart tables only), then `rls/policies.sql`. Use `packages/db/src/scripts/apply-sql.ts` with `DATABASE_URL`, or
    the Supabase SQL editor. Then:
    ```bash
    MART_MIGRATIONS_EXPECTED=true pnpm --filter @amclub/web exec tsx scripts/verify-migrations.ts

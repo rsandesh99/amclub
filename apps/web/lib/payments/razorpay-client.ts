@@ -65,6 +65,8 @@ export const CHECKOUT_ERROR_KEYS: Record<string, string> = {
   rfq_closed: 'err_rfq_closed',
   rfq_checkout_in_progress: 'err_rfq_checkout_in_progress',
   rfq_already_paid: 'err_rfq_already_paid',
+  addon_changed: 'err_addon_changed',
+  option_not_found: 'err_quote_unavailable',
   razorpay_load_failed: 'err_razorpay_load_failed',
   network: 'err_network',
   rate_limited: 'err_rate_limited',

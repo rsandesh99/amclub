@@ -13,6 +13,10 @@ export const users = pgTable('users', {
   preferredLocale: text('preferred_locale').default('en').notNull(),
   roles: text('roles').array().default(sql`'{msme}'`).notNull(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+  // E15 F6 (0063): the explicit corpus opt-in; NULL = off (the default). Revoking deletes the user's corpus rows.
+  corpusConsentAt: timestamp('corpus_consent_at', { withTimezone: true }),
+  // E17 (0068) — { choice: granted | denied, version, at }; written only by /api/v1/me/analytics-consent (service role).
+  analyticsConsent: jsonb('analytics_consent'),
   // Experience v3 N33 (migration 0048): 'comfortable' | 'compact' | NULL (role default).
   uiDensity: text('ui_density'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
@@ -47,6 +51,9 @@ export const providerProfiles = pgTable('provider_profiles', {
   displayName: text('display_name').notNull(),
   slug: text('slug').unique().notNull(),
   about: text('about'),
+  // E14 N32b (0061): the About in hi / te / ta, and which i18n slots are approved machine translations.
+  aboutI18n: jsonb('about_i18n'),
+  i18nSources: jsonb('i18n_sources'),
   logoUrl: text('logo_url'),
   gstin: text('gstin'),
   pan: text('pan'),

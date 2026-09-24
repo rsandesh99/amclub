@@ -24,6 +24,7 @@ import {
   goodsDispatchSchema,
   goodsDeliverSchema,
   goodsReturnSchema,
+  returnAllowed,
   type OrderStatus,
   type GoodsOrderAction,
 } from '@amclub/shared'
@@ -32,6 +33,7 @@ import { schedulePayout, processRefund, type Actor, type TransitionResult } from
 import { generateInvoices } from '@/lib/invoices/generate'
 import { notifyOrderTransition } from '@/lib/notifications/events'
 import { getEwayBillThresholdPaise } from './config'
+import { orderReturnable } from './release'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -166,6 +168,10 @@ export async function applyGoodsTransition(
     if (!parsed.success) return { ok: false, status: 422, error: 'Return reason required' }
     if (parsed.data.photo_doc_id && !(await docOnOrder(admin, orderId, parsed.data.photo_doc_id, ['delivery_photo', 'other']))) {
       return { ok: false, status: 422, error: 'Return photo not found on this order' }
+    }
+    // E16 N43 — a non-returnable order refuses quality / other returns; damaged, wrong and short stay claimable.
+    if (!returnAllowed(await orderReturnable(admin, order), parsed.data.reason)) {
+      return { ok: false, status: 409, error: 'not_returnable' }
     }
     eventName = 'return_opened'
     eventPayload = parsed.data

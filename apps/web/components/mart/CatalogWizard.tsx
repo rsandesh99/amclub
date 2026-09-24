@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, Link } from '@/i18n/navigation'
-import { pickLocale, PRODUCT_UNITS, GST_RATE_BPS_OPTIONS, HSN_CODE_RE, type CatalogDraft, type ProductAvailability } from '@amclub/shared'
+import { pickLocale, MART_PROMISES, PRODUCT_UNITS, GST_RATE_BPS_OPTIONS, HSN_CODE_RE, type CatalogDraft, type MartAttributeDef, type MartPromise, type ProductAvailability } from '@amclub/shared'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -30,12 +30,18 @@ export interface ListingDraft {
   leadTimeDays: string
   images: { key: string; url: string }[]
   tiers: { minQty: string; rupees: string }[]
+  /** E16 N40 — typed attributes as typed in (bools as 'true' / 'false'); the route validates them per category. */
+  attributes: Record<string, string>
+  /** E16 N41 — seller opt-in promises (measured; repeated breaches remove the badge). */
+  promises: MartPromise[]
+  /** E16 N42 — sample price in rupees as typed ('' = no samples); sent as paise. */
+  sampleRupees: string
 }
 
 const EMPTY: ListingDraft = {
   name: '', description: '', categorySlug: '', hsnCode: '', gstRateBps: '', unit: 'pcs', minOrderQty: '1', countryOfOrigin: 'IN',
   brand: '', specs: [], availability: 'in_stock', leadTimeDays: '',
-  images: [], tiers: [{ minQty: '1', rupees: '' }],
+  images: [], tiers: [{ minQty: '1', rupees: '' }], attributes: {}, promises: [], sampleRupees: '',
 }
 
 const MAX_SPECS = 20
@@ -80,12 +86,35 @@ export function CatalogWizard({
   const [savedId, setSavedId] = useState<string | null>(productId ?? null)
   const [done, setDone] = useState<'draft' | 'submitted' | null>(null)
   const step: Step = STEPS[stepIdx]!
+  // E16 N40 — the chosen category's typed attributes (public definitions).
+  const [attrDefs, setAttrDefs] = useState<MartAttributeDef[]>([])
+  useEffect(() => {
+    if (!draft.categorySlug) { setAttrDefs([]); return }
+    let live = true
+    fetch(`/api/v1/mart/categories?attributes=${encodeURIComponent(draft.categorySlug)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { attributes?: MartAttributeDef[] } | null) => { if (live) setAttrDefs(d?.attributes ?? []) })
+      .catch(() => { if (live) setAttrDefs([]) })
+    return () => { live = false }
+  }, [draft.categorySlug])
   const set = (patch: Partial<ListingDraft>) => setDraft((d) => ({ ...d, ...patch }))
   const catName = (slug: string) => { const c = categories.find((x) => x.slug === slug); return c ? pickLocale(c.nameI18n, locale) : slug }
   const gstLabel = (bps: number) => `${bps / 100}%`
   /** Clamped to the schema's 1..90 so the review step shows exactly what is sent. */
   const leadDays = () => Math.min(LEAD_TIME_MAX, Math.max(LEAD_TIME_MIN, Math.floor(Number(draft.leadTimeDays)) || LEAD_TIME_MIN))
   const cleanSpecs = () => draft.specs.map((x) => ({ k: x.k.trim(), v: x.v.trim() })).filter((x) => x.k && x.v).slice(0, MAX_SPECS)
+  /** Only the category's keys, typed as the definition says; empty values are left out. */
+  const cleanAttributes = () => {
+    const out: Record<string, string | number | boolean> = {}
+    for (const d of attrDefs) {
+      const v = (draft.attributes[d.key] ?? '').trim()
+      if (!v) continue
+      out[d.key] = d.type === 'number' ? Number(v) : d.type === 'bool' ? v === 'true' : v
+    }
+    return out
+  }
+  const setAttr = (key: string, v: string) => setDraft((d) => ({ ...d, attributes: { ...d.attributes, [key]: v } }))
+  const attrShown = (d: MartAttributeDef, v: string | number | boolean) => (d.type === 'bool' ? (v ? t('attr_yes') : t('attr_no')) : d.unit ? `${String(v)} ${d.unit}` : String(v))
   const appendDictation = (text: string) =>
     setDraft((d) => ({ ...d, description: d.description.trim() ? `${d.description.trimEnd()}\n${text}` : text }))
 
@@ -132,11 +161,14 @@ export function CatalogWizard({
       if (!HSN_CODE_RE.test(draft.hsnCode)) return t('err_hsn')
       if (!draft.gstRateBps) return t('err_gst')
       if (CONFIRM_FIELDS.some((f) => !confirmed.has(f))) return t('confirm_field')
+      if (attrDefs.some((d) => d.required && !(draft.attributes[d.key] ?? '').trim())) return t('err_attributes')
+      if (attrDefs.some((d) => d.type === 'number' && (draft.attributes[d.key] ?? '').trim() && !Number.isFinite(Number(draft.attributes[d.key])))) return t('err_attributes')
     }
     if (s === 'pricing') {
       const tiers = draft.tiers.map((x) => ({ min_qty: Number(x.minQty), unit_price_paise: Math.round(Number(x.rupees) * 100) }))
       if (tiers.some((x) => !Number.isInteger(x.min_qty) || x.min_qty <= 0 || !Number.isFinite(x.unit_price_paise) || x.unit_price_paise <= 0)) return t('err_price')
       if (tiers[0]?.min_qty !== 1) return t('err_tiers')
+      if (draft.sampleRupees.trim() && !(Number(draft.sampleRupees) > 0)) return t('err_sample_price')
       for (let i = 1; i < tiers.length; i++) {
         if (tiers[i]!.min_qty <= tiers[i - 1]!.min_qty || tiers[i]!.unit_price_paise >= tiers[i - 1]!.unit_price_paise) return t('err_tiers')
       }
@@ -151,6 +183,9 @@ export function CatalogWizard({
       ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
       ...(draft.brand.trim() ? { brand: draft.brand.trim() } : {}),
       specs: cleanSpecs(),
+      attributes: cleanAttributes(),
+      promises: draft.promises,
+      sample_price_paise: draft.sampleRupees.trim() ? Math.round(Number(draft.sampleRupees) * 100) : null,
       availability: draft.availability,
       ...(draft.availability === 'lead_time' ? { lead_time_days: leadDays() } : {}),
       hsn_code: draft.hsnCode.trim(),
@@ -171,7 +206,7 @@ export function CatalogWizard({
         method: savedId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       })
       const d = await res.json()
-      if (!res.ok) throw new Error(typeof d.error === 'string' ? d.error : t('error_generic'))
+      if (!res.ok) throw new Error(d.error === 'invalid_attributes' ? t('err_attributes') : typeof d.error === 'string' ? d.error : t('error_generic'))
       const id = (d.id as string | undefined) ?? savedId
       setSavedId(id)
       return id
@@ -341,6 +376,55 @@ export function CatalogWizard({
             <p className="mt-2 text-xs text-foreground-secondary">{t('availability_hint')}</p>
           </fieldset>
 
+          {attrDefs.length > 0 && (
+            <fieldset data-testid="attribute-inputs">
+              <legend className="text-sm font-medium text-emerald-ink">{t('attributes_title')}</legend>
+              <p className="text-xs text-foreground-secondary">{t('attributes_hint')}</p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                {attrDefs.map((d) => {
+                  const id = `attr-${d.key}`
+                  const label = `${pickLocale(d.label_i18n, locale)}${d.unit ? ` (${d.unit})` : ''}${d.required ? ' *' : ''}`
+                  const v = draft.attributes[d.key] ?? ''
+                  return (
+                    <div key={d.key}>
+                      <Label htmlFor={id}>{label}</Label>
+                      {d.type === 'enum' ? (
+                        <Select id={id} value={v} onChange={(e) => setAttr(d.key, e.target.value)} placeholder={t('attr_choose')}>
+                          {(d.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                        </Select>
+                      ) : d.type === 'bool' ? (
+                        <Select id={id} value={v} onChange={(e) => setAttr(d.key, e.target.value)} placeholder={t('attr_choose')}>
+                          <option value="true">{t('attr_yes')}</option>
+                          <option value="false">{t('attr_no')}</option>
+                        </Select>
+                      ) : (
+                        <Input id={id} maxLength={80} inputMode={d.type === 'number' ? 'decimal' : 'text'} value={v} onChange={(e) => setAttr(d.key, d.type === 'number' ? e.target.value.replace(/[^0-9.]/g, '') : e.target.value)} />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </fieldset>
+          )}
+
+          <fieldset data-testid="promise-inputs">
+            <legend className="text-sm font-medium text-emerald-ink">{t('promises_title')}</legend>
+            <p className="text-xs text-foreground-secondary">{t('promises_hint')}</p>
+            <div className="mt-2 space-y-2">
+              {MART_PROMISES.map((p) => (
+                <label key={p} className="flex items-start gap-3 text-sm text-emerald-ink">
+                  <input
+                    type="checkbox"
+                    checked={draft.promises.includes(p)}
+                    onChange={(e) => set({ promises: e.target.checked ? MART_PROMISES.filter((x) => x === p || draft.promises.includes(x)) : draft.promises.filter((x) => x !== p) })}
+                    className="mt-0.5 h-6 w-6 shrink-0 accent-emerald"
+                  />
+                  <span>{t(`promise_${p}` as 'promise_ships_48h')}<span className="block text-xs text-foreground-secondary">{t(`promise_${p}_hint` as 'promise_ships_48h_hint')}</span></span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <fieldset>
             <legend className="text-sm font-medium text-emerald-ink">{t('specs')}</legend>
             <div className="mt-2 space-y-2">
@@ -376,6 +460,12 @@ export function CatalogWizard({
             </div>
           ))}
           {draft.tiers.length < 8 && <Button variant="outline" size="sm" onClick={() => set({ tiers: [...draft.tiers, { minQty: '', rupees: '' }] })}>{t('add_tier')}</Button>}
+          {/* E16 N42 — optional sample: buyers order one unit at this price before a bulk order. */}
+          <div className="border-t border-brass/20 pt-3" data-testid="sample-price">
+            <Label htmlFor="sample-price">{t('sample_price_rupees')}</Label>
+            <Input id="sample-price" inputMode="decimal" placeholder={t('sample_price_none')} value={draft.sampleRupees} onChange={(e) => set({ sampleRupees: e.target.value.replace(/[^0-9.]/g, '') })} />
+            <p className="mt-1 text-xs text-foreground-secondary">{t('sample_price_hint')}</p>
+          </div>
           {error && <p className="text-sm text-stamp" role="alert">{error}</p>}
           <div className="flex justify-between">
             <Button variant="ghost" onClick={() => setStepIdx(1)}>{t('back')}</Button>
@@ -395,7 +485,16 @@ export function CatalogWizard({
             <div><dt>{t('field_unit')}</dt><dd className="text-emerald-ink">{draft.unit}</dd></div>
             {draft.brand.trim() && <div><dt>{t('field_brand')}</dt><dd className="text-emerald-ink">{draft.brand.trim()}</dd></div>}
             <div><dt>{t('availability')}</dt><dd className="text-emerald-ink">{draft.availability === 'lead_time' ? t('lead_time_note', { days: leadDays() }) : t('in_stock')}</dd></div>
+            {draft.sampleRupees.trim() && <div><dt>{t('sample_price_rupees')}</dt><dd className="text-emerald-ink">₹{draft.sampleRupees.trim()}</dd></div>}
+            {draft.promises.length > 0 && <div className="col-span-2"><dt>{t('promises_title')}</dt><dd className="text-emerald-ink">{draft.promises.map((p) => t(`promise_${p}` as 'promise_ships_48h')).join(' · ')}</dd></div>}
           </dl>
+          {Object.keys(cleanAttributes()).length > 0 && (
+            <dl className="grid grid-cols-2 gap-x-2 gap-y-1 border-t border-brass/20 pt-2 text-xs" data-testid="review-attributes">
+              {attrDefs.filter((d) => cleanAttributes()[d.key] !== undefined).map((d) => (
+                <div key={d.key} className="contents"><dt className="text-foreground-secondary">{pickLocale(d.label_i18n, locale)}</dt><dd className="text-emerald-ink">{attrShown(d, cleanAttributes()[d.key]!)}</dd></div>
+              ))}
+            </dl>
+          )}
           {cleanSpecs().length > 0 && (
             <dl className="grid grid-cols-2 gap-x-2 gap-y-1 border-t border-brass/20 pt-2 text-xs">
               {cleanSpecs().map((x, i) => <div key={i} className="contents"><dt className="text-foreground-secondary">{x.k}</dt><dd className="text-emerald-ink">{x.v}</dd></div>)}

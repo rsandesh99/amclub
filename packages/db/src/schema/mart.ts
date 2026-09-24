@@ -23,6 +23,9 @@ export const martCategories = pgTable('mart_categories', {
   sortOrder: integer('sort_order'),
   // §9.2 — seller | buyer | split (0025, staged)
   returnFreightPayer: text('return_freight_payer').default('seller').notNull(),
+  // E16 N43 (0069, staged) — "Not returnable"; the CA-reviewed §17(5) ITC flag.
+  returnable: boolean('returnable').default(true).notNull(),
+  itcEligible: boolean('itc_eligible').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
@@ -45,6 +48,12 @@ export const products = pgTable('products', {
   brand: text('brand'),
   // [{ k, v }] — spec table rows (seller-confirmed)
   specs: jsonb('specs').default(sql`'[]'`).notNull(),
+  // E16 N40 (0069, staged) — { key: value } validated per category (mart_category_attributes)
+  attributes: jsonb('attributes').default(sql`'{}'`).notNull(),
+  // E16 N41 — seller opt-in promises (ships_48h | return_shipping_covered | gst_invoice_24h)
+  promises: text('promises').array().default(sql`'{}'`).notNull(),
+  // E16 N42 — a sample = an ordinary goods order of qty 1 at this price; NULL = no samples
+  samplePricePaise: bigint('sample_price_paise', { mode: 'number' }),
   // in_stock | lead_time — seller-declared, never inventory
   availability: text('availability').default('in_stock').notNull(),
   leadTimeDays: integer('lead_time_days'),
@@ -75,6 +84,54 @@ export const products = pgTable('products', {
   check('products_status_check', sql`${table.status} IN ('draft', 'pending_approval', 'active', 'suspended')`),
   check('products_gst_rate_check', sql`${table.gstRateBps} IN (0, 500, 1200, 1800, 2800)`),
   check('products_hsn_check', sql`${table.hsnCode} ~ '^[0-9]{4}([0-9]{2})?([0-9]{2})?$'`),
+])
+
+/** E16 N40 (0069, staged) — typed attributes per category; public read, admin-owned config. */
+export const martCategoryAttributes = pgTable('mart_category_attributes', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  categorySlug: text('category_slug').references(() => martCategories.slug, { onDelete: 'cascade' }).notNull(),
+  key: text('key').notNull(),
+  labelI18n: jsonb('label_i18n').notNull(),
+  // text | number | enum | bool
+  type: text('type').notNull(),
+  unit: text('unit'),
+  options: jsonb('options'),
+  facetable: boolean('facetable').default(false).notNull(),
+  required: boolean('required').default(false).notNull(),
+  sort: integer('sort').default(0).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [
+  unique('mart_category_attributes_category_slug_key_key').on(table.categorySlug, table.key),
+  check('mart_category_attributes_type_check', sql`${table.type} IN ('text', 'number', 'enum', 'bool')`),
+])
+
+/** E16 N41 (0069, staged) — one row per measured promise breach; service role only. */
+export const martPromiseBreaches = pgTable('mart_promise_breaches', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  orderId: uuid('order_id').notNull(),
+  productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+  sellerId: uuid('seller_id').references(() => providerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  promise: text('promise').notNull(),
+  measuredAt: timestamp('measured_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  detail: jsonb('detail').default(sql`'{}'`).notNull(),
+}, (table) => [
+  unique('mart_promise_breaches_order_id_product_id_promise_key').on(table.orderId, table.productId, table.promise),
+  index('mart_promise_breaches_product_idx').on(table.productId, table.promise, table.measuredAt),
+])
+
+/** E16 N44 (0069, staged) — the buyer's opt-in reorder reminder; owner reads, API writes. */
+export const martReorderReminders = pgTable('mart_reorder_reminders', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }).notNull(),
+  intervalDays: integer('interval_days').notNull(),
+  nextAt: timestamp('next_at', { withTimezone: true }).notNull(),
+  active: boolean('active').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [
+  unique('mart_reorder_reminders_user_id_product_id_key').on(table.userId, table.productId),
 ])
 
 /** Bulk pricing — the substrate of pools. min_qty=1 row is the list price. */

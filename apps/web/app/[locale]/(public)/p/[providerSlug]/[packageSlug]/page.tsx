@@ -2,20 +2,27 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getTranslations, getLocale } from 'next-intl/server'
 import { Check, X, Clock, RefreshCw, BadgeCheck, FileText, ChevronRight } from 'lucide-react'
-import { rfqFieldLabel } from '@amclub/shared'
+import { bundlePlan, computeOrderAmounts, rfqFieldLabel } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { PriceBlock } from '@/components/catalog/PriceBlock'
 import { Stars } from '@/components/catalog/Stars'
 import { JsonLd } from '@/components/catalog/JsonLd'
 import { getPackageDetail } from '@/lib/catalog/queries'
+import { packageI18nSources } from '@/lib/translations/content'
+import { createAdminClient, createPublicClient } from '@/lib/supabase/server'
+import { activeAddonsFor, addonsOn } from '@/lib/addons'
+import { bundlesOn, milestonesFor } from '@/lib/bundles'
+import { TranslatedText } from '@/components/catalog/TranslatedText'
+import { deliverableLabel, isMachineTranslated } from '@amclub/shared'
 import { getPackageExtras } from '@/lib/catalog/package-groups'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatINR } from '@/lib/format'
 import { isExperienceLive, isOnForEveryone } from '@/lib/experiments'
-import { TierProvider, type BuyOption } from '@/components/packages-v3/TierContext'
+import { TierProvider, type BuyAddon, type BuyOption, type BuyPlanStep } from '@/components/packages-v3/TierContext'
 import { BuyBox, StickyBuyBar, TierTabs } from '@/components/packages-v3/BuyBox'
 import { PackageTierMatrix } from '@/components/packages-v3/TierMatrix'
 import { RecentViewTracker } from '@/components/recent-v3/RecentViewTracker'
+import { SearchAttributionCapture } from '@/components/search-v3/SearchAttributionCapture'
 import { ViewBeacon } from '@/components/partner-v3/ViewBeacon'
 import { TrackedLink } from '@/components/analytics/TrackedLink'
 
@@ -65,6 +72,11 @@ export default async function PackageDetailPage({
   // price equation, refund + government lines. Off → the page as before.
   const v3 = isOnForEveryone('packages')
   const extras = v3 ? await getPackageExtras(pkg) : null
+  // E14 FR-14.3 — which slots are approved machine translations (a tolerant read; nothing when the columns are absent).
+  const trSources = locale === 'hi' || locale === 'te' || locale === 'ta'
+    ? await packageI18nSources(createPublicClient(), [pkg.id, ...(extras?.tiers?.tiers.map((o) => o.packageId) ?? [])])
+    : new Map()
+  const titleTranslated = isMachineTranslated(trSources.get(pkg.id), 'title', locale)
 
   const reqFields: RequirementField[] =
     (pkg.requirementsTemplate as { fields?: RequirementField[] } | null)?.fields ?? []
@@ -93,6 +105,34 @@ export default async function PackageDetailPage({
     },
   }
 
+  // E12a / ADR 019 — each option's active add-ons (v3 buy box only; nothing while the switch is off).
+  const addonsBy = new Map<string, BuyAddon[]>()
+  if (v3) {
+    const admin = await createAdminClient()
+    if (await addonsOn(admin)) {
+      for (const id of [pkg.id, ...(extras?.tiers?.tiers.map((o) => o.packageId) ?? [])]) {
+        if (addonsBy.has(id)) continue
+        addonsBy.set(id, (await activeAddonsFor(admin, id)).map((a) => ({ id: a.id, label: pickI18n(a.label_i18n, locale), pricePaise: Number(a.price_paise), daysDelta: a.days_delta, extraRevisions: a.extra_revisions })))
+      }
+    }
+  }
+
+  // E12c / ADR 021 — a plan per option (the exact split of the option's display total; switch on only).
+  const planBy = new Map<string, BuyPlanStep[]>()
+  if (v3) {
+    const admin = await createAdminClient()
+    if (await bundlesOn(admin)) {
+      const priced = extras?.tiers ? extras.tiers.tiers.map((o) => ({ id: o.packageId, display: o.display })) : [{ id: pkg.id, display: pkg.display }]
+      for (const o of priced) {
+        const ms = await milestonesFor(admin, o.id)
+        if (!ms.length) continue
+        // The display's own figures (list − discount + GST) split exactly as checkout will split the charge.
+        const whole = computeOrderAmounts({ pricePaise: o.display.listPaise, discountBps: 0, commissionBps: 0, extraDiscountPaise: o.display.discountPaise })
+        planBy.set(o.id, bundlePlan(whole, ms).map((c) => ({ label: pickI18n(c.label, locale), dueOffsetDays: c.dueOffsetDays, totalPaise: c.amounts.totalPaise })))
+      }
+    }
+  }
+
   // One purchasable option per tier (or just this package), priced on the server.
   const options: BuyOption[] = extras?.tiers
     ? extras.tiers.tiers.map((o) => ({
@@ -101,11 +141,14 @@ export default async function PackageDetailPage({
         tier: o.tier,
         title: pickI18n(o.titleI18n, locale),
         idealFor: o.idealForI18n ? pickI18n(o.idealForI18n, locale) : null,
+        idealForOriginal: o.idealForI18n && isMachineTranslated(trSources.get(o.packageId), 'ideal_for', locale) ? o.idealForI18n.en : null,
         compareValues: o.compareValues,
         deliveryDays: o.deliveryDays,
         revisionCount: o.revisionCount,
         display: o.display,
         govtDependent: o.govtDependent,
+        addons: addonsBy.get(o.packageId) ?? [],
+        ...(planBy.has(o.packageId) ? { plan: planBy.get(o.packageId)! } : {}),
       }))
     : [{
         packageId: pkg.id,
@@ -118,6 +161,8 @@ export default async function PackageDetailPage({
         revisionCount: pkg.revisionCount,
         display: pkg.display,
         govtDependent: extras?.govtDependent ?? false,
+        addons: addonsBy.get(pkg.id) ?? [],
+        ...(planBy.has(pkg.id) ? { plan: planBy.get(pkg.id)! } : {}),
       }]
 
   const body = (
@@ -126,6 +171,8 @@ export default async function PackageDetailPage({
       <JsonLd data={jsonLd} />
       {/* Experience v3 E11 (N29): the provider funnel's view count. */}
       {isExperienceLive('partner') && <ViewBeacon kind="package" id={pkg.id} />}
+      {/* E15 F5 — the search that led here rides to checkout (tiers: any of this group's packages). */}
+      <SearchAttributionCapture packageIds={[pkg.id, ...(extras?.tiers?.tiers.map((o) => o.packageId) ?? [])]} />
       {isOnForEveryone('search') && <RecentViewTracker kind="package" id={pkg.id} title={title} href={`/p/${provider.slug}/${pkg.slug}`} />}
 
       {/* Breadcrumb */}
@@ -147,7 +194,9 @@ export default async function PackageDetailPage({
         {/* Main */}
         <div className="space-y-8 lg:col-span-2">
           <div>
-            <h1 className="font-display text-2xl font-bold leading-tight">{title}</h1>
+            {titleTranslated
+              ? <TranslatedText as="h1" className="font-display text-2xl font-bold leading-tight" text={title} original={pkg.titleI18n.en} lang={locale} />
+              : <h1 className="font-display text-2xl font-bold leading-tight">{title}</h1>}
             <Link
               href={`/p/${provider.slug}`}
               className="mt-3 inline-flex items-center gap-2 text-sm text-foreground-secondary hover:text-primary"
@@ -202,7 +251,7 @@ export default async function PackageDetailPage({
                 {pkg.deliverables.map((item, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span>{item}</span>
+                    <span>{deliverableLabel(item, locale)}</span>
                   </li>
                 ))}
               </ul>

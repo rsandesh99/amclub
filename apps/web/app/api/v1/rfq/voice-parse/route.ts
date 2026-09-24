@@ -10,7 +10,7 @@ import { BudgetExceededError } from '@/lib/agent/bounded'
 import { transcriberVendorTag } from '@/lib/voice/sarvam'
 import { estimateSttCostPaise, logAiInvocation } from '@/lib/voice/invocations'
 import { maybeClarify, requiredFieldsFor } from '@/lib/voice/clarify'
-import { isVoiceSearchOn } from '@/lib/voice/search'
+import { isVoiceLanguageAllowed, isVoiceSearchOn } from '@/lib/voice/search'
 
 /**
  * Phase 8b — voice → structured RFQ prefill. Auth required and tightly
@@ -164,6 +164,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (queryMode) {
+    // E14 FR-14.5 — a spoken query is answered only in a language whose eval passed; otherwise "type instead"
+    // (no parse call). Typed text in query mode has no STT to trust and is not gated.
+    if (!typedNeed && !typedAnswer && !(await isVoiceLanguageAllowed(admin, languageCode))) {
+      return NextResponse.json({ query: null, original_language: languageCode, category_slug: null, service_slug: null, unsupported_language: true, stub: sttStub })
+    }
     try {
       const pr = await getParser().parse(transcript, languageCode, { admin, userId })
       const service = pr.parse.category_slug && pr.parse.specialization ? pr.parse.specialization : null

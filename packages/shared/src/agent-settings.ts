@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VOICE_SEARCH_LANGUAGES, voiceLanguageEvalsSchema } from './voice-languages'
 
 /**
  * Agent config registry (ADR-009 §7, ARCHITECTURE.md §8). Every key the runtime
@@ -31,6 +32,7 @@ export const AGENT_NAMES = [
   'procurement',    // S3.1
   'benchmark',      // S3.2
   'review_summary', // Experience v3 E3 (FR-3.9) — cited summary of verified reviews; dark slot, built when the agent programme resumes
+  'content_translate', // Experience v3 E14 (FR-14.3, N32b) — provider content translation drafts; the provider approves each language
 ] as const
 export type AgentName = (typeof AGENT_NAMES)[number]
 
@@ -174,6 +176,40 @@ export const AGENT_SETTING_DEFS = {
     default: false,
     hint: 'E2b / N5: the mic in the catalog search field (speech → an English query + the detected language, the Phase 8b pipeline in mode=query). Paid STT + one parse per use; signed-in buyers only. Turn on only after the 30-query eval (te/hi/en, code-mixed) finds the right category ≥ 85 %.',
   },
+  // ── Experience v3 E14 — voice search, one language at a time (FR-14.5) ──
+  voice_search_languages: {
+    schema: z.array(z.enum(VOICE_SEARCH_LANGUAGES)).max(VOICE_SEARCH_LANGUAGES.length),
+    default: ['en', 'hi', 'te'],
+    hint: 'E14 / FR-14.5: the languages the catalog mic may answer in. A listed language still stays off until its recorded eval passes (voice_language_evals: ≥ 50 queries, WER ≤ 20 %, right category ≥ 85 %); an unlisted or failing language gets "type instead".',
+  },
+  voice_language_evals: {
+    schema: voiceLanguageEvalsSchema,
+    default: {},
+    hint: 'E14 / FR-14.5: the last eval per language, written by `pnpm --filter @amclub/web voice:eval -- --lang <code> --set <file> --record`. Edit only to clear a result; a hand-typed pass does not count unless it carries the current eval version.',
+  },
+  // ── Experience v3 E15 — shadow predictions (FR-15.5, F10): each writer has its own switch; nobody but the admin console sees them ──
+  shadow_cad_price_band_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E15 / F10: at fan-out, log a rules-v1 price band for an RFQ with a CAD drawing; resolved against the winning quote on acceptance. Shadow only — shown to nobody; the weekly error is at /admin/shadow.',
+  },
+  shadow_provider_fit_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E15 / F10: at fan-out, log a rules-v1 fit % per matched provider; resolved at acceptance (quoted / won). Shadow only — never ranks, filters or shows anything.',
+  },
+  // ── Experience v3 E15 — search telemetry sample (FR-15.3, F5) ──
+  search_telemetry_sample_pct: {
+    schema: z.number().int().min(0).max(100),
+    default: 20,
+    hint: 'E15 / F5: the share of search result pages recorded in search_queries (normalised parameters + result count; no user id; kept 180 days). 0 = off. Attribution (search → order) rides every search regardless.',
+  },
+  // ── Experience v3 E15 — consented corpora opt-in (FR-15.4, F6) ──
+  corpus_consent_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E15 / F6: show the buyer profile opt-in "Help improve AMClub\'s Hindi and Telugu understanding" and keep text-only voice triples / image pairs for buyers who opt in. Off: the toggle is hidden, opting in 404s and nothing new is kept; revoking (which deletes the rows) always works. Apply migration 0063 first.',
+  },
   // ── Experience v3 E6 — document suggestions on the requirement form (FR-6.3) ──
   document_suggestions_enabled: {
     schema: z.boolean(),
@@ -197,6 +233,24 @@ export const AGENT_SETTING_DEFS = {
     schema: z.boolean(),
     default: false,
     hint: 'E11c / N30 (D9): /partner/tenders — tender ALERTS matched by category + state for verified government-licensing providers (Save / Not relevant; the official portal link) and the reviewed GeM checklist. No bidding, applying or submitting inside AMClub. Turn on only after D9 and the mini-PRD settle the data source and its licence.',
+  },
+  // ── Experience v3 E12c — compliance bundles with milestone escrow (ADR 021; money) ──
+  bundles_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E12c / ADR 021: a package with 2–6 milestones (≤ 92 days, shares summing to 100 %) sells as ONE payment that becomes one ordinary child order per milestone; unstarted children refund in full ("Cancel remaining" on /app/plans). Off: the milestone editor, the plan display and /app/plans are hidden and checkout sells the package as a single order. Apply migration 0067 first; counsel + Razorpay must clear holding buyer money for the plan length.',
+  },
+  // ── Experience v3 E12b — quote speed options (ADR 020; money) ──
+  quote_options_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E12b / ADR 020: a provider may offer Economy (slower, never dearer) and Express (faster, never cheaper) beside the quoted Standard price; the buyer picks one on compare and checkout charges that option (ADR-015 per option). Off: the quote form hides it, options are refused (422) and checkout refuses an optionId (409). Apply migration 0066 first.',
+  },
+  // ── Experience v3 E12a — package add-ons (ADR 019; money) ──
+  addons_enabled: {
+    schema: z.boolean(),
+    default: false,
+    hint: 'E12a / ADR 019: providers add up to 3 priced extras per package ("+₹500 · 1 day faster"); buyers pick them in the buy box and checkout (one computeOrderAmounts on package + add-ons, frozen on the session, one invoice line each). Off: the editor and buy box show nothing and checkout refuses addonIds (409 addon_changed). Apply migration 0065 first.',
   },
   // ── Experience v3 E8b — messaging on a paid order (FR-8.4, N24); also needs the `orders` experience ──
   order_messaging_enabled: {

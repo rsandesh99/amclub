@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto'
 import {
   assertPoolTransition,
   computeGoodsOrderAmounts,
+  goodsItcSplit,
   isValidPoolMemberPaymentTransition,
   mayCapturePoolMember,
   poolCloseOutcome,
@@ -605,7 +606,8 @@ export async function prepareMemberCheckout(
     checkout: {
       sessionId,
       memberId: member.id,
-      amounts: { taxablePaise: amounts.taxablePaise, gstPaise: amounts.gstPaise, totalPaise: amounts.totalPaise, afterItcPaise: amounts.taxablePaise },
+      // E16 N43 — no input credit on an ITC-ineligible category (shared goodsItcSplit).
+      amounts: { taxablePaise: amounts.taxablePaise, gstPaise: amounts.gstPaise, totalPaise: amounts.totalPaise, afterItcPaise: goodsItcSplit([{ gstPaise: amounts.gstPaise, itcEligible: cat.itc_eligible !== false }], amounts.totalPaise).afterItcPaise },
       lineItems,
       sellerId: pool.seller_id,
       sellerName: seller.display_name,

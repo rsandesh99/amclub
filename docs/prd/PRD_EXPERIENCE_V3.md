@@ -2065,6 +2065,49 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.5 · I 1 · C 0.6 · E 2 → **0.15**.
 
+**As built (E12a: ADR 019, migration 0065; dark behind `addons_enabled`).**
+- **Prerequisite (ADR 018, migration 0064).** Checkout sessions and orders became server-written only before this landed, so the frozen snapshot cannot be rewritten from the client.
+- **Data.**
+  - `package_addons`: ≤ 3 active per package (the trigger `package_addons_limit` locks the package row; shared `packageAddonInputSchema`). Anyone reads the active add-ons of an active package; the provider reads their own. No client writes.
+  - `checkout_sessions.addons` / `orders.addons`: the snapshot `[{ id, label, pricePaise, daysDelta, extraRevisions }]`.
+  - The trigger `checkout_sessions_copy_addons` copies the snapshot onto the order when `materialize_order` links the session. Neither version of the function is redefined, and a replay copies nothing.
+- **One rule.** Shared `packageCharge`:
+  - subtotal = package + Σ add-ons;
+  - the package % discount applies to the package price only;
+  - a coupon applies to the whole pre-GST subtotal (`couponBasePaise`);
+  - one `computeOrderAmounts` call, byte-identical to before when there are no add-ons (unit-pinned);
+  - delivery = max(1, days + Σ delta); revisions = count + Σ extras.
+- **Where the rule runs.** Checkout's package branch, `POST /api/v1/checkout/preview` (public, per-IP limited, 404 while off), the coupon route (`addonIds`) and the v3 checkout page all call it.
+- **Checkout.**
+  - `addonIds[]` covers the package branch only.
+  - An id that isn't an active add-on of this package, or any add-on while the switch is off → **409 `addon_changed`**, with no session.
+  - A resumed session with a different selection → 409. The web idempotency key includes the selection.
+  - Anything else the client sends about prices is never read.
+- **Invoices.** The buyer invoice has the package line plus one line per add-on at the same GST rate. `totals.lines` + `discount_paise` are recorded, and PDF labels are made safe for the standard font.
+- **UI.**
+  - Provider: an "Add-ons" editor on the listing edit page (own package only): create, pause / resume, remove. It is written through `/api/v1/partner/packages/[id]/addons[/…]` on the service role; delegated tokens are refused.
+  - Buyer:
+    - The v3 buy box shows `AddOnList` ("+₹500 · 2 days faster"). Ticking one asks the preview for the new total, delivery and revisions, and Buy now carries `?addons=`.
+    - Checkout re-reads and re-prices the selection, lists "Includes: …", and drops anything no longer offered with a note.
+    - The order overview lists "Add-ons bought" for both parties.
+- **Disputes / payouts.** Unchanged (settled on the order total).
+- **Mobile.** Mobile Buy now sends no add-ons and is unchanged.
+- **Tests.**
+  - Shared unit tests (`addons`).
+  - `verify-money-loop` E12a:
+    - preview = shared rule = checkout amount, with tampered client prices ignored;
+    - a replayed capture (simulate and `materialize_order`) creates nothing;
+    - order amounts, days and revisions come from the snapshot;
+    - the buyer invoice lines − discount + GST = the order total;
+    - a paused add-on → 409 with no session;
+    - switch off → 409 / 404.
+  - `verify-authz` 7a2:
+    - off → 404;
+    - owner-only writes; another provider or a buyer is locked out;
+    - a 4th active add-on → 409;
+    - anon reads active only;
+    - no direct client insert or update.
+
 #### E12b: Speed tiers in quotes (N21, ADR-XB)
 
 **Why:** Xometry quotes Economy / Standard / Express (XM-04), and Moglix offers 24 h vs 5 days (MG-04). The buyer picks the trade-off; no negotiation.
@@ -2094,6 +2137,43 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.4 · I 1 · C 0.6 · E 2 → **0.12**.
 
+**As built (E12b: ADR 020, migration 0066; dark behind `quote_options_enabled`).**
+- **Model.**
+  - The quote row IS Standard, so every existing reader is unchanged.
+  - `quote_options` holds Economy / Express per quote **revision**. Rows are immutable, service role only, and unique per (quote, revision, label).
+  - `quotes.selected_option_id` and `checkout_sessions.quote_option_id` are nullable (null = Standard).
+- **Shared.**
+  - `quoteOptionsSchema` (≤ 2 rows, one per label, strict).
+  - `quoteOptionsProblems`: Express strictly faster and never cheaper; Economy strictly slower and never dearer.
+  - `quoteChoices`: each choice's checkout total (ADR-015 per option) and flags (`compareQuotes` with the other quotes at Standard).
+  - `choiceExtremes` (lowest / fastest across every choice); unit tests.
+- **Quote routes.** POST and PATCH take `options`, and a revision restates them. The server checks them before any write:
+  - goods → 422;
+  - switch off → 422 `options_unavailable`;
+  - incoherent → **400 `options_incoherent`**.
+
+  The rows are written under the quote's revision, and the `submitted` / `revised` events carry them.
+- **Provider form.** "Offer faster or cheaper options" is off by default. It appears in both forms, so a revision never drops options, and each row shows the server's "Buyer sees ₹X all-in".
+- **Compare.**
+  - Option chips per quote column (Economy · Standard · Express). The price, total, delivery, flags and confirm sheet follow the picked chip.
+  - A "Lowest: … · Fastest: …" line across every option.
+  - Accept sends `optionId`, and each choice has its own idempotency key.
+- **Checkout.**
+  - The option must be this quote's, at its current revision, with the switch on; otherwise **404 `option_not_found`**, including another quote's option.
+  - Price = the option's price under the quote's GST mode; days = the option's days (the due date).
+  - A live session on another option → 409 `rfq_checkout_in_progress`.
+- **Finalize.** Records `selected_option_id` from the frozen session. N22 loss labels use the winning option's price and days.
+- **Events.** `quote_option_added { label }` (provider form), `quote_option_selected { label }` (compare).
+- **Tests.**
+  - Shared `quote-options` tests.
+  - `verify-rfq` 11:
+    - incoherent → 400; two options stored;
+    - an option from another quote → 404;
+    - Express accepted → order = option price + GST, days = 4, quote records the option;
+    - a signed webhook replay creates nothing;
+    - the loss label is against Express.
+  - `verify-authz` 7a3: clients can't read or insert `quote_options`.
+
 #### E12c: Compliance bundles with milestone escrow (N18, ADR-XC)
 
 **Why:** Vakilsearch Elite (VS-01) and IndiaFilings sell registration + 12 months of filings. It's the strongest 90-day-repeat lever in the survey.
@@ -2114,6 +2194,44 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 - Cancelling after milestone 1 refunds exactly milestones 2 and 3, with one refund row per child.
 
 **RICE:** R 0.2 · I 2 · C 0.5 · E 2.5 → **0.08**.
+
+**As built (E12c: ADR 021, migration 0067; dark behind `bundles_enabled`; enabling waits on counsel + Razorpay).**
+- **Model.**
+  - A package with 2–6 `bundle_milestones` is a bundle: `seq`, label, due offset ≤ 92 days, `share_bps` summing to 10,000, offsets strictly increasing. Shared `bundleMilestonesSchema` enforces it; the partner route is the only writer.
+  - `bundle_purchases`: one per paid plan, carrying the ONE payment. Parties read their own; no client writes.
+  - `orders.bundle_purchase_id` / `bundle_seq` / `available_at`.
+  - `checkout_sessions.bundle_plan`.
+- **The split.**
+  - Shared `bundlePlan`, computed once at checkout: floor split of price, discount, GST and commission per share, the last milestone taking the remainder; taxable, total and earning derived per child.
+  - Every column sums exactly to the whole, and Σ children = the captured payment (unit-pinned).
+  - Add-ons are not offered on plans (409); a coupon applies to the whole.
+- **Materialisation.**
+  - The trigger `checkout_sessions_materialize_bundle` runs in the same transaction that links the session: it records the purchase, turns the materialised order into child 1, and inserts children 2..N from the frozen plan.
+  - A replayed webhook creates nothing.
+  - Later children become actionable at `available_at`. Auto-cancel's 24 hours count from then (`staleOrdersForAutoCancel`, with a fallback before 0067, plus a guard in `autoCancelOrder`).
+- **Refunds per child on one payment.**
+  - `paymentForOrder` / `refundForOrder` run byte-identical queries for ordinary orders.
+  - A child resolves its purchase's payment and its OWN refund row (`rfnd_<order id>`).
+  - Used by `processRefund`, dispute resolve, and the admin order / dispute views.
+- **Cancel remaining.** `POST /api/v1/bundles/[id]/cancel-remaining` (the buyer's own session) sends every unstarted child (`placed` / `accepted`) through the ordinary `cancel` transition: 100 % back, one refund row each. Started or finished children are untouched.
+- **UI.**
+  - Provider: a "Sell as a plan" milestones editor.
+  - Buy box: "Pay once · N milestones over D days" with the exact split.
+  - Checkout: the plan lines.
+  - `/app/plans`: timeline, next due, money still held, "Cancel remaining" behind a confirm sheet.
+  - Each child's order page: "Milestone k of your plan · starts …".
+- **Events.**
+  - Client: `bundle_viewed { milestones }`, `plan_cancel_requested { remaining }`.
+  - Server: `bundle_purchased`, `bundle_milestone_completed { seq }`, `plan_cancelled`, `bundle_milestones_saved { n }`.
+- **Tests.**
+  - Shared `bundles` tests: exact sums across prices, consistency, offsets, schema.
+  - `verify-money-loop` E12c:
+    - one capture → 3 children equal to the frozen split, Σ = the payment;
+    - a replayed `materialize_order` creates nothing;
+    - a future child older than 24 h is not auto-cancelled;
+    - milestone 1 under way, then cancel remaining → 2 and 3 refunded in full, one row each, 1 untouched;
+    - a second cancel refunds nothing more.
+  - `verify-authz` 7a4: routes 404 while off; no direct client writes.
 
 **E12 events**
 
@@ -2181,6 +2299,28 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 
 **RICE:** R 0.5 · I 1 · C 0.8 · E 4 → **0.10**.
 
+**As built (E13a: tab bars, provider listings / earnings, buyer profile / invoices).**
+- **Flag.** `EXP_V3_MOBILE`, delivered as `/profile/me.mobileV3Enabled`; off = the v2 tab bar exactly as before.
+- **FR-13.1.** Shared `mobile-v3.ts`: `mobileTabsFor` (buyer Home · Search · Requirements · Orders · Saved (+ Mart when live); provider Today · RFQs · Orders · Listings · Earnings; no Partner tab), `mobileRolesOf` / `initialMobileRole` (the device remembers the side; an account loses a side it no longer has). The layout orders the tabs by role; the profile (avatar) sheet switches sides. The Orders tab lists the provider's orders on the provider side.
+- **FR-13.2 (part).** Listings: every listing with status, stored price and discount, pause / resume through the web's status route (now Bearer-aware; the provider's own RLS still decides), "Edit on web" for everything else. Earnings: the payout ledger grouped scheduled (incl. on its way / delayed) · on hold (existing hold reasons) · paid (shared `groupPayoutsForEarnings`).
+- **FR-13.3.** Profile sheet (name, the side switch, invoices, notifications, help, language, sign out) and Invoices (the web rows; 15-minute signed PDF links fetched on each visit).
+- **API.** Thin GETs over the web's own loaders, 404 while the flag is off: `/api/v1/partner/packages`, `/api/v1/partner/payouts`, `/api/v1/me/invoices`.
+- **Tests.** The screens' logic is shared and unit-tested; `verify-experience` e13 drives the routes with Bearer tokens as the app does. RN component tests need a mobile test runner (E13b).
+
+**As built (E13b: the rest of the provider phone kit, deep links, haptics, component tests).**
+- **Screens.** Reviews (one public reply each, the web's reply route), Insights (read-only; the web's payload with its n-gates), Profile & availability (N11: next available + capacity through the web's route, now with a GET for the current values), reached from Today and the profile sheet. The order screen's provider side attaches a deliverable (expo-document-picker → the web's documents route, kind `deliverable`).
+- **FR-13.6.** Shared `mobileRouteFor(link, { v3 })` is the deep-link contract: every notification link the server sends today maps to its screen, tab and query kept; admin and unknown links stay on the list; unit-tested per link shape.
+- **FR-13.5 (part).** `confirmHaptic()` (expo-haptics, light) on pay, accept (quote and order actions) and send quote, only while `mobile` is on.
+- **Component tests.** `apps/mobile` now runs jest-expo + React Native Testing Library (`pnpm --filter @amclub/mobile test`, a CI step): Listings, Earnings, Invoices, Profile sheet, Reviews, Insights, Profile & availability. The Jest babel env drops the NativeWind JSX transform.
+- **E13c.** Native provider onboarding (D-PRD3), sheets with detents, and the native Gold Stamp / Paisa Moment.
+
+**As built (E13c: native provider onboarding, detent sheets, signature motion).**
+- **FR-13.4 (D-PRD3).** `/partner-onboarding` is the E10 wizard as native screens: "What you'll need", then contact → business (GSTIN autofill from the same stub/registry route; the legal name locks once filled; the state picker is a detent Sheet) → credentials & bank (camera via expo-image-picker or a file for each category that needs a credential; bank verified before submit) → review → done. It uses the shared E10 Zod rules (`isValidGstin`, `categoriesRequiringCredential`, `ONBOARDING_V3_STEPS`, `autofilledFields`) and the web's own routes: `onboarding-progress`, `kyc/verify-gstin`, `kyc/verify-bank`, `credential-upload`, `legal/accept` (surface `mobile`), `POST /profile/provider`. These five profile routes now accept the app's Bearer session through `getRequestUser()` (the `getSessionUser` shape; cookie behaviour unchanged) and refuse a delegated agent token (`requireNotDelegated`). Partner → Apply opens it while `mobile` is on; the E10 stall nudge (`/partner/onboarding?step=…`) deep-links to the same step (`mobileRouteFor`).
+- **The draft.** Like the web, the field draft stays on the device (SecureStore, 7-day TTL; the bank account number and the registry payload are never stored). What web and phone share is the server progress row the stall nudge reads, so a nudge resumes the step on either.
+- **FR-13.5.** `Sheet` (`components/ui/Sheet.tsx`): medium ≈ 50 % / large ≈ 90 % detents, drag the handle to expand, shrink or dismiss; native driver. `GoldStamp` (on the buyer's accept-delivery) and `PaisaMoment` (after the checkout payment lands; the amount is the server's paise formatted, never computed) run on the native driver inside shared budgets: `MOTION_BUDGET_MS` in `packages/shared/src/motion.ts` (700 ms / 900 ms), whose phase tables are unit-tested to sum within them. Reduced motion jumps to the final frame.
+- **Tests.** Component tests for the wizard (needs → contact → business with autofill), GoldStamp, PaisaMoment and Sheet; rig `e13c` drives progress → GSTIN → bank → submit with a Bearer token and checks the 401s.
+- **Events.** The E10 onboarding events, with `platform: 'android'`.
+
 ---
 
 ### E14: Language
@@ -2236,6 +2376,27 @@ RFQs    Open 12 · Quoted 9 · Closed 40          [ Search titles ]   Sort: Clos
 - Each approval writes exactly one `ai_decisions` row.
 
 **RICE:** R 0.4 · I 1 · C 0.8 · E 2 → **0.16**.
+
+**As built (E14a: the language gate, te / ta drafts, four-language maps, numerals).**
+- **FR-14.1.** `apps/web/i18n/coverage.config.json` is the ONE list of 32 buying-path namespaces. `pnpm --filter @amclub/web i18n:coverage` (CI step "Language coverage") fails on a missing te / ta key, a message that does not parse, argument names or tags that differ from English, stale keys, or a draft outside the buying path; `--strict` counts drafts as missing (the launch gate). Today: te 52 % live / 100 % with drafts; ta 44 % / 100 %.
+- **Drafts, never silently live.** The missing ~610 te and ~710 ta buying-path strings are machine drafts in `messages/drafts/<locale>.json`, loaded by `i18n/request.ts` between English and the live file only while `EXP_V3_LOCALES=on`, and only for the namespaces in `EXP_V3_LOCALES_NAMESPACES` (unset = all). A reviewer promotes a namespace with `i18n:promote` (moves it live in English key order and logs locale / namespace / keys / reviewer / date in `drafts/REVIEW_LOG.json`). Runbook, the 12-screen review list and the terminology choices to settle: `docs/i18n/REVIEW.md`.
+- **FR-14.2.** Shared `i18n-text.ts`: `i18nTextSchema` `{ en, hi?, te?, ta? }`, `pickI18n` (own non-blank slot, else English — never Hindi for te / ta); web and mobile `pickI18n` and shared `pickLocale` are that one function; the catalog `I18nText` type is the shared one. Category names and descriptions in all four languages: shared `CATEGORIES`, the seed, and migration 0060 (names reuse the live gateway copy). Level-2 service names were already four-language (`services` namespace, E2).
+- **FR-14.4 (D-PRD7).** `numeralsTag(locale)` (`<locale>-IN-u-nu-latn`) and `formatCount`: Latin digits and Indian grouping for money, dates and counts in every locale, unit-tested for en / hi / te / ta. No native digits in the drafts.
+- **FR-14.6.** `/admin/dev/ui` links the same gallery in all four languages and shows a long-label strip (buttons size to their label; only names truncate, full text on hover / focus); its own strings are now in te / ta.
+- **Events.** `locale_changed { from, to }` from the header switcher and the gateway (web) and the mobile language setting (`platform: 'android'`).
+- **Rig** `e14`: te drafts stay dark with the flag off (English fallback), category names carry te / ta and render on `/te` and `/ta` pages.
+- **E14b / E14c.** Below.
+
+**As built (E14b: notification copy in the gate, voice search one language at a time).**
+- **Notifications (FR-14.1).** The buyer / provider notification copy (order lifecycle, milestones, auto-cancel / auto-accept, disputes, quotes, RFQ expiry, clarifications, quote and order messages, payouts, duplicate payments) is the `notify` namespace of the message files; `lib/i18n/notify.ts` `notifyText(key, values)` builds the stored `{ en, hi, te?, ta? }` map with next-intl's translator. en / hi text is unchanged; `te` / `ta` are carried only when live, or drafted while `EXP_V3_LOCALES` covers `notify` — otherwise absent, so the reader gets English. `notify` is in the buying-path gate (68 te / ta drafts). Ops-only notices (payout dossier, dispute triage, the ops statement ping) stay en / hi.
+- **FR-14.5 (N5).** Shared `voice-languages.ts`: nine candidate languages; `voiceLanguageAllowed` = listed in `agent_settings.voice_search_languages` AND a recorded eval that passes (`voiceEvalPasses`: current `VOICE_EVAL_VERSION`, ≥ 50 queries, WER ≤ 20 %, right category ≥ 85 %; `wordErrorRate` is word-level edit distance over the reference). The catalog mic (`voice-parse` mode=query) answers a transcribed query only in an allowed language; otherwise `unsupported_language` with no parse call, and the mic says "type instead". `pnpm --filter @amclub/web voice:eval -- --lang te --set <jsonl> --token … [--record]` runs a native-speaker set through the app's own STT + parse and records pass or fail in `agent_settings.voice_language_evals` (a stub STT never records). Runbook: `docs/i18n/REVIEW.md` § Voice languages.
+- **Rig** `e14b`: notification en / hi from `notify.*`, te / ta absent with the flag off; voice: no eval / 49 queries / unlisted → "type instead", listed + passing → answered.
+
+**As built (E14c: provider content translation, N32b, dark).**
+- **Locks.** `AGENT_ENABLED` + `agents_enabled.content_translate` + the cohort; route group `(agent-translate-provider)` (`/partner/translations`), routes `/api/v1/partner/translations` (GET list, POST draft, POST `[id]/approve`, POST `[id]/reject`), each gate → session → `requireNotDelegated` → provider → agent-on.
+- **Draft.** `provider_content_translate@v1` (task class `content_translate`, residency in), one bounded call per field (package title, "Choose this if…", the About); the English is enveloped; `customerFacingText` (no contact / payment / links) + shared `contentNumbersProblems` (numbers copied, Latin digits) + length + target script decide; drafts in `content_translations` (migration 0061) never render.
+- **Approve.** Side by side, editable; claims the draft, re-checks (English unchanged, numbers, length, contract), writes the slot + `i18n_sources` `machine_approved`, exactly one `ai_decisions` row (feature `content_translation`). Buyers see "Translated · View original" on the package title, the "Choose this if…" line and the About (`TranslatedText`); cards show the text only (a card is a link).
+- **Tests.** Golden `provider_content_translate` (13 cases, 8 planted bad outputs refused), the injection set (+17 pairs), `e14c` (dark 404s, an approved slot labelled, drafts never render), `trust:verify:content-translation` on a flag-on server (one decision row per approve, double approve 409, a changed number 422, stale on an English change). Runbook `docs/agents/CONTENT_TRANSLATION.md`.
 
 ---
 
@@ -2304,6 +2465,18 @@ Nothing in this epic is user-visible.
 
 **RICE:** R 1.0 · I 0.5 · C 0.8 · E 3 → **0.13**. It's scored as an enabler: the value arrives in V1.5–V2.
 
+**As built (E15a: typed specs, shadow predictions, the compare flag + triples).**
+- **F3 (FR-15.1).** Migration 0062 `rfqs.cad_features`, written at RFQ create from a confirmed drawing's deterministic parse (shared `cadFeaturesFromDrawing`: format, units, bbox, hole estimate, entity counts — never the product name or prose, never a model). Shared `mfgSpecSchema` (process, material, tolerance, finish, inspection): an optional `details.mfg_spec` block the create route validates (422 otherwise). Shared `packageDeliverableSchema` (`{ label_i18n, format }` or the older prose string) + `deliverableLabel`: web and mobile "What you'll get" render either.
+- **F10 (FR-15.5).** `shadow_predictions` (0062; service role only — no grant, no policy; subject ids only; 24 months). `lib/shadow` `recordShadow` / `resolveShadow` are the only writers. First users, each behind its own switch (`shadow_cad_price_band_enabled`, `shadow_provider_fit_enabled`, default off): the CAD price band (rules v1: size class × holes) predicted at fan-out and resolved against the winning quote's all-in total (0 inside the band, else the distance to the nearest edge / actual); provider fit % (rules v1: must-have languages and credentials, track record, rating, availability) per matched provider, resolved at acceptance (quoted / won). Weekly error report at `/admin/shadow` (admin / ops only).
+- **F1.** `compare_flag_viewed { flag }` (one per flag kind per compare view, v3). `scripts/export-compare-triples.ts`: one JSON line per accepted services request — salted RFQ ref, the quotes as compare showed them (shared `compareQuotes` totals, GST mode, flags), the chosen index; no provider or buyer identity.
+- **Tests.** Shared unit tests (band, fit, weekly report, specs, deliverables); rig `e15a` (a bad mfg_spec 422; cad_features from the drawing; one band + one fit per matched provider at fan-out; the client reads nothing; acceptance resolves the band against ₹5,900 and the fits quoted / won; the admin report renders for admins only); `verify-authz` (no client reads or writes `shadow_predictions`).
+
+**As built (E15b: search telemetry + attribution, declared vs actual, consented corpora, synonyms).**
+- **F5 (FR-15.3).** Migration 0063 `search_queries` (service role only; no user id): every v3 results page mints a `search_id`; a sample (`search_telemetry_sample_pct`, default 20, 0 = off; shared `sampledSearch` is deterministic on the id) is written after the response (`lib/search/telemetry`), with shared `normaliseSearch` parameters and the result count. The id rides the result links (`?sid=&pos=`, the rank across pages) into the package page (ISR — `SearchAttributionCapture` keeps it in sessionStorage for 24 h, keyed to that package group) → the checkout body (`attribution`, strict `searchAttributionSchema`; malformed → 422) → `checkout_sessions.attribution` → `orders.attribution`, copied once inside the placed side effects. Attribution is best-effort and never part of the money decision. Golden set `apps/web/evals/search/golden.jsonl` (200 cases: 40 services × 5 phrasings) run by `pnpm --filter @amclub/web eval:search` (hit@3 through the same anon RPC, threshold 85 %); rebuild it from the sampled real queries after launch.
+- **F4 (FR-15.2).** Nightly `cron/data-foundations` (21:40 UTC): a provider whose paid orders in the last 180 days (n ≥ 5, services only) sit more than half outside their declared categories (all declared, not only the primary — fewer false flags) gets ONE `category_mismatch_flagged` audit row (re-flag after 30 days), shown to ops on `/admin/verifications` ("Category mismatches"). Never the public profile; nothing changes for the provider. The same job purges `search_queries` after 180 days and `shadow_predictions` after 24 months.
+- **F6 (FR-15.4).** `users.corpus_consent_at`; `corpus_voice_triples` (transcript → parse → the buyer's final request — text only, no audio exists to keep) and `corpus_image_pairs` (the private `rfq-attachments` key, the proposal, the final request, shared `intakeCorrections`), service role only, cascade on the user. Written at RFQ create for an opted-in buyer (`lib/corpus`). The opt-in ("Help improve AMClub's Hindi and Telugu understanding", default off) is on the buyer profile behind `corpus_consent_enabled` (default off: hidden, opting in 404s, nothing new is kept; a buyer who already opted in still sees it); `POST /api/v1/me/corpus-consent` (own session only) — revoking deletes that user's rows and returns the count. `service_synonyms` (`term`, `term_key`, `lang`, `category_slug`, `service_slug`, `source`, `reviewed`; anyone reads reviewed rows only): v3 search maps a whole query with a reviewed synonym to its category / service when no category is chosen.
+- **Tests.** Shared unit tests (`data-capture`); rig `e15b` (a sid on the result links and its 100 %-sample row with no user id; the order carries the attribution; malformed → 422; six paid orders outside the declared category → one flag, a re-run adds none, admin page only; the switch off hides the opt-in and 404s; consent keeps the image pair by key with its corrections, the buyer reads nothing, revoking deletes; anon reads reviewed synonyms only); `verify-authz` (no client reads `search_queries` or the corpora; no client writes synonyms).
+
 ---
 
 ### E16: AMC Mart storefront v2 (gated: Mart Launch Gate)
@@ -2341,6 +2514,47 @@ Nothing in this epic is user-visible.
 
 **RICE:** R 0.3 · I 1 · C 0.6 · E 3 → **0.06** (scored for the Launch Gate, not now).
 
+**As built (E16a: dual mode + typed attributes; staged migration 0069, behind `MART_ENABLED` and the Launch Gate).**
+- **Migration 0069 is STAGED** with 0022–0025 (`verify-migrations` `staged: true`; `verify-launch-gate` probes `products.attributes`; LAUNCH_RUNBOOK step 3.2 applies it). It changes Mart tables only (`products`, `mart_categories`, three new tables), so `mart:static` has nothing new to guard. `killtest-mart-storefront` proves its constraints and grants on a local DB.
+- **N40 typed attributes.**
+  - Definitions are `mart_category_attributes` (config, public read, no client writes): `text | number | enum | bool`, unit, options (enums only), `facetable` (enum / bool only), `required`. Seeded for fasteners and lubricants.
+  - Shared `validateProductAttributes` is the one rule. Both seller routes (create and PATCH) run it against the category's definitions and answer 422 `invalid_attributes` with `problems` (`required | unknown | type | option`). Numbers typed as text are stored as numbers.
+  - The listing wizard asks for the category's attributes on the confirm step (definitions from `GET /api/v1/mart/categories?attributes=<slug>`). The product page shows them above the free-form specs.
+  - **Facets.** Facetable attributes of the current category become chips (`a.<key>=<value>`, server-rendered links like the other filters). Counts come from the category's active listings; a chosen facet keeps its siblings visible. Shared `parseAttributeFilters` accepts only facetable keys and legal values; the list query applies them as one jsonb containment on the GIN-indexed column. The products API takes the same params for "show more".
+- **N39 dual mode.**
+  - A Services | Goods switch (`ModeSwitch`, a SegmentedControl) sits above the search field on `/services`, `/app/search` and the Mart header. It renders only when `MART_ENABLED` and carries the query across.
+  - Strong goods results (≥ 3) show a "Make to order" strip: the goods RFQ (ADR-007) prefilled with the query and category. Weak results (< 3) show the prefilled goods RFQ card after the grid; zero results keep the existing empty state with the same link.
+- **Acceptance.** `mart:acceptance` runs the new `verify-mart-storefront` (N39 + N40 now; E16b / E16c add N41–N44) and, on a local DB, the 0069 killtest. `verify-mart-inert` checks `/services` renders no switch with the flag off.
+
+**As built (E16b: seller promises, non-returnable and ITC-ineligible categories; same staged 0069).**
+- **N41 promises.**
+  - The seller opts in per product on the listing wizard: "Ships in 48 h", "Return shipping covered", "GST invoice within 24 h" (`products.promises`, shared `martPromisesSchema`; unknown → 422).
+  - **Measured, never money.** The hourly Mart cron (`pool-close`, still inert with the flag off) runs `measureGoodsPromiseBreaches` over goods orders from the last 14 days. Shared `measurePromiseBreaches` decides:
+    - *Ships in 48 h*: the first dispatch photo is on the order within 48 h of placement. No photo once 48 h have passed is a breach.
+    - *GST invoice within 24 h*: the invoice document named at dispatch is on the order within 24 h of the dispatch photo. Dispatched without one, once 24 h pass, is a breach.
+  - Each breach is one row in `mart_promise_breaches` per (order, product, promise), so a re-run records nothing. No order, payout or release-gate value is read or written; `evaluateGoodsReleaseGate` is unchanged.
+  - **Badges.** Public reads (list, product, products API) carry only the badges still standing (`withActiveBadges` → shared `activePromiseBadges`). A promise with `promise_breach_limit.count` breaches inside `window_days` disappears. That is a registered `mart_settings` key, default 3 in 90 days. The seller's goods list says which badge is hidden and why.
+  - *Return shipping covered* is enforced rather than measured: shared `effectiveReturnFreightPayer` makes the seller the freight payer on that product's return note, whatever the category default.
+- **N43 non-returnable and ITC-ineligible.**
+  - `mart_categories.returnable` / `itc_eligible` are config, edited in the admin category table (`martCategoryPatchSchema`).
+  - **Not returnable** shows on the card, the product page, the cart and checkout lines, and the checkout note. A wholly non-returnable order refuses `open_return` for quality / other with 409 `not_returnable`. Damaged, wrong and short deliveries stay claimable (shared `returnAllowed`), and the workspace offers only those reasons. The release gate's return window is untouched.
+  - **ITC.** "ITC may not be available on this item" replaces the ITC hint, and the after-ITC column and card line disappear. The server computes the credit per line (shared `goodsItcSplit`): cart preview, checkout and pool checkout return `itcPaise` (eligible lines' GST) and `afterItcPaise` = total − credit. With every line eligible this equals the taxable value, as before.
+- **Acceptance.** `verify-mart-storefront` adds N41 (stored promises, badges, a breach recorded once by the cron with no money or status moved, the badge dropping at the limit while the other stays) and N43 (flags on the product page, a zero-credit preview, 409 on a quality return, a damaged claim opening).
+
+**As built (E16c: samples, customise and the reorder library; same staged 0069).**
+- **N42 samples.**
+  - The seller may set a sample price on the listing's pricing step (`products.sample_price_paise`, pre-GST; empty = no samples).
+  - "Request a sample · ₹X + GST" opens `/app/mart/checkout?sample=<id>`: one unit, outside the cart (the cart is untouched).
+  - The one goods preparation (`prepareGoodsCheckout(…, { sample: true })`) prices it at the sample price with the MOQ waived and marks the frozen line `sample: true`. Cart preview and checkout accept `sample` only for exactly one listing at qty 1 (else 422 `sample_one_unit`); a listing without a sample price → 409 `no_sample`.
+  - The money is the same `computeGoodsOrderAmounts` → session → webhook → order path: a sample is an ordinary goods order.
+- **N42 customise.** "Customise" opens the goods RFQ (`?product_id=…&customise=1`) with the spec rows prefilled from the listing's typed attributes, then its free-form specs. The buyer edits them, and sellers quote as with any goods RFQ (D4: provider-priced).
+- **N44 reorder library.**
+  - `/app/mart/reorder` (and `GET /api/v1/mart/reorder` for mobile) groups the lines of the buyer's completed goods orders by listing (shared `groupPastGoodsLines`; samples and quoted lines left out). Each shows what they paid beside today's server price for the same quantity, flagged when it changed (the N26 rule). "Reorder" puts it in the cart at that quantity; a listing no longer live shows "No longer listed".
+  - **Reminder, opt-in.** `POST /api/v1/mart/reorder/reminders` (only for a listing they bought; service role after the buyer's session) stores `mart_reorder_reminders` at their usual interval: shared `usualReorderIntervalDays`, the median gap clamped to 7–365, 30 for a single order. The first reminder comes that long after the last order, or tomorrow if that has passed.
+  - The hourly Mart cron sends each due reminder once (in-app, linking the list) and moves it on, guarded on the `next_at` it read.
+  - The cart links "Your usual orders".
+- **Acceptance.** `verify-mart-storefront` adds N42 (the page offers both; the sample preview and a real sample order at one unit; 422 / 409 refusals) and N44 (the library with then vs today and the change flag; samples excluded; reminder 404 / 14-day interval / overdue → tomorrow; the cron sends once and moves on). `verify-mart-inert` covers `/app/mart/reorder` and both reorder routes.
+
 ---
 
 ### E17: Analytics consent (N36, gated: D-UX2)
@@ -2362,6 +2576,22 @@ Nothing in this epic is user-visible.
 - The §2.3 metrics are computed from server events wherever possible, so a decline rate doesn't blind the funnel. The consent rate is reported as its own metric.
 
 **RICE:** not ranked; this is compliance. **E 0.5.**
+
+**As built (E17, dark: build flag `NEXT_PUBLIC_ANALYTICS_CONSENT_REQUIRED`, default off; migration 0068; the "consent needed" branch, ready for D-UX2).**
+- **Off (today).** Nothing changes: PostHog loads after idle, no notice, and `/api/v1/me/analytics-consent` is 404.
+- **On.**
+  - PostHog does not load, capture or buffer anything until the person accepts. Declining sends nothing and opts out a loaded client.
+  - The notice is one line at the bottom with **equal Accept and Decline** (same variant, size and weight; nothing pre-ticked). It links to the privacy policy.
+- **Storage.**
+  - A first-party cookie `amc_analytics_consent=<choice>.<version>` (one year).
+  - For signed-in people, also `users.analytics_consent { choice, version, at }`, written only by `POST /api/v1/me/analytics-consent` (service role; own session, never a delegated token). A signed-in person on a new device gets their stored choice applied without being asked again.
+- **Versioning.** Shared `ANALYTICS_NOTICE_VERSION`. A choice for another version counts as not asked (`currentConsentFromCookie` / `currentConsentFromRecord`).
+- **Managing it.** A "Privacy choices" row on the buyer profile shows the current choice and changes it.
+- **Metrics.**
+  - The consent rate is its own metric (`analyticsConsent` in the admin KPI), counted from stored choices by shared `consentRate`, never from analytics.
+  - Server-side operational events keep flowing, pending counsel's confirmation that they aren't analytics.
+- **If counsel says consent isn't needed:** leave the flag off and add the privacy-policy paragraph. No code changes.
+- **Tests.** Shared unit tests (cookie / record versioning, consent rate) and rig `e17` (off: route 404, no notice; on: store / read / 422).
 
 ---
 

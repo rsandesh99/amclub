@@ -18,6 +18,8 @@ import { getTdsConfig } from '@/lib/mart/config'
 import { getServicesEvidence } from '@/lib/orders/evidence'
 import { maybeEnqueuePayoutDossier } from '@/lib/agent/dossier-trigger'
 import { getAgentSetting } from '@/lib/agent/settings'
+import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
+import { captureServerEvent } from '@/lib/analytics/server'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -171,11 +173,8 @@ export async function processRefund(
   })
   if (refundPaise <= 0) return 0
 
-  const { data: payment } = await admin
-    .from('payments')
-    .select('id, razorpay_payment_id')
-    .eq('order_id', order.id)
-    .maybeSingle()
+  // E12c — a bundle child refunds against its purchase's ONE payment; its refund row is its own (by key).
+  const payment = await paymentForOrder<{ id: string; razorpay_payment_id: string | null }>(admin, order, 'id, razorpay_payment_id')
   if (!payment) return 0
 
   // Phase 2f — money truth. ONE refund per order, keyed deterministically, and
@@ -187,11 +186,7 @@ export async function processRefund(
   const nowIso = new Date().toISOString()
   let rowId: string
   let amountPaise = refundPaise
-  const { data: existing } = await admin
-    .from('refunds')
-    .select('id, status, amount_paise')
-    .eq('payment_id', payment.id)
-    .maybeSingle()
+  const existing = await refundForOrder<{ id: string; status: string; amount_paise: number }>(admin, order, payment.id, 'id, status, amount_paise')
   if (existing) {
     if (existing.status === 'processed') return Number(existing.amount_paise)
     rowId = existing.id // pending from an earlier attempt → complete it
@@ -210,11 +205,7 @@ export async function processRefund(
       .single()
     if (insErr || !inserted) {
       // Unique-key race: a concurrent caller inserted first — re-read and defer to it.
-      const { data: again } = await admin
-        .from('refunds')
-        .select('id, status, amount_paise')
-        .eq('payment_id', payment.id)
-        .maybeSingle()
+      const again = await refundForOrder<{ id: string; status: string; amount_paise: number }>(admin, order, payment.id, 'id, status, amount_paise')
       if (!again) throw new Error(`refund insert failed: ${insErr?.message ?? 'unknown'}`)
       if (again.status === 'processed') return Number(again.amount_paise)
       rowId = again.id
@@ -321,6 +312,8 @@ export async function applyTransition(
   if (action === 'accept_delivery') {
     await schedulePayout(admin, updated)
     await generateInvoices(admin, orderId)
+    // E12c — a bundle child's completion (its own payout above, like any order).
+    if (updated.bundle_seq) captureServerEvent(actor.userId, 'bundle_milestone_completed', { seq: updated.bundle_seq })
   }
   if (action === 'raise_dispute') {
     await admin.from('disputes').upsert(
@@ -373,9 +366,24 @@ export async function applyTransition(
 
 // ── System (job-driven) transitions — no party actor, validated by the machine ──
 
+/**
+ * The placed orders past the 24 h accept window. E12c — a bundle child counts
+ * from when it becomes actionable (`available_at`), not from the purchase; the
+ * filter names a 0067 column, so before that migration it falls back to the
+ * original query (no child exists then).
+ */
+export async function staleOrdersForAutoCancel(admin: Admin, cutoffIso: string): Promise<any[]> {
+  const withAvail = await admin.from('orders').select('*').eq('status', 'placed').lt('created_at', cutoffIso).or(`available_at.is.null,available_at.lt.${cutoffIso}`).limit(200)
+  if (!withAvail.error) return withAvail.data ?? []
+  const { data } = await admin.from('orders').select('*').eq('status', 'placed').lt('created_at', cutoffIso).limit(200)
+  return data ?? []
+}
+
 /** 24h no-accept → auto_cancelled → refunded (100%). Idempotent on status. */
 export async function autoCancelOrder(admin: Admin, order: any): Promise<boolean> {
   if (order.status !== 'placed') return false
+  // E12c — a bundle child's 24 h starts when it becomes actionable.
+  if (order.available_at && new Date(order.available_at).getTime() > Date.now() - 24 * 3600 * 1000) return false
   if (!isValidOrderTransition('placed', 'auto_cancelled')) return false
   await admin.from('orders').update({ status: 'auto_cancelled', cancelled_reason: 'no_accept_24h', updated_at: new Date().toISOString() }).eq('id', order.id)
   await addEvent(admin, order.id, 'auto_cancelled', null, { reason: 'no_accept_24h' })
@@ -398,6 +406,7 @@ export async function autoAcceptOrder(admin: Admin, order: any): Promise<boolean
   const updated = { ...order, status: 'completed', completed_at: completedAt }
   await schedulePayout(admin, updated)
   await generateInvoices(admin, order.id)
+  if (order.bundle_seq) captureServerEvent('system', 'bundle_milestone_completed', { seq: order.bundle_seq })
   try { await notifyAutoAccepted(admin, updated) } catch (e) { console.error('[notifyAutoAccepted]', e) }
   return true
 }

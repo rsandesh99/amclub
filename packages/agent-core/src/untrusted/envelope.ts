@@ -72,6 +72,8 @@ export const ENVELOPE_CAPS: Readonly<Record<string, number>> = {
   support_chat_previous: 2000,
   whatsapp_previous: 2000,
   support_transcript: 1000,
+  // E14 N32b — a provider's own catalogue copy (title / ideal_for / about) for translation
+  provider_content: 1500,
 }
 
 export function capForKind(kind: string): number {

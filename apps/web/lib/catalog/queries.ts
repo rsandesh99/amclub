@@ -19,7 +19,7 @@ import type {
   VerificationBadge,
   I18nText,
 } from './types'
-import type { PriceDisplay } from '@amclub/shared'
+import type { PackageDeliverable, PriceDisplay } from '@amclub/shared'
 
 // ─── Row mappers ──────────────────────────────────────────────────────────────
 
@@ -318,7 +318,7 @@ export async function getPackageDetail(
     titleI18n: pk.title_i18n as I18nText,
     scopeIncluded: (pk.scope_included as string[]) ?? [],
     scopeExcluded: (pk.scope_excluded as string[]) ?? [],
-    deliverables: (pk.deliverables as string[]) ?? [],
+    deliverables: (pk.deliverables as PackageDeliverable[]) ?? [],
     requirementsTemplate: pk.requirements_template,
     pricePaise: Number(pk.price_paise),
     discountBps: pk.discount_bps,

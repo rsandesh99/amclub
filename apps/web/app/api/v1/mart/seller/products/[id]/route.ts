@@ -1,12 +1,13 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { productInputSchema, productStatusActionSchema, isValidProductTransition, type ProductStatus } from '@amclub/shared'
+import { productInputSchema, productStatusActionSchema, isValidProductTransition, validateProductAttributes, type ProductStatus } from '@amclub/shared'
 import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSellerCtx } from '@/lib/mart/seller'
 import { getSellerProduct } from '@/lib/mart/queries'
 import { getMartCategory, getAutoApproveAfterListings } from '@/lib/mart/config'
+import { listCategoryAttributes } from '@/lib/mart/attributes'
 import { addProductEvent } from '@/lib/mart/events'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { serverError } from '@/lib/api/errors'
@@ -59,17 +60,24 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   const cat = await getMartCategory(c.admin, d.category_slug)
   if (!cat || !cat.is_active || cat.bis_blocked) return NextResponse.json({ error: 'Invalid category' }, { status: 422 })
   if (d.images.some((k) => !k.startsWith(`mart/${c.seller.id}/`))) return NextResponse.json({ error: 'Image not owned by this seller' }, { status: 403 })
+  // E16 N40 — typed attributes, validated against the (possibly new) category's definitions.
+  const attrs = validateProductAttributes(await listCategoryAttributes(c.admin, d.category_slug), d.attributes)
+  if (!attrs.ok) return NextResponse.json({ error: 'invalid_attributes', problems: attrs.problems }, { status: 422 })
 
   const before = {
     category_slug: c.product.categorySlug, name: c.product.name, description: c.product.description, hsn_code: c.product.hsnCode,
     gst_rate_bps: c.product.gstRateBps, unit: c.product.unit, images: c.product.images, min_order_qty: c.product.minOrderQty,
     country_of_origin: c.product.countryOfOrigin, brand: c.product.brand, specs: c.product.specs, availability: c.product.availability,
-    lead_time_days: c.product.leadTimeDays,
+    lead_time_days: c.product.leadTimeDays, attributes: c.product.attributes, promises: c.product.promises,
+    sample_price_paise: c.product.samplePricePaise,
   }
   const after = {
     category_slug: d.category_slug, name: d.name, description: d.description ?? null, hsn_code: d.hsn_code, gst_rate_bps: d.gst_rate_bps,
     unit: d.unit, images: d.images, min_order_qty: d.min_order_qty, country_of_origin: d.country_of_origin, brand: d.brand ?? null,
     specs: d.specs, availability: d.availability, lead_time_days: d.availability === 'lead_time' ? (d.lead_time_days ?? null) : null,
+    attributes: attrs.value,
+    promises: d.promises,
+    sample_price_paise: d.sample_price_paise,
   }
   const { error } = await c.admin
     .from('products')

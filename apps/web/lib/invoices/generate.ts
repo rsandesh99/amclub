@@ -1,6 +1,6 @@
 import 'server-only'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
-import { isValidGstin } from '@amclub/shared'
+import { addonInvoiceLines, addonSnapshotSchema, isValidGstin } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -8,6 +8,9 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
 const BUCKET = 'invoices'
 // StandardFonts can't encode ₹ — use "INR " in PDFs.
 const inr = (paise: number) => 'INR ' + (paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+// …nor Indic scripts: a line label (a title, a provider-typed add-on label) keeps
+// only what the standard font encodes, so a label can never fail the invoice.
+const pdfSafe = (text: string) => text.replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '?')
 
 interface Line {
   label: string
@@ -36,7 +39,7 @@ async function buildPdf(title: string, header: Record<string, string>, lines: Li
   y -= 24
 
   for (const line of lines) {
-    page.drawText(line.label, { x: 50, y, size: 11, font })
+    page.drawText(pdfSafe(line.label), { x: 50, y, size: 11, font })
     page.drawText(line.value, { x: 400, y, size: 11, font })
     y -= 22
   }
@@ -91,6 +94,9 @@ export async function generateInvoices(admin: Admin, orderId: string): Promise<{
           { label: `  GST ${l.gst_rate_bps / 100}%`, value: inr(l.line_gst_paise) },
         ])
       : []
+    const snap = addonSnapshotSchema.safeParse(order.addons ?? [])
+    const addons = snap.success ? snap.data : []
+    const serviceLines = addons.length ? addonInvoiceLines({ title: order.title, pricePaise: Number(order.price_paise) }, addons) : [{ label: order.title as string, paise: Number(order.price_paise) }]
     const bytes = await buildPdf(
       goods ? 'Tax Invoice (Buyer) — Goods' : 'Tax Invoice (Buyer)',
       {
@@ -104,7 +110,8 @@ export async function generateInvoices(admin: Admin, orderId: string): Promise<{
       goods
         ? [...goodsLines, { label: 'Taxable value', value: inr(order.price_paise) }, { label: 'Total GST', value: inr(order.gst_paise) }]
         : [
-            { label: order.title, value: inr(order.price_paise) },
+            // E12a / ADR 019 — the package line, then one line per add-on (same GST rate); they sum to the order price.
+            ...serviceLines.map((l) => ({ label: l.label, value: inr(l.paise) })),
             { label: 'Discount', value: '- ' + inr(order.discount_paise) },
             { label: 'Taxable value', value: inr(order.price_paise - order.discount_paise) },
             { label: 'GST (18%)', value: inr(order.gst_paise) },
@@ -117,7 +124,7 @@ export async function generateInvoices(admin: Admin, orderId: string): Promise<{
     await admin.from('invoices').insert({
       order_id: orderId, number, kind: 'buyer_invoice', pdf_url: path,
       gstin_snapshot: { buyer: buyerGstin, provider: provider?.gstin ?? null, buyer_source: buyerGstin && buyerGstin === typedGstin ? 'checkout' : 'profile' },
-      totals: { total_paise: order.total_paise, gst_paise: order.gst_paise },
+      totals: { total_paise: order.total_paise, gst_paise: order.gst_paise, ...(addons.length ? { lines: serviceLines, discount_paise: Number(order.discount_paise) } : {}) },
     })
     out.buyer = path
   }

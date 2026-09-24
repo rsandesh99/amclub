@@ -933,3 +933,199 @@ export async function sendProcurementDecision(runId: string, action: 'ok' | 'edi
   const res = await fetch(`${API_URL}/api/v1/agent/procurement/decision`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: JSON.stringify({ run_id: runId, action }) })
   return { ok: res.ok, status: res.status }
 }
+
+// ── Experience v3 E13 — mobile parity (flag `mobile`; every route 404s while it is off) ─────────────
+
+export interface MyListing {
+  id: string
+  slug: string
+  providerSlug: string | null
+  title: string
+  status: string
+  /** The stored list price and discount (server paise) — shown as stored, never recomputed. */
+  pricePaise: number
+  discountBps: number
+  deliveryDays: number | null
+  categorySlug: string | null
+  categoryName: string | null
+}
+
+export async function fetchMyListings(locale: string): Promise<{ ok: boolean; listings: MyListing[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/packages?locale=${encodeURIComponent(locale)}`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, listings: [] }
+    const d = (await res.json().catch(() => ({}))) as { listings?: MyListing[] }
+    return { ok: true, listings: d.listings ?? [] }
+  } catch {
+    return { ok: false, listings: [] }
+  }
+}
+
+/** Pause / resume a listing (the web's status toggle; the provider's own RLS decides). */
+export async function setListingStatus(id: string, status: 'active' | 'paused'): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/packages/${id}`, { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export interface MyPayout {
+  id: string
+  orderId: string
+  orderNumber: string | null
+  orderTitle: string | null
+  amountPaise: number
+  status: string
+  scheduledFor: string | null
+  paidAt: string | null
+  holdReasons: string[]
+}
+
+export async function fetchMyPayouts(): Promise<{ ok: boolean; payouts: MyPayout[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/payouts`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, payouts: [] }
+    const d = (await res.json().catch(() => ({}))) as { payouts?: MyPayout[] }
+    return { ok: true, payouts: d.payouts ?? [] }
+  } catch {
+    return { ok: false, payouts: [] }
+  }
+}
+
+export interface MyInvoice {
+  id: string
+  number: string
+  orderId: string
+  orderNumber: string | null
+  orderTitle: string | null
+  totalPaise: number
+  createdAt: string
+  /** A 15-minute signed PDF link, or null while the PDF is being generated. */
+  downloadUrl: string | null
+}
+
+export async function fetchMyInvoices(): Promise<{ ok: boolean; invoices: MyInvoice[] }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/me/invoices`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, invoices: [] }
+    const d = (await res.json().catch(() => ({}))) as { invoices?: MyInvoice[] }
+    return { ok: true, invoices: d.invoices ?? [] }
+  } catch {
+    return { ok: false, invoices: [] }
+  }
+}
+
+// ── E13b — provider reviews, insights, profile / availability, order deliverables ──
+
+export interface MyReview { id: string; rating: number; text: string | null; provider_reply: string | null; status: string; created_at: string; order: { order_number: string; title: string } | null }
+
+export async function fetchMyReviews(): Promise<{ ok: boolean; reviews: MyReview[]; avgRating: number; reviewCount: number }> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/reviews`, { headers: await authHeaders() })
+    if (!res.ok) return { ok: false, reviews: [], avgRating: 0, reviewCount: 0 }
+    const d = (await res.json().catch(() => ({}))) as { reviews?: MyReview[]; avgRating?: number; reviewCount?: number }
+    return { ok: true, reviews: d.reviews ?? [], avgRating: Number(d.avgRating ?? 0), reviewCount: Number(d.reviewCount ?? 0) }
+  } catch {
+    return { ok: false, reviews: [], avgRating: 0, reviewCount: 0 }
+  }
+}
+
+export interface PartnerInsightsView {
+  range: '7d' | '30d'
+  weeks: { week: string; views: number; matched: number; quoted: number; won: number }[]
+  loss: { price: { n: number; of: number; medianPct: number | null }; delivery: { n: number; of: number; medianDays: number | null } }
+  declineReasons: { reason: string; n: number }[]
+  listings: { packageId: string; title: string; views: number; checkouts: number; orders: number }[]
+}
+
+export async function fetchPartnerInsights(range: '7d' | '30d'): Promise<PartnerInsightsView | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/partner/insights?range=${range}`, { headers: await authHeaders() })
+    return res.ok ? ((await res.json()) as PartnerInsightsView) : null
+  } catch {
+    return null
+  }
+}
+
+export interface MyAvailability { nextAvailableOn: string | null; capacitySlots: number; displayName: string | null; status: string | null }
+
+export async function fetchMyAvailability(): Promise<MyAvailability | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/profile/provider/availability`, { headers: await authHeaders() })
+    return res.ok ? ((await res.json()) as MyAvailability) : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveMyAvailability(input: { nextAvailableOn: string | null; capacitySlots: number }): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/profile/provider/availability`, { method: 'PATCH', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+/** Upload a file to the order (the web's documents route: kind 'deliverable' for the provider's delivery). */
+export async function uploadOrderDocument(orderId: string, kind: string, file: { uri: string; name: string; mimeType: string }): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const fd = new FormData()
+    // React Native's FormData takes { uri, name, type } for a file part.
+    fd.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob)
+    fd.append('kind', kind)
+    const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/documents`, { method: 'POST', headers: await authHeaders(), body: fd })
+    if (res.ok) return { ok: true }
+    const d = (await res.json().catch(() => ({}))) as { error?: string }
+    return { ok: false, error: typeof d.error === 'string' ? d.error : 'upload_failed' }
+  } catch {
+    return { ok: false, error: 'upload_failed' }
+  }
+}
+
+// ── E13c — native provider onboarding (D-PRD3): the same routes and schemas as the web wizard (E10) ──
+
+async function postJson<T>(path: string, body: unknown): Promise<{ ok: boolean; status: number; data: T | null }> {
+  try {
+    const res = await fetch(`${API_URL}${path}`, { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    return { ok: res.ok, status: res.status, data: ((await res.json().catch(() => null)) as T | null) }
+  } catch {
+    return { ok: false, status: 0, data: null }
+  }
+}
+
+export function verifyGstinForOnboarding(gstin: string) {
+  return postJson<{ verified?: boolean; autofill?: import('@amclub/shared').GstinAutofill }>('/api/v1/profile/provider/kyc/verify-gstin', { gstin })
+}
+
+export function verifyBankForOnboarding(input: { accountNumber: string; ifsc: string; holderName: string }) {
+  return postJson<{ verified?: boolean; stub?: boolean; accountHolderName?: string }>('/api/v1/profile/provider/kyc/verify-bank', input)
+}
+
+export function saveOnboardingStep(step: string, categorySlug?: string) {
+  return postJson<unknown>('/api/v1/profile/provider/onboarding-progress', { step, ...(categorySlug ? { categorySlug } : {}) })
+}
+
+export function acceptLegalDocsMobile(docs: readonly string[], locale: string) {
+  return postJson<{ required?: string[] }>('/api/v1/legal/accept', { docs, surface: 'mobile', locale })
+}
+
+export function submitProviderProfile(body: Record<string, unknown>) {
+  return postJson<{ error?: unknown }>('/api/v1/profile/provider', body)
+}
+
+/** A credential document (camera photo or picked file) → the private credential bucket; returns its stored reference. */
+export async function uploadCredentialDocument(category: string, file: { uri: string; name: string; mimeType: string }): Promise<{ ok: boolean; url: string | null }> {
+  try {
+    const fd = new FormData()
+    fd.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob)
+    fd.append('category', category)
+    const res = await fetch(`${API_URL}/api/v1/profile/provider/credential-upload`, { method: 'POST', headers: await authHeaders(), body: fd })
+    const d = (await res.json().catch(() => ({}))) as { url?: string }
+    return { ok: res.ok && !!d.url, url: d.url ?? null }
+  } catch {
+    return { ok: false, url: null }
+  }
+}

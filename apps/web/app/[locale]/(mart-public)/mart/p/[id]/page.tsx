@@ -2,11 +2,12 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
-import { pickLocale } from '@amclub/shared'
+import { effectiveReturnFreightPayer, formatAttributeValue, pickLocale } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { martPageGate } from '@/lib/mart/gate'
 import { getPublicProduct } from '@/lib/mart/queries'
 import { listMartCategories } from '@/lib/mart/config'
+import { publicCategoryAttributes } from '@/lib/mart/attributes'
 import { publicAssetUrl } from '@/lib/mart/assets'
 import { formatINRExact } from '@/lib/format'
 import { getSiteUrl } from '@/lib/site-url'
@@ -42,6 +43,9 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
   const [product, categories, t, locale, tr] = await Promise.all([getPublicProduct(id), listMartCategories(), getTranslations('mart'), getLocale(), getTranslations('rfq')])
   if (!product) notFound()
   const cat = categories.find((c) => c.slug === product.categorySlug)
+  // E16 N40 — the typed attributes, in the category's order, labelled from its definitions.
+  const attrDefs = Object.keys(product.attributes).length ? await publicCategoryAttributes(product.categorySlug) : []
+  const attrRows = attrDefs.filter((d) => product.attributes[d.key] !== undefined)
   const images = product.images.map(publicAssetUrl)
   const list = product.list
   const url = `${getSiteUrl()}/mart/p/${product.id}`
@@ -119,6 +123,15 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
         </div>
       </SheetCard>
 
+      {/* E16 N41 — the seller's promises that are still standing (repeated breaches remove a badge). */}
+      {product.promises.length > 0 && (
+        <ul className="mt-4 flex flex-wrap gap-2" aria-label={t('promises_label')} data-testid="promise-badges">
+          {product.promises.map((p) => (
+            <li key={p} className="rounded-full border border-emerald/40 bg-emerald/10 px-3 py-1 text-meta font-medium text-emerald" data-promise={p}>{t(`promise_${p}` as 'promise_ships_48h')}</li>
+          ))}
+        </ul>
+      )}
+
       {/* Price-tier dimension table — Zerodha restraint: numbers first, tabular. */}
       <SheetCard className="mt-4">
         <h2 className="text-meta font-semibold text-emerald-ink">{t('tiers_title')}</h2>
@@ -129,7 +142,7 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
                 <th className="py-2 pr-3 font-medium">{t('tier_qty')}</th>
                 <th className="py-2 pr-3 font-medium">{t('tier_unit_price', { unit: product.unit })}</th>
                 <th className="py-2 pr-3 font-medium">{t('tier_incl_gst')}</th>
-                <th className="py-2 font-medium text-emerald">{t('tier_after_itc')}</th>
+                {product.itcEligible && <th className="py-2 font-medium text-emerald">{t('tier_after_itc')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -138,14 +151,17 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
                   <td className="py-2 pr-3 tabular-nums">{tier.min_qty}+</td>
                   <td className="py-2 pr-3 font-display text-lg font-bold tabular-nums text-ink">{formatINRExact(tier.unit_price_paise)}</td>
                   <td className="py-2 pr-3 tabular-nums">{formatINRExact(tier.unit_incl_gst_paise)}</td>
-                  <td className="py-2 font-semibold tabular-nums text-emerald">{formatINRExact(tier.unit_after_itc_paise)}</td>
+                  {product.itcEligible && <td className="py-2 font-semibold tabular-nums text-emerald">{formatINRExact(tier.unit_after_itc_paise)}</td>}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-foreground-secondary">{t('itc_hint')}</p>
-        {cat && <p className="mt-1 text-xs text-foreground-secondary">{t('return_window_note', { hours: cat.return_window_hours })} {t(`return_freight_${cat.return_freight_payer ?? 'seller'}`)}</p>}
+        {/* E16 N43 — ITC only where the CA-reviewed category flag allows it; "Not returnable" per category. */}
+        <p className="mt-2 text-xs text-foreground-secondary" data-testid={product.itcEligible ? undefined : 'itc-ineligible'}>{product.itcEligible ? t('itc_hint') : t('itc_not_available')}</p>
+        {cat && (product.returnable
+          ? <p className="mt-1 text-xs text-foreground-secondary">{t('return_window_note', { hours: cat.return_window_hours })} {t(`return_freight_${effectiveReturnFreightPayer(cat.return_freight_payer ?? 'seller', product.promises)}`)}</p>
+          : <p className="mt-1 text-xs font-medium text-ink" data-testid="not-returnable">{t('not_returnable')} · {t('not_returnable_claims_only')}</p>)}
         {/* AMC Mart M2 — bulk / custom-spec → goods RFQ prefilled from this listing. */}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-brass/30 pt-3">
           <Link href={`/app/mart/rfq/new?product_id=${product.id}` as '/app'} className="inline-flex min-h-11 items-center rounded-button border border-brass/60 px-3 text-meta font-semibold text-emerald-ink hover:bg-emerald/10">
@@ -153,12 +169,29 @@ export default async function MartProductPage({ params }: { params: Promise<{ id
           </Link>
           <span className="text-xs text-foreground-secondary">{tr('goods_ask_hint')}</span>
         </div>
+        {/* E16 N42 — try one before buying in bulk (an ordinary goods order of one unit), or have it made your way (a goods RFQ prefilled from this listing). */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {product.sample && (
+            <Link href={`/app/mart/checkout?sample=${product.id}` as '/app'} data-testid="request-sample" className="inline-flex min-h-11 items-center rounded-button border border-emerald px-3 text-meta font-semibold text-emerald hover:bg-emerald/10">
+              {t('request_sample', { price: formatINRExact(product.sample.unit_price_paise) })}
+            </Link>
+          )}
+          <Link href={`/app/mart/rfq/new?product_id=${product.id}&customise=1` as '/app'} data-testid="customise" className="inline-flex min-h-11 items-center rounded-button border border-brass/60 px-3 text-meta font-semibold text-emerald-ink hover:bg-emerald/10">
+            {t('customise')}
+          </Link>
+        </div>
       </SheetCard>
 
-      {product.specs.length > 0 && (
+      {(attrRows.length > 0 || product.specs.length > 0) && (
         <SheetCard className="mt-4">
           <h2 className="text-meta font-semibold text-emerald-ink">{t('specs')}</h2>
           <dl className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-y-1 text-meta">
+            {attrRows.map((d) => (
+              <div key={`a-${d.key}`} className="contents" data-attribute={d.key}>
+                <dt className="border-b border-brass/20 py-1.5 text-foreground-secondary">{pickLocale(d.label_i18n, locale)}</dt>
+                <dd className="border-b border-brass/20 py-1.5 text-emerald-ink">{formatAttributeValue(d, product.attributes[d.key], { yes: t('attr_yes'), no: t('attr_no') })}</dd>
+              </div>
+            ))}
             {product.specs.map((s) => (
               <div key={s.k} className="contents">
                 <dt className="border-b border-brass/20 py-1.5 text-foreground-secondary">{s.k}</dt>

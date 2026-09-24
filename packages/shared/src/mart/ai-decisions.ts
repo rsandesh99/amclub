@@ -28,6 +28,7 @@ export const AI_DECISION_FEATURES = [
   'support_reply',     // S2.3
   'score_note',        // S2.4
   'procurement_step',  // S3.1 — the buyer's confirm on a procurement proposal (create_rfq, complete_rfq, answer_clarification, message_provider, decline_quote, choose_quote, the chase nudge)
+  'content_translation', // E14 N32b — the provider's approve on one language of their own catalogue copy (0061 widens the CHECK)
 ] as const
 export type AiDecisionFeature = (typeof AI_DECISION_FEATURES)[number]
 

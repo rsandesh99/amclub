@@ -44,10 +44,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 }
 
 /**
- * POST — create a verified-purchase review (§5.5 / M7). The user-scoped client
- * means RLS does the heavy lifting: insert only succeeds if the caller owns the
- * order AND the order is 'completed'; the unique(order_id) constraint blocks a
- * second review. We translate those failures into clean messages.
+ * POST — create a verified-purchase review (§5.5 / M7). The order is read
+ * through the caller's own session (RLS: a party of it); the route then checks
+ * the caller is the order's BUYER and the order is 'completed', and writes with
+ * the service role — clients hold no write grant on reviews (ADR 018). The
+ * unique(order_id) constraint blocks a second review.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { supabase, userId } = await getAuthedSupabase()
@@ -73,8 +74,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'You can only review a completed order' }, { status: 409 })
   }
 
-  // Insert as the user — RLS WITH CHECK re-verifies ownership + completion.
-  const { data: inserted, error } = await supabase
+  // Only the order's buyer reviews it (a provider can read the order too).
+  const admin = await createAdminClient()
+  const { data: me } = await admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
+  if (!me || me.id !== order.msme_id) {
+    return NextResponse.json({ error: 'You can only review your own completed order' }, { status: 403 })
+  }
+
+  const { data: inserted, error } = await admin
     .from('reviews')
     .insert({
       order_id: orderId,
@@ -87,16 +94,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .single()
 
   if (error) {
-    // 23505 = unique(order_id) → already reviewed; 42501/RLS → not allowed.
+    // 23505 = unique(order_id) → already reviewed.
     if (error.code === '23505') return NextResponse.json({ error: 'You already reviewed this order' }, { status: 409 })
-    if (error.code === '42501') return NextResponse.json({ error: 'You can only review your own completed order' }, { status: 403 })
     return serverError('[review POST]', error)
   }
 
   // Anomaly screen runs with elevated privileges (cross-review read + flag).
   let flagged = false
   try {
-    const admin = await createAdminClient()
     flagged = await maybeFlagAnomalousReview(admin, inserted)
   } catch (e) {
     console.error('[review anomaly]', e)

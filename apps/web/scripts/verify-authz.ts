@@ -557,6 +557,79 @@ async function main() {
     deniedRows('buyerB direct-reads bank_account_verifications', await bClient.from('bank_account_verifications').select('id'))
     deniedRows('provA direct-reads bank_account_verifications', await asUser(provA.token).from('bank_account_verifications').select('id'))
 
+    // ── 7a. ADR 018 (0064) — money + order-state rows are server-written only ──
+    console.log('money + order-state rows (ADR 018, direct PostgREST):')
+    {
+      const uBuyer = asUser(buyerA.token)
+      const uProv = asUser(provA.token)
+      const { data: ordBefore } = await admin.from('orders').select('status, total_paise, provider_earning_paise').eq('id', orderA).single()
+      eq('buyerA direct-reads OWN order → 1 row (control)', ((await uBuyer.from('orders').select('id').eq('id', orderA)).data ?? []).length, 1)
+      deniedRows('provA sets OWN order completed + raises its earning', await uProv.from('orders').update({ status: 'completed', provider_earning_paise: Number(ordBefore!.total_paise) }).eq('id', orderA).select('id'))
+      deniedRows('buyerA rewrites OWN order total', await uBuyer.from('orders').update({ total_paise: 1 }).eq('id', orderA).select('id'))
+      const { data: ordAfter } = await admin.from('orders').select('status, total_paise, provider_earning_paise').eq('id', orderA).single()
+      eq('order A unchanged after the tamper attempts', JSON.stringify(ordAfter), JSON.stringify(ordBefore))
+      // A fresh unpaid session: the buyer holds its razorpay order id, and must not be able to materialise it.
+      const fresh = (await (await api(buyerA.token, '/api/v1/checkout', { packageId: pkgA!.id, idempotencyKey: crypto.randomUUID() })).json().catch(() => ({}))) as { checkoutSessionId?: string; razorpayOrderId?: string }
+      if (fresh.checkoutSessionId && fresh.razorpayOrderId) {
+        deniedRows('buyerA rewrites OWN unpaid session (earning split)', await uBuyer.from('checkout_sessions').update({ provider_earning_paise: 1, commission_paise: 0 }).eq('id', fresh.checkoutSessionId).select('id'))
+        deniedRows('buyerA INSERTs a checkout session', await uBuyer.from('checkout_sessions').insert({ msme_id: msmeA!.id, provider_id: provAId, source: 'package', package_id: pkgA!.id, title: 'forged', scope_snapshot: {}, price_paise: 1, gst_paise: 0, total_paise: 1, commission_bps: 0, commission_paise: 0, provider_earning_paise: 1, delivery_days: 1, idempotency_key: crypto.randomUUID() }).select('id'))
+        const rpc = await uBuyer.rpc('materialize_order', { p_razorpay_order_id: fresh.razorpayOrderId, p_razorpay_payment_id: `pay_forged_${tag}`, p_amount_paise: 1, p_method: 'upi', p_payload: {} })
+        const { data: sess } = await admin.from('checkout_sessions').select('order_id, status, provider_earning_paise').eq('id', fresh.checkoutSessionId).single()
+        eq('buyerA cannot call materialize_order (no order, session untouched)', Boolean(rpc.error) && !sess?.order_id && sess?.status === 'created' && Number(sess?.provider_earning_paise) > 1, true)
+      } else {
+        console.log('  (skipped session checks — checkout did not return a session)')
+      }
+      deniedRows('buyerA closes OWN rfq directly', await uBuyer.from('rfqs').update({ status: 'cancelled' }).eq('id', rfqA).select('id'))
+      if (quoteId) deniedRows('provA rewrites OWN quote price directly', await uProv.from('quotes').update({ price_paise: 1 }).eq('id', quoteId).select('id'))
+      deniedRows('buyerA INSERTs a review directly', await uBuyer.from('reviews').insert({ order_id: orderA, msme_id: msmeA!.id, provider_id: provAId, rating: 5 }).select('id'))
+      deniedRows('provA INSERTs a payout row', await uProv.from('payouts').insert({ provider_id: provAId, order_id: orderA, amount_paise: 1, status: 'scheduled' }).select('id'))
+    }
+
+    // ── 7a2. E12a / ADR 019 — package add-ons: owner-only, server-written, public reads active only ──
+    console.log('package add-ons (E12a / ADR 019):')
+    {
+      const addonUrl = `/api/v1/partner/packages/${pkgA!.id}/addons`
+      eq('switch off → the partner add-on route is 404', (await api(provA.token, addonUrl, undefined, 'GET')).status, 404)
+      eq('switch off → the checkout preview is 404', (await fetch(`${BASE}/api/v1/checkout/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packageId: pkgA!.id }) })).status, 404)
+      const { data: addonSetting } = await admin.from('agent_settings').select('value').eq('key', 'addons_enabled').maybeSingle()
+      await admin.from('agent_settings').upsert({ key: 'addons_enabled', value: true, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      try {
+        const mk = (label: string, active = true) => api(provA.token, addonUrl, { label_i18n: { en: label }, price_paise: 10_000, days_delta: -1, active })
+        const first = await mk('Authz fast-track')
+        eq('provA adds an add-on to OWN package → 201', first.status, 201)
+        denied('provB lists add-ons of A’s package', (await api(provB.token, addonUrl, undefined, 'GET')).status)
+        denied('provB adds an add-on to A’s package', (await api(provB.token, addonUrl, { label_i18n: { en: 'forged' }, price_paise: 1 })).status)
+        denied('buyerA adds an add-on to A’s package', (await api(buyerA.token, addonUrl, { label_i18n: { en: 'forged' }, price_paise: 1 })).status)
+        const paused = await mk('Authz paused', false)
+        await mk('Authz second')
+        await mk('Authz third')
+        const fourth = await mk('Authz fourth')
+        eq('a 4th active add-on → 409 addon_limit (3 max)', fourth.status, 409)
+        const pausedId = ((await paused.json().catch(() => ({}))) as { addon?: { id: string } }).addon?.id
+        const anonRows = ((await createClient(URL_, ANON, { auth: { persistSession: false } }).from('package_addons').select('id, active').eq('package_id', pkgA!.id)).data ?? []) as { id: string; active: boolean }[]
+        eq('anon reads only ACTIVE add-ons of an active package (never the paused one)', anonRows.length > 0 && anonRows.every((r) => r.active) && !anonRows.some((r) => r.id === pausedId), true)
+        deniedRows('provA INSERTs an add-on directly (no client write grant)', await asUser(provA.token).from('package_addons').insert({ package_id: pkgA!.id, label_i18n: { en: 'direct' }, price_paise: 1 }).select('id'))
+        deniedRows('provA re-prices an add-on directly', await asUser(provA.token).from('package_addons').update({ price_paise: 1 }).eq('package_id', pkgA!.id).select('id'))
+      } finally {
+        await admin.from('package_addons').delete().eq('package_id', pkgA!.id)
+        if (addonSetting) await admin.from('agent_settings').upsert({ key: 'addons_enabled', value: addonSetting.value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+        else await admin.from('agent_settings').delete().eq('key', 'addons_enabled')
+      }
+    }
+
+    // ── 7a3. E12b / ADR 020 — quote_options are service-role only (the API is the one reader and writer) ──
+    console.log('quote options (E12b / ADR 020):')
+    deniedRows('buyerA direct-reads quote_options', await asUser(buyerA.token).from('quote_options').select('id'))
+    deniedRows('provA direct-reads quote_options', await asUser(provA.token).from('quote_options').select('id'))
+    if (quoteId) deniedRows('provA INSERTs a quote option directly', await asUser(provA.token).from('quote_options').insert({ quote_id: quoteId, revision: 1, label: 'express', price_paise: 1, delivery_days: 1 }).select('id'))
+
+    // ── 7a4. E12c / ADR 021 — bundles: server-written only; routes dark while off ──
+    console.log('bundles (E12c / ADR 021):')
+    denied('switch off → the partner milestones route is 404', (await api(provA.token, `/api/v1/partner/packages/${pkgA!.id}/milestones`, undefined, 'GET')).status)
+    denied('switch off → /api/v1/me/plans is 404', (await api(buyerA.token, '/api/v1/me/plans', undefined, 'GET')).status)
+    deniedRows('provA INSERTs a milestone directly', await asUser(provA.token).from('bundle_milestones').insert({ package_id: pkgA!.id, seq: 1, label_i18n: { en: 'x' }, due_offset_days: 10, share_bps: 5000 }).select('id'))
+    deniedRows('buyerA INSERTs a bundle purchase directly', await asUser(buyerA.token).from('bundle_purchases').insert({ msme_id: msmeA!.id, provider_id: provAId, checkout_session_id: crypto.randomUUID(), total_paise: 1, title: 'forged' }).select('id'))
+
     // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
     console.log('users privilege guard (0042, direct PostgREST):')
     eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)
@@ -722,6 +795,48 @@ async function main() {
       eq('a provider cannot write view counts directly', !!ins.error, true)
     } finally {
       await admin.from('view_counts_daily').delete().in('provider_id', [provAId, provBId])
+    }
+    // ── Experience v3 E15 (F10): shadow predictions are service-role only — no client reads or writes any row ──
+    console.log('\nshadow_predictions (E15 F10):')
+    const shadowSubject = crypto.randomUUID()
+    await admin.from('shadow_predictions').insert({ feature: 'provider_fit', model_version: 'authz-probe', subject_kind: 'rfq', subject_id: shadowSubject, predicted: { provider_id: provAId, fit_pct: 80 } })
+    try {
+      const asUser = (token: string | null) => createClient(URL_, ANON, { auth: { persistSession: false }, ...(token ? { global: { headers: { Authorization: `Bearer ${token}` } } } : {}) })
+      for (const [who, token] of [['provA (the subject provider)', provA.token], ['buyerA', buyerA.token], ['anon', null]] as const) {
+        const { data } = await asUser(token).from('shadow_predictions').select('id').eq('subject_id', shadowSubject)
+        eq(`${who} reads no shadow_predictions`, (data ?? []).length, 0)
+      }
+      const w = await asUser(provA.token).from('shadow_predictions').insert({ feature: 'provider_fit', model_version: 'forged', subject_kind: 'rfq', subject_id: shadowSubject, predicted: {} })
+      eq('a client cannot write shadow_predictions', !!w.error, true)
+    } finally {
+      await admin.from('shadow_predictions').delete().eq('subject_id', shadowSubject)
+    }
+    // ── E15 (F5 / F6): search telemetry and the consented corpora are service-role only; synonyms are readable only when reviewed ──
+    console.log('\nsearch_queries + corpora + service_synonyms (E15 F5 / F6):')
+    const sqId = crypto.randomUUID()
+    const synKey = `authz-probe-${sqId.slice(0, 8)}`
+    await admin.from('search_queries').insert({ id: sqId, query_norm: 'authz probe', params: {}, result_count: 1 })
+    await admin.from('corpus_voice_triples').insert({ user_id: buyerA.uid, transcript: 'authz probe', parsed: {}, final: {} })
+    await admin.from('corpus_image_pairs').insert({ user_id: buyerA.uid, proposed: {}, final: {} })
+    await admin.from('service_synonyms').insert([
+      { term: `${synKey} ok`, term_key: `${synKey} ok`, lang: 'en', category_slug: 'legal', source: 'curated', reviewed: true },
+      { term: `${synKey} draft`, term_key: `${synKey} draft`, lang: 'en', category_slug: 'legal', source: 'search_log', reviewed: false },
+    ])
+    try {
+      const asUser = (token: string | null) => createClient(URL_, ANON, { auth: { persistSession: false }, ...(token ? { global: { headers: { Authorization: `Bearer ${token}` } } } : {}) })
+      for (const [who, token] of [['buyerA (the corpus owner)', buyerA.token], ['provA', provA.token], ['anon', null]] as const) {
+        eq(`${who} reads no search_queries`, ((await asUser(token).from('search_queries').select('id').eq('id', sqId)).data ?? []).length, 0)
+        eq(`${who} reads no corpus_voice_triples`, ((await asUser(token).from('corpus_voice_triples').select('id').eq('user_id', buyerA.uid)).data ?? []).length, 0)
+        eq(`${who} reads no corpus_image_pairs`, ((await asUser(token).from('corpus_image_pairs').select('id').eq('user_id', buyerA.uid)).data ?? []).length, 0)
+        eq(`${who} reads only the reviewed synonym`, ((await asUser(token).from('service_synonyms').select('term_key').like('term_key', `${synKey}%`)).data ?? []).map((r) => r.term_key).join(), `${synKey} ok`)
+      }
+      eq('a client cannot write a synonym', !!(await asUser(provA.token).from('service_synonyms').insert({ term: 'x', term_key: `${synKey} forged`, lang: 'en', category_slug: 'legal', source: 'curated', reviewed: true })).error, true)
+      eq('a client cannot write search_queries', !!(await asUser(buyerA.token).from('search_queries').insert({ id: crypto.randomUUID(), params: {}, result_count: 0 })).error, true)
+    } finally {
+      await admin.from('search_queries').delete().eq('id', sqId)
+      await admin.from('corpus_voice_triples').delete().eq('user_id', buyerA.uid)
+      await admin.from('corpus_image_pairs').delete().eq('user_id', buyerA.uid)
+      await admin.from('service_synonyms').delete().like('term_key', `${synKey}%`)
     }
   } finally {
     // Cleanup — children before parents; loud on error.

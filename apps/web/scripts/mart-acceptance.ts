@@ -2,8 +2,8 @@
  * AMC Mart — ACCEPTANCE BUNDLE (Launch Gate item 1). One command runs the
  * milestone suites in order against BASE_URL and prints a scoreboard:
  *
- *   default (flag ON on the target):  verify-mart (M0) → verify-goods-rfq (M2)
- *                                     → DB killtests (schema, pools, goods RFQ) when DATABASE_URL is a LOCAL db
+ *   default (flag ON on the target):  verify-mart (M0) → verify-goods-rfq (M2) → verify-mart-storefront (E16)
+ *                                     → DB killtests (schema, pools, goods RFQ, storefront) when DATABASE_URL is a LOCAL db
  *   --inert (flag OFF on the target): verify-mart-inert
  *
  * Each suite is its own process (its own env + cleanup); a failing suite
@@ -30,7 +30,8 @@ const suites: Suite[] = inert
   : [
       web('M0 catalog + goods lifecycle + authz', 'verify-mart.ts'),
       web('M2 goods RFQ lifecycle', 'verify-goods-rfq.ts'),
-      ...(localDb ? [db('DB: 0022 schema', 'killtest-mart-schema.ts'), db('DB: 0023 pools', 'killtest-mart-pools.ts'), db('DB: 0024 goods RFQ', 'killtest-mart-goods-rfq.ts')] : []),
+      web('E16 storefront v2 (N39–N44)', 'verify-mart-storefront.ts'),
+      ...(localDb ? [db('DB: 0022 schema', 'killtest-mart-schema.ts'), db('DB: 0023 pools', 'killtest-mart-pools.ts'), db('DB: 0024 goods RFQ', 'killtest-mart-goods-rfq.ts'), db('DB: 0069 storefront', 'killtest-mart-storefront.ts')] : []),
     ]
 
 console.log(`\nMart acceptance ${inert ? '(inert)' : '(flag ON)'} → ${process.env['BASE_URL'] ?? 'http://localhost:3000'}${localDb ? ' + local DB killtests' : ''}\n`)

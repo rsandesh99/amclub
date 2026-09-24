@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
-import type { GoodsLineItem } from '@amclub/shared'
+import { ALWAYS_CLAIMABLE_RETURN_REASONS, type GoodsLineItem } from '@amclub/shared'
 import { formatINR, formatINRExact } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +35,8 @@ const EVENT_KEY: Record<string, string> = {
   payout_held: 'event_payout_held', payout_released: 'event_payout_released', payout_paid: 'event_payout_paid', document_uploaded: 'event_document_uploaded',
 }
 const RETURN_REASONS = ['damaged', 'wrong_item', 'short_quantity', 'quality', 'other'] as const
+/** E16 N43 — what a non-returnable order can still claim (shared ALWAYS_CLAIMABLE_RETURN_REASONS). */
+const CLAIM_REASONS: readonly (typeof RETURN_REASONS)[number][] = ALWAYS_CLAIMABLE_RETURN_REASONS
 const HOUR = 3600 * 1000
 
 /** "Thu 8 Sep, 9:07 am" in IST — the mandate wants dates, not "in 72 hours". */
@@ -101,7 +103,7 @@ export function GoodsOrderWorkspace({
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }),
       })
       const d = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(d.error === 'eway_bill_required' ? t('eway_required_note') : typeof d.error === 'string' ? d.error : t('action_failed'))
+      if (!res.ok) throw new Error(d.error === 'eway_bill_required' ? t('eway_required_note') : d.error === 'not_returnable' ? t('not_returnable_claims_only') : typeof d.error === 'string' ? d.error : t('action_failed'))
       setPanel(null)
       if (action === 'accept_delivery') { setStamp('received'); await new Promise((r) => setTimeout(r, 900)) }
       router.refresh()
@@ -229,10 +231,11 @@ export function GoodsOrderWorkspace({
           )}
           {panel === 'return' && (
             <div className="space-y-3">
+              {goods?.returnable === false && <p className="text-meta text-foreground-secondary" data-testid="not-returnable-claim">{t('not_returnable_claims_only')}</p>}
               <div>
                 <Label htmlFor="rr">{t('return_reason')}</Label>
                 <Select id="rr" value={ret.reason} onChange={(e) => setRet((s) => ({ ...s, reason: e.target.value as (typeof RETURN_REASONS)[number] }))}>
-                  {RETURN_REASONS.map((r) => <option key={r} value={r}>{t(`return_reason_${r}` as 'return_reason_damaged')}</option>)}
+                  {(goods?.returnable === false ? CLAIM_REASONS : RETURN_REASONS).map((r) => <option key={r} value={r}>{t(`return_reason_${r}` as 'return_reason_damaged')}</option>)}
                 </Select>
               </div>
               <div><Label htmlFor="rd">{t('return_details')}</Label><Textarea id="rd" rows={3} value={ret.details} onChange={(e) => setRet((s) => ({ ...s, details: e.target.value }))} /></div>

@@ -10,6 +10,7 @@ import { formatINR } from '@/lib/format'
 import { GoodsSpecBlock } from '@/components/GoodsSpecBlock'
 import { BenchmarkBlock } from '@/components/BenchmarkBlock'
 import { track } from '@/lib/analytics'
+import { confirmHaptic } from '@/lib/haptics'
 
 
 const CARD_W = Math.min(Dimensions.get('window').width - 48, 340)
@@ -66,6 +67,7 @@ export default function BuyerRfqScreen() {
 
   async function accept(quoteId: string) {
     setAccepting(quoteId)
+    confirmHaptic()
     const res = await acceptQuote(quoteId)
     setAccepting(null)
     if (res.ok && res.data?.orderId) router.replace(`/orders/${res.data.orderId}` as never)

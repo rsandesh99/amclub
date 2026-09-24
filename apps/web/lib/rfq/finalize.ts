@@ -7,6 +7,9 @@ import { addEvent, processRefund } from '@/lib/orders/transitions'
 import { writeAudit } from '@/lib/audit/log'
 import { addQuoteEvent, addQuoteEvents } from './events'
 import { labelLostQuotes } from './loss-labels'
+import { shadowAtAcceptance } from '@/lib/shadow'
+import { optionForOrder } from './quote-options'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -65,7 +68,11 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     const result = await handleDuplicateRfqOrder(admin, orderId, quote.rfq_id as string)
     // E7 (N22) — a replay of the winning order completes loss labels an interrupted pass missed
     // (labelLostQuotes writes only missing rows, checks the winner itself, never throws).
-    if (result === 'noop') await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+    if (result === 'noop') {
+      const option = await optionForOrder(admin, orderId)
+      await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id, ...(option ? { winnerTerms: { pricePaise: option.pricePaise, deliveryDays: option.deliveryDays } } : {}) })
+      await shadowAtAcceptance(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+    }
     return result
   }
 
@@ -82,6 +89,13 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
 
   // Accept the winning quote.
   await admin.from('quotes').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', quote.id)
+  // E12b / ADR 020 — the option the buyer paid for (from the frozen session; null = Standard). Best-effort,
+  // a separate write so the acceptance above never names a 0066 column.
+  const option = await optionForOrder(admin, orderId)
+  if (option) {
+    const { error: optErr } = await admin.from('quotes').update({ selected_option_id: option.id }).eq('id', quote.id)
+    if (optErr) console.warn('[finalize] selected_option_id', optErr.message)
+  }
   // S2.2 — mark the winner's price-book row accepted (Munshi prefers accepted rows as its basis). The row exists
   // only while the agent programme is on (recordPriceBookEntry), so this is gated the same way; best-effort.
   if (AGENT_ENABLED) {
@@ -110,8 +124,10 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
       payload: { rfq_id: quote.rfq_id, accepted_quote_id: quote.id, order_id: orderId },
     })),
   )
-  // E7 (N22) — one `lost` label per passed-over quote, deltas against the winner. Best-effort, outside the money path.
-  await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
+  // E7 (N22) — one `lost` label per passed-over quote, deltas against the winner (E12b: its winning option). Best-effort, outside the money path.
+  await labelLostQuotes(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id, ...(option ? { winnerTerms: { pricePaise: option.pricePaise, deliveryDays: option.deliveryDays } } : {}) })
+  // E15 F10 — resolve the RFQ's shadow predictions (price band vs the winner, fit vs quoted). Best-effort, shown to nobody.
+  await shadowAtAcceptance(admin, { rfqId: quote.rfq_id as string, acceptedQuoteId: quote.id })
 
   // Notify the winning provider, and the declined providers.
   const { data: winner } = await admin
@@ -123,8 +139,8 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     await createNotification(admin, {
       userId: winner.user_id,
       kind: 'quote_accepted',
-      titleI18n: { en: 'Your quote was accepted', hi: 'आपका कोटेशन स्वीकार किया गया' },
-      bodyI18n: { en: claimed.title, hi: claimed.title },
+      titleI18n: notifyText('quote_accepted.title'),
+      bodyI18n: sameText(claimed.title),
       link: '/partner/orders',
       channels: ['sms', 'whatsapp'],
     })
@@ -139,11 +155,8 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
     const userIds = (provs ?? []).map((p) => p.user_id).filter(Boolean) as string[]
     await createNotificationsBulk(admin, userIds, {
       kind: 'quote_declined',
-      titleI18n: {
-        en: 'A request you quoted on was awarded to another provider',
-        hi: 'जिस अनुरोध पर आपने कोटेशन दिया वह किसी अन्य प्रदाता को दिया गया',
-      },
-      bodyI18n: { en: claimed.title, hi: claimed.title },
+      titleI18n: notifyText('quote_lost.title'),
+      bodyI18n: sameText(claimed.title),
       link: '/partner/rfqs',
     })
   }
@@ -227,16 +240,8 @@ async function handleDuplicateRfqOrder(admin: Admin, orderId: string, rfqId: str
     await createNotification(admin, {
       userId: msme.user_id as string,
       kind: 'order_duplicate_payment',
-      titleI18n: { en: 'We noticed a duplicate payment', hi: 'हमें एक दोहरा भुगतान दिखा' },
-      bodyI18n: refunded
-        ? {
-            en: `You paid twice for the same request. We cancelled order ${order.order_number} and refunded it in full; your bank usually shows it within 5–7 working days. Your other order stands.`,
-            hi: `आपने एक ही अनुरोध के लिए दो बार भुगतान किया। हमने ऑर्डर ${order.order_number} रद्द करके पूरी राशि वापस कर दी है; आपका बैंक इसे आमतौर पर 5–7 कार्य दिवसों में दिखाता है। आपका दूसरा ऑर्डर जारी है।`,
-          }
-        : {
-            en: `You paid twice for the same request. Our team will refund order ${order.order_number} in full; your other order stands.`,
-            hi: `आपने एक ही अनुरोध के लिए दो बार भुगतान किया। हमारी टीम ऑर्डर ${order.order_number} की पूरी राशि वापस करेगी; आपका दूसरा ऑर्डर जारी है।`,
-          },
+      titleI18n: notifyText('duplicate_payment.title'),
+      bodyI18n: notifyText(refunded ? 'duplicate_payment.body_refunded' : 'duplicate_payment.body_pending', { ref: String(order.order_number) }),
       link: `/app/orders/${orderId}`,
       channels: ['email', 'sms'],
     })

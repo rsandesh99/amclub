@@ -11,7 +11,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, autofilledFields, quotePreview, type ActionItem, type GstinAutofill, type OrderStatus } from '@amclub/shared'
+import { scoreFieldPaths, summarizeProviderOrders, computeOrderAmounts, isValidGstin, meActionsSchema, nextAction, priceDisplay, autofilledFields, quotePreview, VOICE_EVAL_VERSION, type ActionItem, type GstinAutofill, type OrderStatus } from '@amclub/shared'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -1413,6 +1413,400 @@ async function e8() {
   }
 }
 
+async function e13() {
+  console.log('\nE13a — mobile parity: role-aware tabs, provider listings / earnings, buyer invoices (Bearer, as the app calls them)')
+  const buyer = await mkUser('e13buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E13 Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  const mkP = async (label: string) => {
+    const u = await mkUser(label, ['provider'])
+    const { data: pp } = await admin.from('provider_profiles').insert({ user_id: u.uid, legal_name: label, display_name: label, slug: `${tag.replace(/_/g, '-')}-${label}`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+    created.providerIds.push(pp!.id)
+    return { ...u, providerId: pp!.id as string }
+  }
+  const prov = await mkP('e13prov')
+  const other = await mkP('e13other')
+  const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const mkPkg = async (providerId: string, slug: string, status: string) => {
+    const { data } = await admin.from('packages').insert({ provider_id: providerId, category_id: cat!.id, slug: `${tag.replace(/_/g, '-')}-${slug}`, title_i18n: { en: `E13 ${slug}` }, price_paise: 250_000, discount_bps: 1000, delivery_days: 4, revision_count: 1, status, scope_included: ['x'], scope_excluded: [], deliverables: ['y'] }).select('id').single()
+    created.packageIds.push(data!.id)
+    return data!.id as string
+  }
+  const mine = await mkPkg(prov.providerId, 'mine', 'active')
+  const theirs = await mkPkg(other.providerId, 'theirs', 'active')
+  const { data: o } = await admin.from('orders').insert({ msme_id: msme!.id, provider_id: prov.providerId, source: 'package', title: 'E13 order', scope_snapshot: {}, price_paise: 250_000, gst_paise: 45_000, total_paise: 295_000, commission_bps: 1000, commission_paise: 25_000, provider_earning_paise: 225_000, delivery_days: 4, status: 'completed' }).select('id').single()
+  created.orderIds.push(o!.id)
+  const { data: po } = await admin.from('payouts').insert({ provider_id: prov.providerId, order_id: o!.id, amount_paise: 225_000, status: 'held' }).select('id').single()
+  await admin.from('order_events').insert({ order_id: o!.id, event: 'payout_held', payload: { reasons: ['bank_unverified'] } })
+  const get = async (token: string, path: string) => { const r = await api(token, path, undefined, 'GET'); return { status: r.status, body: (await r.json().catch(() => ({}))) as Record<string, unknown> } }
+  try {
+    const me = await get(prov.token, '/api/v1/profile/me')
+    check('FR-13.1: /profile/me tells the app the mobile experience is on', me.body['mobileV3Enabled'] === true)
+    const ls = await get(prov.token, '/api/v1/partner/packages?locale=en')
+    const ids = ((ls.body['listings'] as { id: string }[] | undefined) ?? []).map((x) => x.id)
+    check('FR-13.2 listings: the provider sees their own listings only (Bearer)', ls.status === 200 && ids.includes(mine) && !ids.includes(theirs), JSON.stringify(ids))
+    check('FR-13.2 listings: a buyer has no listings (403)', (await get(buyer.token, '/api/v1/partner/packages')).status === 403)
+    const pause = await api(prov.token, `/api/v1/partner/packages/${mine}`, { status: 'paused' })
+    const { data: afterPause } = await admin.from('packages').select('status').eq('id', mine).single()
+    const resume = await api(prov.token, `/api/v1/partner/packages/${mine}`, { status: 'active' })
+    const { data: afterResume } = await admin.from('packages').select('status').eq('id', mine).single()
+    check('FR-13.2 listings: pause / resume from the phone (Bearer) through the web status route', pause.ok && afterPause?.status === 'paused' && resume.ok && afterResume?.status === 'active', `${pause.status}/${afterPause?.status} ${resume.status}/${afterResume?.status}`)
+    const steal = await api(other.token, `/api/v1/partner/packages/${mine}`, { status: 'paused' })
+    const { data: afterSteal } = await admin.from('packages').select('status').eq('id', mine).single()
+    check('FR-13.2 listings: another provider cannot pause it (404, unchanged)', steal.status === 404 && afterSteal?.status === 'active', String(steal.status))
+    const pay = await get(prov.token, '/api/v1/partner/payouts')
+    const rows = (pay.body['payouts'] as { id: string; status: string; holdReasons: string[] }[] | undefined) ?? []
+    check('FR-13.2 earnings: own payouts with the hold reasons (the web ledger)', pay.status === 200 && rows.length === 1 && rows[0]!.status === 'held' && rows[0]!.holdReasons.includes('bank_unverified'))
+    check('FR-13.2 earnings: another provider sees none of them', ((await get(other.token, '/api/v1/partner/payouts')).body['payouts'] as unknown[] | undefined)?.length === 0)
+    const inv = await get(buyer.token, '/api/v1/me/invoices')
+    check('FR-13.3 invoices: the buyer list answers (the web rows, signed links)', inv.status === 200 && Array.isArray(inv.body['invoices']))
+    check('every new route is private (no session → 401)', (await fetch(`${BASE}/api/v1/partner/payouts`)).status === 401 && (await fetch(`${BASE}/api/v1/me/invoices`)).status === 401)
+  } finally {
+    if (po) await admin.from('payouts').delete().eq('id', po.id)
+  }
+}
+
+async function e13c() {
+  console.log('\nE13c — native provider onboarding: the E10 routes answer the app\'s Bearer session')
+  const gstin = [...'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map((c) => `36AABCM${String(Date.now()).slice(-4)}F1Z${c}`).find((g) => isValidGstin(g))!
+  const app = await mkUser('e13capp')
+  let providerId: string | null = null
+  try {
+    const prog = await api(app.token, '/api/v1/profile/provider/onboarding-progress', { step: 'business', categorySlug: 'digital-marketing' })
+    const { data: row } = await admin.from('provider_onboarding_progress').select('step').eq('user_id', app.uid).maybeSingle()
+    check('FR-13.4: the phone saves its step on the server (the row the stall nudge reads)', prog.ok && row?.step === 'business', String(prog.status))
+    const v = await api(app.token, '/api/v1/profile/provider/kyc/verify-gstin', { gstin })
+    const a = ((await v.json().catch(() => ({}))) as { autofill?: GstinAutofill }).autofill
+    check('FR-13.4: GSTIN autofill over Bearer (the same stub registry as the web)', v.ok && !!a && autofilledFields(a).length === 4)
+    await api(app.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy', 'provider_addendum'], surface: 'mobile', locale: 'en' })
+    const b = await api(app.token, '/api/v1/profile/provider/kyc/verify-bank', { accountNumber: '123456789012', ifsc: 'HDFC0000001', holderName: a?.legalName ?? 'E13c' })
+    check('FR-13.4: bank verification over Bearer', b.ok, String(b.status))
+    const sub = await api(app.token, '/api/v1/profile/provider', { fullName: 'E13c Applicant', legalName: a?.legalName, displayName: a?.tradeName, gstin, categorySlugs: ['digital-marketing'], state: a?.state, city: 'Hyderabad', languages: ['en'], bankIfsc: 'HDFC0000001', bankAccount: '123456789012', bankHolder: a?.legalName, bankVerified: true })
+    providerId = ((await sub.json().catch(() => ({}))) as { providerId?: string }).providerId ?? null
+    if (providerId) created.providerIds.push(providerId)
+    const { data: pp } = await admin.from('provider_profiles').select('status, user_id').eq('id', providerId ?? '').maybeSingle()
+    const { data: after } = await admin.from('provider_onboarding_progress').select('submitted_at').eq('user_id', app.uid).single()
+    check('FR-13.4: the phone submits the same profile the web does (under review, draft stamped done)', sub.ok && pp?.user_id === app.uid && pp?.status === 'under_review' && !!after?.submitted_at, `status ${sub.status} ${pp?.status}`)
+    const anon = await fetch(`${BASE}/api/v1/profile/provider/onboarding-progress`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step: 'contact' }) })
+    const bogus = await api('not-a-jwt', '/api/v1/profile/provider/kyc/verify-gstin', { gstin })
+    check('FR-13.4: no session / a bad Bearer → 401', anon.status === 401 && bogus.status === 401, `${anon.status}/${bogus.status}`)
+  } finally {
+    if (providerId) await admin.from('provider_bank_accounts').delete().eq('provider_id', providerId)
+    await admin.from('gstin_verifications').delete().eq('user_id', app.uid)
+    await admin.from('bank_account_verifications').delete().eq('user_id', app.uid)
+  }
+}
+
+async function e14() {
+  console.log('\nE14a — language: te / ta drafts stay dark, category names in four languages')
+  const flagOn = (process.env['EXP_V3_LOCALES'] ?? '').trim().toLowerCase() === 'on'
+  const te = visible(await (await fetch(`${BASE}/te/services`)).text())
+  if (flagOn) {
+    check('FR-14.1: with EXP_V3_LOCALES on, the te drafts render on the buying path', te.includes('అన్ని సేవలు'))
+  } else {
+    check('FR-14.1: te drafts never render while EXP_V3_LOCALES is off (English fallback key by key)', te.includes('Browse verified providers across every category') && !te.includes('అన్ని సేవలు'))
+  }
+  const { data: cat } = await admin.from('categories').select('name_i18n').eq('slug', 'tax-accounting').single()
+  const names = (cat?.name_i18n ?? {}) as Record<string, string>
+  check('FR-14.2: category names carry te + ta (migration 0060 / seed)', names['te'] === 'పన్ను & అకౌంటింగ్' && names['ta'] === 'வரி & கணக்கியல்', JSON.stringify(names))
+  check('FR-14.2: a te page shows the Telugu category name (pickI18n, en fallback per slot)', te.includes('పన్ను &amp; అకౌంటింగ్') || te.includes('పన్ను & అకౌంటింగ్'))
+  const ta = visible(await (await fetch(`${BASE}/ta/services`)).text())
+  check('FR-14.2: a ta page shows the Tamil category name', ta.includes('வரி &amp; கணக்கியல்') || ta.includes('வரி & கணக்கியல்'))
+}
+
+async function e14b() {
+  console.log('\nE14b — notification copy from the notify namespace; voice search one language at a time')
+  // FR-14.1 — a notification built from `notify.*`: en + hi exactly as before, te / ta drafts absent while the flag is off.
+  const flagOn = (process.env['EXP_V3_LOCALES'] ?? '').trim().toLowerCase() === 'on'
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const buyer = await mkUser('e14bbuyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E14b Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  const pu = await mkUser('e14bprov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: pu.uid, legal_name: 'E14b Prov', display_name: 'E14b Prov', slug: `${tag.replace(/_/g, '-')}-e14bprov`, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  const { data: r } = await admin.from('rfqs').insert({ msme_id: msme!.id, category_id: tax!.id, title: 'E14b GST returns', details: {}, status: 'open', fanout_at: new Date().toISOString(), expires_at: new Date(Date.now() + 48 * 3600e3).toISOString() }).select('id').single()
+  created.rfqIds.push(r!.id)
+  await admin.from('rfq_matches').insert({ rfq_id: r!.id, provider_id: pp!.id })
+  try {
+    const ask = await api(pu.token, `/api/v1/rfq/${r!.id}/clarifications`, { question: 'Which financial year are the returns for?' })
+    const { data: n } = await admin.from('notifications').select('title_i18n').eq('user_id', buyer.uid).eq('kind', 'rfq_question').maybeSingle()
+    const t = (n?.title_i18n ?? {}) as Record<string, string>
+    check('FR-14.1: notification copy comes from notify.* — en / hi unchanged', ask.ok && t['en'] === 'A provider asked a question' && t['hi'] === 'एक प्रदाता ने सवाल पूछा', JSON.stringify(t))
+    check(flagOn ? 'FR-14.1: with EXP_V3_LOCALES on, the te / ta drafts are carried' : 'FR-14.1: te / ta drafts are not carried while EXP_V3_LOCALES is off (readers get English)', flagOn ? !!t['te'] && !!t['ta'] : !('te' in t) && !('ta' in t))
+  } finally {
+    await admin.from('notifications').delete().eq('user_id', buyer.uid)
+    await admin.from('rfq_clarifications').delete().eq('rfq_id', r!.id)
+    await admin.from('rfq_matches').delete().eq('rfq_id', r!.id)
+  }
+
+  // FR-14.5 — the keyless STT stub reports te-IN: listed but no passing eval → "type instead"; a passing eval → answered.
+  // The voice route allows 3 calls a minute per user: two buyers, two calls each.
+  const buyer2 = await mkUser('e14bbuyer2')
+  const spoken = (who: { token: string } = buyer) => {
+    const fd = new FormData()
+    fd.append('audio', new Blob([new Uint8Array(2048)], { type: 'audio/webm' }), 'q.webm')
+    fd.append('duration_ms', '2500')
+    fd.append('mode', 'query')
+    return fetch(`${BASE}/api/v1/rfq/voice-parse`, { method: 'POST', headers: { Authorization: `Bearer ${who.token}` }, body: fd })
+  }
+  const restores: (() => Promise<void>)[] = []
+  try {
+    restores.push(await setSetting('voice_search_enabled', true))
+    restores.push(await setSetting('voice_search_languages', ['en', 'hi', 'te']))
+    restores.push(await setSetting('voice_language_evals', {}))
+    const noEval = (await (await spoken()).json()) as { query?: string | null; unsupported_language?: boolean; original_language?: string }
+    check('FR-14.5: a listed language with no eval is not answered ("type instead", no parse)', noEval.unsupported_language === true && !noEval.query && noEval.original_language === 'te-IN', JSON.stringify(noEval))
+    const good = { version: VOICE_EVAL_VERSION, n: 50, wer: 0.12, categoryAccuracy: 0.9, ranAt: new Date().toISOString() }
+    await setSetting('voice_language_evals', { te: { ...good, n: 49 } })
+    const short = (await (await spoken()).json()) as { unsupported_language?: boolean }
+    check('FR-14.5: an eval under 50 queries does not count', short.unsupported_language === true)
+    await setSetting('voice_language_evals', { te: good })
+    const ok = (await (await spoken(buyer2)).json()) as { query?: string | null; unsupported_language?: boolean }
+    check('FR-14.5: listed + a passing eval → the mic answers', !ok.unsupported_language && typeof ok.query === 'string' && ok.query.length > 0, JSON.stringify(ok))
+    await setSetting('voice_search_languages', ['en', 'hi'])
+    const unlisted = (await (await spoken(buyer2)).json()) as { unsupported_language?: boolean }
+    check('FR-14.5: a passing eval alone is not enough — the language must be listed', unlisted.unsupported_language === true)
+  } finally {
+    for (const restore of restores.reverse()) await restore()
+  }
+}
+
+async function e14c() {
+  console.log('\nE14c — provider content translation (dark): a draft never renders; an approved slot is labelled')
+  const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const prov = await mkUser('e14cprov', ['provider'])
+  const slug = `${tag.replace(/_/g, '-')}-e14cprov`
+  const about = 'We file GST returns for 12 months.'
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E14c Prov', display_name: 'E14c Prov', slug, state: 'TS', status: 'active', languages: ['en'], about }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: cat!.id })
+  const pkgSlug = `${tag.replace(/_/g, '-')}-e14cpkg`
+  // An APPROVED te title (as the approve route writes it: the slot + its source) …
+  const { data: pk } = await admin.from('packages').insert({
+    provider_id: pp!.id, category_id: cat!.id, slug: pkgSlug, title_i18n: { en: 'E14c GST filing 12 months', te: 'E14c 12 నెలల GST ఫైలింగ్' }, i18n_sources: { title: { te: 'machine_approved' } },
+    scope_included: ['x'], deliverables: ['y'], price_paise: 1000_00, delivery_days: 5, status: 'active',
+  }).select('id').single()
+  created.packageIds.push(pk!.id)
+  // … and open DRAFTS for ta and for the About (never rendered).
+  await admin.from('content_translations').insert([
+    { provider_id: pp!.id, subject_kind: 'package', subject_id: pk!.id, field: 'title', lang: 'ta', source_text: 'E14c GST filing 12 months', draft_text: 'E14c DRAFT-TA 12' },
+    { provider_id: pp!.id, subject_kind: 'profile', subject_id: pp!.id, field: 'about', lang: 'te', source_text: about, draft_text: 'E14c DRAFT-ABOUT 12' },
+  ])
+  try {
+    const list = await api(prov.token, '/api/v1/partner/translations', undefined, 'GET')
+    const draft = await api(prov.token, '/api/v1/partner/translations/draft', { subjectKind: 'profile', lang: 'te' })
+    const approve = await api(prov.token, `/api/v1/partner/translations/${crypto.randomUUID()}/approve`, {})
+    check('FR-14.3: the translation surface is dark (AGENT_ENABLED + agents_enabled.content_translate + cohort) — 404', list.status === 404 && draft.status === 404 && approve.status === 404, `${list.status}/${draft.status}/${approve.status}`)
+    const te = visible(await (await fetch(`${BASE}/te/p/${slug}/${pkgSlug}`)).text())
+    check('FR-14.3: an approved machine translation renders in te, labelled "Translated · View original"', te.includes('E14c 12 నెలల GST ఫైలింగ్') && te.includes('data-translated="translation"'))
+    const ta = visible(await (await fetch(`${BASE}/ta/p/${slug}/${pkgSlug}`)).text())
+    check('FR-14.3: a draft never renders — ta shows the English title, unlabelled', ta.includes('E14c GST filing 12 months') && !ta.includes('DRAFT-TA') && !ta.includes('data-translated'))
+    const prof = visible(await (await fetch(`${BASE}/te/p/${slug}`)).text())
+    check('FR-14.3: the About draft never renders either', prof.includes(about) && !prof.includes('DRAFT-ABOUT'))
+  } finally {
+    await admin.from('content_translations').delete().eq('provider_id', pp!.id)
+  }
+}
+
+async function e15a() {
+  console.log('\nE15a — data foundations: typed CAD features, the shadow price band + fit (shown to nobody)')
+  const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const buyer = await mkUser('e15buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E15 Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const prov = await mkUser('e15prov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E15 Prov', display_name: 'E15 Prov', slug: `${tag.replace(/_/g, '-')}-e15prov`, state: 'TS', status: 'active', languages: ['en', 'te'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: cat!.id })
+  const ops = await mkUser('e15admin', ['admin'])
+  // A confirmed drawing, as document-extract writes it (the deterministic STEP parse; never a model).
+  const summary = { format: 'step', product_name: 'E15 BRACKET', units: 'mm', bbox_mm: [120, 80, 10], counts: { faces: 42 }, hole_estimate: 6, layers: [], summary_english: 'A bracket', spec_rows: [] }
+  const { data: ix } = await admin.from('rfq_intake_extractions').insert({ user_id: buyer.uid, kind: 'drawing', input_refs: { format: 'step' }, proposed: summary, model: null, stub: false, cost_est_paise: 0 }).select('id').single()
+  const restores = [await setSetting('shadow_cad_price_band_enabled', true), await setSetting('shadow_provider_fit_enabled', true)]
+  let rfqId = ''
+  try {
+    const bad = await api(buyer.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'E15 bad spec block', details: { mfg_spec: { process: 'magic' } } })
+    check('FR-15.1: a malformed mfg_spec block is refused (422)', bad.status === 422, String(bad.status))
+    const res = await api(buyer.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'E15 machined bracket', details: { notes: 'Bracket per drawing', mfg_spec: { process: 'cnc_machining', material: 'SS304', tolerance: '±0.05 mm' } }, intake_extraction_ids: [ix!.id] })
+    const rj = (await res.json().catch(() => ({}))) as { rfqId?: string; matched?: number }
+    rfqId = rj.rfqId ?? ''
+    if (rfqId) created.rfqIds.push(rfqId)
+    const { data: r } = await admin.from('rfqs').select('cad_features, details').eq('id', rfqId).maybeSingle()
+    const cad = (r?.cad_features ?? null) as { hole_estimate?: number; bbox_mm?: number[] } | null
+    check('FR-15.1: cad_features from the drawing parse (bbox, holes, counts — no product name, no prose); mfg_spec kept', res.ok && cad?.hole_estimate === 6 && cad.bbox_mm?.[0] === 120 && !JSON.stringify(cad).includes('BRACKET') && (r?.details as { mfg_spec?: { process?: string } } | null)?.mfg_spec?.process === 'cnc_machining', JSON.stringify(cad))
+    const { data: preds } = await admin.from('shadow_predictions').select('feature, predicted, resolved_at').eq('subject_id', rfqId)
+    const bands = (preds ?? []).filter((p) => p.feature === 'cad_price_band')
+    const fits = (preds ?? []).filter((p) => p.feature === 'provider_fit')
+    check('FR-15.5: at fan-out one CAD band + one fit per matched provider, all unresolved', bands.length === 1 && fits.length === (rj.matched ?? -1) && fits.some((f) => (f.predicted as { provider_id?: string }).provider_id === pp!.id) && (preds ?? []).every((p) => !p.resolved_at), `bands ${bands.length}, fits ${fits.length}, matched ${rj.matched}`)
+    const asBuyer = createClient(URL_, ANON, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${buyer.token}` } } })
+    const { data: leak } = await asBuyer.from('shadow_predictions').select('id').eq('subject_id', rfqId)
+    check('FR-15.5: shadow_predictions is service-role only (a signed-in client reads nothing)', !leak || leak.length === 0)
+    // The provider quotes ₹5,000 + GST; the buyer pays → finalize resolves the shadows.
+    const { data: q } = await admin.from('quotes').insert({ rfq_id: rfqId, provider_id: pp!.id, price_paise: 5000_00, delivery_days: 5, scope: 'E15 quote scope for the bracket', gst_included: false }).select('id').single()
+    const co = (await (await api(buyer.token, '/api/v1/checkout', { quoteId: q!.id, idempotencyKey: crypto.randomUUID() })).json().catch(() => ({}))) as { simulated?: boolean; checkoutSessionId?: string }
+    if (co.simulated) await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: co.checkoutSessionId })
+    const { data: after } = await admin.from('shadow_predictions').select('feature, predicted, actual, error, resolved_at').eq('subject_id', rfqId)
+    const band = (after ?? []).find((p) => p.feature === 'cad_price_band')
+    const mine = (after ?? []).find((p) => p.feature === 'provider_fit' && (p.predicted as { provider_id?: string }).provider_id === pp!.id)
+    const others = (after ?? []).filter((p) => p.feature === 'provider_fit' && (p.predicted as { provider_id?: string }).provider_id !== pp!.id)
+    check('FR-15.5: acceptance resolves the band against the winner (₹5,900 all-in) with an error', !!band?.resolved_at && (band.actual as { total_paise?: number })?.total_paise === 5900_00 && band.error !== null, JSON.stringify(band?.actual))
+    check('FR-15.5: the winner\'s fit resolves quoted + won; every other matched provider quoted = false', (mine?.actual as { quoted?: boolean; won?: boolean } | null)?.quoted === true && (mine?.actual as { won?: boolean }).won === true && others.every((p) => (p.actual as { quoted?: boolean } | null)?.quoted === false))
+    const page = visible(await (await fetch(`${BASE}/admin/shadow`, { headers: { cookie: ops.cookie } })).text())
+    check('FR-15.5: the weekly error report is in the admin console (admin only)', page.includes('data-feature="cad_price_band"') && page.includes('data-feature="provider_fit"') && !visible(await (await fetch(`${BASE}/admin/shadow`, { headers: { cookie: buyer.cookie } })).text()).includes('data-testid="admin-shadow"'))
+  } finally {
+    for (const restore of restores.reverse()) await restore()
+    if (rfqId) {
+      await admin.from('shadow_predictions').delete().eq('subject_id', rfqId)
+      const { data: ords } = await admin.from('orders').select('id').eq('msme_id', msme!.id)
+      for (const o of ords ?? []) {
+        await admin.from('payouts').delete().eq('order_id', o.id)
+        const { data: pays } = await admin.from('payments').select('id').eq('order_id', o.id)
+        for (const pay of pays ?? []) await admin.from('refunds').delete().eq('payment_id', pay.id)
+        await admin.from('payments').delete().eq('order_id', o.id)
+        await admin.from('invoices').delete().eq('order_id', o.id)
+        created.orderIds.push(o.id as string)
+      }
+      await admin.from('checkout_sessions').delete().eq('msme_id', msme!.id)
+      await admin.from('conversations').delete().eq('msme_id', msme!.id)
+      await admin.from('quote_events').delete().in('quote_id', ((await admin.from('quotes').select('id').eq('rfq_id', rfqId)).data ?? []).map((x) => x.id as string))
+    }
+    await admin.from('rfq_intake_extractions').delete().eq('user_id', buyer.uid)
+    await admin.from('ai_decisions').delete().eq('decided_by', buyer.uid)
+  }
+}
+
+async function e17() {
+  console.log('\nE17 — analytics consent (gated D-UX2): dark unless NEXT_PUBLIC_ANALYTICS_CONSENT_REQUIRED is on')
+  const on = (process.env['NEXT_PUBLIC_ANALYTICS_CONSENT_REQUIRED'] ?? '') === 'true'
+  const buyer = await mkUser('e17buyer')
+  const get = () => fetch(`${BASE}/api/v1/me/analytics-consent`, { headers: { cookie: buyer.cookie } })
+  if (!on) {
+    const home = visible(await (await fetch(`${BASE}/`)).text())
+    const r = await get()
+    check('E17 off: the consent route is 404 and no notice renders (PostHog loads as before)', r.status === 404 && !home.includes('data-testid="analytics-consent"'), String(r.status))
+    return
+  }
+  const first = (await (await get()).json().catch(() => ({}))) as { choice?: string | null }
+  const accept = await api(buyer.token, '/api/v1/me/analytics-consent', { choice: 'granted' })
+  const afterAccept = (await (await get()).json().catch(() => ({}))) as { choice?: string | null }
+  const decline = await api(buyer.token, '/api/v1/me/analytics-consent', { choice: 'denied' })
+  const afterDecline = (await (await get()).json().catch(() => ({}))) as { choice?: string | null }
+  const bad = await api(buyer.token, '/api/v1/me/analytics-consent', { choice: 'maybe' })
+  check('E17 on: not asked yet → null; accept / decline stored for the current version; anything else 422', first.choice == null && accept.ok && afterAccept.choice === 'granted' && decline.ok && afterDecline.choice === 'denied' && bad.status === 422)
+}
+
+async function e15b() {
+  console.log('\nE15b — data foundations: search telemetry + attribution, declared vs actual, consented corpora, synonyms')
+  const cronSecret = process.env['CRON_SECRET']
+  const { data: tax } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
+  const { data: legal } = await admin.from('categories').select('id').eq('slug', 'legal').single()
+  const buyer = await mkUser('e15bbuyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E15b Buyer', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const prov = await mkUser('e15bprov', ['provider'])
+  const provSlug = `${tag.replace(/_/g, '-')}-e15bprov`
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E15b Prov', display_name: 'E15b Prov', slug: provSlug, state: 'TS', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  await admin.from('provider_categories').insert({ provider_id: pp!.id, category_id: tax!.id })
+  const word = `Vexmora${Date.now() % 100000}`
+  const { data: pk } = await admin.from('packages').insert({ provider_id: pp!.id, category_id: tax!.id, slug: `${tag.replace(/_/g, '-')}-e15bpkg`, title_i18n: { en: `${word} GST filing` }, scope_included: ['x'], deliverables: ['y'], price_paise: 2000_00, delivery_days: 3, status: 'active' }).select('id').single()
+  created.packageIds.push(pk!.id)
+  const restores = [await setSetting('search_telemetry_sample_pct', 100)]
+  const extraOrders: string[] = []
+  try {
+    // F5 — the search page mints a search id on the result links; the (100 %) sample records it, with no user id.
+    const html = visible(await (await fetch(`${BASE}/services?query=${word}`, { headers: { cookie: buyer.cookie } })).text())
+    const sid = /[?&]sid=([0-9a-f-]{36})/.exec(html)?.[1] ?? null
+    type SearchRow = { query_norm: string | null; result_count: number; params: unknown }
+    let row = null as SearchRow | null
+    for (let i = 0; i < 10 && sid && !row; i++) {
+      row = ((await admin.from('search_queries').select('query_norm, result_count, params').eq('id', sid).maybeSingle()).data as SearchRow | null) ?? null
+      if (!row) await new Promise((r) => setTimeout(r, 300))
+    }
+    const found = row as SearchRow | null
+    check('FR-15.3: a results page carries a search id and the sample records it (normalised query + count, no user id)', !!sid && found?.query_norm === word.toLowerCase() && (found?.result_count ?? 0) >= 1 && !JSON.stringify(found).includes(buyer.uid), JSON.stringify(found))
+    // … and it rides package → checkout → the order.
+    const co = (await (await api(buyer.token, '/api/v1/checkout', { packageId: pk!.id, idempotencyKey: crypto.randomUUID(), attribution: { search_id: sid, position: 1 } })).json().catch(() => ({}))) as { simulated?: boolean; checkoutSessionId?: string }
+    let orderId = ''
+    if (co.simulated) orderId = ((await (await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: co.checkoutSessionId })).json().catch(() => ({}))) as { orderId?: string }).orderId ?? ''
+    if (orderId) created.orderIds.push(orderId)
+    const { data: ord } = await admin.from('orders').select('attribution').eq('id', orderId).maybeSingle()
+    check('FR-15.3: the order carries the search that produced it (orders.attribution)', (ord?.attribution as { search_id?: string; position?: number } | null)?.search_id === sid && (ord?.attribution as { position?: number }).position === 1, JSON.stringify(ord?.attribution))
+    const bad = await api(buyer.token, '/api/v1/checkout', { packageId: pk!.id, idempotencyKey: crypto.randomUUID(), attribution: { search_id: 'nope' } })
+    check('FR-15.3: a malformed attribution is refused (422) — never stored', bad.status === 422, String(bad.status))
+
+    // F4 — five paid orders in a category the provider did not declare → one flag for ops.
+    const { data: lp } = await admin.from('packages').insert({ provider_id: pp!.id, category_id: legal!.id, slug: `${tag.replace(/_/g, '-')}-e15blegal`, title_i18n: { en: 'E15b legal notice' }, scope_included: ['x'], deliverables: ['y'], price_paise: 1000_00, delivery_days: 3, status: 'paused' }).select('id').single()
+    created.packageIds.push(lp!.id)
+    for (let i = 0; i < 5; i++) {
+      const { data: o } = await admin.from('orders').insert({ msme_id: msme!.id, provider_id: pp!.id, package_id: lp!.id, source: 'package', title: `E15b legal ${i}`, scope_snapshot: {}, price_paise: 1000_00, gst_paise: 180_00, total_paise: 1180_00, commission_bps: 1000, commission_paise: 100_00, provider_earning_paise: 900_00, delivery_days: 3, status: 'completed' }).select('id').single()
+      if (o) { extraOrders.push(o.id as string); created.orderIds.push(o.id as string) }
+    }
+    const cron = await fetch(`${BASE}/api/v1/cron/data-foundations`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })
+    const again = await fetch(`${BASE}/api/v1/cron/data-foundations`, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {} })
+    const { data: flags } = await admin.from('audit_logs').select('after').eq('action', 'category_mismatch_flagged').eq('entity_id', pp!.id)
+    check('FR-15.2: > 50 % of ≥ 5 paid orders outside the declared categories → ONE ops flag (a re-run adds none)', cron.ok && again.ok && (flags ?? []).length === 1 && (flags![0]!.after as { n?: number }).n === 6, JSON.stringify(flags))
+    const ops = await mkUser('e15bops', ['admin'])
+    const q = visible(await (await fetch(`${BASE}/admin/verifications`, { headers: { cookie: ops.cookie } })).text())
+    const pub = visible(await (await fetch(`${BASE}/p/${provSlug}`)).text())
+    check('FR-15.2: the flag is on the admin verification queue — never the public profile', q.includes(`data-flag="${pp!.id}"`) && !pub.includes('data-testid="category-flags"'))
+
+    // F6 — consent: off by default, on keeps text-only pairs, off deletes them.
+    const docExtract = { doc_type: 'gst_notice', facts: [{ k: 'notice', v: 'ASMT-10', confidence: 'high' }], suggested_category_slug: 'legal', description_english: 'A GST scrutiny notice', uncertain: false }
+    const mkIntake = async () => (await admin.from('rfq_intake_extractions').insert({ user_id: buyer.uid, kind: 'document', input_refs: { attachment_path: `${buyer.uid}/e15b-notice.jpg`, mime: 'image/jpeg' }, proposed: docExtract, model: null, stub: true, cost_est_paise: 0 }).select('id').single()).data!.id as string
+    const rfqBody = (intakeId: string) => ({ category_slug: 'tax-accounting', title: 'E15b reply to a GST notice', details: { notes: 'ASMT-10 reply' }, intake_extraction_ids: [intakeId] })
+    const r0 = (await (await api(buyer.token, '/api/v1/rfq', rfqBody(await mkIntake()))).json().catch(() => ({}))) as { rfqId?: string }
+    if (r0.rfqId) created.rfqIds.push(r0.rfqId)
+    const { count: none } = await admin.from('corpus_image_pairs').select('id', { count: 'exact', head: true }).eq('user_id', buyer.uid)
+    check('FR-15.4: no consent → nothing kept', none === 0)
+    const dark = await api(buyer.token, '/api/v1/me/corpus-consent', { on: true })
+    const prof = visible(await (await fetch(`${BASE}/app/profile`, { headers: { cookie: buyer.cookie } })).text())
+    check('FR-15.4: the switch off → no opt-in on the profile and opting in 404s', dark.status === 404 && !prof.includes('data-testid="corpus-consent"'), String(dark.status))
+    restores.push(await setSetting('corpus_consent_enabled', true))
+    const profOn = visible(await (await fetch(`${BASE}/app/profile`, { headers: { cookie: buyer.cookie } })).text())
+    check('FR-15.4: the switch on → the profile offers the opt-in, off by default', profOn.includes('data-testid="corpus-consent"'))
+    const on = await api(buyer.token, '/api/v1/me/corpus-consent', { on: true })
+    const r1 = (await (await api(buyer.token, '/api/v1/rfq', rfqBody(await mkIntake()))).json().catch(() => ({}))) as { rfqId?: string }
+    if (r1.rfqId) created.rfqIds.push(r1.rfqId)
+    const { data: pairs } = await admin.from('corpus_image_pairs').select('storage_key, corrections, final').eq('user_id', buyer.uid)
+    check('FR-15.4: with consent, the image → final-request pair is kept by key with the corrected fields', on.ok && (pairs ?? []).length === 1 && pairs![0]!.storage_key === `${buyer.uid}/e15b-notice.jpg` && JSON.stringify(pairs![0]!.corrections) === '["category"]', JSON.stringify(pairs))
+    const asBuyer = createClient(URL_, ANON, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${buyer.token}` } } })
+    check('FR-15.4: the buyer cannot read the corpus rows directly (service role only)', ((await asBuyer.from('corpus_image_pairs').select('id')).data ?? []).length === 0)
+    const off = await api(buyer.token, '/api/v1/me/corpus-consent', { on: false })
+    const { count: afterOff } = await admin.from('corpus_image_pairs').select('id', { count: 'exact', head: true }).eq('user_id', buyer.uid)
+    check('FR-15.4: revoking consent deletes that user\'s rows', off.ok && afterOff === 0 && ((await off.json()) as { deleted?: number }).deleted === 1)
+
+    // F6 — service_synonyms: anyone reads reviewed rows only.
+    await admin.from('service_synonyms').insert([
+      { term: `${word} reviewed`, term_key: `${word.toLowerCase()} reviewed`, lang: 'en', category_slug: 'tax-accounting', service_slug: 'gst-filing', source: 'curated', reviewed: true },
+      { term: `${word} draft`, term_key: `${word.toLowerCase()} draft`, lang: 'en', category_slug: 'legal', service_slug: null, source: 'search_log', reviewed: false },
+    ])
+    const { data: syn } = await createClient(URL_, ANON, { auth: { persistSession: false } }).from('service_synonyms').select('term_key').like('term_key', `${word.toLowerCase()}%`)
+    check('FR-15.4: service_synonyms — anon reads the reviewed row, never the unreviewed one', (syn ?? []).length === 1 && syn![0]!.term_key.endsWith('reviewed'), JSON.stringify(syn))
+  } finally {
+    for (const restore of restores.reverse()) await restore()
+    await admin.from('service_synonyms').delete().like('term_key', `${word.toLowerCase()}%`)
+    await admin.from('audit_logs').delete().eq('action', 'category_mismatch_flagged').eq('entity_id', pp!.id)
+    await admin.from('corpus_image_pairs').delete().eq('user_id', buyer.uid)
+    await admin.from('rfq_intake_extractions').delete().eq('user_id', buyer.uid)
+    await admin.from('ai_decisions').delete().eq('decided_by', buyer.uid)
+    const { data: ords } = await admin.from('orders').select('id').eq('msme_id', msme!.id)
+    for (const o of ords ?? []) {
+      await admin.from('payouts').delete().eq('order_id', o.id)
+      const { data: pays } = await admin.from('payments').select('id').eq('order_id', o.id)
+      for (const pay of pays ?? []) await admin.from('refunds').delete().eq('payment_id', pay.id)
+      await admin.from('payments').delete().eq('order_id', o.id)
+      await admin.from('invoices').delete().eq('order_id', o.id)
+      if (!created.orderIds.includes(o.id as string)) created.orderIds.push(o.id as string)
+    }
+    await admin.from('checkout_sessions').delete().eq('msme_id', msme!.id)
+    await admin.from('search_queries').delete().eq('query_norm', word.toLowerCase())
+  }
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
   try {
@@ -1432,6 +1826,14 @@ async function main() {
     await e11c()
     await e7()
     await e8()
+    await e13()
+    await e13c()
+    await e14()
+    await e14b()
+    await e14c()
+    await e15a()
+    await e15b()
+    await e17()
   } finally {
     console.log('\n🧹 cleanup…')
     const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }

@@ -42,6 +42,7 @@ export const AGENT_WRITE_ALLOWLIST: Readonly<Record<string, string>> = {
   provider_price_book: 'the provider\'s own price memory, upserted from their confirmed quotes (S1.1)',
   procurement_sessions: 'the buyer procurement agent\'s session (S3.1) — draft / pending / labels / the open proposal; every RFQ / quote / message write is an ordinary buyer route after the buyer\'s tap',
   procurement_turns: 'the procurement thread the web mirror shows (S3.1) — user text masked, agent text = the rendered template',
+  content_translations: 'E14 N32b translation DRAFTS of a provider\'s own copy — a draft never renders; the provider\'s approve (lib/translations, a spine path) writes the package / profile slot',
 }
 
 /**

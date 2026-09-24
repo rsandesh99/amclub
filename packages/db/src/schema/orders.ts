@@ -16,6 +16,14 @@ export const orders = pgTable('orders', {
   source: text('source').notNull(),
   packageId: uuid('package_id').references(() => packages.id),
   quoteId: uuid('quote_id').references(() => quotes.id),
+  // E15 F5 (0063): { search_id, position } — the search that led here; written best-effort after the money writes.
+  attribution: jsonb('attribution'),
+  // E12a / ADR 019 (0065): the add-on snapshot [{ id, label, pricePaise, daysDelta, extraRevisions }] copied from the session (trigger); NULL = none.
+  addons: jsonb('addons'),
+  // E12c / ADR 021 (0067): a bundle child — its purchase (FK in SQL), milestone number, and when it becomes actionable.
+  bundlePurchaseId: uuid('bundle_purchase_id'),
+  bundleSeq: integer('bundle_seq'),
+  availableAt: timestamp('available_at', { withTimezone: true }),
   title: text('title').notNull(),
   scopeSnapshot: jsonb('scope_snapshot').notNull(),
   pricePaise: bigint('price_paise', { mode: 'number' }).notNull(),
@@ -116,6 +124,14 @@ export const payments = pgTable('payments', {
 // Order intent — frozen amounts locked at checkout; the webhook materialises the
 // order from this row (checkout never creates the order). §2.5 webhook-as-truth.
 export const checkoutSessions = pgTable('checkout_sessions', {
+  // E15 F5 (0063): { search_id, position } carried from search → package → checkout.
+  attribution: jsonb('attribution'),
+  // E12a / ADR 019 (0065): the add-on snapshot, frozen at session creation; NULL = none.
+  addons: jsonb('addons'),
+  // E12b / ADR 020 (0066): the quote option the session is frozen on (NULL = Standard); FK → quote_options in SQL.
+  quoteOptionId: uuid('quote_option_id'),
+  // E12c / ADR 021 (0067): the frozen per-child plan (shared bundlePlanSnapshot); NULL = not a bundle.
+  bundlePlan: jsonb('bundle_plan'),
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   razorpayOrderId: text('razorpay_order_id').unique(),
   msmeId: uuid('msme_id').references(() => msmeProfiles.id).notNull(),
@@ -203,4 +219,18 @@ export const disputes = pgTable('disputes', {
   triageId: uuid('triage_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
+})
+
+// E12c / ADR 021 (0067) — one row per paid bundle: the ONE payment its child orders share. Parties read own; no client writes.
+export const bundlePurchases = pgTable('bundle_purchases', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  msmeId: uuid('msme_id').references(() => msmeProfiles.id).notNull(),
+  providerId: uuid('provider_id').references(() => providerProfiles.id).notNull(),
+  packageId: uuid('package_id').references(() => packages.id, { onDelete: 'set null' }),
+  checkoutSessionId: uuid('checkout_session_id').references(() => checkoutSessions.id).notNull().unique(),
+  paymentId: uuid('payment_id'),
+  totalPaise: bigint('total_paise', { mode: 'number' }).notNull(),
+  title: text('title').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

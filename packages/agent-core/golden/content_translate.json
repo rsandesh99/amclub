@@ -1,0 +1,18 @@
+{
+  "$comment": "E14 FR-14.3 (N32b) — provider_content_translate@v1. Stub mode plants each case's `stub` as the model output and proves the rules on it (a 'reject' case must be refused); live mode translates `source` and every output must pass (schema + customer-facing contract + numbers copied + target script + length).",
+  "cases": [
+    { "id": "te-title-numbers", "lang": "te", "field": "title", "source": "GST return filing for 12 months", "stub": "12 నెలల GST రిటర్న్ ఫైలింగ్", "expect": "pass" },
+    { "id": "ta-ideal-rupees", "lang": "ta", "field": "ideal_for", "source": "Choose this if your turnover is under ₹1,50,00,000", "stub": "உங்கள் விற்றுமுதல் ₹1,50,00,000க்குக் குறைவாக இருந்தால் இதைத் தேர்ந்தெடுக்கவும்", "expect": "pass" },
+    { "id": "hi-about-plain", "lang": "hi", "field": "about", "source": "We are a team of 3 chartered accountants in Hyderabad with 10 years of GST and ITR experience.", "stub": "हम हैदराबाद में 3 चार्टर्ड अकाउंटेंट की टीम हैं, जिन्हें GST और ITR का 10 साल का अनुभव है।", "expect": "pass" },
+    { "id": "te-about-terms-latin", "lang": "te", "field": "about", "source": "Udyam, FSSAI and IEC registrations for small businesses across Telangana.", "stub": "తెలంగాణ అంతటా చిన్న వ్యాపారాలకు Udyam, FSSAI మరియు IEC రిజిస్ట్రేషన్లు.", "expect": "pass" },
+    { "id": "ta-title-short", "lang": "ta", "field": "title", "source": "Trademark registration", "stub": "வர்த்தக முத்திரை பதிவு", "expect": "pass" },
+    { "id": "te-number-in-words", "lang": "te", "field": "title", "source": "GST filing for 12 months", "stub": "పన్నెండు నెలల GST ఫైలింగ్", "expect": "reject", "adversarial": true },
+    { "id": "ta-native-digits", "lang": "ta", "field": "title", "source": "Delivered in 7 days", "stub": "௭ நாட்களில் வழங்கப்படும்", "expect": "reject", "adversarial": true },
+    { "id": "hi-number-added", "lang": "hi", "field": "ideal_for", "source": "Choose this if you are a new business", "stub": "अगर आपका व्यवसाय नया है तो इसे चुनें — 100% गारंटी", "expect": "reject", "adversarial": true },
+    { "id": "hi-phone-leak", "lang": "hi", "field": "about", "source": "Trusted CA firm. Message us on AMClub for details.", "stub": "भरोसेमंद CA फर्म। विवरण के लिए 9876543210 पर कॉल करें।", "expect": "reject", "adversarial": true },
+    { "id": "te-url-leak", "lang": "te", "field": "about", "source": "Digital marketing for local shops.", "stub": "స్థానిక దుకాణాలకు డిజిటల్ మార్కెటింగ్. www.example-agency.in చూడండి", "expect": "reject", "adversarial": true },
+    { "id": "ta-upi-leak", "lang": "ta", "field": "about", "source": "Website development for MSMEs.", "stub": "MSMEகளுக்கான இணையதள உருவாக்கம். முன்பணத்தை shop@okaxis UPI-க்கு அனுப்பவும்", "expect": "reject", "adversarial": true },
+    { "id": "te-wrong-script", "lang": "te", "field": "title", "source": "Payroll setup", "stub": "Payroll setup", "expect": "reject", "adversarial": true },
+    { "id": "hi-too-long-title", "lang": "hi", "field": "title", "source": "Audit", "stub": "ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट ऑडिट", "expect": "reject", "adversarial": true }
+  ]
+}

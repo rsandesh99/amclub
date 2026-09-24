@@ -8,11 +8,15 @@ import { formatINR, formatINRExact } from '@/lib/format'
 import { useCart, groupBySeller } from '@/lib/mart/cart-store'
 import { SheetCard, EmeraldCard, GoldNumeral } from '@/components/mart/primitives'
 import { CartSkeleton } from '@/components/mart/skeletons'
+import { LineFlags } from '@/components/mart/LineFlags'
 
 interface Preview {
   sellerName: string
   amounts: { taxablePaise: number; gstPaise: number; totalPaise: number; afterItcPaise: number }
   lineItems: { product_id: string; line_taxable_paise: number; tier_unit_price_paise: number; tier_min_qty: number }[]
+  /** E16 N43 — server flags per line. */
+  nonReturnableProductIds?: string[]
+  itcIneligibleProductIds?: string[]
 }
 
 const ERR_KEYS: Record<string, string> = {
@@ -68,6 +72,8 @@ export function CartClient() {
           <h1 className="text-lg font-semibold text-emerald-ink">{t('cart_empty_title')}</h1>
           <p className="mt-1 text-sm text-foreground-secondary">{t('cart_empty_body')}</p>
           <Link href={'/mart' as '/services'}><Button className="mt-5 bg-emerald hover:bg-emerald-ink">{t('browse_cta')}</Button></Link>
+          {/* E16 N44 — the buyer's usual orders at today's prices. */}
+          <p className="mt-3"><Link href={'/app/mart/reorder' as '/app'} className="inline-flex min-h-11 items-center text-meta font-medium text-emerald underline underline-offset-2">{t('reorder_link')}</Link></p>
         </div>
       </div>
     )
@@ -81,7 +87,10 @@ export function CartClient() {
 
   return (
     <div className="mart-enter mx-auto max-w-lg space-y-5 px-4 py-6">
-      <h1 className="font-display text-2xl font-bold text-emerald-ink">{t('cart_title')}</h1>
+      <div className="flex items-baseline justify-between gap-2">
+        <h1 className="font-display text-2xl font-bold text-emerald-ink">{t('cart_title')}</h1>
+        <Link href={'/app/mart/reorder' as '/app'} className="inline-flex min-h-11 items-center text-meta font-medium text-emerald underline underline-offset-2">{t('reorder_link')}</Link>
+      </div>
       {groups.length > 1 && <p className="text-xs text-foreground-secondary">{t('one_seller_note')}</p>}
       {groups.map((g, gi) => {
         const pv = previews[g.sellerId]
@@ -110,6 +119,7 @@ export function CartClient() {
                             {formatINRExact(li.tier_unit_price_paise)} {t('per_unit', { unit: l.unit })} · {t('line_total')} {formatINRExact(li.line_taxable_paise)}
                           </p>
                         )}
+                        <LineFlags nonReturnable={!!ok?.nonReturnableProductIds?.includes(l.productId)} itcIneligible={!!ok?.itcIneligibleProductIds?.includes(l.productId)} />
                       </div>
                       <input
                         type="number"

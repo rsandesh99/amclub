@@ -6,12 +6,13 @@ import { delegatedRunId, requireToolScope } from '@/lib/agent/scope'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { fanoutRfq } from '@/lib/rfq/fanout'
-import { isEmptyMustHaves, rfqDocumentsExpectedSchema } from '@amclub/shared'
+import { cadFeaturesFromDrawing, drawingSummarySchema, isEmptyMustHaves, mfgSpecSchema, rfqDocumentsExpectedSchema } from '@amclub/shared'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { MART_ENABLED } from '@/lib/flags'
 import { checkIntakeExtractions, linkIntakeExtractions, type IntakeRow } from '@/lib/agent/intake'
+import { writeConsentedCorpus } from '@/lib/corpus'
 import { getMartCategory } from '@/lib/mart/config'
 import { isRfqQualityEnabledFor, runRfqQualityCheck, toQualityLocale } from '@/lib/agent/rfq-quality'
 
@@ -42,6 +43,10 @@ export async function POST(request: NextRequest) {
   // details; anything but a short list of keys is dropped, never stored.
   if (d.details && 'documents_expected' in d.details && !rfqDocumentsExpectedSchema.safeParse(d.details['documents_expected']).success) {
     delete d.details['documents_expected']
+  }
+  // E15 F3 — the optional manufacturing block of a job-work requirement is typed.
+  if (d.details && 'mfg_spec' in d.details && !mfgSpecSchema.safeParse(d.details['mfg_spec']).success) {
+    return NextResponse.json({ error: 'invalid_mfg_spec' }, { status: 422 })
   }
 
   const admin = await createAdminClient()
@@ -141,6 +146,16 @@ export async function POST(request: NextRequest) {
       final: { title: d.title, detail_keys: Object.keys(d.details ?? {}), attachments: (d.attachments ?? []).length, ...(d.voice_meta?.clarify ? { clarify: d.voice_meta.clarify } : {}) },
     }).catch((e) => console.error('[rfq intake link]', (e as Error).message))
   }
+
+  // E15 F3 — typed CAD features from a confirmed drawing (the deterministic parse; never a model), before fan-out reads them.
+  const drawing = intakeRows.find((r) => r.kind === 'drawing')
+  const cad = drawing ? drawingSummarySchema.safeParse(drawing.proposed) : null
+  if (cad?.success) {
+    const { error: cadErr } = await admin.from('rfqs').update({ cad_features: cadFeaturesFromDrawing(cad.data) }).eq('id', rfq.id)
+    if (cadErr) console.warn('[rfq cad_features]', cadErr.message)
+  }
+  // E15 F6 — consented corpora (the buyer's explicit opt-in only; text only; best-effort).
+  await writeConsentedCorpus(admin, { userId, rfqId: rfq.id, voiceMeta: d.voice_meta, intakeRows, final: { title: d.title, categorySlug: d.category_slug ?? null, details: (d.details ?? {}) as Record<string, unknown> } })
 
   if (!twoPhase) {
     // Fan-out (match + notify). Best-effort — the RFQ exists regardless.

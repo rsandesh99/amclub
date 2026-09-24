@@ -14,7 +14,7 @@ import { QuoteComposer, type QuoteComposerGoods, type QuoteComposerInitial } fro
  * cap it renders disabled with "no revisions left" (the server re-checks:
  * submitted, RFQ active, revision < MAX).
  */
-export function ReviseQuote({ rfqId, initial, revision, goods }: { rfqId: string; initial: QuoteComposerInitial; revision: number; goods?: QuoteComposerGoods | undefined }) {
+export function ReviseQuote({ rfqId, initial, revision, goods, optionsEnabled = false }: { rfqId: string; initial: QuoteComposerInitial; revision: number; goods?: QuoteComposerGoods | undefined; optionsEnabled?: boolean }) {
   const t = useTranslations('rfq')
   const [open, setOpen] = useState(false)
   const left = Math.max(0, MAX_QUOTE_REVISIONS - revision)
@@ -37,7 +37,7 @@ export function ReviseQuote({ rfqId, initial, revision, goods }: { rfqId: string
   }
   return (
     <div className="mt-3">
-      <QuoteComposer rfqId={rfqId} goods={goods} mode="revise" initial={initial} onDone={() => setOpen(false)} onCancel={() => setOpen(false)} />
+      <QuoteComposer rfqId={rfqId} goods={goods} mode="revise" initial={initial} optionsEnabled={optionsEnabled} onDone={() => setOpen(false)} onCancel={() => setOpen(false)} />
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/auth/session'
+import { getRequestUser } from '@/lib/auth/request'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { serverError } from '@/lib/api/errors'
 import { KYC_BUCKET, KYC_SIGNED_URL_TTL_SECONDS, credentialPathPrefix } from '@/lib/auth/kyc-documents'
 
@@ -35,10 +36,13 @@ function sniffMatches(declared: string, buf: Buffer): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getSessionUser()
+  const user = await getRequestUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // E13 — Bearer is now accepted (the native wizard); a delegated agent token never is (S1.6: the agent never verifies or writes the profile).
+  const delegated = await requireNotDelegated('profile/provider/credential-upload')
+  if (delegated) return delegated
 
   const formData = await request.formData().catch(() => null)
   if (!formData) {

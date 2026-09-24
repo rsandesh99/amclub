@@ -47,7 +47,14 @@
           "microphonePermission": "AMClub uses the microphone so you can speak your service requirement instead of typing it."
         }
       ],
-      "@sentry/react-native"
+      "@sentry/react-native",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "AMClub uses the camera so you can photograph your professional certificate while applying as a provider.",
+          "photosPermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

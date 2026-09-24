@@ -12,6 +12,7 @@ name: AI golden eval
 on:
   workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'apps/web/lib/voice/**'
       - 'packages/shared/src/specializations.ts'
@@ -22,6 +23,8 @@ on:
 jobs:
   golden:
     name: Parser golden set (live LLM)
+    # Minutes economy: drafts run nothing; a PR runs once when it is marked ready (and on later pushes).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

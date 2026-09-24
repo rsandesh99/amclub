@@ -10,7 +10,7 @@ import { getLocale } from 'next-intl/server'
 import { GoodsSpecCard, type GoodsSpecView } from '@/components/mart/GoodsSpecCard'
 import { getMartCategory } from '@/lib/mart/config'
 import { createAdminClient } from '@/lib/supabase/server'
-import { computeCompare, getComparePointers, isComparePointersEnabledFor, toPointerLocale } from '@/lib/rfq/compare'
+import { computeChoices, computeCompare, getComparePointers, isComparePointersEnabledFor, toPointerLocale } from '@/lib/rfq/compare'
 import { isInClarification, rfqIsActive } from '@amclub/shared'
 import { ClarificationsCard } from '@/components/rfq/ClarificationsCard'
 import { QualityQuestionsCard, QualitySummary } from '@/components/rfq/QualityQuestionsCard'
@@ -44,6 +44,8 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
   // S1.2 — deterministic flags + normalised totals (never a model); pointers only from the
   // cache here (the client loads fresh ones after mount when enabled, so the table never waits).
   const compare = computeCompare(rfq.kind, rfq.quotes)
+  // E12b — Economy · Standard · Express per quote (null = no options anywhere: the screen as before).
+  const choices = computeChoices(rfq.kind, rfq.quotes)
   // S2.4 — the server's order (price, or reliability-adjusted above the threshold); never a score
   const ordering = await compareOrderingFor(admin, { kind: rfq.kind, quotes: rfq.quotes, results: compare, userId: user.id, rfqId: rfq.id })
   const pointersEnabled = await isComparePointersEnabledFor(admin, user.id)
@@ -141,7 +143,7 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
           {/* S1.3 — questions from providers, above the compare table; answers are visible to every matched provider. */}
           <ClarificationsCard rfqId={rfq.id} role="buyer" initial={rfq.clarifications} canWrite={active} closed={!active} />
 
-          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} payQuoteId={payQuoteId} benchmark={benchmark} v3={compareV3} />
+          <QuoteCompare rfq={rfq} compare={compare} pointers={pointerOutcome?.pointers ?? null} pointersEnabled={pointersEnabled} ordering={ordering} payQuoteId={payQuoteId} benchmark={benchmark} v3={compareV3} choices={choices} />
         </>
       )}
     </div>

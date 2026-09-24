@@ -12,6 +12,7 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { getPaymentGateway } from '@/lib/payments'
 import { processRefund } from '@/lib/orders/transitions'
 import { runPayouts } from '@/lib/payments/payout'
+import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -122,11 +123,9 @@ export async function resolveDispute(
   // Read what already happened to the payout and refund rows, then plan.
   const [{ data: payout }, { data: payment }] = await Promise.all([
     admin.from('payouts').select('id, status, amount_paise').eq('order_id', order.id).maybeSingle(),
-    admin.from('payments').select('id').eq('order_id', order.id).maybeSingle(),
+    paymentForOrder<{ id: string }>(admin, order, 'id').then((data) => ({ data })),
   ])
-  const { data: refundRow } = payment
-    ? await admin.from('refunds').select('id, status, amount_paise').eq('payment_id', payment.id).maybeSingle()
-    : { data: null }
+  const refundRow = payment ? await refundForOrder<{ id: string; status: string; amount_paise: number }>(admin, order, payment.id, 'id, status, amount_paise') : null
 
   const plan = planDisputeSettlement({
     totalPaise: Number(order.total_paise),

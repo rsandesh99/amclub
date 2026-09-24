@@ -5,6 +5,8 @@ import { notFound } from 'next/navigation'
 import localFont from 'next/font/local'
 import { routing } from '@/i18n/routing'
 import { PostHogProvider } from '@/components/providers/posthog'
+import { AnalyticsConsentNotice } from '@/components/consent/AnalyticsConsentNotice'
+import { ANALYTICS_CONSENT_REQUIRED } from '@/lib/public-flags'
 import { ToastProvider } from '@/components/ui/toast'
 import { PwaManager } from '@/components/pwa/PwaManager'
 import { ResourceHints } from '@/components/shell/ResourceHints'
@@ -162,6 +164,8 @@ export default async function LocaleLayout({
             <ToastProvider>{children}</ToastProvider>
           </PostHogProvider>
           <PwaManager />
+          {/* E17 (gated D-UX2) — rendered only when consent is required; off = nothing, as before. */}
+          {ANALYTICS_CONSENT_REQUIRED && <AnalyticsConsentNotice />}
         </NextIntlClientProvider>
       </body>
     </html>

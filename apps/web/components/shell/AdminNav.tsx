@@ -17,6 +17,7 @@ const ITEMS = [
   { href: '/admin/coupons', key: 'coupons' },
   { href: '/admin/mart', key: 'mart' },
   { href: '/admin/agents', key: 'agents' },
+  { href: '/admin/shadow', key: 'shadow' },
   { href: '/admin/cms', key: 'cms' },
   { href: '/admin/audit', key: 'audit' },
 ] as const

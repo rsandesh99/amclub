@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useI18n } from '@/lib/i18n'
-import { pickLocale } from '@amclub/shared'
+import { mobileRouteFor, pickLocale } from '@amclub/shared'
+import { currentMobileRole } from '@/lib/role'
 import { fetchNotifications, markNotificationRead, type NotificationItem } from '@/lib/api'
 import { ErrorState } from '@/components/ErrorState'
 
@@ -33,7 +34,12 @@ export default function NotificationsScreen() {
       await markNotificationRead({ id: n.id })
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)))
     }
-    if (n.link) router.push(mobileLink(n.link) as never)
+    if (!n.link) return
+    // E13 FR-13.6 — the shared deep-link contract (the exact screen, tab / query kept); v2 falls back to the app root as before.
+    const v3 = currentMobileRole() !== null
+    const route = mobileRouteFor(n.link, { v3 })
+    if (route) router.push(route as never)
+    else if (!v3) router.push('/' as never)
   }
 
   async function markAll() {
@@ -84,12 +90,3 @@ export default function NotificationsScreen() {
   )
 }
 
-/** Map web app-relative links to the mobile route equivalents. */
-function mobileLink(link: string): string {
-  if (link.startsWith('/app/orders/')) return `/orders/${link.split('/').pop()}`
-  if (link.startsWith('/partner/orders/')) return `/orders/${link.split('/').pop()}`
-  if (link.startsWith('/app/rfq/')) return `/rfq/${link.split('/').pop()}`
-  if (link.startsWith('/partner/rfqs')) return '/partner-rfqs'
-  if (link.startsWith('/partner/earnings')) return '/partner'
-  return '/'
-}

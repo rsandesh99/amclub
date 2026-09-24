@@ -10,7 +10,7 @@ import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { computeOrderAmounts, quoteLossLabel, type LossLabelQuote } from '@amclub/shared'
+import { computeOrderAmounts, quoteChargeAmounts, quoteLossLabel, type LossLabelQuote } from '@amclub/shared'
 import { signWebhookBody } from '../lib/payments/signature'
 
 const URL = process.env['NEXT_PUBLIC_SUPABASE_URL']!
@@ -252,6 +252,60 @@ async function main() {
     check('10b. the losing provider reads its own quote events but never its loss label', seenTypes.includes('submitted') && !seenTypes.includes('lost'), `seen=${seenTypes.join(',')}`)
   } else {
     console.log('  ⏭ 10 loss labels SKIPPED (EXP_V3_COMPARE is off — labels are written only while compare v3 is live)')
+  }
+
+  // ── Criterion 11 (PRD Experience v3 E12b, ADR 020): speed options on a quote ──
+  // A quotes Standard ₹8,000 / 10 days with Express ₹10,000 / 4 days and Economy ₹7,000 / 15 days (GST extra);
+  // B quotes Standard only. Incoherent options are refused (400). Accepting A's Express charges the Express price
+  // (+ GST, ADR-015 per option), the order's days follow the option, the quote records the option, a replay creates
+  // nothing, and B's loss label is against the Express terms. An option id from another quote → 404.
+  {
+    const { data: optBefore } = await admin.from('agent_settings').select('value').eq('key', 'quote_options_enabled').maybeSingle()
+    await admin.from('agent_settings').upsert({ key: 'quote_options_enabled', value: true, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    try {
+      const r11 = await api(buyer.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'GST returns for a small trading firm, FY25', details: { filing_type: 'GST Returns', financial_year: '2024-25', turnover_range: '< ₹20 lakh' }, attachments: [] })
+      const optRfqId = (await r11.json()).rfqId as string
+      created.rfqIds.push(optRfqId)
+      const scope = 'Monthly GSTR-1 and GSTR-3B filing with reconciliation.'
+      const bad = await api(matching[5]!.token, `/api/v1/rfq/${optRfqId}/quote`, { price_paise: 800000, delivery_days: 10, scope, gst_included: false, options: [{ label: 'express', price_paise: 700000, delivery_days: 4 }] })
+      const aRes = await api(matching[0]!.token, `/api/v1/rfq/${optRfqId}/quote`, { price_paise: 800000, delivery_days: 10, scope, gst_included: false, options: [{ label: 'express', price_paise: 1000000, delivery_days: 4 }, { label: 'economy', price_paise: 700000, delivery_days: 15 }] })
+      const bRes = await api(matching[1]!.token, `/api/v1/rfq/${optRfqId}/quote`, { price_paise: 750000, delivery_days: 8, scope, gst_included: false })
+      const aId = (await aRes.json().catch(() => ({}))).quoteId as string | undefined
+      const bId = (await bRes.json().catch(() => ({}))).quoteId as string | undefined
+      const { data: opts } = await admin.from('quote_options').select('id, label, price_paise, delivery_days').eq('quote_id', aId ?? '')
+      const express = (opts ?? []).find((o) => o.label === 'express')
+      check('11a. options: incoherent → 400; two coherent options stored at revision 1', bad.status === 400 && !!aId && !!bId && (opts ?? []).length === 2 && !!express, `bad=${bad.status} opts=${(opts ?? []).length}`)
+      if (aId && bId && express) {
+        const foreign = await api(buyer.token, '/api/v1/checkout', { quoteId: bId, optionId: express.id, idempotencyKey: crypto.randomUUID() })
+        check('11b. an option id from another quote → 404 option_not_found', foreign.status === 404, String(foreign.status))
+        const co = (await (await api(buyer.token, '/api/v1/checkout', { quoteId: aId, optionId: express.id, idempotencyKey: crypto.randomUUID() })).json().catch(() => ({}))) as { checkoutSessionId?: string; amountPaise?: number; simulated?: boolean }
+        const expectedTotal = quoteChargeAmounts({ pricePaise: 1000000, gstIncluded: false, commissionBps: 0 }).totalPaise
+        if (co.simulated && co.checkoutSessionId) {
+          const sim = (await (await api(buyer.token, '/api/v1/checkout/simulate', { checkoutSessionId: co.checkoutSessionId })).json().catch(() => ({}))) as { orderId?: string }
+          const { data: ord } = await admin.from('orders').select('id, total_paise, delivery_days').eq('id', sim.orderId ?? '').maybeSingle()
+          const { data: aq } = await admin.from('quotes').select('status, selected_option_id').eq('id', aId).single()
+          check('11c. accepting Express: order = the option price + GST, days = the option, quote records the option', co.amountPaise === expectedTotal && Number(ord?.total_paise) === expectedTotal && ord?.delivery_days === 4 && aq?.status === 'accepted' && aq?.selected_option_id === express.id,
+            `amount=${co.amountPaise}/${expectedTotal} order=${ord?.total_paise} days=${ord?.delivery_days} sel=${aq?.selected_option_id === express.id}`)
+          const { data: sess } = await admin.from('checkout_sessions').select('id, razorpay_order_id, total_paise').eq('id', co.checkoutSessionId).single()
+          const body = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: `pay_sim_${sess!.id}`, order_id: sess!.razorpay_order_id, amount: Number(sess!.total_paise), method: 'upi' } } } })
+          const rp = await fetch(WEBHOOK_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-razorpay-signature': signWebhookBody(body) }, body })
+          const { count: nOrders } = await admin.from('orders').select('id', { count: 'exact', head: true }).eq('quote_id', aId)
+          check('11d. a replayed capture creates nothing', rp.status === 200 && nOrders === 1, `replay=${rp.status} orders=${nOrders}`)
+          const compareFlag = (process.env['EXP_V3_COMPARE'] ?? 'off').trim().toLowerCase()
+          if (compareFlag !== '' && compareFlag !== 'off' && compareFlag !== '0') {
+            const { data: lost } = await admin.from('quote_events').select('payload').eq('quote_id', bId).eq('event_type', 'lost').maybeSingle()
+            const want = quoteLossLabel({ pricePaise: 750000, gstIncluded: false, deliveryDays: 8 }, { id: aId, pricePaise: 1000000, gstIncluded: false, deliveryDays: 4 })
+            const got = (lost?.payload ?? {}) as Record<string, unknown>
+            check('11e. the loss label is against the winning option (Express), not Standard', got['price_delta_paise'] === want.price_delta_paise && got['days_delta'] === want.days_delta, JSON.stringify(got))
+          }
+        } else {
+          console.log('  ⏭ 11c–e SKIPPED (real gateway: no simulate)')
+        }
+      }
+    } finally {
+      if (optBefore) await admin.from('agent_settings').upsert({ key: 'quote_options_enabled', value: optBefore.value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      else await admin.from('agent_settings').delete().eq('key', 'quote_options_enabled')
+    }
   }
 
   // ── Criterion 6: expiry → RFQ 'expired' + its submitted quotes 'expired' (+ event) ─

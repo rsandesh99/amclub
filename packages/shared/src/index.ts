@@ -55,6 +55,8 @@ export * from './insights-v3'
 export * from './quote-loss'
 export * from './order-workspace-v3'
 export * from './order-messages'
+export * from './mobile-v3'
+export * from './motion'
 
 // N9 — public measured stats (gated; never the composite score)
 export * from './public-stats'
@@ -85,6 +87,20 @@ export * from './profile'
 
 // UI locale + provider spoken-language single sources of truth (S3)
 export * from './locales'
+export * from './i18n-text'
+export * from './voice-languages'
+export * from './content-translation'
+export * from './shadow'
+export * from './specs'
+export * from './data-capture'
+// Experience v3 E12a (ADR 019) — package add-ons: schemas, the ONE packageCharge rule, snapshots, invoice lines
+export * from './addons'
+// Experience v3 E12b (ADR 020) — quote speed options (Economy / Standard / Express): coherence, choices, extremes
+export * from './quote-options'
+// Experience v3 E12c (ADR 021) — compliance bundles: milestones, the exact per-child split, the frozen plan
+export * from './bundles'
+// Experience v3 E17 (N36, gated D-UX2) — analytics consent: versioned notice, cookie + stored record, consent rate
+export * from './analytics-consent'
 
 // Agentic assistant contract: task classes → tiers, personas, tool allowlists,
 // confirm gates, event kinds (H0 groundwork, DESIGN.md §8.6 / ADR-008)

@@ -28,24 +28,43 @@ export interface GoodsDossier {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/** Longest return window across the order's line-item categories. */
-export async function returnWindowHoursForOrder(admin: Admin, order: any): Promise<number> {
+/** The Mart categories of an order's lines (a quoted line carries its own; catalogue lines resolve through the product). */
+async function orderCategorySlugs(admin: Admin, order: any): Promise<string[]> {
   const lines = (order.line_items ?? []) as GoodsLineItem[]
-  if (lines.length === 0) return 0
-  // A line carries its own category when it was quoted without a listing (M2);
-  // catalogue lines resolve through the product.
   const slugs = new Set<string>(lines.map((l) => l.category_slug).filter((x): x is string => !!x))
   const productIds = lines.filter((l) => !l.category_slug && l.product_id).map((l) => l.product_id as string)
   if (productIds.length > 0) {
     const { data: prods } = await admin.from('products').select('id, category_slug').in('id', productIds)
     for (const p of prods ?? []) slugs.add((p as any).category_slug as string)
   }
+  return [...slugs]
+}
+
+/** Longest return window across the order's line-item categories. */
+export async function returnWindowHoursForOrder(admin: Admin, order: any): Promise<number> {
+  const lines = (order.line_items ?? []) as GoodsLineItem[]
+  if (lines.length === 0) return 0
   let hours = 0
-  for (const slug of [...slugs]) {
+  for (const slug of await orderCategorySlugs(admin, order)) {
     const cat = await getMartCategory(admin, slug)
     hours = Math.max(hours, cat?.return_window_hours ?? 0)
   }
   return hours
+}
+
+/**
+ * E16 N43 — an order is returnable when any of its categories is. A wholly
+ * non-returnable order still takes damaged / wrong / short claims (shared
+ * returnAllowed). Never read by the release gate (money timing is unchanged).
+ */
+export async function orderReturnable(admin: Admin, order: any): Promise<boolean> {
+  const slugs = await orderCategorySlugs(admin, order)
+  if (slugs.length === 0) return true
+  for (const slug of slugs) {
+    const cat = await getMartCategory(admin, slug)
+    if (!cat || cat.returnable !== false) return true
+  }
+  return false
 }
 
 /** Build the goods dossier for one order from its events. */

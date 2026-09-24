@@ -5,6 +5,7 @@ import { getAgentSetting } from '@/lib/agent/settings'
 import { isOnFor } from '@/lib/experiments'
 import { createNotification } from '@/lib/notifications/create'
 import { resolveActor } from './actor'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -144,8 +145,8 @@ export async function sendOrderMessage(admin: Admin, thread: OrderThread, userId
         userId: thread.counterpartyUserId,
         kind: 'order_message',
         // Never the message text: the order number (the WhatsApp template's only parameter) and the order title in-app.
-        titleI18n: { en: `New message on order ${thread.orderNumber}`, hi: `ऑर्डर ${thread.orderNumber} पर नया संदेश`, te: `ఆర్డర్ ${thread.orderNumber}లో కొత్త సందేశం`, ta: `ஆர்டர் ${thread.orderNumber} இல் புதிய செய்தி` },
-        bodyI18n: { en: thread.title, hi: thread.title },
+        titleI18n: notifyText('order_message.title', { ref: thread.orderNumber }),
+        bodyI18n: sameText(thread.title),
         link,
         channels: ['whatsapp'],
       })

@@ -7,8 +7,8 @@
  */
 import 'server-only'
 import { effectiveCostAfterItcPaise, resolveTier } from '@amclub/shared'
-import { createPublicClient } from '@/lib/supabase/server'
-import type { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, createPublicClient } from '@/lib/supabase/server'
+import { withActiveBadges } from './promises'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -21,7 +21,7 @@ export interface TierRow {
 export interface TierDisplay extends TierRow {
   unit_gst_paise: number
   unit_incl_gst_paise: number
-  /** For GST-registered buyers: cost after input credit = taxable value. */
+  /** For GST-registered buyers: cost after input credit = taxable value (incl. GST when the category is ITC-ineligible, E16 N43). */
   unit_after_itc_paise: number
 }
 
@@ -38,6 +38,19 @@ export interface ProductSummary {
   countryOfOrigin: string
   brand: string | null
   specs: { k: string; v: string }[]
+  /** E16 N40 — typed attributes, validated per category by the seller routes (staged 0069). */
+  attributes: Record<string, string | number | boolean>
+  /**
+   * E16 N41 — promises. Public reads carry only the ACTIVE badges (repeated
+   * breaches remove one); seller reads carry what the seller opted into.
+   */
+  promises: string[]
+  /** E16 N43 — the category's flags ("Not returnable", "ITC may not be available"). */
+  returnable: boolean
+  itcEligible: boolean
+  /** E16 N42 — the seller's sample price (paise, pre-GST) and its server display; null = no samples. */
+  samplePricePaise: number | null
+  sample: TierDisplay | null
   availability: 'in_stock' | 'lead_time'
   leadTimeDays: number | null
   status: string
@@ -59,19 +72,21 @@ export interface ProductSummary {
   createdAt: string
 }
 
-export function tierDisplay(t: TierRow, gstRateBps: number): TierDisplay {
+export function tierDisplay(t: TierRow, gstRateBps: number, itcEligible = true): TierDisplay {
   const unitGst = Math.round((t.unit_price_paise * gstRateBps) / 10000)
   return {
     min_qty: t.min_qty,
     unit_price_paise: t.unit_price_paise,
     unit_gst_paise: unitGst,
     unit_incl_gst_paise: t.unit_price_paise + unitGst,
-    unit_after_itc_paise: effectiveCostAfterItcPaise({ taxablePaise: t.unit_price_paise }),
+    // No input credit on an ITC-ineligible category: the effective cost is the GST-inclusive price.
+    unit_after_itc_paise: itcEligible ? effectiveCostAfterItcPaise({ taxablePaise: t.unit_price_paise }) : t.unit_price_paise + unitGst,
   }
 }
 
 const SELECT =
-  'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, brand, specs, availability, lead_time_days, list_price_paise, status, created_at, ' +
+  'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, brand, specs, attributes, promises, sample_price_paise, availability, lead_time_days, list_price_paise, status, created_at, ' +
+  'category:mart_categories(returnable, itc_eligible), ' +
   'seller:provider_profiles!inner(id, display_name, slug, city, state, avg_rating, review_count, completed_orders, top_rated), tiers:price_tiers(min_qty, unit_price_paise)'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -80,7 +95,9 @@ export function mapProduct(r: any): ProductSummary {
     .map((t) => ({ min_qty: Number(t.min_qty), unit_price_paise: Number(t.unit_price_paise) }))
     .sort((a, b) => a.min_qty - b.min_qty)
   const gst = Number(r.gst_rate_bps)
-  const displays = tiers.map((t) => tierDisplay(t, gst))
+  const category = Array.isArray(r.category) ? r.category[0] : r.category
+  const itcEligible = category?.itc_eligible !== false
+  const displays = tiers.map((t) => tierDisplay(t, gst, itcEligible))
   const seller = Array.isArray(r.seller) ? r.seller[0] : r.seller
   return {
     id: r.id,
@@ -95,6 +112,12 @@ export function mapProduct(r: any): ProductSummary {
     countryOfOrigin: r.country_of_origin ?? 'IN',
     brand: r.brand ?? null,
     specs: Array.isArray(r.specs) ? (r.specs as { k: string; v: string }[]) : [],
+    attributes: r.attributes && typeof r.attributes === 'object' && !Array.isArray(r.attributes) ? (r.attributes as Record<string, string | number | boolean>) : {},
+    promises: Array.isArray(r.promises) ? (r.promises as string[]) : [],
+    returnable: category?.returnable !== false,
+    itcEligible,
+    samplePricePaise: r.sample_price_paise == null ? null : Number(r.sample_price_paise),
+    sample: r.sample_price_paise == null ? null : tierDisplay({ min_qty: 1, unit_price_paise: Number(r.sample_price_paise) }, gst, itcEligible),
     availability: r.availability === 'lead_time' ? 'lead_time' : 'in_stock',
     leadTimeDays: r.lead_time_days == null ? null : Number(r.lead_time_days),
     status: r.status,
@@ -127,6 +150,8 @@ export interface ProductListFilters {
   /** Bounds on the min_qty=1 tier price, paise. */
   minPricePaise?: number
   maxPricePaise?: number
+  /** E16 N40 — facet filters (shared parseAttributeFilters: facetable keys, typed values). */
+  attrs?: Record<string, string | boolean>
   sort?: ProductSort
   limit?: number
   offset?: number
@@ -152,6 +177,7 @@ export async function listPublicProducts(f: ProductListFilters): Promise<{ produ
   if (f.brand) q = q.ilike('brand', f.brand)
   if (f.minPricePaise !== undefined) q = q.gte('list_price_paise', f.minPricePaise)
   if (f.maxPricePaise !== undefined) q = q.lte('list_price_paise', f.maxPricePaise)
+  if (f.attrs && Object.keys(f.attrs).length > 0) q = q.contains('attributes', f.attrs)
   if (f.query) {
     // Postgres FTS over the generated search_tsv (name + description + HSN);
     // hybrid dense search is a later trigger (MART_DESIGN.md §6).
@@ -162,15 +188,43 @@ export async function listPublicProducts(f: ProductListFilters): Promise<{ produ
     console.error('[listPublicProducts]', error.message)
     return { products: [], total: 0, nextOffset: null }
   }
-  const products = (data ?? []).map(mapProduct)
+  const products = await withActiveBadges(await createAdminClient(), (data ?? []).map(mapProduct))
   const total = count ?? products.length
   return { products, total, nextOffset: offset + products.length < total ? offset + products.length : null }
+}
+
+/**
+ * E16 N40 — the attributes of every active listing in a category (and query),
+ * for facet counts (shared countAttributeFacets). Ignores the attribute filters
+ * themselves so a chosen facet still shows its siblings. Capped at 500 rows.
+ */
+export async function attributeFacetRows(f: Pick<ProductListFilters, 'category' | 'query' | 'brand' | 'sellerSlug'>): Promise<{ attributes: unknown }[]> {
+  if (!f.category) return []
+  let q = createPublicClient().from('products').select(f.sellerSlug ? 'attributes, seller:provider_profiles!inner(slug)' : 'attributes').eq('status', 'active').is('deleted_at', null).eq('category_slug', f.category).limit(500)
+  if (f.sellerSlug) q = q.eq('seller.slug', f.sellerSlug)
+  if (f.brand) q = q.ilike('brand', f.brand)
+  if (f.query) q = q.textSearch('search_tsv', f.query, { type: 'plain', config: 'simple' })
+  const { data, error } = await q
+  if (error) {
+    console.error('[attributeFacetRows]', error.message)
+    return []
+  }
+  return (data ?? []) as unknown as { attributes: unknown }[]
 }
 
 /** One public product (anon client; null when not visible). */
 export async function getPublicProduct(id: string): Promise<ProductSummary | null> {
   const { data } = await createPublicClient().from('products').select(SELECT).eq('id', id).is('deleted_at', null).maybeSingle()
-  return data ? mapProduct(data) : null
+  if (!data) return null
+  const [product] = await withActiveBadges(await createAdminClient(), [mapProduct(data)])
+  return product ?? null
+}
+
+/** E16 N44 — several public listings by id (anon client → only the ones still live), as displayed today. */
+export async function getPublicProductsByIds(ids: string[]): Promise<ProductSummary[]> {
+  if (!ids.length) return []
+  const { data } = await createPublicClient().from('products').select(SELECT).in('id', ids.slice(0, 200)).eq('status', 'active').is('deleted_at', null)
+  return (data ?? []).map(mapProduct)
 }
 
 /** Seller's own catalog (service role; caller has verified ownership of sellerId). */

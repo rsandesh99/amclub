@@ -1,7 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { Link } from '@/i18n/navigation'
+import { routing, type AppLocale } from '@/i18n/routing'
+import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 import { Package, ShieldCheck } from 'lucide-react'
 import type { ActionItem } from '@amclub/shared'
 import { INDIAN_STATES } from '@/lib/constants/india'
@@ -38,6 +41,7 @@ function Panel({ density, children }: { density: 'comfortable' | 'compact'; chil
 
 export function UiGallery() {
   const t = useTranslations('dev_ui')
+  const locale = useLocale()
   const [seg, setSeg] = useState<'extra' | 'included' | 'na'>('extra')
   const [state, setState] = useState<string | null>('TS')
   const [sheet, setSheet] = useState(false)
@@ -96,7 +100,25 @@ export function UiGallery() {
         <header>
           <h1 className="t-large-title">{t('title')}</h1>
           <p className="t-subhead mt-1 text-foreground-secondary">{t('subtitle')}</p>
+          {/* E14 FR-14.6 — every component in all four languages: the same gallery per locale. */}
+          <nav aria-label={t('locales')} className="mt-3 flex flex-wrap items-center gap-2" data-testid="devui-locales">
+            <span className="t-footnote text-foreground-secondary">{t('locales')}</span>
+            {(routing.locales as readonly AppLocale[]).map((l) => (
+              <Link key={l} href="/admin/dev/ui" locale={l} lang={l} aria-current={l === locale ? 'page' : undefined} className={`rounded-button border px-3 py-1.5 text-sm ${l === locale ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-border bg-surface'}`}>
+                {LOCALE_LABELS[l]}
+              </Link>
+            ))}
+          </nav>
         </header>
+        {/* FR-14.6 — long strings: buttons size to their label (never a fixed width); only names truncate, with the full text on hover / focus. */}
+        <section className="space-y-2 rounded-sheet bg-surface p-4 shadow-xs" data-testid="devui-stress">
+          <p className="t-footnote font-medium text-foreground-secondary">{t('stress')}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="min-h-11 rounded-button bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">{t('stress_button')}</button>
+            <button type="button" className="min-h-11 rounded-button border border-border px-4 py-2 text-sm">{t('empty_body')}</button>
+          </div>
+          <p className="max-w-[12rem] truncate text-sm" title="Sri Venkateswara Tax & Accounting Consultants LLP" tabIndex={0}>Sri Venkateswara Tax & Accounting Consultants LLP</p>
+        </section>
         <section className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           {SWATCHES.map((s) => (
             <div key={s} className="overflow-hidden rounded-card bg-surface shadow-xs">

@@ -40,15 +40,8 @@ export function formatResponseTime(minutes: number | null | undefined): string |
   return `~${days}d`
 }
 
-/** Pick a localized string from an {en, hi} map, falling back to en. */
-export function pickI18n(
-  map: { en: string; hi?: string | undefined } | null | undefined,
-  locale: string,
-): string {
-  if (!map) return ''
-  if (locale === 'hi' && map.hi) return map.hi
-  return map.en
-}
+/** E14 FR-14.2 — the ONE picker ({ en, hi?, te?, ta? }, own slot else English), shared with mobile. */
+export { pickI18n } from '@amclub/shared'
 
 /** Initials for a logo-less avatar, e.g. "Sharma & Associates" → "SA". */
 export function initials(name: string): string {

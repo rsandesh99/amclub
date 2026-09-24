@@ -1,6 +1,7 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createPublicClient } from '@/lib/supabase/server'
+import { DEFAULT_PROMISE_BREACH_LIMIT, promiseBreachLimitSchema, type PromiseBreachLimit } from '@amclub/shared'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -14,9 +15,13 @@ export interface MartCategoryRow {
   sort_order: number | null
   /** §9.2 — who bears return freight (0025). */
   return_freight_payer: 'seller' | 'buyer' | 'split'
+  /** E16 N43 (0069, staged) — false = "Not returnable" (damaged / wrong / short stay claimable). */
+  returnable: boolean
+  /** E16 N43 — the CA-reviewed §17(5) flag; false = "ITC may not be available on this item". */
+  itc_eligible: boolean
 }
 
-const CATEGORY_COLS = 'slug, name_i18n, return_window_hours, commission_bps, bis_blocked, is_active, sort_order, return_freight_payer'
+const CATEGORY_COLS = 'slug, name_i18n, return_window_hours, commission_bps, bis_blocked, is_active, sort_order, return_freight_payer, returnable, itc_eligible'
 
 /** Public list of active, non-blocked Mart categories (anon client, RLS). */
 export async function listMartCategories(): Promise<MartCategoryRow[]> {
@@ -71,6 +76,12 @@ export async function getTdsConfig(admin: Admin): Promise<TdsConfig> {
 export async function getEwayBillThresholdPaise(admin: Admin): Promise<number> {
   const v = await getMartSetting<number | string>(admin, 'eway_bill_threshold_paise', 5_000_000)
   return Number(v)
+}
+
+export async function getPromiseBreachLimit(admin: Admin): Promise<PromiseBreachLimit> {
+  const v = await getMartSetting<unknown>(admin, 'promise_breach_limit', DEFAULT_PROMISE_BREACH_LIMIT)
+  const r = promiseBreachLimitSchema.safeParse(v)
+  return r.success ? r.data : { ...DEFAULT_PROMISE_BREACH_LIMIT }
 }
 
 export async function getAutoApproveAfterListings(admin: Admin): Promise<number> {

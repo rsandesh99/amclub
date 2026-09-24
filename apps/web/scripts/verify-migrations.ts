@@ -367,6 +367,64 @@ const MANIFEST: Entry[] = [
     tables: [],
     note: "E8b / N24: order threads reuse conversations (context_type 'order'); conversations parties read-only + writes revoked; admin read on conversations + messages; messages_conversation_created_idx",
   },
+  {
+    file: '0060_category_names_te_ta.sql',
+    tables: [],
+    note: 'E14 / FR-14.2: te + ta slots merged into categories.name_i18n / description_i18n (data only)',
+  },
+  {
+    file: '0061_content_translations.sql',
+    tables: ['content_translations'],
+    triggers: [['content_translations', 'content_translations_set_updated_at']],
+    note: "E14 / N32b (dark): content_translations (drafts; provider reads own, service role writes); packages.i18n_sources, provider_profiles.about_i18n + i18n_sources; ai_decisions CHECK + 'content_translation'",
+  },
+  {
+    file: '0062_shadow_predictions_specs.sql',
+    tables: ['shadow_predictions'],
+    triggers: [['shadow_predictions', 'shadow_predictions_set_updated_at']],
+    note: 'E15 / F3 + F10: rfqs.cad_features (deterministic CAD parse); shadow_predictions (service role only; subject ids only; 24-month retention)',
+  },
+  {
+    file: '0063_search_telemetry_corpora.sql',
+    tables: ['search_queries', 'corpus_voice_triples', 'corpus_image_pairs', 'service_synonyms'],
+    triggers: [['service_synonyms', 'service_synonyms_set_updated_at']],
+    note: 'E15 / F4-F6: search_queries (sample, no user id, 180 days); checkout_sessions / orders .attribution; users.corpus_consent_at; consented text-only corpora (service role); service_synonyms (anyone reads reviewed rows)',
+  },
+  {
+    file: '0064_server_written_money.sql',
+    tables: [],
+    note: 'ADR 018 security hotfix: EXECUTE on materialize_order / claim_quote_slot / release_quote_slot / increment_coupon_usage for service_role only; no client INSERT/UPDATE/DELETE on orders, checkout_sessions, payments, payouts, refunds, invoices, disputes, order_documents, rfqs, quotes, rfq_matches, coupons, coupon_redemptions, provider_bank_accounts, reviews',
+  },
+  {
+    file: '0065_package_addons.sql',
+    tables: ['package_addons'],
+    functions: ['package_addons_limit', 'checkout_sessions_copy_addons'],
+    triggers: [['package_addons', 'package_addons_limit'], ['checkout_sessions', 'checkout_sessions_copy_addons']],
+    note: 'E12a / ADR 019: package_addons (<= 3 active, public reads active of active packages, provider reads own, no client writes); checkout_sessions.addons + orders.addons snapshot, copied by trigger when materialize_order links the session',
+  },
+  {
+    file: '0066_quote_options.sql',
+    tables: ['quote_options'],
+    note: 'E12b / ADR 020: quote_options (economy / express per quote revision, immutable, service role only); quotes.selected_option_id; checkout_sessions.quote_option_id',
+  },
+  {
+    file: '0067_bundles.sql',
+    tables: ['bundle_milestones', 'bundle_purchases'],
+    functions: ['checkout_sessions_materialize_bundle'],
+    triggers: [['checkout_sessions', 'checkout_sessions_materialize_bundle']],
+    note: 'E12c / ADR 021: bundle_milestones + bundle_purchases (no client writes); orders.bundle_purchase_id / bundle_seq / available_at; checkout_sessions.bundle_plan; trigger turns the materialised order into child 1 and inserts children 2..N from the frozen plan',
+  },
+  {
+    file: '0068_analytics_consent.sql',
+    tables: [],
+    note: 'E17 / N36 (gated D-UX2): users.analytics_consent (service role writes via /api/v1/me/analytics-consent)',
+  },
+  {
+    file: '0069_mart_storefront_v2.sql',
+    tables: ['mart_category_attributes', 'mart_promise_breaches', 'mart_reorder_reminders'],
+    note: 'E16 Mart storefront v2 (STAGED with 0022–0025): typed category attributes + products.attributes (N40), promises + breaches (N41), sample price (N42), mart_categories.returnable / itc_eligible (N43), reorder reminders (N44)',
+    staged: true,
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]
