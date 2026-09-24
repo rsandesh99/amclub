@@ -153,7 +153,7 @@ any → held               (dispute open, provider suspended, or bank verificati
   - **A capture with no live session makes no order:** `capture_payment()` records a `capture_exceptions` row (expired session / second capture) and it is refunded in full; checkout never resumes an expired session.
   - `manual_refund` follows ADR-014 (`platformAbsorbs` only by explicit confirm); `payoutRunBlockers` refuses a full payout beside a refund.
 - **ADR-029 landed (audit wave 5b, migration 0081; applied to production 2026-09-24):** coupon uses are claimed under the coupon's row lock before any payment opens (`claim_coupon_for_session`; optional `per_buyer_limit`); **no self-dealing** (`lib/orders/self-dealing.ts`: 409 `self_dealing` on checkout, own-request quotes, order actions and own reviews; fan-outs skip the buyer's own provider); `sweepMissingPayouts` backfills a completed order's missing payout; money crons run in bounded batches inside `timeBudget` with `maxDuration = 300`. Admin verification / coupon / CMS decisions are audit-logged.
-- **Audit wave 5c landed (migrations 0077, 0082, 0083):**
+- **Audit wave 5c landed (migrations 0077, 0082, 0083; applied to production 2026-09-24):**
   - **Goods returns** from `completed` close at the earlier of the category window and `dispute_window_days` (shared `goodsReturnDeadline`; the server sends it).
   - **Listings:** a material edit goes back to `pending_approval`; approval names `reviewed_updated_at`; pools freeze GST / HSN / unit at open and checkout charges the frozen values.
   - **Group requests:** a group quote is never revised (`quotes.pool_member_id`); a dual-role user (buyer + provider) is kept out of pools; the close holds a per-pool lease.
