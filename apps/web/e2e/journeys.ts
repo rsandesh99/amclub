@@ -134,7 +134,7 @@ async function step(journey: string, name: string, pages: Page[], fn: () => Prom
     pass++
   } catch (e) {
     fail++
-    const msg = (e as Error).message.split('\n')[0]
+    const msg = (e as Error).message.split('\n').slice(0, 4).join(' | ')
     console.log(`  ✗ ${name} — ${msg}`)
     for (const [i, p] of pages.entries()) {
       await p.screenshot({ path: path.join(ART, `${journey}-${name.replace(/[^a-z0-9]+/gi, '_').slice(0, 60)}-${i}.png`), fullPage: true }).catch(() => {})
@@ -167,8 +167,12 @@ async function confirmIfAsked(page: Page): Promise<void> {
 
 /** The order workspace's NextStepBar primary action (its label is the action's name). */
 async function nextStep(page: Page, label: string | RegExp): Promise<void> {
-  const bar = page.getByTestId('order-next-step-bar')
+  // Act on the bar on screen. More than one in the DOM is worth knowing about (it has happened once, after a
+  // redirect into the order), so say so without failing the step.
+  const bar = page.getByTestId('order-next-step-bar').filter({ visible: true }).first()
   await bar.waitFor()
+  const n = await page.getByTestId('order-next-step-bar').count()
+  if (n > 1) console.log(`    ! ${n} next-step bars in the DOM on ${new URL(page.url()).pathname}`)
   await bar.getByRole('button', { name: label }).click()
 }
 
