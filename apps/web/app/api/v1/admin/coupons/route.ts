@@ -1,26 +1,21 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
+import { adminCouponCreateSchema } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
+import { requireNotDelegated } from '@/lib/agent/scope'
+import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
+import { writeAudit } from '@/lib/audit/log'
 import { serverError } from '@/lib/api/errors'
 import { COUPONS_ENABLED } from '@/lib/flags'
 
 /**
  * Admin coupon management (A6 / §5.5). `value` is human units: for percent it's
  * a percentage (10 → 1000 bps); for fixed it's rupees (500 → 50000 paise). All
- * money is normalised to integer paise/bps before storage (§2.5 rule 6).
+ * money is normalised to integer paise/bps before storage (§2.5 rule 6). The
+ * schema is shared `adminCouponCreateSchema` (audit M10 adds `perBuyerLimit`).
  */
-const createSchema = z.object({
-  code: z.string().trim().min(3).max(40).transform((s) => s.toUpperCase()),
-  kind: z.enum(['percent', 'fixed']),
-  value: z.number().positive(),
-  maxDiscountRupees: z.number().nonnegative().optional(),
-  categorySlug: z.string().optional(),
-  validFrom: z.string().datetime(),
-  validTo: z.string().datetime(),
-  usageLimit: z.number().int().positive().optional(),
-}).refine((d) => d.kind !== 'percent' || d.value <= 100, { message: 'Percentage cannot exceed 100', path: ['value'] })
+const createSchema = adminCouponCreateSchema
 
 export async function GET() {
   if (!COUPONS_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -29,7 +24,7 @@ export async function GET() {
   const admin = await createAdminClient()
   const { data } = await admin
     .from('coupons')
-    .select('id, code, kind, value_bps, max_discount_paise, category_id, valid_from, valid_to, usage_limit, used_count, is_active, created_at, category:categories(slug, name_i18n)')
+    .select('id, code, kind, value_bps, max_discount_paise, category_id, valid_from, valid_to, usage_limit, per_buyer_limit, used_count, is_active, created_at, category:categories(slug, name_i18n)')
     .order('created_at', { ascending: false })
     .limit(200)
   return NextResponse.json({ coupons: data ?? [] })
@@ -39,6 +34,11 @@ export async function POST(request: NextRequest) {
   if (!COUPONS_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const gate = await requireAdmin()
   if (gate.error) return gate.error
+  // Audit M11 — a coupon moves money: never an agent tool, rate-limited, audit-logged.
+  const delegated = await requireNotDelegated('POST /admin/coupons')
+  if (delegated) return delegated
+  const rl = await enforce(limiters.adminMutation, `admin:${gate.userId}`)
+  if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
   const json = await request.json().catch(() => null)
   const parsed = createSchema.safeParse(json)
@@ -61,25 +61,26 @@ export async function POST(request: NextRequest) {
   const valueBps = d.kind === 'percent' ? Math.round(d.value * 100) : Math.round(d.value * 100) // %→bps, ₹→paise
   const maxDiscountPaise = d.maxDiscountRupees != null ? Math.round(d.maxDiscountRupees * 100) : null
 
-  const { data: created, error } = await admin
-    .from('coupons')
-    .insert({
-      code: d.code,
-      kind: d.kind,
-      value_bps: valueBps,
-      max_discount_paise: maxDiscountPaise,
-      category_id: categoryId,
-      valid_from: d.validFrom,
-      valid_to: d.validTo,
-      usage_limit: d.usageLimit ?? null,
-      is_active: true,
-    })
-    .select('id, code')
-    .single()
+  const row = {
+    code: d.code,
+    kind: d.kind,
+    value_bps: valueBps,
+    max_discount_paise: maxDiscountPaise,
+    category_id: categoryId,
+    valid_from: d.validFrom,
+    valid_to: d.validTo,
+    usage_limit: d.usageLimit ?? null,
+    // Audit M10 (0081) — uses per buyer business; absent = unlimited (the column's NULL).
+    ...(d.perBuyerLimit != null ? { per_buyer_limit: d.perBuyerLimit } : {}),
+    is_active: true,
+  }
+  const { data: created, error } = await admin.from('coupons').insert(row).select('id, code').single()
 
   if (error) {
     if (error.code === '23505') return NextResponse.json({ error: 'A coupon with this code already exists' }, { status: 409 })
     return serverError('[admin/coupons POST]', error)
   }
+  // §7 — every admin mutation is audit-logged (the whole created row).
+  await writeAudit(admin, request, { actorId: gate.userId, action: 'coupon_create', entity: 'coupons', entityId: created.id, before: null, after: row })
   return NextResponse.json({ ok: true, coupon: created })
 }

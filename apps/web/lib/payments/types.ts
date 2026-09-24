@@ -73,7 +73,12 @@ export interface PaymentGateway {
    * THROWS when it cannot tell (lookup failed, or too many transfers to scan):
    * "unknown" must never read as "no transfer", or a retry would pay twice.
    */
-  findTransfer(params: { payoutId: string; sinceUnixSeconds: number }): Promise<GatewayTransfer | null>
+  findTransfer(params: {
+    payoutId: string
+    sinceUnixSeconds: number
+    /** ADR 027 — transfers the gateway reported failed / reversed for this payout: never a settlement. */
+    excludeTransferIds?: readonly string[]
+  }): Promise<GatewayTransfer | null>
 
   /** Fetch a single payment — used by reconciliation / dropped-webhook recovery. */
   fetchPayment(razorpayPaymentId: string): Promise<GatewayPayment | null>

@@ -28,6 +28,8 @@ export interface CheckoutStart {
   /** Resume of a session whose payment was already captured. */
   alreadyPaid?: boolean
   orderId?: string | null
+  /** ADR 027 (M21) — seconds until the frozen session expires; the sheet closes then (Razorpay `timeout`). */
+  checkoutTimeoutSeconds?: number
 }
 
 export class CheckoutError extends Error {
@@ -69,8 +71,18 @@ export const CHECKOUT_ERROR_KEYS: Record<string, string> = {
   option_not_found: 'err_quote_unavailable',
   razorpay_load_failed: 'err_razorpay_load_failed',
   payments_unavailable: 'err_payments_unavailable',
+  checkout_expired: 'err_checkout_expired',
+  // Audit M10 — the coupon's last use (total or per buyer) went to another checkout.
+  coupon_unavailable: 'err_coupon_unavailable',
+  // Audit M22 — a buyer's own provider (or seller) profile.
+  self_dealing: 'err_self_dealing',
   network: 'err_network',
   rate_limited: 'err_rate_limited',
+}
+
+/** ADR 027 (M21) — the server refused to resume an expired session: the caller drops its idempotency key so the next tap starts a fresh checkout. */
+export function isCheckoutExpired(e: unknown): boolean {
+  return e instanceof CheckoutError && e.code === 'checkout_expired'
 }
 
 /** Map a code to a translation key via `keys`; unknown codes → `fallback`. */
@@ -145,6 +157,9 @@ export async function payCheckout(
     currency: 'INR',
     name: 'AMClub',
     description: opts.description,
+    // ADR 027 (M21): the sheet closes when the server's frozen session expires (a
+    // later capture creates no order and is refunded in full).
+    ...(typeof data.checkoutTimeoutSeconds === 'number' && data.checkoutTimeoutSeconds > 0 ? { timeout: data.checkoutTimeoutSeconds } : {}),
     // Redirect is cosmetic; the order appears once the webhook fires.
     handler: () => opts.onPaid({ kind: 'processing' }),
     modal: { ondismiss: () => opts.onDismiss() },

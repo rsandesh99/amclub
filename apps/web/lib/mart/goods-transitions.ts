@@ -33,6 +33,7 @@ import { safeGenerateInvoices, schedulePayout, settleCancellationRefund, type Ac
 import { notifyOrderTransition } from '@/lib/notifications/events'
 import { getEwayBillThresholdPaise } from './config'
 import { orderReturnable } from './release'
+import { SELF_DEALING, isSelfDealtOrder } from '@/lib/orders/self-dealing'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -98,6 +99,10 @@ export async function applyGoodsTransition(
   if (!rule) return { ok: false, status: 400, error: 'Unknown action' }
   if (!(rule.actor === 'msme' ? isMsme : isProvider)) {
     return { ok: false, status: 403, error: `Only the ${rule.actor === 'msme' ? 'buyer' : 'seller'} can ${action}` }
+  }
+  // Audit M22 (ADR 029) — the same rule as services: only the buyer's cancel (a refund to the payer).
+  if (action !== 'cancel' && (await isSelfDealtOrder(admin, order, actor.userId))) {
+    return { ok: false, status: 409, error: SELF_DEALING }
   }
   const from = order.status as OrderStatus
   if (!rule.from.includes(from)) return { ok: false, status: 409, error: `Cannot ${action} from status '${from}'` }

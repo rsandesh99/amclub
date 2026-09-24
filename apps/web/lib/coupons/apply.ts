@@ -1,4 +1,5 @@
 import 'server-only'
+import { perBuyerLimitReached, type CouponClaimResult } from '@amclub/shared'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -8,6 +9,7 @@ export type CouponError =
   | 'not_started'
   | 'expired'
   | 'usage_exceeded'
+  | 'per_buyer_exceeded'
   | 'category_mismatch'
 
 export interface CouponEvaluation {
@@ -25,18 +27,23 @@ export interface CouponEvaluation {
  * integer paise throughout (§2.5 rule 6).
  *
  * `taxableBeforeCoupon` is the post-listing-discount, pre-GST base in paise.
+ * `buyerRedemptions` is how many times this buyer has redeemed the coupon
+ * (audit M10: `coupons.per_buyer_limit`). These are the pre-checks; the
+ * checkout's claim (`claim_coupon_for_session`) is the atomic authority.
  */
 export function evaluateCoupon(
   coupon: any | null,
   taxableBeforeCoupon: number,
   categoryId: string | null,
-  now: Date = new Date(),
+  opts: { now?: Date; buyerRedemptions?: number } = {},
 ): CouponEvaluation {
+  const now = opts.now ?? new Date()
   if (!coupon) return { discountPaise: 0, error: 'not_found' }
   if (!coupon.is_active) return { discountPaise: 0, error: 'inactive', code: coupon.code }
   if (coupon.valid_from && new Date(coupon.valid_from) > now) return { discountPaise: 0, error: 'not_started', code: coupon.code }
   if (coupon.valid_to && new Date(coupon.valid_to) < now) return { discountPaise: 0, error: 'expired', code: coupon.code }
   if (coupon.usage_limit != null && coupon.used_count >= coupon.usage_limit) return { discountPaise: 0, error: 'usage_exceeded', code: coupon.code }
+  if (perBuyerLimitReached(coupon.per_buyer_limit, opts.buyerRedemptions ?? 0)) return { discountPaise: 0, error: 'per_buyer_exceeded', code: coupon.code }
   if (coupon.category_id && categoryId && coupon.category_id !== categoryId) return { discountPaise: 0, error: 'category_mismatch', code: coupon.code }
 
   let discount = 0
@@ -54,6 +61,23 @@ export const COUPON_ERROR_KEY: Record<CouponError, string> = {
   not_started: 'coupon_not_started',
   expired: 'coupon_expired',
   usage_exceeded: 'coupon_usage_exceeded',
+  per_buyer_exceeded: 'coupon_per_buyer_exceeded',
   category_mismatch: 'coupon_category_mismatch',
+}
+
+/**
+ * Audit M10 — why the checkout's claim refused the coupon, as a key in the
+ * `coupons` messages namespace (the checkout answers 409 `coupon_unavailable`
+ * with it as `couponError`). `null` is a claim the database could not answer.
+ */
+export function couponClaimRefusalKey(r: CouponClaimResult | null): string {
+  switch (r) {
+    case 'usage_exceeded': return 'coupon_usage_exceeded'
+    case 'per_buyer_exceeded': return 'coupon_per_buyer_exceeded'
+    case 'per_buyer_pending': return 'coupon_in_checkout'
+    case 'inactive': return 'coupon_inactive'
+    case 'not_found': return 'coupon_not_found'
+    default: return 'coupon_unavailable'
+  }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

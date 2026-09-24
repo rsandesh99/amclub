@@ -94,7 +94,11 @@ const EVENT_LABEL: Record<string, string> = {
 // finalizeQuoteAcceptance are for the admin queue; the buyer gets a notification.
 // ADR 026: refund_failed / invoice_failed / payout_unconfirmed are ops markers
 // (the sweepers finish the work); the parties see the outcome, not the retries.
-const HIDDEN_EVENTS = new Set(['placed_side_effects', 'requirements_data', 'duplicate_rfq_order', 'quote_not_live_at_payment', 'refund_failed', 'invoice_failed', 'payout_unconfirmed'])
+const HIDDEN_EVENTS = new Set([
+  'placed_side_effects', 'requirements_data', 'duplicate_rfq_order', 'quote_not_live_at_payment', 'refund_failed', 'invoice_failed', 'payout_unconfirmed',
+  // ADR 027: gateway truth recorded for ops (a second capture, a closed RFQ at payment, refund / transfer / chargeback webhooks).
+  'duplicate_capture', 'rfq_not_live_at_payment', 'refund_confirmed', 'payout_partially_reversed', 'chargeback_opened', 'chargeback_lost', 'chargeback_won', 'chargeback_closed',
+])
 // Provider-money events are shown to the provider only.
 const PROVIDER_ONLY_EVENTS = new Set(['payout_held', 'payout_scheduled', 'payout_released', 'payout_paid', 'payout_failed', 'payout_voided'])
 
@@ -273,7 +277,7 @@ function ServicesOrderWorkspace({
         body: JSON.stringify(body),
       })
       const d = await res.json().catch(() => ({}))
-      if (!res.ok) return d.error === 'dispute_window_closed' ? t('dispute_window_closed') : typeof d.error === 'string' ? d.error : t('action_failed')
+      if (!res.ok) return d.error === 'dispute_window_closed' ? t('dispute_window_closed') : d.error === 'self_dealing' ? t('self_dealing') : typeof d.error === 'string' ? d.error : t('action_failed')
       return null
     } catch {
       return t('action_failed')

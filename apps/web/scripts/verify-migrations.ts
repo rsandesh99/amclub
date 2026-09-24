@@ -460,9 +460,20 @@ const MANIFEST: Entry[] = [
     note: 'Audit M15: pools.rationale (source order ids, seller 30-day volume) not client-readable; column grant built from the catalogue; no-op without the Mart tables',
   },
   {
+    file: '0078_payment_truth.sql',
+    tables: ['capture_exceptions'],
+    functions: ['capture_payment'],
+    note: 'ADR 027 (audit M21 / M39): a capture on an expired or already-paid session is recorded in capture_exceptions and refunded, never an order; capture_payment() locks the session and calls materialize_order for a live one (replay-safe); both service-role only',
+  },
+  {
     file: '0080_ops_heartbeat_status_hot_indexes.sql',
     tables: ['cron_heartbeats'],
     note: 'Audit M35 + L7: cron_heartbeats.status / summary (run outcome; no client grant) + hot-table indexes (notifications, payments, checkout_sessions, orders, quotes, rfq_matches, payouts)',
+  },
+  {
+    file: '0081_coupon_claims_self_dealing.sql',
+    functions: ['claim_coupon_for_session', 'record_coupon_redemption'],
+    note: 'Audit M10 + M22 / ADR 029: coupons.per_buyer_limit; checkout_sessions.coupon_claimed_at; claim_coupon_for_session (usage + per-buyer limits decided under the coupon row lock) and record_coupon_redemption (atomic insert + used_count), service_role only; no client privilege on coupons; service_pool_members skip_reason self_dealing',
   },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },

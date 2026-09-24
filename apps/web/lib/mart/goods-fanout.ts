@@ -15,8 +15,10 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
  * (a spec request is exactly the case where nobody lists the item yet).
  */
 export async function fanoutGoodsRfq(admin: Admin, rfq: { id: string; msme_id: string; title: string; mart_category_slug: string | null }): Promise<{ matched: number }> {
-  const { data: msme } = await admin.from('msme_profiles').select('state').eq('id', rfq.msme_id).maybeSingle()
+  const { data: msme } = await admin.from('msme_profiles').select('state, user_id').eq('id', rfq.msme_id).maybeSingle()
   const state = msme?.state ?? null
+  // Audit M22 (ADR 029) — the buyer's own seller profile is never matched to their request.
+  const buyerUserId = (msme?.user_id as string | undefined) ?? null
   const { data: sellers } = await admin
     .from('provider_profiles')
     .select('id, user_id, state')
@@ -24,7 +26,7 @@ export async function fanoutGoodsRfq(admin: Admin, rfq: { id: string; msme_id: s
     .eq('sells_goods', true)
     .eq('capacity_paused', false)
     .is('deleted_at', null)
-  const inState = (sellers ?? []).filter((s) => !state || s.state === state)
+  const inState = (sellers ?? []).filter((s) => (!state || s.state === state) && (!buyerUserId || s.user_id !== buyerUserId))
   if (inState.length === 0) return { matched: 0 }
   let chosen = inState
   if (rfq.mart_category_slug) {

@@ -5,12 +5,13 @@ import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getPaymentGateway } from '@/lib/payments'
-import { paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
+import { checkoutTimeoutSeconds, paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { prepareGoodsCheckout } from '@/lib/mart/totals'
 import { getMartSetting } from '@/lib/mart/config'
 import { serverError } from '@/lib/api/errors'
 import { accountSuspendedResponse } from '@/lib/auth/suspension'
+import { SELF_DEALING, isOwnProvider } from '@/lib/orders/self-dealing'
 
 /**
  * Goods checkout (MART_DESIGN.md §4.3) — the SAME frozen-session → gateway
@@ -60,9 +61,12 @@ export async function POST(request: NextRequest) {
   const prepared = await prepareGoodsCheckout(admin, items, { sample: !!sample })
   if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status })
   const { prep } = prepared
+  // Audit M22 (ADR 029) — a seller never buys their own listings.
+  if (await isOwnProvider(admin, prep.sellerId, userId)) return NextResponse.json({ error: { code: SELF_DEALING } }, { status: 409 })
   const deliveryDays = Number(await getMartSetting<number | string>(admin, 'goods_delivery_days', 3))
 
   // ADR 018 — sessions are server-written only (the buyer is authorised above).
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
   const { data: session, error: insErr } = await admin
     .from('checkout_sessions')
     .upsert(
@@ -90,7 +94,7 @@ export async function POST(request: NextRequest) {
         delivery_snapshot: delivery,
         idempotency_key: idempotencyKey,
         status: 'created',
-        expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        expires_at: expiresAt,
       },
       { onConflict: 'idempotency_key', ignoreDuplicates: true },
     )
@@ -117,6 +121,8 @@ export async function POST(request: NextRequest) {
     amountPaise: prep.amounts.totalPaise,
     keyId: process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'] ?? '',
     simulated: !gateway.isReal,
+    // ADR 027 (M21) — the Razorpay sheet closes when the frozen session expires.
+    checkoutTimeoutSeconds: checkoutTimeoutSeconds(expiresAt),
     // Server-computed display (FRONTEND.md §8): the client renders, never derives.
     amounts: {
       taxablePaise: prep.amounts.taxablePaise,

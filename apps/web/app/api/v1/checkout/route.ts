@@ -1,14 +1,15 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { addonIdsSchema, addonSelectionKey, bundlePlan, bundlePlanSnapshot, couponBasePaise, isValidGstin, packageCharge, quoteChargeAmounts, resolveAddonSelection, type AddonSnapshot, type BundleMilestoneRow, type BundlePlanSnapshot, type OrderAmounts, type PackageAddonRow } from '@amclub/shared'
+import { addonIdsSchema, addonSelectionKey, bundlePlan, bundlePlanSnapshot, couponBasePaise, couponClaimHeld, isValidGstin, packageCharge, quoteChargeAmounts, resolveAddonSelection, type AddonSnapshot, type BundleMilestoneRow, type BundlePlanSnapshot, type OrderAmounts, type PackageAddonRow } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { getPaymentGateway } from '@/lib/payments'
-import { paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
+import { checkoutTimeoutSeconds, MIN_RESUME_SECONDS, paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
-import { evaluateCoupon } from '@/lib/coupons/apply'
+import { COUPON_ERROR_KEY, couponClaimRefusalKey, evaluateCoupon } from '@/lib/coupons/apply'
+import { buyerRedemptions, claimCouponForSession } from '@/lib/coupons/redeem'
 import { COUPONS_ENABLED } from '@/lib/flags'
 import { createAdminClient } from '@/lib/supabase/server'
 import { prepareGoodsQuoteCheckout, type GoodsQuotePrep } from '@/lib/mart/goods-rfq'
@@ -17,6 +18,7 @@ import { storeCheckoutAttribution } from '@/lib/search/attribution'
 import { activeAddonsFor, addonsOn } from '@/lib/addons'
 import { optionForCheckout, quoteOptionsOn } from '@/lib/rfq/quote-options'
 import { offeredMilestones } from '@/lib/bundles'
+import { SELF_DEALING, isOwnProvider } from '@/lib/orders/self-dealing'
 
 const bodySchema = z
   .object({
@@ -69,6 +71,9 @@ type CheckoutErrorCode =
   | 'addon_changed'
   | 'option_not_found'
   | 'payments_unavailable'
+  | 'checkout_expired'
+  | 'coupon_unavailable'
+  | typeof SELF_DEALING
 
 function fail(status: number, code: CheckoutErrorCode, error: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error, code, ...(extra ?? {}) }, { status })
@@ -80,8 +85,9 @@ interface SessionRow {
   total_paise: number
   status: string
   order_id: string | null
+  expires_at: string | null
 }
-const SESSION_COLS = 'id, razorpay_order_id, total_paise, status, order_id'
+const SESSION_COLS = 'id, razorpay_order_id, total_paise, status, order_id, expires_at'
 /** A session whose payment was captured (materialize_order claimed it). */
 const isPaidSession = (s: SessionRow) => !!s.order_id || s.status === 'materializing' || s.status === 'materialized'
 
@@ -89,6 +95,10 @@ const isPaidSession = (s: SessionRow) => !!s.order_id || s.status === 'materiali
  * Resume an existing session (same idempotency key, or a live session for the
  * SAME quote). Never mints a second Razorpay order; once the session is paid
  * the client is sent to the order instead of re-opening the payment sheet.
+ * ADR 027 (audit M21): an unpaid session that has expired (or has less than a
+ * minute left) is never resumed — its frozen price, quote or coupon lapsed; the
+ * client starts a fresh checkout (409 `checkout_expired`). A live one carries
+ * the Razorpay Checkout `timeout` so the sheet closes when the session does.
  */
 function resumeResponse(s: SessionRow) {
   if (isPaidSession(s)) {
@@ -101,6 +111,10 @@ function resumeResponse(s: SessionRow) {
       idempotent: true,
     })
   }
+  const timeout = checkoutTimeoutSeconds(s.expires_at)
+  if (s.status !== 'created' || (timeout !== null && timeout < MIN_RESUME_SECONDS)) {
+    return fail(409, 'checkout_expired', 'This checkout has expired; start again for the current price', { retryAfter: s.expires_at })
+  }
   return NextResponse.json({
     checkoutSessionId: s.id,
     razorpayOrderId: s.razorpay_order_id,
@@ -110,6 +124,7 @@ function resumeResponse(s: SessionRow) {
     // The resume path must say whether to simulate, or a stable client key
     // would open the Razorpay sheet on a simulated order id.
     simulated: !getPaymentGateway().isReal,
+    ...(timeout !== null ? { checkoutTimeoutSeconds: timeout } : {}),
   })
 }
 
@@ -192,6 +207,9 @@ export async function POST(request: NextRequest) {
   /* eslint-disable @typescript-eslint/no-explicit-any */
   let goodsPrep: GoodsQuotePrep | null = null
   let prep: Prep
+  // Audit M10 — the code frozen on the session only when its discount applied
+  // (an unusable code no longer leaves a phantom redemption behind).
+  let appliedCouponCode: string | null = null
 
   if (packageId) {
     const { data: pkg } = await supabase
@@ -234,10 +252,20 @@ export async function POST(request: NextRequest) {
     let extraDiscountPaise = 0
     if (couponCode) {
       // Audit M10 — coupons are not client-readable; the lookup is the service role's.
-      const { data: coupon } = await (await createAdminClient()).from('coupons').select('*').eq('code', couponCode).maybeSingle()
+      const couponDb = await createAdminClient()
+      const { data: coupon } = await couponDb.from('coupons').select('*').eq('code', couponCode).maybeSingle()
       // The coupon applies to the whole pre-GST subtotal (package after its discount + add-ons).
       const taxableBeforeCoupon = couponBasePaise({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, addons: addonRows })
-      extraDiscountPaise = evaluateCoupon(coupon, taxableBeforeCoupon, p.category_id).discountPaise
+      const uses = coupon?.per_buyer_limit != null ? await buyerRedemptions(couponDb, coupon.id as string, msme.id) : 0
+      const ev = evaluateCoupon(coupon, taxableBeforeCoupon, p.category_id, { buyerRedemptions: uses })
+      // A coupon that has run out (in total, or for this buyer) is refused, never
+      // silently dropped: the buyer was shown its discount. Other unusable codes
+      // are ignored as before (the total never included them).
+      if (ev.error === 'usage_exceeded' || ev.error === 'per_buyer_exceeded') {
+        return fail(409, 'coupon_unavailable', 'This coupon can no longer be used on this order', { couponError: COUPON_ERROR_KEY[ev.error] })
+      }
+      extraDiscountPaise = ev.discountPaise
+      if (!ev.error && ev.discountPaise > 0) appliedCouponCode = couponCode
     }
     // ONE rule (shared packageCharge): with no add-ons it is exactly computeOrderAmounts as before.
     const charge = packageCharge({
@@ -304,11 +332,11 @@ export async function POST(request: NextRequest) {
       if (siblingIds.length > 0) {
         const { data: sessions } = await admin
           .from('checkout_sessions')
-          .select(SESSION_COLS + ', quote_id, expires_at, created_at')
+          .select(SESSION_COLS + ', quote_id, created_at')
           .in('quote_id', siblingIds)
           .in('status', ['created', 'materializing', 'materialized'])
           .order('created_at', { ascending: false })
-        const rows = (sessions ?? []) as unknown as (SessionRow & { quote_id: string; expires_at: string | null })[]
+        const rows = (sessions ?? []) as unknown as (SessionRow & { quote_id: string })[]
         const paid = rows.find(isPaidSession)
         if (paid) {
           if (paid.quote_id === quote.id) return resumeResponse(paid)
@@ -393,6 +421,12 @@ export async function POST(request: NextRequest) {
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
+  // Audit M22 (ADR 029) — nobody buys from their own provider profile: a package,
+  // a quote on their own request, services or goods. Checked before any session exists.
+  if (await isOwnProvider(await createAdminClient(), prep.providerId, userId)) {
+    return fail(409, SELF_DEALING, 'You cannot buy from your own provider profile')
+  }
+
   const { amounts } = prep
 
   // Create the checkout session (frozen). ON CONFLICT guards a racing double-submit.
@@ -420,7 +454,7 @@ export async function POST(request: NextRequest) {
         provider_earning_paise: amounts.providerEarningPaise,
         delivery_days: prep.deliveryDays,
         revision_max: prep.revisionMax,
-        coupon_code: couponCode ?? null,
+        coupon_code: appliedCouponCode,
         gst_invoice: gstInvoice ?? null,
         // Goods-quote sessions carry the goods columns; every other session
         // leaves them at their defaults exactly as before.
@@ -437,21 +471,35 @@ export async function POST(request: NextRequest) {
       },
       { onConflict: 'idempotency_key', ignoreDuplicates: true },
     )
-    .select('id, total_paise')
+    .select('id, total_paise, expires_at')
     .maybeSingle()
 
   // ignoreDuplicates returns no row when this key already has a session (a
   // racing double-submit, or a retry after the gateway call below failed).
   // Re-read it so the SAME frozen session is bound — never a second one.
-  let bound = (session as { id: string; total_paise: number } | null) ?? null
+  let bound = (session as { id: string; total_paise: number; expires_at: string | null } | null) ?? null
+  // The coupon the bound session carries (a re-read session's own, which the claim is about).
+  let boundCoupon: string | null = bound ? appliedCouponCode : null
   if (!bound && !insErr) {
-    const { data: again } = await supabase.from('checkout_sessions').select(SESSION_COLS).eq('idempotency_key', idempotencyKey).maybeSingle()
-    if (again?.razorpay_order_id) return resumeResponse(again as SessionRow)
-    bound = again ? { id: again.id as string, total_paise: Number(again.total_paise) } : null
+    const { data } = await supabase.from('checkout_sessions').select(SESSION_COLS + ', coupon_code').eq('idempotency_key', idempotencyKey).maybeSingle()
+    const again = data as unknown as (SessionRow & { coupon_code: string | null }) | null
+    if (again?.razorpay_order_id) return resumeResponse(again)
+    bound = again ? { id: again.id, total_paise: Number(again.total_paise), expires_at: again.expires_at ?? null } : null
+    boundCoupon = again?.coupon_code ?? null
   }
   if (insErr || !bound) {
     console.error('[checkout] session insert', insErr)
     return fail(500, 'checkout_failed', 'Checkout failed')
+  }
+  // Audit M10 / ADR 029 — a session that applied a coupon holds one of its uses
+  // BEFORE any payment opens: claim_coupon_for_session decides under the coupon's
+  // row lock, so two buyers at the last use get one claim and one 409. A re-read
+  // session (a racing double-submit) is claimed too: the claim is idempotent.
+  if (boundCoupon) {
+    const claim = await claimCouponForSession(writer, bound.id)
+    if (!claim || !(couponClaimHeld(claim) || claim === 'no_coupon')) {
+      return fail(409, 'coupon_unavailable', 'This coupon can no longer be used on this order', { couponError: couponClaimRefusalKey(claim) })
+    }
   }
   if (parsed.data.attribution) await storeCheckoutAttribution(bound.id, parsed.data.attribution)
 
@@ -476,11 +524,14 @@ export async function POST(request: NextRequest) {
   const { data: final } = await supabase.from('checkout_sessions').select('razorpay_order_id').eq('id', bound.id).maybeSingle()
   const razorpayOrderId = (final?.razorpay_order_id as string | null | undefined) ?? order.razorpayOrderId
 
+  const timeout = checkoutTimeoutSeconds(bound.expires_at)
   return NextResponse.json({
     checkoutSessionId: bound.id,
     razorpayOrderId,
     amountPaise: Number(bound.total_paise),
     keyId: process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'] ?? '',
     simulated: !gateway.isReal,
+    // ADR 027 (M21) — the Razorpay sheet closes when the frozen session expires.
+    ...(timeout !== null ? { checkoutTimeoutSeconds: timeout } : {}),
   })
 }

@@ -336,9 +336,22 @@ async function main() {
 
     console.log('S1.5 verifications route — one admin gate + limiter:')
     {
+      // Audit M11: only a pending application is decided here, so each decision
+      // below starts from under_review (provB is seeded active).
+      const toReview = () => admin.from('provider_profiles').update({ status: 'under_review' }).eq('id', provBId)
+      eq('admin Bearer POST on an ACTIVE provider → 409 not_pending', (await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'approve' })).status, 409)
+      await admin.from('provider_profiles').update({ status: 'suspended' }).eq('id', provBId)
+      eq('approve a SUSPENDED provider from the queue → 409 (reactivation is the audited suspend/reactivate path)', (await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'approve' })).status, 409)
+      const { data: stillSuspended } = await admin.from('provider_profiles').select('status').eq('id', provBId).single()
+      eq('…and the provider stays suspended', stillSuspended?.status, 'suspended')
+      await toReview()
       denied('provider Bearer POST /admin/verifications/{provB}', (await api(provA.token, `/api/v1/admin/verifications/${provBId}`, { action: 'reject', reason: 'killtest' })).status)
       const okBearer = await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'reject', reason: 'killtest' })
       eq('admin Bearer POST → 200', okBearer.status, 200)
+      eq('a second decision on the same application → 409 not_pending', (await api(adminUser.token, `/api/v1/admin/verifications/${provBId}`, { action: 'approve' })).status, 409)
+      const { data: decided } = await admin.from('audit_logs').select('action').eq('entity_id', provBId).eq('action', 'provider_verification_reject')
+      eq('the decision is audit-logged (provider_verification_reject)', (decided ?? []).length, 1)
+      await toReview()
       // Cookie session (the admin browser path) must also pass — requireAdmin
       // accepts both. Mint a cookie jar for the admin fixture.
       const ajar: Record<string, string> = {}
@@ -584,6 +597,11 @@ async function main() {
       if (quoteId) deniedRows('provA rewrites OWN quote price directly', await uProv.from('quotes').update({ price_paise: 1 }).eq('id', quoteId).select('id'))
       deniedRows('buyerA INSERTs a review directly', await uBuyer.from('reviews').insert({ order_id: orderA, msme_id: msmeA!.id, provider_id: provAId, rating: 5 }).select('id'))
       deniedRows('provA INSERTs a payout row', await uProv.from('payouts').insert({ provider_id: provAId, order_id: orderA, amount_paise: 1, status: 'scheduled' }).select('id'))
+      // ADR 027 (0078) — captures that created no order are service-role only, and so is the capture RPC.
+      deniedRows('buyerA direct-reads capture_exceptions', await uBuyer.from('capture_exceptions').select('id'))
+      deniedRows('buyerA INSERTs a capture exception', await uBuyer.from('capture_exceptions').insert({ razorpay_payment_id: `pay_forged_ce_${tag}`, razorpay_order_id: 'order_forged', amount_paise: 1, reason: 'session_expired', refund_key: `rfcap_forged_${Date.now()}` }).select('id'))
+      const capRpc = await uBuyer.rpc('capture_payment', { p_razorpay_order_id: 'order_forged', p_razorpay_payment_id: `pay_forged_cp_${tag}`, p_amount_paise: 1, p_method: 'upi', p_payload: {}, p_grace_seconds: 900 })
+      eq('buyerA cannot call capture_payment', Boolean(capRpc.error), true)
     }
 
     // ── 7a2. E12a / ADR 019 — package add-ons: owner-only, server-written, public reads active only ──
@@ -1039,6 +1057,10 @@ async function main() {
       eq('anon cannot list coupon codes', Boolean(anonCoupons.error) || (anonCoupons.data ?? []).length === 0, true)
       const buyerCoupons = await asUser(buyerA.token).from('coupons').select('code')
       eq('a signed-in buyer cannot list coupon codes', Boolean(buyerCoupons.error) || (buyerCoupons.data ?? []).length === 0, true)
+      // M10 parts 2–3 (0081, ADR 029) — the coupon claim and the redemption record are the server's.
+      eq('a signed-in buyer cannot call claim_coupon_for_session', Boolean((await asUser(buyerA.token).rpc('claim_coupon_for_session', { p_session_id: crypto.randomUUID() })).error), true)
+      eq('a signed-in buyer cannot call record_coupon_redemption', Boolean((await asUser(buyerA.token).rpc('record_coupon_redemption', { p_order_id: orderA })).error), true)
+      eq('anon cannot call claim_coupon_for_session', Boolean((await createClient(URL_, ANON, { auth: { persistSession: false } }).rpc('claim_coupon_for_session', { p_session_id: crypto.randomUUID() })).error), true)
     }
   } finally {
     // Cleanup — children before parents; loud on error.

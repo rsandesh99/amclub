@@ -256,6 +256,7 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
       if (!res.ok) {
         if (d.error === 'already_quoted') throw new Error(t('already_quoted'))
         if (d.error === 'rfq_closed') throw new Error(t('rfq_closed'))
+        if (d.error === 'self_dealing') throw new Error(t('quote_err_self_dealing'))
         if (d.error === 'revision_cap') throw new Error(t('revise_err_cap'))
         if (d.error === 'revision_conflict') throw new Error(t('revise_err_conflict'))
         if (d.error === 'quote_not_revisable' || d.error === 'quote_not_found') throw new Error(t('revise_err_not_revisable'))

@@ -5,6 +5,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon, COUPON_ERROR_KEY } from '@/lib/coupons/apply'
+import { buyerRedemptions } from '@/lib/coupons/redeem'
 import { COUPONS_ENABLED } from '@/lib/flags'
 import { addonIdsSchema, couponBasePaise, packageCharge, packageChargeDisplay, priceDisplay, resolveAddonSelection, type PackageAddonRow } from '@amclub/shared'
 import { activeAddonsFor, addonsOn } from '@/lib/addons'
@@ -83,7 +84,13 @@ export async function POST(request: NextRequest) {
   // evaluateCoupon then returns the precise reason (expired / usage / etc.).
   const adminDb = await createAdminClient()
   const { data: coupon } = await adminDb.from('coupons').select('*').eq('code', code.toUpperCase()).maybeSingle()
-  const result = evaluateCoupon(coupon, taxableBeforeCoupon, categoryId)
+  // Audit M10 — the per-buyer limit counts this buyer business's redemptions.
+  let uses = 0
+  if (coupon?.per_buyer_limit != null) {
+    const { data: me } = await adminDb.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
+    if (me) uses = await buyerRedemptions(adminDb, coupon.id as string, me.id as string)
+  }
+  const result = evaluateCoupon(coupon, taxableBeforeCoupon, categoryId, { buyerRedemptions: uses })
 
   if (result.error) {
     return NextResponse.json({ ok: false, error: COUPON_ERROR_KEY[result.error] })

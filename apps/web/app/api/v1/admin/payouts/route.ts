@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth/admin'
 import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { latestDossiersByOrder } from '@/lib/agent/dossiers'
+import { isSimulatedPayment } from '@/lib/payments/simulation'
 
 /** Statuses that are still waiting on us — aged oldest-first (Phase 3c). */
 const OPEN = new Set(['held', 'scheduled', 'failed'])
@@ -76,6 +77,15 @@ export async function GET(request: NextRequest) {
     reasonsByOrder.set(e.order_id, reasons)
   }
 
+  // ADR 027 (audit M2) — which rows were paid for by a SIMULATED payment (pay_sim_ id /
+  // webhook_payload.simulated): the monitor says so, and runPayouts never sends them
+  // real money. Bundle children read their purchase's payment (not flagged here).
+  const allOrderIds = [...new Set(rows.map((r) => r.order_id).filter(Boolean))]
+  const { data: pays } = allOrderIds.length
+    ? await admin.from('payments').select('order_id, razorpay_payment_id, simulated:webhook_payload->simulated').in('order_id', allOrderIds)
+    : { data: [] as { order_id: string; razorpay_payment_id: string | null; simulated: unknown }[] }
+  const simulatedOrders = new Set(((pays ?? []) as { order_id: string; razorpay_payment_id: string | null; simulated: unknown }[]).filter((p) => isSimulatedPayment(p)).map((p) => p.order_id))
+
   // S1.4 — latest payout dossier per order (agent surface: only when the flag is on).
   const dossiers = AGENT_ENABLED ? await latestDossiersByOrder(admin, rows.map((r) => r.order_id).filter(Boolean)) : new Map()
 
@@ -89,6 +99,7 @@ export async function GET(request: NextRequest) {
       readiness: payoutReadiness(facts),
       days_pending: open ? Math.floor((now - new Date(r.created_at).getTime()) / 86_400_000) : null,
       hold_reasons: open ? (reasonsByOrder.get(r.order_id) ?? []) : [],
+      simulated: simulatedOrders.has(r.order_id),
     }
   })
   // Unfiltered view: open rows first, oldest first; settled rows after, newest first.

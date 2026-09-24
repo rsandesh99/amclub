@@ -99,6 +99,45 @@ async function main() {
   const rBad = await fetch(WEBHOOK_URL, { method: 'POST', headers: { ...headers, 'x-razorpay-signature': 'deadbeef' }, body })
   check('tampered signature is rejected with 400', rBad.status === 400)
 
+  // (5) ADR 027 (M39) — a SECOND captured payment on the same Razorpay order: no
+  //     second order or payment; recorded once as a duplicate capture (refunded in
+  //     full by the server); replaying it changes nothing.
+  const dupPaymentId = `pay_ktdup_${Date.now()}`
+  const dupBody = JSON.stringify({
+    event: 'payment.captured',
+    payload: { payment: { entity: { id: dupPaymentId, order_id: rzpOrderId, amount: amounts.totalPaise, method: 'upi' } } },
+  })
+  const dupHeaders = { 'content-type': 'application/json', 'x-razorpay-signature': signWebhookBody(dupBody) }
+  const d1 = await fetch(WEBHOOK_URL, { method: 'POST', headers: dupHeaders, body: dupBody })
+  const d1j = await d1.json().catch(() => ({}))
+  const d2 = await fetch(WEBHOOK_URL, { method: 'POST', headers: dupHeaders, body: dupBody })
+  const { data: dupRows } = await sb.from('capture_exceptions').select('reason, order_id').eq('razorpay_payment_id', dupPaymentId)
+  check('second capture → 200, no order returned, outcome duplicate_capture', d1.status === 200 && !d1j.orderId && d1j.outcome === 'duplicate_capture' && d2.status === 200)
+  check('second capture recorded ONCE as duplicate_capture against the existing order', (dupRows ?? []).length === 1 && dupRows![0]!.reason === 'duplicate_capture' && dupRows![0]!.order_id === j1.orderId)
+
+  // (6) ADR 027 (M21) — a capture on a session past expires_at + grace creates NO order.
+  const expOrderId = `order_ktexp_${Date.now()}`
+  const expPaymentId = `pay_ktexp_${Date.now()}`
+  const { data: expSession } = await sb.from('checkout_sessions').insert({
+    razorpay_order_id: expOrderId, msme_id: msme.id, provider_id: pkg.provider_id, source: 'package', package_id: pkg.id,
+    title: 'KILLTEST expired', scope_snapshot: { title: pkg.title_i18n },
+    price_paise: amounts.pricePaise, discount_paise: amounts.discountPaise, gst_paise: amounts.gstPaise, total_paise: amounts.totalPaise,
+    commission_bps: amounts.commissionBps, commission_paise: amounts.commissionPaise, provider_earning_paise: amounts.providerEarningPaise,
+    delivery_days: pkg.delivery_days, revision_max: pkg.revision_count, idempotency_key: randomUUID(), status: 'created',
+    expires_at: new Date(Date.now() - 3600 * 1000).toISOString(),
+  }).select('id').single()
+  const expBody = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: expPaymentId, order_id: expOrderId, amount: amounts.totalPaise, method: 'upi' } } } })
+  const expHeaders = { 'content-type': 'application/json', 'x-razorpay-signature': signWebhookBody(expBody) }
+  const e1 = await fetch(WEBHOOK_URL, { method: 'POST', headers: expHeaders, body: expBody })
+  const e1j = await e1.json().catch(() => ({}))
+  await fetch(WEBHOOK_URL, { method: 'POST', headers: expHeaders, body: expBody })
+  const { data: expAfter } = await sb.from('checkout_sessions').select('order_id, status').eq('id', expSession?.id ?? '').maybeSingle()
+  const { count: expPayments } = await sb.from('payments').select('id', { count: 'exact', head: true }).eq('razorpay_order_id', expOrderId)
+  const { data: expRows } = await sb.from('capture_exceptions').select('reason').eq('razorpay_payment_id', expPaymentId)
+  check('expired-session capture → 200, NO order, no payments row, one session_expired exception (replay-safe)', e1.status === 200 && !e1j.orderId && !expAfter?.order_id && expAfter?.status === 'expired' && expPayments === 0 && (expRows ?? []).length === 1 && expRows![0]!.reason === 'session_expired')
+  await sb.from('capture_exceptions').delete().in('razorpay_payment_id', [dupPaymentId, expPaymentId])
+  if (expSession?.id) await sb.from('checkout_sessions').delete().eq('id', expSession.id)
+
   // ── Invariants: exactly one order, one payment, one (future) payout slot ──
   const { count: paymentCount } = await sb.from('payments').select('id', { count: 'exact', head: true }).eq('razorpay_order_id', rzpOrderId)
   check('exactly ONE payment after replay', paymentCount === 1)

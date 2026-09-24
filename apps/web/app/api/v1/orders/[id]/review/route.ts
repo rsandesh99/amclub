@@ -8,6 +8,7 @@ import { maybeFlagAnomalousReview } from '@/lib/reviews/anomaly'
 import { serverError } from '@/lib/api/errors'
 import { accountSuspendedResponse, getMsmeSuspension } from '@/lib/auth/suspension'
 import { requireNotDelegated } from '@/lib/agent/scope'
+import { SELF_DEALING, isOwnProvider } from '@/lib/orders/self-dealing'
 
 const bodySchema = z.object({
   rating: z.number().int().min(1).max(5),
@@ -39,7 +40,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     .maybeSingle()
   return NextResponse.json({
     review: data ?? null,
-    canReview: !!(m && m.id === order.msme_id && !m.deleted_at) && order.status === 'completed',
+    // Audit M22 — never a review of your own provider profile.
+    canReview: !!(m && m.id === order.msme_id && !m.deleted_at) && order.status === 'completed' && !(p && p.id === order.provider_id),
     isProvider: !!(p && p.id === order.provider_id),
   })
 }
@@ -83,6 +85,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: me } = await admin.from('msme_profiles').select('id').eq('user_id', userId).maybeSingle()
   if (!me || me.id !== order.msme_id) {
     return NextResponse.json({ error: 'You can only review your own completed order' }, { status: 403 })
+  }
+  // Audit M22 (ADR 029) — nobody rates their own provider profile.
+  if (await isOwnProvider(admin, order.provider_id as string, userId)) {
+    return NextResponse.json({ error: SELF_DEALING }, { status: 409 })
   }
 
   const { data: inserted, error } = await admin

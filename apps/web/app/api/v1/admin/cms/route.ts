@@ -4,6 +4,9 @@ import { z } from 'zod'
 import { SUPPORTED_LOCALES } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
+import { requireNotDelegated } from '@/lib/agent/scope'
+import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
+import { writeAudit } from '@/lib/audit/log'
 import { getMaxDiscountPct } from '@/lib/cms/queries'
 import { serverError } from '@/lib/api/errors'
 
@@ -65,8 +68,19 @@ export async function GET() {
   return NextResponse.json({ banners: data ?? [], maxDiscountPct })
 }
 
-export async function POST(request: NextRequest) {
+/** Audit M11 — the CMS writes are admin mutations like any other: no agent token, the admin limiter. */
+async function mutationGate(route: string): Promise<{ userId: string; error?: undefined } | { userId?: undefined; error: NextResponse }> {
   const gate = await requireAdmin()
+  if (gate.error) return gate
+  const delegated = await requireNotDelegated(route)
+  if (delegated) return { error: delegated }
+  const rl = await enforce(limiters.adminMutation, `admin:${gate.userId}`)
+  if (!rl.ok) return { error: tooManyRequests(rl.retryAfter) }
+  return { userId: gate.userId }
+}
+
+export async function POST(request: NextRequest) {
+  const gate = await mutationGate('POST /admin/cms')
   if (gate.error) return gate.error
 
   const json = await request.json().catch(() => null)
@@ -75,31 +89,30 @@ export async function POST(request: NextRequest) {
   const d = parsed.data
 
   const admin = await createAdminClient()
-  const { data: created, error } = await admin
-    .from('cms_banners')
-    .insert({
-      slot: d.slot,
-      variant: d.variant,
-      image_url: d.variant === 'image' ? d.imageUrl : null,
-      link: d.link ?? null,
-      headline: d.variant === 'hero' ? d.headline : null,
-      subline: d.variant === 'hero' ? (d.subline ?? null) : null,
-      cta_label: d.variant === 'hero' ? (d.ctaLabel ?? null) : null,
-      cta_href: d.variant === 'hero' ? (d.ctaHref ?? null) : null,
-      discount_pct: d.variant === 'hero' ? (d.discountPct ?? null) : null,
-      locale: d.locale ?? null,
-      starts_at: d.startsAt ?? null,
-      ends_at: d.endsAt ?? null,
-      is_active: true,
-    })
-    .select('id')
-    .single()
+  const row = {
+    slot: d.slot,
+    variant: d.variant,
+    image_url: d.variant === 'image' ? (d.imageUrl ?? null) : null,
+    link: d.link ?? null,
+    headline: d.variant === 'hero' ? (d.headline ?? null) : null,
+    subline: d.variant === 'hero' ? (d.subline ?? null) : null,
+    cta_label: d.variant === 'hero' ? (d.ctaLabel ?? null) : null,
+    cta_href: d.variant === 'hero' ? (d.ctaHref ?? null) : null,
+    discount_pct: d.variant === 'hero' ? (d.discountPct ?? null) : null,
+    locale: d.locale ?? null,
+    starts_at: d.startsAt ?? null,
+    ends_at: d.endsAt ?? null,
+    is_active: true,
+  }
+  const { data: created, error } = await admin.from('cms_banners').insert(row).select('id').single()
   if (error) return serverError('[admin/cms POST]', error)
+  // §7 — every admin mutation is audit-logged: a banner renders on public pages.
+  await writeAudit(admin, request, { actorId: gate.userId, action: 'cms_banner_create', entity: 'cms_banners', entityId: created.id, before: null, after: row })
   return NextResponse.json({ ok: true, banner: created })
 }
 
 export async function PATCH(request: NextRequest) {
-  const gate = await requireAdmin()
+  const gate = await mutationGate('PATCH /admin/cms')
   if (gate.error) return gate.error
 
   const json = await request.json().catch(() => null)
@@ -107,10 +120,20 @@ export async function PATCH(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
 
   const admin = await createAdminClient()
+  const { data: before } = await admin.from('cms_banners').select('id, slot, is_active').eq('id', parsed.data.id).maybeSingle()
+  if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { error } = await admin
     .from('cms_banners')
     .update({ is_active: parsed.data.isActive, updated_at: new Date().toISOString() })
     .eq('id', parsed.data.id)
   if (error) return serverError('[admin/cms PATCH]', error)
+  await writeAudit(admin, request, {
+    actorId: gate.userId,
+    action: 'cms_banner_update',
+    entity: 'cms_banners',
+    entityId: parsed.data.id,
+    before: { slot: before.slot, is_active: before.is_active },
+    after: { slot: before.slot, is_active: parsed.data.isActive },
+  })
   return NextResponse.json({ ok: true })
 }

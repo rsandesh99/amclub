@@ -32,10 +32,12 @@ export async function fanoutRfq(admin: Admin, rfqId: string): Promise<{ matched:
 
   const { data: msme } = await admin
     .from('msme_profiles')
-    .select('state')
+    .select('state, user_id')
     .eq('id', rfq.msme_id)
     .maybeSingle()
   const state = msme?.state ?? null
+  // Audit M22 (ADR 029) — the buyer's own provider profile is never matched to their request.
+  const buyerUserId = (msme?.user_id as string | undefined) ?? null
 
   // Providers in this category, active, not paused, in the buyer's state.
   const { data: rows } = await admin
@@ -51,6 +53,7 @@ export async function fanoutRfq(admin: Admin, rfqId: string): Promise<{ matched:
     if (!prov) continue
     if (prov.status !== 'active' || prov.deleted_at || prov.capacity_paused) continue
     if (state && prov.state !== state) continue
+    if (buyerUserId && prov.user_id === buyerUserId) continue
     providers.push(prov)
   }
   if (providers.length === 0) return { matched: 0 }

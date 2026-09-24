@@ -1,10 +1,13 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { PROVIDER_REVIEWABLE_STATUSES, type ProviderStatus } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { writeAudit } from '@/lib/audit/log'
 import { revalidateProviderCatalog } from '@/lib/catalog/revalidate'
 import { getProviderReadiness } from '@/lib/payments/readiness-server'
 
@@ -22,6 +25,9 @@ export async function POST(
   // the service-role client. Plus the standard admin-mutation rate limit.
   const gate = await requireAdmin()
   if (gate.error) return gate.error
+  // Audit M11 — KYC approval gates who can receive money: never an agent tool.
+  const delegated = await requireNotDelegated('POST /admin/verifications/[id]')
+  if (delegated) return delegated
 
   const rl = await enforce(limiters.adminMutation, `admin:${gate.userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
@@ -42,22 +48,37 @@ export async function POST(
 
   const admin = await createAdminClient()
 
+  // Audit M11 — only a pending application is decided here. An active or
+  // suspended provider changes only through the audited suspend / reactivate
+  // actions (/admin/providers/[id]); approving a suspended provider from this
+  // queue would have reactivated them with no record.
+  const { data: before } = await admin.from('provider_profiles').select('id, status').eq('id', providerId).maybeSingle()
+  if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const fromStatus = before.status as ProviderStatus
+  if (!PROVIDER_REVIEWABLE_STATUSES.includes(fromStatus)) {
+    return NextResponse.json({ error: 'not_pending', code: 'not_pending', status: fromStatus }, { status: 409 })
+  }
+
   // provider_profiles only carries status (active | rejected). Reviewer audit
   // metadata lives on provider_verifications, which has verified_by/verified_at/
-  // rejection_reason columns.
-  const newStatus = action === 'approve' ? 'active' : 'rejected'
-  const { error: profileErr } = await admin
+  // rejection_reason columns. Compare-and-set on the pending status: a second
+  // reviewer (or a suspend) that lands first wins, and this decision is refused.
+  const newStatus: ProviderStatus = action === 'approve' ? 'active' : 'rejected'
+  const { data: moved, error: profileErr } = await admin
     .from('provider_profiles')
-    .update({ status: newStatus })
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
     .eq('id', providerId)
+    .in('status', [...PROVIDER_REVIEWABLE_STATUSES])
+    .select('id')
 
   if (profileErr) {
     return serverError('[admin/verifications POST] profile update:', profileErr)
   }
+  if (!moved?.length) return NextResponse.json({ error: 'not_pending', code: 'not_pending' }, { status: 409 })
 
   // Stamp reviewer + outcome on the provider's verification rows.
   // Verification status enum: pending | api_verified | manually_approved | rejected.
-  const { error: verErr } = await admin
+  const { data: stamped, error: verErr } = await admin
     .from('provider_verifications')
     .update({
       status: action === 'approve' ? 'manually_approved' : 'rejected',
@@ -66,11 +87,26 @@ export async function POST(
       rejection_reason: action === 'reject' ? (reason ?? null) : null,
     })
     .eq('provider_id', providerId)
+    .select('kind')
 
   if (verErr) {
     console.error('[admin/verifications POST] verification update:', verErr)
     // Non-fatal — provider_profiles.status is the source of truth
   }
+
+  // §7 — every admin mutation is audit-logged, with the status it left.
+  await writeAudit(admin, request, {
+    actorId: gate.userId,
+    action: `provider_verification_${action}`,
+    entity: 'provider_profiles',
+    entityId: providerId,
+    before: { status: fromStatus },
+    after: {
+      status: newStatus,
+      ...(action === 'reject' ? { reason: reason ?? null } : {}),
+      verifications: ((stamped ?? []) as { kind: string }[]).map((v) => v.kind),
+    },
+  })
 
   // Approval/rejection flips public visibility — purge the ISR cache NOW so
   // the provider's pages appear (or vanish) in seconds, not after the ISR

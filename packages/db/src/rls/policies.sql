@@ -770,6 +770,23 @@ REVOKE INSERT, UPDATE, DELETE ON orders, checkout_sessions, payments, payouts, r
 REVOKE EXECUTE ON FUNCTION materialize_order(text, text, bigint, text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION materialize_order(text, text, bigint, text, jsonb) TO service_role;
 
+-- ─── capture_exceptions + capture_payment() (0078, ADR 027) — service role only ──
+-- A captured payment that created no order (expired session, second capture):
+-- no client role reads or writes it; capture_payment() is the capture path's RPC.
+DO $capture_truth$
+BEGIN
+  IF to_regclass('public.capture_exceptions') IS NOT NULL THEN
+    ALTER TABLE capture_exceptions ENABLE ROW LEVEL SECURITY;
+    REVOKE ALL ON capture_exceptions FROM PUBLIC, anon, authenticated;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON capture_exceptions TO service_role;
+  END IF;
+  IF to_regprocedure('public.capture_payment(text, text, bigint, text, jsonb, integer)') IS NOT NULL THEN
+    REVOKE EXECUTE ON FUNCTION capture_payment(text, text, bigint, text, jsonb, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION capture_payment(text, text, bigint, text, jsonb, integer) TO service_role;
+  END IF;
+END
+$capture_truth$;
+
 -- ─── orders ───────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "orders: msme all own" ON orders;
@@ -1008,8 +1025,21 @@ CREATE POLICY "notifications: owner mark read" ON notifications
 -- ─── coupons ──────────────────────────────────────────────────────────────────
 
 -- 0075 (audit M10): no client read; checkout and validate read coupons with the service role.
+-- 0081: no client privilege of any kind (per_buyer_limit included); the claim and the
+-- redemption record are service-role functions.
 DROP POLICY IF EXISTS "coupons: public read active" ON coupons;
-REVOKE SELECT ON coupons FROM anon, authenticated;
+REVOKE ALL ON coupons FROM anon, authenticated;
+DO $$
+BEGIN
+  IF to_regprocedure('claim_coupon_for_session(uuid)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION claim_coupon_for_session(uuid) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION claim_coupon_for_session(uuid) TO service_role';
+  END IF;
+  IF to_regprocedure('record_coupon_redemption(uuid)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION record_coupon_redemption(uuid) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION record_coupon_redemption(uuid) TO service_role';
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "coupons: admin all" ON coupons;
 CREATE POLICY "coupons: admin all" ON coupons

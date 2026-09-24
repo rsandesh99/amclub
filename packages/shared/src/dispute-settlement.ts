@@ -132,3 +132,72 @@ export function planDisputeSettlement(p: {
 
   return { ok: true, refundPaise, providerPaidPaise, payoutStep, refund }
 }
+
+// ── ADR 027 (audit L1) — an admin manual refund follows the same rules ────────
+
+/**
+ * An admin manual refund of `amountPaise` is planned exactly like a dispute
+ * resolution that refunds that amount (`refund_full` when it is the whole
+ * total, otherwise `refund_partial`), so a refund and a full payout can never
+ * both go out:
+ *  • a `processing` payout (transfer in flight) → `payout_in_flight`;
+ *  • a `paid` payout at any other amount than the settlement → `provider_already_paid`,
+ *    unless `platformAbsorbs` — the founder's explicit ADR-014 §2 interim path
+ *    (refund the buyer from the platform's own balance; the paid payout is kept);
+ *  • an existing refund row → `refund_exists`.
+ * On success `payoutStep` says what the caller does with the payout row in the
+ * same audited action: `schedule` = rewrite it to `providerPaidPaise` and HOLD it
+ * (it never moves without a later release), `void` = the provider is owed nothing,
+ * `keep` / `none` = leave it.
+ */
+export function planManualRefund(p: {
+  totalPaise: number
+  earningPaise: number
+  amountPaise: number
+  payout: { status: PayoutStatus; amountPaise: number } | null
+  refund: { amountPaise: number } | null
+  platformAbsorbs?: boolean
+}): DisputeSettlementPlan {
+  const resolution: DisputeResolution = p.amountPaise >= p.totalPaise ? 'refund_full' : 'refund_partial'
+  const plan = planDisputeSettlement({
+    totalPaise: p.totalPaise,
+    earningPaise: p.earningPaise,
+    resolution,
+    amountPaise: p.amountPaise,
+    payout: p.payout,
+    refund: p.refund,
+    resuming: false,
+  })
+  if (plan.ok || plan.conflict !== 'provider_already_paid' || !p.platformAbsorbs) return plan
+  // Paid already and the founder chose to absorb the refund: keep the payout; the one-refund-row rule still holds.
+  if (p.refund) return { ok: false, conflict: 'refund_exists', refundPaise: plan.refundPaise, providerPaidPaise: plan.providerPaidPaise, existingPaise: p.refund.amountPaise }
+  return { ok: true, refundPaise: plan.refundPaise, providerPaidPaise: plan.providerPaidPaise, payoutStep: 'keep', refund: plan.refundPaise > 0 }
+}
+
+/**
+ * ADR 027 (audit L1) — may a payout of `payoutPaise` leave for an order that
+ * also carries a refund of `refundPaise`? The run-time release rule
+ * (`payoutRunBlockers`) asks this for every claimed payout.
+ *  • A dispute resolution (`resolved_release` / `resolved_partial`) was already
+ *    planned by `planDisputeSettlement`, which saw the refund row: allowed.
+ *  • Otherwise (a plainly `completed` order) only up to the provider's share of
+ *    what the buyer kept — the formula a `refund_partial` resolution uses — so a
+ *    refund and a full payout never both go out.
+ */
+export function payoutAllowedWithRefund(p: {
+  orderStatus: string
+  totalPaise: number
+  earningPaise: number
+  payoutPaise: number
+  refundPaise: number
+}): boolean {
+  if (p.refundPaise <= 0) return true
+  if (p.orderStatus === 'resolved_release' || p.orderStatus === 'resolved_partial') return true
+  const { providerPaidPaise } = disputeSettlementPaise({
+    totalPaise: p.totalPaise,
+    earningPaise: p.earningPaise,
+    resolution: p.refundPaise >= p.totalPaise ? 'refund_full' : 'refund_partial',
+    amountPaise: p.refundPaise,
+  })
+  return p.payoutPaise <= providerPaidPaise
+}

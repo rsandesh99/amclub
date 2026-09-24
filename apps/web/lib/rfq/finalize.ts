@@ -1,6 +1,6 @@
 import 'server-only'
 import { AGENT_ENABLED } from '@/lib/flags'
-import { canTransitionQuote, isValidOrderTransition, QUOTE_STATUS } from '@amclub/shared'
+import { canTransitionQuote, isValidOrderTransition, QUOTE_STATUS, RFQ_LIVE_STATUSES } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
 import { addEvent, processRefund } from '@/lib/orders/transitions'
@@ -21,8 +21,13 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
  * - `duplicate_flagged` — a second paid order on an already-accepted RFQ;
  *   cancelled and refunded in full at once (ADR-014 §7), or left for ops if
  *   that cannot complete (see handleDuplicateRfqOrder).
+ * - `rfq_not_live` — ADR 027 (audit M21): the RFQ closed (cancelled / expired)
+ *   while the checkout was open. It is never moved to `accepted` (the RFQ state
+ *   machine has no such edge); the paid order stands as an ordinary `placed`
+ *   order (the provider may accept it, or the 24 h auto-cancel refunds it in
+ *   full) and ops sees `rfq_not_live_at_payment`.
  */
-export type FinalizeResult = 'finalized' | 'noop' | 'duplicate_flagged'
+export type FinalizeResult = 'finalized' | 'noop' | 'duplicate_flagged' | 'rfq_not_live'
 
 /**
  * Runs when a QUOTE-sourced order materialises (called from the payment
@@ -58,14 +63,27 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
   }
 
   // Claim the RFQ atomically — only the first finalize proceeds (idempotent).
+  // ADR 027 (M21): only a LIVE RFQ (open | quoted) may become accepted.
   const { data: claimed } = await admin
     .from('rfqs')
     .update({ status: 'accepted', updated_at: new Date().toISOString() })
     .eq('id', quote.rfq_id)
-    .neq('status', 'accepted')
+    .in('status', [...RFQ_LIVE_STATUSES])
     .select('id, msme_id, title')
     .maybeSingle()
   if (!claimed) {
+    const { data: rfqNow } = await admin.from('rfqs').select('status').eq('id', quote.rfq_id).maybeSingle()
+    const rfqStatus = (rfqNow as { status?: string } | null)?.status
+    if (rfqStatus && rfqStatus !== 'accepted') {
+      const { data: flagged } = await admin.from('order_events').select('id').eq('order_id', orderId).eq('event', 'rfq_not_live_at_payment').limit(1)
+      if (!(flagged ?? []).length) {
+        const detail = { rfq_id: quote.rfq_id, rfq_status: rfqStatus, quote_id: quote.id }
+        await addEvent(admin, orderId, 'rfq_not_live_at_payment', null, detail)
+        await writeAudit(admin, null, { actorId: null, action: 'rfq_not_live_at_payment', entity: 'orders', entityId: orderId, after: detail })
+        console.error('[finalize] paid order on an RFQ that is no longer live', orderId, detail)
+      }
+      return 'rfq_not_live'
+    }
     const result = await handleDuplicateRfqOrder(admin, orderId, quote.rfq_id as string)
     // E7 (N22) — a replay of the winning order completes loss labels an interrupted pass missed
     // (labelLostQuotes writes only missing rows, checks the winner itself, never throws).

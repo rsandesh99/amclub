@@ -82,6 +82,8 @@ export const coupons = pgTable('coupons', {
   validFrom: timestamp('valid_from', { withTimezone: true }).notNull(),
   validTo: timestamp('valid_to', { withTimezone: true }).notNull(),
   usageLimit: integer('usage_limit'),
+  // Audit M10 (0081): uses per buyer business; NULL = unlimited.
+  perBuyerLimit: integer('per_buyer_limit'),
   usedCount: integer('used_count').default(0).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),

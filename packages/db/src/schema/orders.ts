@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, integer, timestamp, jsonb, bigint, date, index,
+  pgTable, uuid, text, integer, timestamp, jsonb, bigint, date, index, boolean,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { users, msmeProfiles, providerProfiles } from './identity'
@@ -151,6 +151,9 @@ export const checkoutSessions = pgTable('checkout_sessions', {
   deliveryDays: integer('delivery_days').notNull(),
   revisionMax: integer('revision_max'),
   couponCode: text('coupon_code'),
+  // Audit M10 (0081): set by claim_coupon_for_session when this session holds a
+  // use of its coupon; the hold lasts while the session can still be paid.
+  couponClaimedAt: timestamp('coupon_claimed_at', { withTimezone: true }),
   gstInvoice: jsonb('gst_invoice'),
   // S2.1 (0020) + AMC Mart (0022): same three goods columns as orders —
   // materialize_order copies them verbatim into the order row.
@@ -175,7 +178,8 @@ export const refunds = pgTable('refunds', {
   amountPaise: bigint('amount_paise', { mode: 'number' }).notNull(),
   reason: text('reason'),
   razorpayRefundId: text('razorpay_refund_id').unique(),
-  // pending | processed — 'pending' is inserted BEFORE the gateway call (0017)
+  // pending | processed | failed — 'pending' is inserted BEFORE the gateway call (0017);
+  // 'failed' only from the gateway's refund.failed webhook (ADR 027, shared REFUND_STATUSES)
   status: text('status').default('pending').notNull(),
   // Deterministic per order (rfnd_<order_id>); unique where not null (0017).
   idempotencyKey: text('idempotency_key'),
@@ -183,12 +187,41 @@ export const refunds = pgTable('refunds', {
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
 
+// ADR 027 (0078) — a captured payment that created NO order: its checkout session had
+// expired (expires_at + the capture grace) or another payment had already paid it. Written
+// only by capture_payment() and the refund path (service role); refunded in full.
+export const captureExceptions = pgTable('capture_exceptions', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  razorpayPaymentId: text('razorpay_payment_id').unique().notNull(),
+  razorpayOrderId: text('razorpay_order_id').notNull(),
+  checkoutSessionId: uuid('checkout_session_id').references(() => checkoutSessions.id, { onDelete: 'set null' }),
+  orderId: uuid('order_id').references(() => orders.id, { onDelete: 'set null' }),
+  msmeId: uuid('msme_id').references(() => msmeProfiles.id, { onDelete: 'set null' }),
+  amountPaise: bigint('amount_paise', { mode: 'number' }).notNull(),
+  method: text('method'),
+  // session_expired | duplicate_capture (shared CAPTURE_EXCEPTION_REASONS)
+  reason: text('reason').notNull(),
+  // refund_pending | refunding | refunded | refund_failed (shared CAPTURE_EXCEPTION_STATUSES)
+  status: text('status').default('refund_pending').notNull(),
+  refundKey: text('refund_key').unique().notNull(),
+  razorpayRefundId: text('razorpay_refund_id').unique(),
+  attempts: integer('attempts').default(0).notNull(),
+  lastError: text('last_error'),
+  simulated: boolean('simulated').default(false).notNull(),
+  webhookPayload: jsonb('webhook_payload'),
+  refundedAt: timestamp('refunded_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+}, (table) => [
+  index('capture_exceptions_status_idx').on(table.status, table.updatedAt),
+])
+
 export const payouts = pgTable('payouts', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   providerId: uuid('provider_id').references(() => providerProfiles.id).notNull(),
   orderId: uuid('order_id').references(() => orders.id).unique().notNull(),
   amountPaise: bigint('amount_paise', { mode: 'number' }).notNull(),
-  // scheduled | processing | paid | failed | held
+  // scheduled | processing | paid | failed | held (paid → failed only from a gateway transfer.failed / reversed, ADR 027)
   status: text('status').default('scheduled').notNull(),
   scheduledFor: date('scheduled_for'),
   razorpayTransferId: text('razorpay_transfer_id'),

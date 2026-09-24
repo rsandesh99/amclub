@@ -1,5 +1,7 @@
 /**
  * KILL-TEST (done-criterion 3): a DROPPED webhook is recovered by reconciliation.
+ * ADR 027 (M39): a second captured payment on the same Razorpay order is flagged
+ * as a duplicate capture, never a second order, and never counted as recovered.
  *
  * 1. Creates a checkout_session — simulating "paid at Razorpay, webhook never
  *    arrived" (no order, no payment locally).
@@ -29,21 +31,29 @@ function check(name: string, cond: boolean) {
 
 // Inline reconciliation loop (mirrors lib/payments/materialize.reconcileCapturedPayments,
 // avoiding the '@/' alias so tsx can run standalone). One captured payment in, the
-// same materialize_order RPC the webhook calls.
+// same capture_payment RPC the webhook calls (ADR 027: it runs materialize_order for a
+// live session, and records a second capture on a paid session as an exception).
+// Only orders created by THIS run count as recovered (M39).
+let exceptions = 0
 async function reconcile(captured: { razorpayOrderId: string; razorpayPaymentId: string; amountPaise: number; method: string }[]) {
   let recovered = 0
   for (const pay of captured) {
     const { data: existing } = await sb.from('payments').select('id').eq('razorpay_payment_id', pay.razorpayPaymentId).maybeSingle()
     if (existing) continue
-    const { data: orderId, error } = await sb.rpc('materialize_order', {
+    const { data: known } = await sb.from('capture_exceptions').select('id').eq('razorpay_payment_id', pay.razorpayPaymentId).maybeSingle()
+    if (known) continue
+    const { data, error } = await sb.rpc('capture_payment', {
       p_razorpay_order_id: pay.razorpayOrderId,
       p_razorpay_payment_id: pay.razorpayPaymentId,
       p_amount_paise: pay.amountPaise,
       p_method: pay.method,
       p_payload: { source: 'reconciliation' },
+      p_grace_seconds: 900,
     })
-    if (error) throw new Error('materialize_order failed: ' + error.message)
-    if (orderId) recovered++
+    if (error) throw new Error('capture_payment failed: ' + error.message)
+    const outcome = (data as { outcome?: string } | null)?.outcome
+    if (outcome === 'materialized') recovered++
+    if (outcome === 'duplicate_capture' || outcome === 'session_expired') exceptions++
   }
   return recovered
 }
@@ -78,10 +88,17 @@ async function main() {
   const before = await sb.from('orders').select('id', { count: 'exact', head: true }).eq('id', '00000000-0000-0000-0000-000000000000')
   check('order does not exist before reconciliation', (before.count ?? 0) === 0)
 
-  const captured = [{ razorpayOrderId: rzpOrderId, razorpayPaymentId: paymentId, amountPaise: amounts.totalPaise, method: 'upi' }]
+  // ADR 027 (M39): the gateway also lists a SECOND captured payment on the same Razorpay order.
+  const secondPaymentId = `pay_drop2_${Date.now()}`
+  const captured = [
+    { razorpayOrderId: rzpOrderId, razorpayPaymentId: paymentId, amountPaise: amounts.totalPaise, method: 'upi' },
+    { razorpayOrderId: rzpOrderId, razorpayPaymentId: secondPaymentId, amountPaise: amounts.totalPaise, method: 'upi' },
+  ]
 
   const recovered1 = await reconcile(captured)
   check('reconciliation recovered exactly 1 order', recovered1 === 1)
+  const { data: dupRows } = await sb.from('capture_exceptions').select('reason').eq('razorpay_payment_id', secondPaymentId)
+  check('the second capture is flagged once as duplicate_capture (not counted as recovered)', exceptions === 1 && (dupRows ?? []).length === 1 && dupRows![0]!.reason === 'duplicate_capture')
 
   const { data: sessionAfter } = await sb.from('checkout_sessions').select('order_id, status').eq('id', session.id).single()
   const orderId = sessionAfter?.order_id as string | undefined
@@ -92,12 +109,13 @@ async function main() {
 
   // Second run → idempotent, recovers nothing.
   const recovered2 = await reconcile(captured)
-  check('second reconciliation recovers NOTHING (idempotent)', recovered2 === 0)
+  check('second reconciliation recovers NOTHING (idempotent)', recovered2 === 0 && exceptions === 1)
 
   const { count: paymentCount2 } = await sb.from('payments').select('id', { count: 'exact', head: true }).eq('razorpay_payment_id', paymentId)
   check('still exactly one payment after second run', paymentCount2 === 1)
 
   // Cleanup.
+  await sb.from('capture_exceptions').delete().eq('razorpay_payment_id', secondPaymentId)
   await sb.from('checkout_sessions').delete().eq('id', session.id)
   if (orderId) await sb.from('orders').delete().eq('id', orderId)
 

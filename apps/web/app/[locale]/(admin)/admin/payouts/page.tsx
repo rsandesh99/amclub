@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { ReadinessBadge } from '@/components/admin/ReadinessBadge'
 import { DossierPanel } from '@/components/admin/DossierPanel'
+import { useMoneyError } from '@/components/admin/useMoneyError'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -22,6 +23,7 @@ import { DossierPanel } from '@/components/admin/DossierPanel'
  *  opens that dossier with the action focused — never auto-submitted. */
 export default function AdminPayoutsPage() {
   const t = useTranslations('admin_ops')
+  const moneyError = useMoneyError()
   const { toast } = useToast()
   const [status, setStatus] = useState<string>('held')
   const [payouts, setPayouts] = useState<any[]>([])
@@ -67,7 +69,7 @@ export default function AdminPayoutsPage() {
       load()
     } else {
       const d = await res.json().catch(() => ({}))
-      toast(typeof d.error === 'string' ? d.error : t('action_failed'), 'error')
+      toast(moneyError(d) ?? (typeof d.error === 'string' ? d.error : t('action_failed')), 'error')
     }
   }
 
@@ -123,6 +125,10 @@ export default function AdminPayoutsPage() {
                     {p.provider?.status !== 'active' && (
                       <span className="ml-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">{p.provider?.status}</span>
                     )}
+                    {/* ADR 027 (M2) — paid for by a simulated payment: never sent real money. */}
+                    {p.simulated && (
+                      <span className="ml-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">{t('payout_simulated_badge')}</span>
+                    )}
                     {/* Phase 3a — a release tap on this row would FAIL: say so before the tap. */}
                     {p.readiness !== 'ready' && (
                       <p className="mt-1"><ReadinessBadge readiness={p.readiness} /></p>
@@ -147,7 +153,7 @@ export default function AdminPayoutsPage() {
                     {p.hold_reasons?.length > 0 && (
                       <p className="mt-1 flex flex-wrap gap-1">
                         {p.hold_reasons.map((r: string) => (
-                          <span key={r} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground-secondary">{t(`hold_${r}` as 'hold_approval_gate')}</span>
+                          <span key={r} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground-secondary">{t.has(`hold_${r}` as 'hold_approval_gate') ? t(`hold_${r}` as 'hold_approval_gate') : r}</span>
                         ))}
                       </p>
                     )}

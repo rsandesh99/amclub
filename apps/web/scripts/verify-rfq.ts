@@ -23,7 +23,7 @@ const admin = createClient(URL, SERVICE, { auth: { persistSession: false } })
 let pass = 0, fail = 0
 const check = (n: string, ok: boolean, extra = '') => { console.log(`  ${ok ? '✓' : '✗'} ${n}${extra ? ' — ' + extra : ''}`); ok ? pass++ : fail++ }
 const tag = `rfqv_${Date.now()}`
-const created: { users: string[]; providerIds: string[]; msmeIds: string[]; rfqIds: string[] } = { users: [], providerIds: [], msmeIds: [], rfqIds: [] }
+const created: { users: string[]; providerIds: string[]; msmeIds: string[]; rfqIds: string[]; packageIds: string[] } = { users: [], providerIds: [], msmeIds: [], rfqIds: [], packageIds: [] }
 
 async function mkUser(label: string, roles: string[] = ['msme']): Promise<{ uid: string; token: string }> {
   const email = `${tag}_${label}@killtest.amclub`
@@ -347,6 +347,74 @@ async function main() {
   // UPSTASH_* is set, graceful no-op otherwise (security-pass design).
   check('7. Rate limiting applied on RFQ-create + quote-submit', true, 'enforce() wired on both routes; active when UPSTASH_REDIS_REST_* is set')
 
+  // ── Criterion 12 (audit M22, ADR 029): no self-dealing ──────────────────────
+  // One person holds a buyer profile AND an active provider profile in the same
+  // category and state: they may never be both sides of one deal.
+  {
+    const dual = await mkUser('dual', ['msme', 'provider'])
+    const { data: dualMsme } = await admin.from('msme_profiles').insert({ user_id: dual.uid, business_name: 'Dual Co', state: 'KA', sector: 'services' }).select('id').single()
+    created.msmeIds.push(dualMsme!.id)
+    const { data: dualProv } = await admin.from('provider_profiles').insert({
+      user_id: dual.uid, legal_name: 'Dual Prov', display_name: 'Dual Prov', slug: `${tag}-dual`, state: 'KA', status: 'active', languages: ['en'],
+    }).select('id').single()
+    created.providerIds.push(dualProv!.id)
+    await admin.from('provider_categories').insert({ provider_id: dualProv!.id, category_id: categoryId })
+
+    const r12 = await api(dual.token, '/api/v1/rfq', { category_slug: 'tax-accounting', title: 'Monthly GST returns for our own firm', details: { filing_type: 'GST Return (Monthly)', financial_year: '2024-25', turnover_range: '₹1–5 crore' }, attachments: [] })
+    const selfRfqId = ((await r12.json().catch(() => ({}))) as { rfqId?: string }).rfqId ?? ''
+    if (selfRfqId) created.rfqIds.push(selfRfqId)
+    const { data: m12 } = await admin.from('rfq_matches').select('provider_id').eq('rfq_id', selfRfqId)
+    const ids12 = new Set((m12 ?? []).map((m) => m.provider_id as string))
+    check('12a. fan-out never matches the buyer’s own provider profile (the other matching providers are matched)',
+      !!selfRfqId && !ids12.has(dualProv!.id) && matching.every((m) => ids12.has(m.providerId)),
+      `rfq=${selfRfqId || 'none'} matched=${ids12.size} own=${ids12.has(dualProv!.id)}`)
+
+    // A match written by hand (as fan-out did before this fix) still cannot quote.
+    await admin.from('rfq_matches').insert({ rfq_id: selfRfqId, provider_id: dualProv!.id })
+    const q12 = await api(dual.token, `/api/v1/rfq/${selfRfqId}/quote`, { price_paise: 500000, delivery_days: 5, scope: 'Monthly GST filing for our own firm, with reconciliation and challans.' })
+    const q12d = (await q12.json().catch(() => ({}))) as { error?: string }
+    const { count: q12n } = await admin.from('quotes').select('id', { count: 'exact', head: true }).eq('rfq_id', selfRfqId).eq('provider_id', dualProv!.id)
+    check('12b. a quote to your own request → 409 self_dealing, nothing written', q12.status === 409 && q12d.error === 'self_dealing' && q12n === 0, `http=${q12.status} error=${q12d.error} quotes=${q12n}`)
+
+    const { data: ownPkg } = await admin.from('packages').insert({
+      provider_id: dualProv!.id, category_id: categoryId, slug: `${tag}-own`, title_i18n: { en: 'Own pkg', hi: 'Own pkg' },
+      price_paise: 300000, discount_bps: 0, delivery_days: 3, revision_count: 1, status: 'active', scope_included: ['x'], scope_excluded: [], deliverables: ['y'],
+    }).select('id').single()
+    created.packageIds.push(ownPkg!.id)
+    const co12 = await api(dual.token, '/api/v1/checkout', { packageId: ownPkg!.id, idempotencyKey: crypto.randomUUID() })
+    const co12d = (await co12.json().catch(() => ({}))) as { code?: string }
+    const { count: s12 } = await admin.from('checkout_sessions').select('id', { count: 'exact', head: true }).eq('package_id', ownPkg!.id)
+    check('12c. buying your own package → 409 self_dealing, no checkout session', co12.status === 409 && co12d.code === 'self_dealing' && s12 === 0, `http=${co12.status} code=${co12d.code} sessions=${s12}`)
+
+    // A quote row from their own provider (as a pre-fix quote would be): accepting it is refused.
+    const { data: ownQuote } = await admin.from('quotes').insert({ rfq_id: selfRfqId, provider_id: dualProv!.id, price_paise: 500000, delivery_days: 5, scope: 'Pre-fix own quote (kill-test).', status: 'submitted' }).select('id').single()
+    const coq = await api(dual.token, '/api/v1/checkout', { quoteId: ownQuote!.id, idempotencyKey: crypto.randomUUID() })
+    const coqd = (await coq.json().catch(() => ({}))) as { code?: string }
+    const { count: sq } = await admin.from('checkout_sessions').select('id', { count: 'exact', head: true }).eq('quote_id', ownQuote!.id)
+    check('12d. accepting a quote from your own provider profile → 409 self_dealing, no checkout session', coq.status === 409 && coqd.code === 'self_dealing' && sq === 0, `http=${coq.status} code=${coqd.code} sessions=${sq}`)
+
+    // An order with one person on both sides (made before this fix): only the buyer's cancel.
+    const { data: selfOrder } = await admin.from('orders').insert({
+      msme_id: dualMsme!.id, provider_id: dualProv!.id, source: 'package', package_id: ownPkg!.id, title: 'Self-dealt (kill-test)', scope_snapshot: {},
+      price_paise: 300000, gst_paise: 54000, total_paise: 354000, commission_bps: 1000, commission_paise: 30000, provider_earning_paise: 270000, delivery_days: 3, status: 'placed',
+    }).select('id').single()
+    const acc12 = await api(dual.token, `/api/v1/orders/${selfOrder!.id}/transition`, { action: 'accept' })
+    const acc12d = (await acc12.json().catch(() => ({}))) as { error?: string }
+    const { data: afterAcc } = await admin.from('orders').select('status').eq('id', selfOrder!.id).single()
+    const cancel12 = await api(dual.token, `/api/v1/orders/${selfOrder!.id}/transition`, { action: 'cancel' })
+    const { data: afterCancel } = await admin.from('orders').select('status').eq('id', selfOrder!.id).single()
+    check('12e. acting on both sides of an order → 409 self_dealing (unchanged); the buyer’s cancel still works',
+      acc12.status === 409 && acc12d.error === 'self_dealing' && afterAcc!.status === 'placed' && cancel12.status === 200 && afterCancel!.status === 'cancelled_by_buyer',
+      `accept=${acc12.status}:${acc12d.error}→${afterAcc!.status} cancel=${cancel12.status}→${afterCancel!.status}`)
+
+    // A completed order on their own provider profile cannot be reviewed.
+    await admin.from('orders').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', selfOrder!.id)
+    const rv12 = await api(dual.token, `/api/v1/orders/${selfOrder!.id}/review`, { rating: 5, text: 'Excellent work by our own team.' })
+    const rv12d = (await rv12.json().catch(() => ({}))) as { error?: string }
+    const { count: rvN } = await admin.from('reviews').select('id', { count: 'exact', head: true }).eq('order_id', selfOrder!.id)
+    check('12f. reviewing your own provider profile → 409 self_dealing, no review', rv12.status === 409 && rv12d.error === 'self_dealing' && rvN === 0, `http=${rv12.status} error=${rv12d.error} reviews=${rvN}`)
+  }
+
   } finally {
   // cleanup — ALWAYS runs (even on a thrown assertion) so no residue is left.
   console.log('\n🧹 cleanup…')
@@ -382,6 +450,7 @@ async function main() {
     await t(admin.from('quote_extractions').delete().in('rfq_id', created.rfqIds))
   }
   for (const id of created.rfqIds) await t(admin.from('rfqs').delete().eq('id', id)) // cascades quotes + rfq_matches + conversations? no — conversations separate
+  for (const id of created.packageIds) await t(admin.from('packages').delete().eq('id', id))
   // conversations/messages reference quote via context_id (no FK) — clean by msme.
   for (const id of created.providerIds) { await t(admin.from('provider_categories').delete().eq('provider_id', id)); await t(admin.from('provider_profiles').delete().eq('id', id)) }
   for (const mid of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', mid))

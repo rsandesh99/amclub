@@ -11,6 +11,8 @@ import { writeAudit } from '@/lib/audit/log'
 import { getGoodsDossier } from '@/lib/mart/release'
 import { getServicesEvidence } from '@/lib/orders/evidence'
 import { closeDossierApprove, getDossier, type DossierRow } from '@/lib/agent/dossiers'
+import { paymentForOrder } from '@/lib/payments/order-payment'
+import { moneyMovementBlock, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 
 /**
  * Phase 8 §7 — payout release/retry: failed|held → scheduled, validated against
@@ -66,6 +68,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'order_not_releasable', orderStatus: ord?.status ?? null }, { status: 409 })
   }
 
+  // ADR 027 (audit M2) — no transfer through the simulation gateway on production
+  // (503, the payout stays as it is), and no real transfer for an order whose
+  // payment was simulated (409). runPayouts re-checks both.
+  const gateway = getPaymentGateway()
+  const payment = await paymentForOrder<{ id: string; razorpay_payment_id: string | null; simulated: unknown }>(admin, ord, 'id, razorpay_payment_id, simulated:webhook_payload->simulated')
+  const blocked = moneyMovementBlock(gateway.isReal, payment)
+  if (blocked) return NextResponse.json({ error: blocked }, { status: blocked === PAYMENTS_UNAVAILABLE ? 503 : 409 })
+
   // AMC Mart — goods release gate (MART_DESIGN.md §4.3): a goods payout is
   // NEVER released while delivery evidence, receipt, the return window or an
   // open return still hold. Services orders (kind='service') skip this block.
@@ -107,7 +117,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Settle immediately (release = pay now). A transfer failure marks the
   // payout 'failed' inside runPayouts — visible in the monitor for retry.
-  const run = await runPayouts(admin, getPaymentGateway(), { orderId: payout.order_id })
+  const run = await runPayouts(admin, gateway, { orderId: payout.order_id })
   const { data: after } = await admin.from('payouts').select('status').eq('id', id).maybeSingle()
   const finalStatus = after?.status ?? 'scheduled'
 

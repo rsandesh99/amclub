@@ -16,6 +16,7 @@ import { createNotification, createNotificationsBulk } from '@/lib/notifications
 import { notifyText } from '@/lib/i18n/notify'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { addPoolEvent, chunks, cohortUserIds, loadPool, poolSettings, providerUsers, type PoolRow } from './core'
+import { providerOwnsRequest } from '@/lib/orders/self-dealing'
 
 /**
  * S3.4 (ADR 024) — every pool move a person makes. Each write is guarded on the status it expects (a replay or a
@@ -205,11 +206,13 @@ export async function memberAction(
 
 /** An offer is available to a member unless its provider already quoted, or declined, the member's own request. */
 export async function offerAvailableTo(admin: SupabaseClient, providerId: string, rfqId: string): Promise<boolean> {
-  const [{ data: q }, { data: m }] = await Promise.all([
+  const [{ data: q }, { data: m }, own] = await Promise.all([
     admin.from('quotes').select('id').eq('rfq_id', rfqId).eq('provider_id', providerId).maybeSingle(),
     admin.from('rfq_matches').select('declined_at').eq('rfq_id', rfqId).eq('provider_id', providerId).maybeSingle(),
+    // Audit M22 (ADR 029) — a buyer's own provider profile never offers to their request.
+    providerOwnsRequest(admin, providerId, rfqId),
   ])
-  return !q && !(m as { declined_at: string | null } | null)?.declined_at
+  return !q && !(m as { declined_at: string | null } | null)?.declined_at && !own
 }
 
 export async function commit(

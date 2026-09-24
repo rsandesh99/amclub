@@ -8,6 +8,7 @@ import { notifyText } from '@/lib/i18n/notify'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { addPoolEvent, loadPool, providerUsers } from './core'
 import { notifyBuyer } from './actions'
+import { providerOwnsRequest } from '@/lib/orders/self-dealing'
 
 /**
  * S3.4 (ADR 024) — the clock: forming groups that ran out of time lapse; open groups past closes_at close. The close
@@ -74,6 +75,8 @@ async function precheck(admin: SupabaseClient, m: MemberRow, providerId: string,
   if (!r || r.deleted_at || (r.status !== 'open' && r.status !== 'quoted') || Date.parse(r.expires_at) <= Date.now()) return 'rfq_closed'
   if (quote) return 'already_quoted'
   if ((match as { declined_at: string | null } | null)?.declined_at) return 'declined'
+  // Audit M22 (ADR 029) — never a quote from the member's own provider profile.
+  if (await providerOwnsRequest(admin, providerId, m.rfq_id)) return 'self_dealing'
   return null
 }
 

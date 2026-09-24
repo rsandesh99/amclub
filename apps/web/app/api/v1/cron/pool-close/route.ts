@@ -9,6 +9,8 @@ import { measureGoodsPromiseBreaches } from '@/lib/mart/promises'
 import { sendDueReorderReminders } from '@/lib/mart/reorder'
 
 export const dynamic = 'force-dynamic'
+// Audit M38 — the Mart cron settles pool payments into orders: an explicit ceiling.
+export const maxDuration = 300
 
 /**
  * AMC Mart hourly: close open pools past closes_at (met / unmet), then settle
