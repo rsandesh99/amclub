@@ -1,17 +1,15 @@
 import sharp from 'sharp'
 import {
+  buildPhotoPlausibilityParts,
   computeDossierChecks,
   dhashFromImage,
-  envelope,
   getPrompt,
   hammingHex,
   isValidDhash,
   photoPlausibilitySchema,
   signRuntimeCredential,
   type AgentDefinition,
-  type ChatImage,
   type DuplicatePhoto,
-  type Envelope,
 } from '@amclub/agent-core'
 import {
   MILESTONE_ORDER,
@@ -39,9 +37,10 @@ sharp.unblock({ operation: ['VipsForeignLoadJpeg', 'VipsForeignLoadPng', 'VipsFo
  *  3. Photos: cap at dossier_max_photos, download, dHash, upsert
  *     evidence_photo_hashes (agent-owned telemetry), flag near-duplicates of a
  *     DIFFERENT order by the same provider.
- *  4. Vision: ONE model call (photo_plausibility@v1, frontier tier) with the
- *     order facts as TRUSTED parts and milestone notes as Envelopes. Findings
- *     are inputs, never a decision.
+ *  4. Vision: ONE model call (photo_plausibility@v1, frontier tier); the parts
+ *     come from agent-core `buildPhotoPlausibilityParts`: order facts as TRUSTED
+ *     parts, the party-authored order title and milestone notes as Envelopes
+ *     (audit M43). Findings are inputs, never a decision.
  *  5. recommendDossier (shared rule) → payout_dossiers row (service role,
  *     agent-owned) → POST …/dossiers/[id]/notify with the runtime credential.
  *
@@ -184,21 +183,16 @@ export const payoutDossierAgent: AgentDefinition<PayoutDossierInput, PayoutDossi
     let findings: PhotoFinding[] = []
     if (photos.length > 0) {
       const prompt = getPrompt('photo_plausibility', 'v1')
-      const trusted = [
-        `Order category: ${ev.order.category_slug ?? 'unknown'}`,
-        `Order title: ${ev.order.title}`,
-        `Order kind: ${ev.order.kind}; placed ${ev.order.created_at}; completed ${ev.order.completed_at ?? 'not yet'}`,
-        ...photos.map((p) => `Image ${p.doc_id}: claimed stage = ${p.stage}; uploaded ${p.uploaded_at}`),
-      ]
-      const untrusted: Envelope[] = photos.filter((p) => p.note && p.note.trim()).map((p) => envelope(p.note as string, { kind: 'milestone_note', id: p.doc_id }))
-      const images: ChatImage[] = photos
-        .filter((p) => !!(p.dataUrl ?? p.signedUrl))
-        .map((p) => ({ url: (p.dataUrl ?? p.signedUrl) as string, mime: p.mime, label: p.doc_id }))
+      // audit M43: the order title is party text → an Envelope inside the agent-core builder (facts only in trusted)
+      const parts = buildPhotoPlausibilityParts({
+        order: { id: ev.order.id, kind: ev.order.kind, category_slug: ev.order.category_slug ?? null, title: ev.order.title, created_at: ev.order.created_at, completed_at: ev.order.completed_at ?? null },
+        photos: photos.map((p) => ({ doc_id: p.doc_id, stage: p.stage, uploaded_at: p.uploaded_at, mime: p.mime, note: p.note, imageUrl: p.dataUrl ?? p.signedUrl })),
+      })
       const out = await run.callModel({
         taskClass: prompt.taskClass,
         prompt,
         schema: photoPlausibilitySchema,
-        parts: { trusted, untrusted, images },
+        parts,
         feature: 'payout_dossier',
         // Stub producer (keyless / CI): every photo plausible.
         stub: () => ({

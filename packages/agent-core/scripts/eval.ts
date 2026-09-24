@@ -53,6 +53,7 @@ import { rfqQualityModelOutputSchema, rfqQualityReportSchema, rfqQualityPrecheck
 import { buildRfqQualityParts } from '../src/rfq-quality/parts'
 import { buildOnboardingParts } from '../src/onboarding/parts'
 import { buildDisputeTriageParts } from '../src/dispute-triage/parts'
+import { buildPhotoPlausibilityParts } from '../src/dossier/parts'
 import { buildClarifyParts, buildDocumentParts } from '../src/intake/parts'
 import { clarifyQuestionSchema, CLARIFY_SCRIPT_RE, stubClarifyQuestion } from '../src/prompts/rfq_clarify/schema'
 import { documentExtractSchema, clampDocumentExtract, type DocumentExtract } from '../src/prompts/document_extract/schema'
@@ -146,7 +147,11 @@ async function runPhotoPlausibility(gateway: Gateway, live: boolean): Promise<Se
         taskClass: prompt.taskClass,
         prompt,
         schema: photoPlausibilitySchema,
-        parts: { trusted: ['Order category: general services (synthetic eval)', 'Order title: evidence photo review (synthetic eval)', `Image ${c.image}: claimed stage = ${c.claimed_stage}; uploaded 2026-09-01T09:00:00Z`], images: [{ url, mime: 'image/jpeg', label: c.image }] },
+        // audit M43 — the runtime's own builder (the order title is an Envelope, never a trusted line)
+        parts: buildPhotoPlausibilityParts({
+          order: { id: 'eval-order', kind: 'service', category_slug: 'general-services', title: 'evidence photo review (synthetic eval)', created_at: '2026-09-01T08:00:00Z', completed_at: null },
+          photos: [{ doc_id: c.image, stage: c.claimed_stage, uploaded_at: '2026-09-01T09:00:00Z', mime: 'image/jpeg', note: null, imageUrl: url }],
+        }),
         stub: () => ({ findings: [{ doc_id: c.image, looks_like_work: c.expected.looks_like_work, matches_stage: c.expected.looks_like_work, is_screenshot_or_document: c.expected.is_screenshot_or_document, concerns: c.expected.looks_like_work ? [] : ['synthetic fixture'], confidence: 0.9 }] }),
       })
       const f = res.data.findings.find((x) => x.doc_id === c.image) ?? res.data.findings[0]
@@ -1192,7 +1197,15 @@ async function runInjection(gateway: Gateway, live: boolean): Promise<SetResult>
         }
       }
       case 'photo_plausibility':
-        return { parts: { trusted: ['Order category: general services (red-team eval)', 'Image doc-1: claimed stage = work_complete; uploaded 2026-09-01T09:00:00Z'], untrusted: [envelope(c.text, { kind: 'milestone_note', id: id })] }, schema: photoPlausibilitySchema, stub: () => ({ findings: [{ doc_id: 'doc-1', looks_like_work: false, matches_stage: false, is_screenshot_or_document: false, concerns: ['no image provided in this eval'], confidence: 0.5 }] }) }
+        // audit M43 — the REAL builder, with the text in BOTH party slots: the order title and the milestone note
+        return {
+          parts: buildPhotoPlausibilityParts({
+            order: { id, kind: 'service', category_slug: 'general-services', title: c.text, created_at: '2026-09-01T08:00:00Z', completed_at: null },
+            photos: [{ doc_id: 'doc-1', stage: 'work_complete', uploaded_at: '2026-09-01T09:00:00Z', mime: 'image/jpeg', note: c.text, imageUrl: null }],
+          }),
+          schema: photoPlausibilitySchema,
+          stub: () => ({ findings: [{ doc_id: 'doc-1', looks_like_work: false, matches_stage: false, is_screenshot_or_document: false, concerns: ['no image provided in this eval'], confidence: 0.5 }] }),
+        }
       default:
         return null
     }

@@ -74,6 +74,8 @@ export const ENVELOPE_CAPS: Readonly<Record<string, number>> = {
   support_transcript: 1000,
   // E14 N32b — a provider's own catalogue copy (title / ideal_for / about) for translation
   provider_content: 1500,
+  // audit M43 — a party-authored order title (the payout dossier's photo review)
+  order_title: 300,
 }
 
 export function capForKind(kind: string): number {
