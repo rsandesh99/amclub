@@ -1,6 +1,6 @@
 # ADR 025 — Provider and catalog rows are server-written only
 
-**Status:** Accepted 2026-09-24. **Security hotfix**, touching auth, provider verification and the public catalog (CLAUDE.md §2.5 rule 1). Migrations **0072** (urgent, no code dependency) and **0073** (after the partner-route build is live). Amends ADR 022's note on `public_providers` and `buyer_pool_discipline_v1`. Found by the architecture and security audit of 2026-09-24 (`docs/audit/2026-09-24-architecture-security-audit.md`, findings C1–C4).
+**Status:** Accepted 2026-09-24. **Security hotfix**, touching auth, provider verification and the public catalog (CLAUDE.md §2.5 rule 1). Migrations **0072** (urgent, no code dependency) and **0073** (after the partner-route build is live). Amends ADR 022's note on `public_providers` and `buyer_pool_discipline_v1`. Found by the architecture and security audit of 2026-09-24 (`docs/audit/2026-09-24-architecture-security-audit.md`, findings C1, C2, H1, H2 and M18).
 
 ## Context
 

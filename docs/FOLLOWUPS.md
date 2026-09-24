@@ -4,6 +4,20 @@ Items deliberately deferred during pre-cutover hardening. Each entry says what
 exists today, what is missing, and what would unblock it. Remove an entry when
 it ships.
 
+## Architecture and security audit — remediation (2026-09-24)
+
+The audit (`docs/audit/2026-09-24-architecture-security-audit.md`) confirmed
+66 unique issues. Wave 0 is done: 0072 is live on production (C1, C2, H1, H2,
+M18). 0073 (`packages`) is applied once PR #58 is serving production.
+
+Waves 1–5 in the report's remediation plan are open. Each wave is one or more
+PRs, and each ticks items off in the report's index. Two items need something
+outside the code:
+- **H3** needs a `SEND_SMS_HOOK_SECRET` in Vercel production, matching the
+  secret configured on the Supabase Auth "Send SMS" hook.
+- **Leaked password protection** (Supabase advisor) is a dashboard toggle in
+  Supabase Auth.
+
 ## H1 — money rigs in CI against a disposable Supabase (2026-09-23)
 
 `.github/workflows/money-rigs.yml` runs verify-authz, verify-money-loop, the two
