@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { PAYOUT_RELEASE_STATUSES } from '@amclub/shared'
+import { PAYOUT_RELEASE_STATUSES, type ProviderStatus } from '@amclub/shared'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/admin'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
@@ -123,7 +123,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await admin.from('payouts').update({ status: 'held' }).eq('provider_id', id).eq('status', 'scheduled')
       after = { status: 'suspended', reason: d.reason }
     } else if (d.action === 'reactivate') {
-      await admin.from('provider_profiles').update({ status: 'active', updated_at: new Date().toISOString() }).eq('id', id)
+      // Audit M11 — reactivate lifts a suspension, nothing else: a pending or
+      // rejected application is decided in the verification queue (audited there).
+      const suspended: ProviderStatus = 'suspended'
+      if (before.status !== suspended) return NextResponse.json({ error: 'not_suspended', code: 'not_suspended', status: before.status }, { status: 409 })
+      const { data: lifted } = await admin.from('provider_profiles').update({ status: 'active', updated_at: new Date().toISOString() }).eq('id', id).eq('status', suspended).select('id')
+      if (!lifted?.length) return NextResponse.json({ error: 'not_suspended', code: 'not_suspended' }, { status: 409 })
       after = { status: 'active' }
     } else if (d.action === 'set_capacity_pause') {
       await admin.from('provider_profiles').update({ capacity_paused: d.paused, updated_at: new Date().toISOString() }).eq('id', id)

@@ -278,9 +278,14 @@ async function main() {
     const again = await api(adminUser.token, `/api/v1/admin/verifications/${appB}`, { action: 'approve' })
     const { data: stillRejected } = await admin.from('provider_profiles').select('status').eq('id', appB).single()
     const missing = await api(adminUser.token, `/api/v1/admin/verifications/${crypto.randomUUID()}`, { action: 'approve' })
-    check('7b. the queue refuses a suspended or decided provider (409 not_pending, unchanged) and 404s a missing one',
-      viaQueue.status === 409 && viaQueueD.code === 'not_pending' && stillSusp?.status === 'suspended' && again.status === 409 && stillRejected?.status === 'rejected' && missing.status === 404,
-      `suspended=${viaQueue.status}:${viaQueueD.code}→${stillSusp?.status} decided=${again.status}→${stillRejected?.status} missing=${missing.status}`)
+    // …and reactivate lifts a suspension only: it never activates a rejected (or pending) application.
+    const react = await api(adminUser.token, `/api/v1/admin/providers/${appB}`, { action: 'reactivate' })
+    const reactD = await react.json().catch(() => ({}))
+    const { data: stillRejected2 } = await admin.from('provider_profiles').select('status').eq('id', appB).single()
+    check('7b. the queue refuses a suspended or decided provider (409 not_pending, unchanged), 404s a missing one; reactivate refuses a non-suspended one (409 not_suspended)',
+      viaQueue.status === 409 && viaQueueD.code === 'not_pending' && stillSusp?.status === 'suspended' && again.status === 409 && stillRejected?.status === 'rejected' && missing.status === 404 &&
+        react.status === 409 && reactD.code === 'not_suspended' && stillRejected2?.status === 'rejected',
+      `suspended=${viaQueue.status}:${viaQueueD.code}→${stillSusp?.status} decided=${again.status}→${stillRejected?.status} missing=${missing.status} reactivateRejected=${react.status}:${reactD.code}→${stillRejected2?.status}`)
 
     const banner = (await (await api(adminUser.token, '/api/v1/admin/cms', { slot: `${tag}-m11`, imageUrl: 'https://example.com/m11.png' })).json().catch(() => ({}))) as { banner?: { id: string } }
     const bannerId = banner.banner?.id
