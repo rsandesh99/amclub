@@ -277,7 +277,7 @@ function ServicesOrderWorkspace({
         body: JSON.stringify(body),
       })
       const d = await res.json().catch(() => ({}))
-      if (!res.ok) return d.error === 'dispute_window_closed' ? t('dispute_window_closed') : typeof d.error === 'string' ? d.error : t('action_failed')
+      if (!res.ok) return d.error === 'dispute_window_closed' ? t('dispute_window_closed') : d.error === 'self_dealing' ? t('self_dealing') : typeof d.error === 'string' ? d.error : t('action_failed')
       return null
     } catch {
       return t('action_failed')

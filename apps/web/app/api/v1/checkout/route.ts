@@ -18,6 +18,7 @@ import { storeCheckoutAttribution } from '@/lib/search/attribution'
 import { activeAddonsFor, addonsOn } from '@/lib/addons'
 import { optionForCheckout, quoteOptionsOn } from '@/lib/rfq/quote-options'
 import { offeredMilestones } from '@/lib/bundles'
+import { SELF_DEALING, isOwnProvider } from '@/lib/orders/self-dealing'
 
 const bodySchema = z
   .object({
@@ -72,6 +73,7 @@ type CheckoutErrorCode =
   | 'payments_unavailable'
   | 'checkout_expired'
   | 'coupon_unavailable'
+  | typeof SELF_DEALING
 
 function fail(status: number, code: CheckoutErrorCode, error: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error, code, ...(extra ?? {}) }, { status })
@@ -418,6 +420,12 @@ export async function POST(request: NextRequest) {
     }
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  // Audit M22 (ADR 027) — nobody buys from their own provider profile: a package,
+  // a quote on their own request, services or goods. Checked before any session exists.
+  if (await isOwnProvider(await createAdminClient(), prep.providerId, userId)) {
+    return fail(409, SELF_DEALING, 'You cannot buy from your own provider profile')
+  }
 
   const { amounts } = prep
 

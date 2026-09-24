@@ -10,6 +10,17 @@ The checkout read `used_count < usage_limit` and froze the discount on the check
 
 The checkout also froze whatever code the client sent, even one that gave no discount (an unknown code, or any code on a quote). `materialize_order` then recorded a redemption and bumped `used_count` for it.
 
+### M22 — one person could deal with themselves
+
+A user may hold a buyer profile and a provider profile; both are keyed by `user_id`. Nothing stopped that person from:
+
+- buying their own package;
+- receiving their own request through fan-out and quoting on it, then paying their own quote;
+- acting as both parties on the resulting order, including disputing and settling it;
+- reviewing their own provider profile.
+
+The only control was the payout approval gate. The exposure: fraud and chargebacks, and metrics built on paid orders and ratings that the owner could inflate.
+
 ## Decision
 
 ### 1. A checkout claims a coupon use before any payment opens (M10)
@@ -28,6 +39,19 @@ The checkout also froze whatever code the client sent, even one that gave no dis
 - The lock order is session, then coupon, which is the same as `materialize_order`, so the two cannot deadlock.
 - The admin coupon form takes "Uses per buyer" (shared `adminCouponCreateSchema`).
 
+### 2. Nobody is on both sides of a deal (M22)
+
+One rule, `lib/orders/self-dealing.ts`, compares the `user_id` that owns each side. A refusal is 409 `self_dealing`.
+
+- **Checkout:** the services checkout (a package, or a quote on your own request) refuses before any session exists. So do the Mart cart checkout and the Mart group-buy member checkout; a group-buy join of your own listing is refused too.
+- **Fan-out:** `fanoutRfq` and `fanoutGoodsRfq` never match the buyer's own provider or seller profile.
+- **Quotes:** the quote route refuses a quote to your own request, even with a match written before this fix.
+- **Services group requests:** an offer from a member's own provider profile is never available to that member (`offerAvailableTo`). A member still committed to one is skipped at close with the new reason `self_dealing` (0081 widens the check).
+- **Order actions:** `applyTransition` and `applyGoodsTransition` refuse every action on an order whose two sides one person owns, except the buyer's `cancel`. The cancel only refunds the payer, and an unaccepted order also auto-cancels in full after 24 hours. This covers any order made before the fix.
+- **Reviews:** a review of your own provider profile is refused, and the review GET no longer offers the form.
+
+Flagging shared bank accounts or phones between two users is still open. Unlike these checks, it needs a signal and an ops queue.
+
 ## Consequences
 
 - One buyer with a per-buyer limit of 1 who opens a second checkout while the first is unpaid is refused for up to 30 minutes (the session's life). The message says so (`coupon_in_checkout`).
@@ -36,5 +60,11 @@ The checkout also froze whatever code the client sent, even one that gave no dis
 - **Proof:**
   - `verify-coupons` runs on the production-flags server (coupons on). Two checkouts at the last use give one 200 and one 409, and the winner's order carries the discount with one redemption. A per-buyer limit of 1 refuses a parallel second checkout and a second order, but not another buyer. An unknown code leaves no coupon on the session. The functions are not callable by a buyer.
   - `verify-authz` §10 checks the function grants on every PR.
+  - `verify-rfq` criterion 12 covers M22 with one person holding a buyer and a provider profile:
+    - fan-out skips their provider profile;
+    - a hand-written match still cannot quote (409);
+    - their own package and their own quote cannot be bought (409, no session);
+    - on their own order, `accept` is 409 and `cancel` works;
+    - their own provider profile cannot be reviewed.
   - The claim race was also run by hand on Postgres 16 with two sessions: the second waited on the lock, then got `usage_exceeded`.
 - **Rollback:** revert the code, then drop the two functions, the two columns and the two indexes. The rollback note is in 0081.

@@ -60,7 +60,8 @@ export const POOL_OFFER_STATUSES = ['active', 'withdrawn'] as const
 export type PoolOfferStatus = (typeof POOL_OFFER_STATUSES)[number]
 
 /** Why a committed member did not get a group quote at close. */
-export const POOL_SKIP_REASONS = ['provider_inactive', 'rfq_closed', 'already_quoted', 'declined'] as const
+// 'self_dealing' (audit M22, 0081): the committed offer is from the member's own provider profile.
+export const POOL_SKIP_REASONS = ['provider_inactive', 'rfq_closed', 'already_quoted', 'declined', 'self_dealing'] as const
 export type PoolSkipReason = (typeof POOL_SKIP_REASONS)[number]
 
 export const POOL_EVENT_KINDS = [

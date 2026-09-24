@@ -25,6 +25,7 @@ import { getAgentSetting } from '@/lib/agent/settings'
 import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { reportOpsError } from '@/lib/observability'
+import { SELF_DEALING, isSelfDealtOrder } from '@/lib/orders/self-dealing'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -303,6 +304,14 @@ export async function applyTransition(
   const actorOk =
     rule.actor === 'either' ? isMsme || isProvider : rule.actor === 'msme' ? isMsme : isProvider
   if (!actorOk) return { ok: false, status: 403, error: `Only the ${rule.actor} can ${action}` }
+
+  // Audit M22 (ADR 027) — one person on both sides of an order acts on neither side
+  // (checkout refuses such an order now; this covers any made before). The buyer's
+  // cancel stays open: it only refunds the payer, and an unaccepted order also
+  // auto-cancels in full after 24 h.
+  if (action !== 'cancel' && (await isSelfDealtOrder(admin, order, actor.userId))) {
+    return { ok: false, status: 409, error: SELF_DEALING }
+  }
 
   const from = order.status as OrderStatus
   if (!rule.from.includes(from)) {

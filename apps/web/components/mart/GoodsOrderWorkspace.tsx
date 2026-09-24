@@ -103,7 +103,7 @@ export function GoodsOrderWorkspace({
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }),
       })
       const d = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(d.error === 'eway_bill_required' ? t('eway_required_note') : d.error === 'not_returnable' ? t('not_returnable_claims_only') : typeof d.error === 'string' ? d.error : t('action_failed'))
+      if (!res.ok) throw new Error(d.error === 'eway_bill_required' ? t('eway_required_note') : d.error === 'not_returnable' ? t('not_returnable_claims_only') : d.error === 'self_dealing' ? t('self_dealing_order') : typeof d.error === 'string' ? d.error : t('action_failed'))
       setPanel(null)
       if (action === 'accept_delivery') { setStamp('received'); await new Promise((r) => setTimeout(r, 900)) }
       router.refresh()

@@ -137,7 +137,8 @@
     "err_addon_changed": "An add-on changed since you chose it. Go back to the package to see the new total.",
     "err_payments_unavailable": "Payments are not available right now. Please try again later — you have not been charged.",
     "err_checkout_expired": "This checkout timed out, so its price and terms are no longer held. Tap Pay again to continue at the current price. You have not been charged.",
-    "err_coupon_unavailable": "This coupon can't be used on this order right now. Remove it to pay the full price, or try again later — no money has been taken."
+    "err_coupon_unavailable": "This coupon can't be used on this order right now. Remove it to pay the full price, or try again later — no money has been taken.",
+    "err_self_dealing": "This is your own business's listing, so you can't buy it here. No money has been taken."
   },
   "orders": {
     "nudge_button": "Send a reminder",
@@ -302,7 +303,8 @@
     "event_payout_paid": "Payout paid",
     "event_payout_failed": "Payout failed",
     "event_payout_voided": "Payout cancelled",
-    "event_other": "Order updated"
+    "event_other": "Order updated",
+    "self_dealing": "You are both the buyer and the provider on this order, so only a cancellation is possible. Contact support if you need help."
   },
   "catalog": {
     "off": "OFF",
@@ -1332,7 +1334,8 @@
     "cmp3_option_standard": "Standard",
     "cmp3_option_express": "Express",
     "cmp3_options_lowest": "Lowest: {who} {option}, {total}",
-    "cmp3_options_fastest": "Fastest: {who} {option}, {days, plural, one {# day} other {# days}}"
+    "cmp3_options_fastest": "Fastest: {who} {option}, {days, plural, one {# day} other {# days}}",
+    "quote_err_self_dealing": "This is your own business's request, so you can't quote on it."
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -2661,7 +2664,9 @@
     "reorder_reminder_on": "Reminder on · every {days} days · next {date}",
     "reorder_reminder_failed": "Could not change the reminder. Try again.",
     "reorder_link": "Your usual orders",
-    "why_label": "Why AMClub"
+    "why_label": "Why AMClub",
+    "pool_err_self_dealing": "This group buy is for your own listing, so you can't join it.",
+    "self_dealing_order": "You are both the buyer and the seller on this order, so only a cancellation is possible."
   },
   "admin_mart": {
     "title": "AMC Mart",

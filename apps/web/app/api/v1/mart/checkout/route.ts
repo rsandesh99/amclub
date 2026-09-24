@@ -11,6 +11,7 @@ import { prepareGoodsCheckout } from '@/lib/mart/totals'
 import { getMartSetting } from '@/lib/mart/config'
 import { serverError } from '@/lib/api/errors'
 import { accountSuspendedResponse } from '@/lib/auth/suspension'
+import { SELF_DEALING, isOwnProvider } from '@/lib/orders/self-dealing'
 
 /**
  * Goods checkout (MART_DESIGN.md §4.3) — the SAME frozen-session → gateway
@@ -60,6 +61,8 @@ export async function POST(request: NextRequest) {
   const prepared = await prepareGoodsCheckout(admin, items, { sample: !!sample })
   if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status })
   const { prep } = prepared
+  // Audit M22 (ADR 027) — a seller never buys their own listings.
+  if (await isOwnProvider(admin, prep.sellerId, userId)) return NextResponse.json({ error: { code: SELF_DEALING } }, { status: 409 })
   const deliveryDays = Number(await getMartSetting<number | string>(admin, 'goods_delivery_days', 3))
 
   // ADR 018 — sessions are server-written only (the buyer is authorised above).

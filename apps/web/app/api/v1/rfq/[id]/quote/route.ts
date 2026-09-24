@@ -18,6 +18,7 @@ import { captureServerEvent } from '@/lib/analytics/server'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { notifyText, sameText } from '@/lib/i18n/notify'
 import { quoteOptionsOn, writeQuoteOptions } from '@/lib/rfq/quote-options'
+import { SELF_DEALING, providerOwnsRequest } from '@/lib/orders/self-dealing'
 
 const bodySchema = quoteSchema.omit({ rfq_id: true })
 
@@ -117,6 +118,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // window lapse) can no longer quote — enforced here, not only in the UI, so
   // mobile/direct callers cannot bypass it and the score never double-counts.
   if (match.declined_at) return NextResponse.json({ error: 'declined', declined_at: match.declined_at }, { status: 409 })
+  // Audit M22 (ADR 027) — never a quote to your own request (fan-out no longer matches
+  // it; a match written before that, or by hand, is refused here).
+  if (await providerOwnsRequest(admin, actor.providerId, rfqId)) return NextResponse.json({ error: SELF_DEALING }, { status: 409 })
 
   // One quote per provider per RFQ.
   const { data: existing } = await admin

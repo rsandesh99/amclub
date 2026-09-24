@@ -74,6 +74,8 @@ export const CHECKOUT_ERROR_KEYS: Record<string, string> = {
   checkout_expired: 'err_checkout_expired',
   // Audit M10 — the coupon's last use (total or per buyer) went to another checkout.
   coupon_unavailable: 'err_coupon_unavailable',
+  // Audit M22 — a buyer's own provider (or seller) profile.
+  self_dealing: 'err_self_dealing',
   network: 'err_network',
   rate_limited: 'err_rate_limited',
 }
