@@ -30,7 +30,7 @@ export default async function MsmeOrderPage({ params, searchParams }: { params: 
   const tLic = licenceFacts && licenceFacts !== 'forbidden' ? await getTranslations('licences_v3') : null
   const [documents, goods, again] = await Promise.all([
     getOrderDocuments(id),
-    detail.order['kind'] === 'goods' ? getGoodsOrderExtras(await createAdminClient(), detail.order) : Promise.resolve(undefined),
+    detail.order['kind'] === 'goods' ? getGoodsOrderExtras(await createAdminClient(), detail.order, detail.viewerRole) : Promise.resolve(undefined),
     repeatable ? getBuyAgainForOrder(user.id, id) : Promise.resolve(null),
   ])
 

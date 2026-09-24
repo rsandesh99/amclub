@@ -4,33 +4,13 @@ import { useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
+import { CRON_ERROR_PREFIX, CRON_JOBS, decodeCronIssues } from '@/lib/jobs/cron-registry'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const daysAgoISO = (d: number) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10)
-
-// Expected beats per vercel.json schedules; stale = ~2 missed runs + slack.
-const CRON_JOBS = [
-  { name: 'auto-cancel', staleAfterMs: 3 * 3600_000 },
-  { name: 'auto-accept', staleAfterMs: 3 * 3600_000 },
-  { name: 'rfq-expire', staleAfterMs: 3 * 3600_000 },
-  { name: 'reconcile', staleAfterMs: 14 * 3600_000 },
-  { name: 'payouts', staleAfterMs: 26 * 3600_000 },
-  { name: 'provider-stats', staleAfterMs: 26 * 3600_000 },
-  { name: 'score-compute', staleAfterMs: 26 * 3600_000 },
-  { name: 'benchmark-compute', staleAfterMs: 26 * 3600_000 },
-  { name: 'licence-reminders', staleAfterMs: 26 * 3600_000 },
-  { name: 'onboarding-nudges', staleAfterMs: 2 * 3600_000 },
-  // Agent crons beat even while AGENT_ENABLED=false (they only skip the enqueue).
-  { name: 'agent-munshi-scan', staleAfterMs: 1 * 3600_000 },
-  { name: 'agent-munshi-followup', staleAfterMs: 3 * 3600_000 },
-  { name: 'agent-onboarding-expire', staleAfterMs: 3 * 3600_000 },
-  { name: 'agent-munshi-growth', staleAfterMs: 8 * 24 * 3600_000 }, // weekly (S2.4)
-  { name: 'agent-procurement-watch', staleAfterMs: 1 * 3600_000 }, // every 15 min (S3.1)
-  { name: 'agent-demand-pools', staleAfterMs: 3 * 3600_000 }, // hourly (S3.4); a no-op beat while the switch is off
-  // pool-close is omitted: it deliberately records no beat while MART_ENABLED=false.
-]
+const ist = (iso: string) => new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST'
 
 export default function AdminDashboardPage() {
   const t = useTranslations('admin_ops')
@@ -113,21 +93,46 @@ export default function AdminDashboardPage() {
             </Panel>
           </div>
 
-          {/* Cron liveness (B3) — a job that stops beating turns red here. */}
+          {/* Cron liveness + outcome (B3, audit M35): red = stale or the last run threw; amber = it finished but reported failures. */}
           <Panel title={t('jobs_title')}>
             <div className="grid gap-2 sm:grid-cols-2">
-              {CRON_JOBS.map(({ name, staleAfterMs }) => {
+              {CRON_JOBS.filter((j) => !j.requires || data.cronExpect?.[j.requires] === true).map(({ name, staleAfterMs }) => {
                 const hb = (data.cronHeartbeats ?? []).find((x: any) => x.name === name)
                 const ageMs = hb ? Date.now() - new Date(hb.last_ok_at).getTime() : Infinity
                 const stale = ageMs > staleAfterMs
+                const failed = hb?.status === 'failed'
+                const degraded = !stale && !failed && hb?.status === 'degraded'
+                const red = stale || failed
+                const issues = degraded ? decodeCronIssues(hb.summary) : []
+                const errorText = failed && typeof hb.summary === 'string' ? hb.summary.slice(CRON_ERROR_PREFIX.length) : ''
                 return (
-                  <div key={name} className={`flex items-center justify-between rounded-button border px-3 py-2 text-sm ${stale ? 'border-danger/40 bg-danger/5' : 'border-border'}`}>
-                    <span className="font-medium">{name}</span>
-                    <span className={stale ? 'font-semibold text-danger' : 'text-foreground-secondary'}>
-                      {hb
-                        ? new Date(hb.last_ok_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST'
-                        : t('jobs_never')}
-                    </span>
+                  <div
+                    key={name}
+                    data-testid={`cron-${name}`}
+                    data-status={red ? 'red' : degraded ? 'amber' : 'ok'}
+                    className={`rounded-button border px-3 py-2 text-sm ${red ? 'border-danger/40 bg-danger/5' : degraded ? 'border-warning/40 bg-warning/5' : 'border-border'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">
+                        {name}
+                        {stale && hb && <span className="ml-2 text-xs font-semibold text-danger">{t('jobs_status_overdue')}</span>}
+                        {degraded && <span className="ml-2 text-xs font-semibold text-warning">{t('jobs_status_degraded')}</span>}
+                      </span>
+                      <span className={stale ? 'font-semibold text-danger' : 'text-foreground-secondary'}>
+                        {hb ? ist(hb.last_ok_at) : t('jobs_never')}
+                      </span>
+                    </div>
+                    {failed && (
+                      <p className="mt-1 text-xs text-danger">
+                        <span className="font-semibold">{t('jobs_failed_at', { at: ist(hb.updated_at ?? hb.last_ok_at) })}</span>
+                        {errorText && <span className="ml-1 break-all font-mono">{errorText}</span>}
+                      </p>
+                    )}
+                    {issues.length > 0 && (
+                      <p className="mt-1 text-xs text-warning">
+                        {issues.map((i) => t(`jobs_issue_${i.code}`, { n: i.n })).join(' · ')}
+                      </p>
+                    )}
                   </div>
                 )
               })}

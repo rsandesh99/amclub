@@ -1,6 +1,7 @@
 import 'server-only'
 import { VendorHttpError } from './types'
 import type { Transcriber, TranscriptionResult, VoiceAudio } from './types'
+import { OUTBOUND_TIMEOUT_MS } from '@/lib/outbound'
 
 /**
  * Sarvam AI speech-to-text-translate (Phase 8b). One REST call transcribes
@@ -32,6 +33,7 @@ class SarvamTranscriber implements Transcriber {
       method: 'POST',
       headers: { 'api-subscription-key': this.apiKey },
       body: form,
+      signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS.stt), // audit M37; the route logs it and answers transcription_failed
     })
     if (!res.ok) {
       const body = await res.text().catch(() => '')

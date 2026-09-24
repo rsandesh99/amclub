@@ -1,0 +1,23 @@
+# Build context for apps/agent-runtime/Dockerfile, which is built from the repo root
+# (`fly deploy --config apps/agent-runtime/fly.toml --dockerfile apps/agent-runtime/Dockerfile .`).
+# The image needs only the workspace manifests (package.json, pnpm-lock.yaml,
+# pnpm-workspace.yaml, .npmrc), apps/agent-runtime and packages/*. Everything else stays
+# out: secrets, git history, the other apps and the docs (audit M26). pnpm install
+# --frozen-lockfile tolerates the absent workspace members (verified with pnpm 9.15).
+.git
+.claude
+.github
+**/node_modules
+**/.env*
+**/.next
+**/.turbo
+**/.expo
+**/*.log
+**/*.tsbuildinfo
+**/coverage
+docs
+apps/web
+apps/mobile
+launch
+loadtest
+tests

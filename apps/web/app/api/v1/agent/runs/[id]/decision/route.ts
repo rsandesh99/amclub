@@ -8,6 +8,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { env } from '@/lib/env'
+import { OUTBOUND_TIMEOUT_MS } from '@/lib/outbound'
 
 /**
  * POST /api/v1/agent/runs/[id]/decision — the SURFACE records the user's yes/no
@@ -109,6 +110,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `AMC-Runtime ${cred}` },
         body: JSON.stringify({ decisionId: decision.id, tool, final }),
+        // Audit M37: never hold the tap on a slow runtime; munshi.followup resumes approved runs it missed.
+        signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS.internal),
       })
       resumed = res.ok
     } catch {

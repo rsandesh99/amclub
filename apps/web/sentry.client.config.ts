@@ -9,7 +9,8 @@ import * as Sentry from '@sentry/nextjs'
  */
 Sentry.init({
   dsn: process.env['NEXT_PUBLIC_SENTRY_DSN'],
-  environment: process.env['NODE_ENV'],
+  // Vercel exposes its environment to the browser build as NEXT_PUBLIC_VERCEL_ENV (audit M35).
+  environment: process.env['NEXT_PUBLIC_VERCEL_ENV'] ?? process.env['NODE_ENV'],
   tracesSampleRate: process.env['NODE_ENV'] === 'production' ? 0.1 : 1.0,
   debug: false,
   replaysOnErrorSampleRate: 1.0,

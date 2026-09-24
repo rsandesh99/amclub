@@ -381,7 +381,20 @@
     "onboarding_unconfirmed": "வரைவு உறுதிப்படுத்தப்படவில்லை",
     "onboarding_decision": "முடிவு",
     "onboarding_masked": "மறைக்கப்பட்டது",
-    "onboarding_none": "பதில்கள் பதிவு செய்யப்படவில்லை."
+    "onboarding_none": "பதில்கள் பதிவு செய்யப்படவில்லை.",
+    "jobs_title": "திட்டமிடப்பட்ட பணிகள் (கிரான் நிலை)",
+    "jobs_never": "ஒருமுறையும் இயங்கவில்லை",
+    "jobs_hint": "சிவப்பு = எதிர்பார்த்த நேரத்தில் முடிந்த இயக்கம் இல்லை, அல்லது கடைசி இயக்கம் தோல்வியடைந்தது. அம்பர் = கடைசி இயக்கம் முடிந்தது, ஆனால் தோல்விகளைப் புகாரளித்தது. Vercel-இல் CRON_SECRET, கிரான் பதிவுகள் மற்றும் Sentry-ஐச் சரிபார்க்கவும்.",
+    "jobs_status_overdue": "தாமதம்",
+    "jobs_status_degraded": "கவனம் தேவை",
+    "jobs_failed_at": "கடைசி இயக்கம் தோல்வி: {at}",
+    "jobs_issue_payouts_failed": "{n} பேஅவுட்கள் தோல்வியடைந்தன",
+    "jobs_issue_payouts_held": "{n} பேஅவுட்கள் நிறுத்தி வைக்கப்பட்டன",
+    "jobs_issue_payouts_unconfirmed": "{n} பேஅவுட்கள் உறுதிப்படுத்தப்படவில்லை",
+    "jobs_issue_refunds_failing": "{n} பணத்திருப்பங்கள் இன்னும் தோல்வியடைகின்றன",
+    "jobs_issue_not_enqueued": "ஏஜென்ட் ரன்டைம் பணியை ஏற்கவில்லை",
+    "jobs_issue_update_errors": "{n} வரிசைகள் புதுப்பிக்கப்படவில்லை",
+    "jobs_issue_step_errors": "{n} படிகள் தோல்வியடைந்தன"
   },
   "orders": {
     "dispute_statement_title": "உங்கள் தரப்பு",

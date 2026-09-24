@@ -1074,7 +1074,20 @@
     "onboarding_unconfirmed": "డ్రాఫ్ట్ నిర్ధారించలేదు",
     "onboarding_decision": "నిర్ణయం",
     "onboarding_masked": "దాచబడింది",
-    "onboarding_none": "జవాబులు నమోదు కాలేదు."
+    "onboarding_none": "జవాబులు నమోదు కాలేదు.",
+    "jobs_title": "షెడ్యూల్ చేసిన జాబ్‌లు (క్రాన్ స్థితి)",
+    "jobs_never": "ఎప్పుడూ రన్ కాలేదు",
+    "jobs_hint": "ఎరుపు = ఆశించిన సమయంలో పూర్తయిన రన్ లేదు, లేదా చివరి రన్ విఫలమైంది. కాషాయం = చివరి రన్ పూర్తయింది కానీ వైఫల్యాలను నివేదించింది. Vercelలో CRON_SECRET, క్రాన్ లాగ్‌లు మరియు Sentry చూడండి.",
+    "jobs_status_overdue": "ఆలస్యం",
+    "jobs_status_degraded": "శ్రద్ధ అవసరం",
+    "jobs_failed_at": "చివరి రన్ విఫలమైంది: {at}",
+    "jobs_issue_payouts_failed": "{n} పేఅవుట్‌లు విఫలమయ్యాయి",
+    "jobs_issue_payouts_held": "{n} పేఅవుట్‌లు నిలిపివేయబడ్డాయి",
+    "jobs_issue_payouts_unconfirmed": "{n} పేఅవుట్‌లు నిర్ధారించబడలేదు",
+    "jobs_issue_refunds_failing": "{n} రీఫండ్‌లు ఇంకా విఫలమవుతున్నాయి",
+    "jobs_issue_not_enqueued": "ఏజెంట్ రన్‌టైమ్ జాబ్‌ను స్వీకరించలేదు",
+    "jobs_issue_update_errors": "{n} వరుసలు అప్‌డేట్ కాలేదు",
+    "jobs_issue_step_errors": "{n} దశలు విఫలమయ్యాయి"
   },
   "orders": {
     "dispute_statement_title": "మీ వాదన",

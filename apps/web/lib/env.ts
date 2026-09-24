@@ -17,6 +17,8 @@ const publicEnvSchema = z.object({
     .url()
     .default('https://eu.posthog.com'),
   NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
+  // Set by Vercel (production | preview | development); the browser Sentry environment. Unset locally.
+  NEXT_PUBLIC_VERCEL_ENV: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string().optional(),
   // Cloudflare Turnstile site key (public). The matching SECRET key lives in the
@@ -49,6 +51,9 @@ const serverEnvSchema = z.object({
   KYC_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   SENTRY_AUTH_TOKEN: z.string().optional(),
+  // Set by Vercel (production | preview | development): the server Sentry environment and the
+  // payments-simulation guard (ADR-023). Unset locally and in CI.
+  VERCEL_ENV: z.string().optional(),
   // Upstash Redis REST — backs rate limiting AND the agent budget counters. When
   // unset, the limiter is a no-op (allow all) so local/dev keeps working without
   // Redis; agent model calls FAIL CLOSED instead when NODE_ENV/VERCEL_ENV is

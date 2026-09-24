@@ -21,6 +21,10 @@ concurrency:
   group: money-rigs-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only token (audit M26): the rigs write nothing to the repo or the PR (artifacts use the runtime token).
+permissions:
+  contents: read
+
 jobs:
   rigs:
     name: Money rigs · disposable Supabase
@@ -37,7 +41,8 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
       upstash:
-        image: hiett/serverless-redis-http:latest
+        # Third-party image: pinned to the digest `latest` pointed at (2024-05-11); bump deliberately.
+        image: hiett/serverless-redis-http:latest@sha256:5b0bb9239fce53abf87b2018a7a0deb9ec7bd900c5360738fe5fbeeb426f9150
         ports: ['8079:80']
         env:
           SRH_MODE: env
@@ -74,13 +79,13 @@ jobs:
       EXP_V3_GUIDE: "on"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -89,7 +94,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
         with:
           # Pinned: `latest` resolves through the unauthenticated GitHub API,
           # which rate-limits shared runner IPs ("Failed to resolve latest
@@ -150,7 +155,7 @@ jobs:
           echo "the Upstash REST front did not answer"
           curl -s -X POST -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" -d '["PING"]' "$UPSTASH_REDIS_REST_URL/" || true
           docker ps
-          docker logs "$(docker ps -q --filter ancestor=hiett/serverless-redis-http:latest)" 2>&1 | tail -40 || true
+          docker logs "$(docker ps -q --filter ancestor=hiett/serverless-redis-http@sha256:5b0bb9239fce53abf87b2018a7a0deb9ec7bd900c5360738fe5fbeeb426f9150)" 2>&1 | tail -40 || true
           exit 1
 
       - name: Build and start the app (simulate payments)
@@ -280,7 +285,7 @@ jobs:
 
       - name: Screenshots and a11y report (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: e2e-artifacts
           path: apps/web/e2e-artifacts/

@@ -3,6 +3,7 @@ import type { GatewayTransfer, PaymentGateway } from './types'
 import { notifyPayoutPaid } from '@/lib/notifications/events'
 import { assertFeeHeadroom, FeeHeadroomError } from './fees'
 import { payoutRunBlockers } from './release-gate'
+import { reportOpsError, reportOpsIssue } from '@/lib/observability'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -79,7 +80,7 @@ export async function runPayouts(
   admin: Admin,
   gateway: PaymentGateway,
   opts?: { allScheduled?: boolean; orderId?: string },
-): Promise<{ processed: number; transferIds: string[]; simulated: boolean; held: number; unconfirmed: number }> {
+): Promise<{ processed: number; transferIds: string[]; simulated: boolean; held: number; unconfirmed: number; failed: number }> {
   const today = new Date().toISOString().slice(0, 10)
   let query = admin.from('payouts').select('*').eq('status', 'scheduled')
   // Single-order settlement (dispute resolution / manual retry) reuses this same
@@ -92,6 +93,7 @@ export async function runPayouts(
   let simulated = false
   let held = 0
   let unconfirmed = 0
+  let failed = 0
   for (const p of due ?? []) {
     // CAS claim: scheduled → processing (one worker wins).
     const { data: claimed } = await admin
@@ -165,6 +167,8 @@ export async function runPayouts(
         if (isDefiniteTransferFailure(e)) {
           // Refused: nothing was sent. 'failed' surfaces in /admin/payouts for retry.
           console.error('[runPayouts] transfer refused for payout', p.id, e)
+          reportOpsError(e, 'payout_failed', { tags: { payout_id: p.id, order_id: p.order_id }, extra: { reason: describe(e) } })
+          failed++
           await admin
             .from('payouts')
             .update({ status: 'failed', updated_at: new Date().toISOString() })
@@ -199,7 +203,7 @@ export async function runPayouts(
     if (transfer.simulated) simulated = true
     if (await markPaid(admin, p, transfer, recovered)) transferIds.push(transfer.razorpayTransferId)
   }
-  return { processed: transferIds.length, transferIds, simulated, held, unconfirmed }
+  return { processed: transferIds.length, transferIds, simulated, held, unconfirmed, failed }
 }
 
 /**
@@ -244,6 +248,7 @@ export async function settleUnconfirmedPayouts(
         event: 'payout_failed',
         payload: { payout_id: p.id, amount_paise: p.amount_paise, reason: 'unconfirmed_no_transfer' },
       })
+      reportOpsIssue('payout failed: unconfirmed transfer not at the gateway', 'payout_failed', { level: 'error', tags: { payout_id: p.id, order_id: p.order_id } })
       failed++
     }
   }

@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth/admin'
 import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
 import { consentRate } from '@amclub/shared'
 import { ANALYTICS_CONSENT_REQUIRED } from '@/lib/public-flags'
+import { MART_ENABLED } from '@/lib/flags'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -37,8 +38,9 @@ export async function GET(request: NextRequest) {
     admin.from('provider_profiles').select('id, state, status').is('deleted_at', null),
     admin.from('provider_categories').select('provider_id, category_id'),
     admin.from('categories').select('id, slug, name_i18n'),
-    // Cron liveness (STATUS_AUDIT B3) — dead crons must be visible, not silent.
-    admin.from('cron_heartbeats').select('name, last_ok_at, last_result'),
+    // Cron liveness + outcome (STATUS_AUDIT B3, audit M35) — dead or failing crons must be visible, not silent.
+    // `*`: status / summary arrive with migration 0080; before it the rows still load (and read as ok).
+    admin.from('cron_heartbeats').select('*'),
   ])
 
   const orders = (ordersRes.data ?? []) as any[]
@@ -120,6 +122,8 @@ export async function GET(request: NextRequest) {
     topStates,
     liquidityMatrix: { categories: Object.keys(matrix).sort(), states: [...new Set(Object.values(matrix).flatMap((m) => Object.keys(m)))].sort(), matrix },
     cronHeartbeats: heartbeatsRes.data ?? [],
+    // Which flag-gated crons are expected to beat (pool-close records nothing while Mart is off).
+    cronExpect: { mart: MART_ENABLED },
   })
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

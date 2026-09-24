@@ -2,11 +2,13 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
-import { recordHeartbeat } from '@/lib/jobs/heartbeat'
+import { runCronJob } from '@/lib/jobs/heartbeat'
 import { recomputePublicStats } from '@/lib/trust/public-stats'
 import { recheckGstins } from '@/lib/trust/gstin-recheck'
 
 export const dynamic = 'force-dynamic'
+
+type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
 /** Quotes a provider must have answered before a response time is shown to buyers.
  *  (Not exported — Next.js route modules may only export handlers/config.) */
@@ -18,18 +20,19 @@ const MIN_RESPONSE_SAMPLE = 3
  * rfq_matches.notified_at → quotes.created_at) behind a sample gate; below the
  * gate it is NULL and the UI renders nothing — never "0 min". Every provider is
  * rewritten on every run, so a seeded or stale value cannot survive a night.
+ * Failed updates or failed side steps mark the run degraded (M35).
  */
 export async function GET(request: NextRequest) {
   if (!verifyCron(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const admin = await createAdminClient()
+  return runCronJob(admin, 'provider-stats', () => computeProviderStats(admin))
+}
 
+async function computeProviderStats(admin: Admin) {
   const { data: rows, error } = await admin
     .from('provider_score_inputs_v1')
     .select('provider_id, median_response_hours, response_sample_count')
-  if (error) {
-    console.error('[cron/provider-stats]', error)
-    return NextResponse.json({ error: 'failed' }, { status: 500 })
-  }
+  if (error) throw new Error(`provider_score_inputs_v1: ${error.message}`)
 
   let computed = 0
   let nulled = 0
@@ -64,7 +67,5 @@ export async function GET(request: NextRequest) {
     .then(({ data, error: e }) => (e ? { cells: 0, error: e.message } : { cells: Number(data ?? 0) }))
     .catch(() => ({ cells: 0, error: 'failed' }))
 
-  const result = { providers: rows?.length ?? 0, computed, nulled, failed, minSample: MIN_RESPONSE_SAMPLE, publicStats, gstin, quoteSla }
-  await recordHeartbeat(admin, 'provider-stats', result)
-  return NextResponse.json(result)
+  return { providers: rows?.length ?? 0, computed, nulled, failed, minSample: MIN_RESPONSE_SAMPLE, publicStats, gstin, quoteSla }
 }

@@ -459,6 +459,11 @@ const MANIFEST: Entry[] = [
     file: '0076_pool_rationale_private.sql',
     note: 'Audit M15: pools.rationale (source order ids, seller 30-day volume) not client-readable; column grant built from the catalogue; no-op without the Mart tables',
   },
+  {
+    file: '0080_ops_heartbeat_status_hot_indexes.sql',
+    tables: ['cron_heartbeats'],
+    note: 'Audit M35 + L7: cron_heartbeats.status / summary (run outcome; no client grant) + hot-table indexes (notifications, payments, checkout_sessions, orders, quotes, rfq_matches, payouts)',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

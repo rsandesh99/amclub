@@ -11,6 +11,10 @@ on:
         required: true
         default: 'https://amclub-web.vercel.app'
 
+# Read-only token (audit M26).
+permissions:
+  contents: read
+
 jobs:
   search:
     name: k6 · search p95 < 800 ms
@@ -18,13 +22,19 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install k6
+        # Pinned version AND checksum (k6-v0.54.0-checksums.txt); bump both together.
         run: |
-          curl -fsSL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xz
+          curl -fsSL -o k6.tar.gz https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz
+          echo "c7f03434854f837b6790ee81572e4b0f955241974c79a43cbb9f8d0fef069589  k6.tar.gz" | sha256sum -c -
+          tar xzf k6.tar.gz
           sudo mv k6-v0.54.0-linux-amd64/k6 /usr/local/bin/k6
           k6 version
 
       - name: 500 concurrent searches (ramp 30 s, hold 60 s)
-        run: k6 run --summary-trend-stats "avg,med,p(90),p(95),p(99),max" -e BASE_URL="${{ inputs.base_url }}" loadtest/k6-search.js
+        # The input reaches the shell through env, never interpolated into the script.
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        run: k6 run --summary-trend-stats "avg,med,p(90),p(95),p(99),max" -e BASE_URL="$BASE_URL" loadtest/k6-search.js

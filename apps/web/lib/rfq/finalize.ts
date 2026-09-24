@@ -5,6 +5,7 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
 import { addEvent, processRefund } from '@/lib/orders/transitions'
 import { writeAudit } from '@/lib/audit/log'
+import { reportOpsError, reportOpsIssue } from '@/lib/observability'
 import { addQuoteEvent, addQuoteEvents } from './events'
 import { labelLostQuotes } from './loss-labels'
 import { shadowAtAcceptance } from '@/lib/shadow'
@@ -284,11 +285,13 @@ async function settleDuplicateRfqOrder(
     if (refundedPaise !== totalPaise) {
       // ADR-014 H4: never record a refund that did not happen.
       console.error('[finalize] duplicate refund mismatch — ops must check', order.id, { expected: totalPaise, refundedPaise })
+      reportOpsIssue('duplicate RFQ order refund mismatch', 'refund_failed', { level: 'error', tags: { order_id: order.id }, extra: { expected_paise: totalPaise, refunded_paise: refundedPaise } })
       await writeAudit(admin, null, { actorId: null, action: 'duplicate_rfq_refund_mismatch', entity: 'orders', entityId: order.id, after: { expected_paise: totalPaise, refunded_paise: refundedPaise } })
       return false
     }
   } catch (e) {
     console.error('[finalize] duplicate refund failed — ops must refund', order.id, (e as Error).message)
+    reportOpsError(e, 'refund_failed', { tags: { order_id: order.id, reason: 'duplicate_rfq_order' } })
     await writeAudit(admin, null, { actorId: null, action: 'duplicate_rfq_refund_failed', entity: 'orders', entityId: order.id, after: { error: (e as Error).message } })
     return false
   }
