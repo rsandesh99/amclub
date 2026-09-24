@@ -8,7 +8,7 @@ it ships.
 
 The audit (`docs/audit/2026-09-24-architecture-security-audit.md`) confirmed
 66 unique issues. Wave 0 is done: 0072 is live on production (C1, C2, H1, H2,
-M18). 0073 (`packages`) is applied once PR #58 is serving production.
+M18). 0073 (`packages`) was applied the same day, once PR #58 was serving production.
 
 Waves 1–5 in the report's remediation plan are open. Each wave is one or more
 PRs, and each ticks items off in the report's index. Two items need something

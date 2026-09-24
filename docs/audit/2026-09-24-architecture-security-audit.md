@@ -8,7 +8,7 @@
 
 The money core is well built. Payments trust only the HMAC-verified webhook, `materialize_order` is atomic and replay-safe, prices are computed only on the server, and ADR 018 / 022 closed the money tables. The agent confirm gates are enforced in code, not in prompts. The serious problems sat **around** that core:
 
-1. **Critical, now fixed on production: provider and catalog tables were client-writable** (C1, C2, H1, H2, M18). Supabase's default privileges grant `ALL` to `anon` and `authenticated` on every new table and view. ADR 018 revoked that for the money tables, but the provider and catalog tables kept it. With only the public anon key, anyone could rename, re-rate or delete any live provider through the `public_providers` view. Any signed-in user could create an **active** provider profile (skipping verification), lift a suspension, or join credential-gated categories and receive those buyers' requests. Migration **0072** closed all of this on production on 2026-09-24, and a catalog query confirmed the result. The `packages` part (0073) lands after PR #58 deploys.
+1. **Critical, now fixed on production: provider and catalog tables were client-writable** (C1, C2, H1, H2, M18). Supabase's default privileges grant `ALL` to `anon` and `authenticated` on every new table and view. ADR 018 revoked that for the money tables, but the provider and catalog tables kept it. With only the public anon key, anyone could rename, re-rate or delete any live provider through the `public_providers` view. Any signed-in user could create an **active** provider profile (skipping verification), lift a suspension, or join credential-gated categories and receive those buyers' requests. Migration **0072** closed all of this on production on 2026-09-24, and a catalog query confirmed the result. The `packages` part (0073) followed once PR #58 was live, the same day.
 2. **High: unauthenticated inbound endpoints.**
    - The Supabase SMS hook (H3) sends a real OTP SMS to any number for anyone who calls it.
    - The WhatsApp webhook (H4) skips its signature check when the driver falls back to `stub`.
@@ -38,7 +38,7 @@ The money core is well built. Payments trust only the HMAC-verified webhook, `ma
 | Reproduced C1 / C2 / H1 / H2 / M18 on a scratch Postgres 16 with the same grants and policies. Proved 0072 + 0073 close every hole, keep owner and public reads, and re-run cleanly | local |
 | Wrote migration **0072**: `public_providers` SELECT-only; no client writes on `provider_profiles`, `provider_categories`, `products`, `price_tiers`; `buyer_pool_discipline_v1` becomes `security_invoker` with no client grant | PR #58 |
 | **Applied 0072 to production** (approved by the founder) and verified the grants and view options with a read-only query. The security advisor's definer-view count dropped from 2 to 1; the one left is the deliberate public projection `public_providers` | production |
-| Wrote migration **0073** (`packages`). The partner package routes now check ownership on the session client and write with the service role. Apply 0073 after #58 is live | PR #58 |
+| Wrote migration **0073** (`packages`). The partner package routes now check ownership on the session client and write with the service role. **Applied to production** once #58 was live; clients hold SELECT only | PR #58, production |
 | Added `verify-authz` §7a6 (every denial asserted as an error, plus owner-read controls) and route checks in `verify-experience` E2b | PR #58 |
 | ADR 025 and a CLAUDE.md rule: every new table or view gets an explicit grant decision | PR #58 |
 
@@ -48,7 +48,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 
 | Wave | Items | Notes |
 |---|---|---|
-| **0 — done** | C1, C2, H1, H2, M18 | 0072 live. 0073 after the #58 deploy |
+| **0 — done** | C1, C2, H1, H2, M18 | 0072 and 0073 live |
 | **1 — inbound and dependencies (in review)** | H3 SMS hook signature (Standard Webhooks, +91 only; closed once the secret is set); H4 WhatsApp webhook fails closed without a verified signature; M6 `safeNext` control characters; H10 sharp, M27 next, M25 next-intl upgrades; M1 revoke `generate_order_number` from clients; the advisor items (revoke EXECUTE on internal definer functions from anon, pin `search_path`) | H3 needs a `SEND_SMS_HOOK_SECRET` in Vercel and the Supabase hook config |
 | **2 — money path** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
 | **3 — authorisation and abuse** | M7 / M8 delegated tokens refused unless a route opts in; M13 suspension enforced in `resolveActor`; M9 review flags go to a queue; M10 coupons: no public read, atomic redemption, per-buyer limit; M12 ownership checks on Udyam and penny-drop; M22 self-dealing guard; M17 clarification provider id hidden; M5 / L2 attachment and certificate paths pinned; M3 no token renewal from a delegated token | M12 touches KYC, so an ADR is needed |
@@ -188,7 +188,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### C2. Any signed-in user could create or rewrite a provider profile (self-activation, lifting a suspension, fake trust badges)
 
-- **Status:** Fixed on production (0072, applied 2026-09-24; PR #58). The `packages` part is fixed in code in PR #58; its migration 0073 is applied after that build is live
+- **Status:** Fixed on production (0072 and 0073, applied 2026-09-24; PR #58)
 - **Where:** `packages/db/src/rls/policies.sql:111`, `packages/db/src/rls/policies.sql:110`
 - **Raised by:** 4 findings from 4 audit teams (AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); AuthZ: provider (partner) and Mart routes; Database: RLS, grants, functions, views, storage; Server-rendered pages: service-role data serialized into client components, and public ISR pages)
 - **Impact:** KYC review, credential requirements for regulated categories, the legal-acceptance gate and admin suspension are all bypassed. An ordinary signed-in account receives every future buyer RFQ in the categories and states it picks, including private business details and attachments. It can take buyer payments as a 'provider' nobody vetted and can forge trust badges and ranking signals. Payout of money stays blocked (bank rows are write-revoked and the approval gate holds payouts), but the data exposure and marketplace fraud happen immediately.
