@@ -1,7 +1,15 @@
 # Deploy the always-on agent runtime to Fly.io (ADR-009 §1). Runs on master when
-# the runtime or its source packages change. NO-OP until FLY_API_TOKEN is set as
-# a repo secret (founder task, docs/agents/RUNTIME.md) — the deploy step is
-# skipped when the secret is absent, so the workflow never fails a build.
+# the runtime or its source packages change. NO-OP until FLY_API_TOKEN is set
+# (founder task, docs/agents/RUNTIME.md) — the deploy steps are skipped when the
+# secret is absent, so the workflow never fails a build.
+#
+# Supply chain (audit M26): the Fly token can deploy code to a machine that holds
+# SUPABASE_SERVICE_ROLE_KEY and DATABASE_URL, so nothing here trusts a mutable
+# ref. Every action is pinned to a full commit SHA (the tag it was taken from is
+# in the trailing comment; bump both together), flyctl is pinned to an exact
+# version, the job only ever runs for master, and FLY_API_TOKEN lives in the
+# GitHub Environment "production" as an app-scoped deploy token (operator steps:
+# docs/agents/RUNTIME.md § "Deploy credentials").
 name: Deploy agent-runtime
 
 on:
@@ -11,22 +19,42 @@ on:
       - 'apps/agent-runtime/**'
       - 'packages/agent-core/**'
       - 'packages/shared/**'
+      - '.dockerignore'
       - '.github/workflows/agent-runtime.yml'
   workflow_dispatch:
+
+# Read the repo, nothing else: the deploy talks to Fly, never to GitHub.
+permissions:
+  contents: read
+
+# One deploy at a time, and a newer push never cancels a deploy half-way.
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
     name: Fly deploy (bom)
+    # A workflow_dispatch from another branch must not deploy that branch.
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # FLY_API_TOKEN is an Environment secret: the Environment is restricted to
+    # master (and to required reviewers when the plan allows it).
+    environment: production
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Guard — FLY_API_TOKEN present?
         id: guard
+        # The secret reaches the shell only through env, never interpolated into the script.
+        env:
+          T: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          if [ -n "${{ secrets.FLY_API_TOKEN }}" ]; then
+          if [ -n "$T" ]; then
             echo "armed=true" >> "$GITHUB_OUTPUT"
           else
             echo "armed=false" >> "$GITHUB_OUTPUT"
@@ -35,7 +63,10 @@ jobs:
 
       - name: Setup Fly CLI
         if: steps.guard.outputs.armed == 'true'
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6 (= v1)
+        with:
+          # Pinned; bump deliberately (https://github.com/superfly/flyctl/releases).
+          version: 0.4.107
 
       - name: Deploy (repo-root context so pnpm workspace resolves)
         if: steps.guard.outputs.armed == 'true'

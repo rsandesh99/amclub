@@ -28,7 +28,7 @@ needed to turn it on:
 |---|---|---|
 | `SUPABASE_JWT_SECRET` | Supabase dashboard → Settings → API → JWT Secret | web signs the delegated JWT with it |
 | `AGENT_RUNTIME_SECRET` | `openssl rand -hex 32` | HMAC shared by web ↔ runtime |
-| `FLY_API_TOKEN` | Fly.io → tokens | CI deploy (repo secret) |
+| `FLY_API_TOKEN` | `fly tokens create deploy -a amc-agent-runtime` (app-scoped, never an org token) | CI deploy (GitHub Environment `production` secret; see "Deploy credentials" below) |
 | `AGENT_LLM_API_KEY` | LLM gateway (or reuse `OPENROUTER_API_KEY`) | model calls; absent ⇒ stub mode |
 | `AGENT_MODEL_EMBEDDING`, `AGENT_EMBED_BASE_URL` | gateway | retrieval (later stages) |
 | `UPSTASH_REDIS_REST_URL/TOKEN` | reuse the web rate-limit Upstash | budget counters |
@@ -60,7 +60,57 @@ fly deploy --config apps/agent-runtime/fly.toml \
 
 CI (`.github/workflows/agent-runtime.yml`) redeploys on `master` when
 `apps/agent-runtime/**` or `packages/{shared,agent-core}/**` change — but only
-once `FLY_API_TOKEN` is a repo secret; until then the deploy step is skipped.
+once `FLY_API_TOKEN` is set; until then the deploy steps are skipped.
+
+## Deploy credentials (audit M26)
+
+The Fly token can deploy code to the machine that holds `SUPABASE_SERVICE_ROLE_KEY`
+and `DATABASE_URL`, so it is scoped as narrowly as Fly and GitHub allow. What the
+workflow already does:
+
+- Every action is pinned to a full commit SHA (the tag is in the trailing comment),
+  and flyctl to an exact version (`with: version:`). Bump both deliberately.
+- `permissions: contents: read`; checkout does not persist git credentials.
+- The job runs only for `refs/heads/master` (a `workflow_dispatch` from another
+  branch is skipped) and uses `environment: production`.
+- `concurrency: fly-deploy` with `cancel-in-progress: false`: one deploy at a time,
+  never cancelled half-way.
+- The token reaches the shell only through `env`, never interpolated into a script.
+- The root `.dockerignore` keeps `.git`, `.env*`, `node_modules`, docs and the other
+  apps out of the build context; the image runs as the unprivileged `node` user.
+
+Operator steps (once; GitHub and Fly settings, not code):
+
+1. **App-scoped deploy token.** From a machine logged in to Fly:
+   ```bash
+   fly tokens create deploy -a amc-agent-runtime --expiry 8760h --name github-actions
+   ```
+   A deploy token can deploy and manage this one app only. Never use an org or
+   personal token (`fly auth token`): those also reach every other app and
+   `fly ssh` / secrets across the org. Rotate yearly (the expiry above) and at once
+   if the repo or a maintainer account is compromised:
+   `fly tokens list -a amc-agent-runtime`, then `fly tokens revoke <id>`.
+2. **GitHub Environment `production`.** Repo → Settings → Environments → New
+   environment → `production`:
+   - *Deployment branches and tags* → "Selected branches and tags" → add `master` only.
+   - *Required reviewers* → add the founder, if the plan offers it (it is not
+     available for private repos on every plan). With a reviewer, every deploy
+     waits for an approval click in the Actions run.
+   - *Environment secrets* → add `FLY_API_TOKEN` = the token from step 1.
+3. **Remove the repo-level secret.** Repo → Settings → Secrets and variables →
+   Actions → delete any repository secret `FLY_API_TOKEN`. An environment secret
+   is readable only by jobs that name the environment and pass its branch rule; a
+   repository secret is readable by every workflow on every branch.
+4. **Check.** Push a runtime change to `master` (or run the workflow by hand on
+   `master`): the run shows the `production` environment, and "Guard" reports
+   `armed=true`. A manual run on any other branch shows the job as skipped.
+
+GitHub offers Environment secrets and branch rules on private repos only on paid
+plans (Pro / Team / Enterprise). Without them, skip steps 2–3 and keep
+`FLY_API_TOKEN` as a repository secret: the master-only `if:` and the app-scoped
+token still bound it. Move it into the Environment when the plan allows. The first
+run after this change shows whether the plan accepts `environment: production`; if
+that run is refused because of the environment, delete that one line from the job.
 
 ## Health & smoke
 
