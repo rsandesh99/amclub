@@ -2,8 +2,8 @@
 
 > **RESUMED 2026-09-24 (founder).** It was paused after S3.2 on 2026-09-23 while
 > Experience v3 took the build; Wave 1 has since landed.
-> - **Built dark:** S3.4 (ADR 024, `docs/agents/AGGREGATION.md`). Its volume tiers reuse the E12b design rules. Enabling waits for
->   the V1.5→V2 gate and migration 0071 on production.
+> - **Built dark:** S3.4 (ADR 024, `docs/agents/AGGREGATION.md`). Its volume tiers reuse the E12b design rules. Migration 0071 is applied
+>   to production (2026-09-24). Enabling waits for the V1.5→V2 gate.
 > - **Done:** S4.3's paperwork: ADR-013 (Proposed; it recommends keeping §8.3) plus the
 >   unexported spike `packages/shared/src/spikes/negotiation.ts`.
 > - **Still gated:**
