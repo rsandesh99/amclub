@@ -597,7 +597,10 @@
     "group_services": "சேவைகள்",
     "group_providers": "வழங்குநர்கள்",
     "group_categories": "வகைகள்",
-    "price_plus_gst": "{price} + ஜிஎஸ்டி"
+    "price_plus_gst": "{price} + ஜிஎஸ்டி",
+    "hint": "குறைந்தது இரண்டு எழுத்துகளை உள்ளிடுங்கள்: ஒரு சேவை, வழங்குநர் அல்லது உங்கள் ஆர்டர்.",
+    "searching": "தேடுகிறது…",
+    "see_all_results": "“{q}” க்கான எல்லா முடிவுகளையும் பார்க்கவும்"
   },
   "next_action": {
     "accept_order": "இந்த ஆர்டரை ஏற்கவும்",

@@ -1290,7 +1290,10 @@
     "group_services": "సేవలు",
     "group_providers": "ప్రొవైడర్లు",
     "group_categories": "వర్గాలు",
-    "price_plus_gst": "{price} + జీఎస్టీ"
+    "price_plus_gst": "{price} + జీఎస్టీ",
+    "hint": "కనీసం రెండు అక్షరాలు టైప్ చేయండి: ఒక సేవ, ప్రొవైడర్ లేదా మీ ఆర్డర్.",
+    "searching": "వెతుకుతోంది…",
+    "see_all_results": "“{q}” కోసం అన్ని ఫలితాలు చూడండి"
   },
   "next_action": {
     "accept_order": "ఈ ఆర్డర్‌ను అంగీకరించండి",

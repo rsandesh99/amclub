@@ -2917,7 +2917,10 @@
     "group_services": "सेवाएं",
     "group_providers": "प्रदाता",
     "group_categories": "श्रेणियाँ",
-    "price_plus_gst": "{price} + जीएसटी"
+    "price_plus_gst": "{price} + जीएसटी",
+    "hint": "कम से कम दो अक्षर लिखें: कोई सेवा, प्रदाता, या आपका कोई ऑर्डर।",
+    "searching": "खोज रहे हैं…",
+    "see_all_results": "“{q}” के सभी नतीजे देखें"
   },
   "next_action": {
     "accept_order": "यह ऑर्डर स्वीकार करें",

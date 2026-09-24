@@ -10,6 +10,8 @@
  *      buyer accepts delivery → admin releases the payout.
  *   B  Requirement (RFQ) form → fan-out → provider quotes → buyer compares,
  *      accepts & pays → paid order from the quote.
+ *   C  The top-bar search is typed into in place (signed in and public), its
+ *      results open right under it, and a sheet on a wide screen is centred.
  *
  * Sessions are Supabase SSR cookies minted server-side (the login UI is phone
  * OTP only), exactly as scripts/a11y-scan.ts does. Every fixture is created
@@ -353,6 +355,60 @@ async function journeyB(): Promise<void> {
   }
 }
 
+// ── Journey C: search from the top bar; sheets sit where they belong ───────────
+/** The results panel opens right under the field it belongs to — not as a dialog somewhere else. */
+async function expectPanelUnderField(page: Page): Promise<void> {
+  const field = page.getByTestId('header-search')
+  await field.click()
+  await field.fill('gst')
+  const panel = page.getByTestId('header-search-panel')
+  await panel.waitFor()
+  if (await page.getByRole('dialog').isVisible().catch(() => false)) throw new Error('typing in the header opened a dialog')
+  const f = (await field.boundingBox())!
+  const p = (await panel.boundingBox())!
+  const gap = p.y - (f.y + f.height)
+  if (gap < 0 || gap > 24 || p.x > f.x || f.x - p.x > 64) throw new Error(`panel not under the field: field ${JSON.stringify(f)} panel ${JSON.stringify(p)}`)
+}
+
+async function journeyC(): Promise<void> {
+  console.log('\nC — search from the top bar; a sheet on a wide screen is centred (browser)')
+  const buyer = await mkBuyer('buyerC')
+  const b = await pageFor(buyer)
+  const tab = await pageFor(buyer, { width: 900, height: 800 })
+  const guestCtx = await browser!.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-IN' })
+  const guest = await guestCtx.newPage()
+  guest.setDefaultTimeout(STEP_TIMEOUT)
+  const all = [b.page, tab.page, guest]
+  try {
+    await step('C', 'typing in the signed-in top bar shows results right under the field', all, async () => {
+      await b.page.goto(`${BASE}/app`)
+      await expectPanelUnderField(b.page)
+    })
+    await step('C', '"See all results" opens the buyer search for the term', all, async () => {
+      await b.page.getByTestId('header-search-panel').getByRole('button', { name: /See all results/ }).click()
+      await b.page.waitForURL(/\/app\/search\?query=gst/)
+    })
+    await step('C', 'the public header searches in place too', all, async () => {
+      await guest.goto(`${BASE}/services`)
+      await expectPanelUnderField(guest)
+    })
+    await step('C', 'a sheet on a wide screen sits in the middle of the window', all, async () => {
+      await tab.page.goto(`${BASE}/app/search?query=gst`)
+      await tab.page.getByTestId('filter-more').click()
+      const dialog = tab.page.getByRole('dialog')
+      await dialog.waitFor()
+      // The sheet animates in; wait for its box to settle on the centre (it sat with its corner there before the fix).
+      await until('the sheet centred in a 900×800 window', async () => await dialog.boundingBox(),
+        (bx) => !!bx && Math.abs(bx.x + bx.width / 2 - 450) <= 4 && Math.abs(bx.y + bx.height / 2 - 400) <= 4, 5000)
+    })
+  } catch (e) {
+    if (!(e instanceof JourneyStop)) throw e
+    console.log('  … journey C stopped (later steps depend on the failed one)')
+  } finally {
+    await b.ctx.close(); await tab.ctx.close(); await guestCtx.close()
+  }
+}
+
 // ── cleanup (always) ───────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n🧹 cleanup…')
@@ -402,6 +458,7 @@ async function main(): Promise<void> {
   try {
     await journeyA()
     await journeyB()
+    await journeyC()
   } finally {
     await browser.close().catch(() => {})
     await cleanup()
