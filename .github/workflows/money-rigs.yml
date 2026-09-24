@@ -50,6 +50,7 @@ jobs:
       # Throwaway values for the disposable stack only — not secrets.
       CRON_SECRET: ci-cron-secret-disposable
       RAZORPAY_WEBHOOK_SECRET: ci-webhook-secret-disposable
+      SEND_SMS_HOOK_SECRET: "v1,whsec_Y2ktc21zLWhvb2stc2VjcmV0LWRpc3Bvc2FibGUtMDAwMQ=="
       COLUMN_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
       UPSTASH_REDIS_REST_URL: http://localhost:8079
       UPSTASH_REDIS_REST_TOKEN: ci-upstash-token-disposable

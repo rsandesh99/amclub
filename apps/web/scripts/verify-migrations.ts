@@ -446,6 +446,11 @@ const MANIFEST: Entry[] = [
     file: '0073_packages_write_lockdown.sql',
     note: 'ADR 025 part 2: no client INSERT/UPDATE/DELETE on packages (owners read); the partner routes write with the service role. Apply after that build is live',
   },
+  {
+    file: '0074_function_hardening.sql',
+    functions: ['generate_order_number'],
+    note: 'Audit M1 + advisors: generate_order_number not callable by clients (and no longer truncates past 999,999); the definer trigger functions not callable over RPC; search_path pinned on 14 functions',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

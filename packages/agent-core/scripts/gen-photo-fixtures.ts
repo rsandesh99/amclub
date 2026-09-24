@@ -13,7 +13,7 @@
 import { mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import sharp from 'sharp'
+import sharp, { type Sharp } from 'sharp'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const outDir = join(here, '../golden/photos')
@@ -102,7 +102,7 @@ function screenshotFrame(seed: number): string {
   return parts.join('')
 }
 
-async function toJpeg(pipeline: sharp.Sharp, quality = 62): Promise<Buffer> {
+async function toJpeg(pipeline: Sharp, quality = 62): Promise<Buffer> {
   let q = quality
   for (;;) {
     const buf = await pipeline.clone().jpeg({ quality: q, mozjpeg: true }).toBuffer()

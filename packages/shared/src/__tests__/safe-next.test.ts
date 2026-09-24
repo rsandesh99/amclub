@@ -11,6 +11,15 @@ describe('safeNext', () => {
       expect(safeNext(bad)).toBeNull()
     }
   })
+  it('refuses control characters and backslashes that a URL parser would drop or turn into "//" (audit M6)', () => {
+    for (const bad of ['/%09/evil.example/x', '/%0a/evil.example', '/%0D/evil.example', '/\t/evil.example', '/%5C/evil.example', '/app\\..\\x', '/%00/app', '/%7F']) {
+      expect(safeNext(bad)).toBeNull()
+    }
+  })
+  it('still keeps ordinary paths with spaces-free queries and fragments', () => {
+    expect(safeNext('/app/rfq/new?entry=why#top')).toBe('/app/rfq/new?entry=why#top')
+    expect(safeNext('  /app  ')).toBe('/app')
+  })
 })
 
 describe('withNext (E0 / U1 — the new buyer keeps their checkout)', () => {

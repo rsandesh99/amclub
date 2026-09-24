@@ -17,8 +17,9 @@ import { enforce, limiters, tooManyRequests, clientIp } from '@/lib/rate-limit'
 const bodySchema = z.discriminatedUnion('channel', [
   z.object({
     channel: z.literal('sms'),
-    // Client normalizes to E.164 (+91XXXXXXXXXX) before sending.
-    identifier: z.string().regex(/^\+[1-9]\d{7,14}$/, 'Invalid phone'),
+    // Client normalizes to E.164 (+91XXXXXXXXXX) before sending. India only
+    // (§8.3: no international): an Indian mobile starts 6–9 (audit H3).
+    identifier: z.string().regex(/^\+91[6-9]\d{9}$/, 'Invalid phone'),
     captchaToken: z.string().optional(),
   }),
   z.object({

@@ -24,6 +24,22 @@ function guestCheckoutOn(): boolean {
   return v === 'on' || v === 'true' || v === '100'
 }
 
+// next-intl 3.x open redirect (GHSA-8f24-v5vv-gm5j, audit M25): for
+// /en/%09/evil.example the locale redirect drops "/en", and URL parsing then
+// drops the tab, leaving "//evil.example" (another host). Until next-intl 4:
+// refuse paths with control characters or backslashes (encoded or not) before
+// next-intl sees them, and never pass on a redirect that leaves this origin.
+const HOSTILE_PATH_CHARS = /[\u0000-\u001F\u007F\\]/
+function hostilePath(pathname: string): boolean {
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(pathname)
+  } catch {
+    return true
+  }
+  return HOSTILE_PATH_CHARS.test(pathname) || HOSTILE_PATH_CHARS.test(decoded)
+}
+
 function stripLocale(pathname: string): string {
   return pathname.replace(LOCALE_RE, '/').replace(/\/$/, '') || '/'
 }
@@ -52,8 +68,14 @@ function makeSupabase(request: NextRequest, response: NextResponse) {
 }
 
 export async function middleware(request: NextRequest) {
+  if (hostilePath(request.nextUrl.pathname)) return new NextResponse(null, { status: 400 })
+
   // Apply next-intl locale routing first
   const intlResponse = nextIntl(request)
+  const intlLocation = intlResponse?.headers.get('location')
+  if (intlLocation && new URL(intlLocation, request.url).origin !== request.nextUrl.origin) {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
 
   // Build a mutable response; intlResponse may be a redirect (locale detection)
   let response = intlResponse ?? NextResponse.next({ request })

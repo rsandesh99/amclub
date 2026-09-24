@@ -89,5 +89,7 @@ export async function GET(request: NextRequest) {
     dest = withNext(next.startsWith('/partner') ? '/partner/onboarding' : '/signup?complete=1', wantsNext)
   }
 
-  return NextResponse.redirect(new URL(dest, origin))
+  // Belt and braces for safeNext (audit M6): never leave this origin.
+  const target = new URL(dest, origin)
+  return NextResponse.redirect(target.origin === new URL(origin).origin ? target : new URL('/', origin))
 }

@@ -17,6 +17,7 @@ config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { createCipheriv, randomBytes } from 'crypto'
+import { signStandardWebhook } from '../lib/auth/standard-webhook'
 
 const URL_ = process.env['NEXT_PUBLIC_SUPABASE_URL']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY']!
@@ -922,6 +923,57 @@ async function main() {
       await admin.from('corpus_voice_triples').delete().eq('user_id', buyerA.uid)
       await admin.from('corpus_image_pairs').delete().eq('user_id', buyerA.uid)
       await admin.from('service_synonyms').delete().like('term_key', `${synKey}%`)
+    }
+
+    // ── 9. Audit wave 1 (2026-09-24): inbound hook, redirects, RPC, uploads ──
+    console.log('\naudit wave 1 — SMS hook, redirects, RPC, uploads:')
+    {
+      // H3 — the Supabase SMS hook answers only Standard Webhooks-signed calls.
+      // No call here can send a real SMS: the one signed control carries no code.
+      const hookUrl = `${BASE}/api/v1/auth/sms-hook`
+      const hookBody = (phone: string, message = 'Your AMClub code is 123456') => JSON.stringify({ user: { id: crypto.randomUUID(), phone }, sms_data: { message } })
+      const postHook = (body: string, headers: Record<string, string> = {}) => fetch(hookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body })
+      const hookSecret = process.env['SEND_SMS_HOOK_SECRET']
+      if (hookSecret) {
+        eq('SMS hook: an unsigned call → 401', (await postHook(hookBody('+919800000001'))).status, 401)
+        const signed = (body: string, ts = Math.floor(Date.now() / 1000), key = hookSecret) => {
+          const id = `msg_${crypto.randomUUID()}`
+          return { 'webhook-id': id, 'webhook-timestamp': String(ts), 'webhook-signature': signStandardWebhook(key, id, ts, body) }
+        }
+        const b = hookBody('+919800000002')
+        const wrongKey = `v1,whsec_${Buffer.from('not-the-hook-secret-0123456789').toString('base64')}`
+        eq('SMS hook: a signature with another key → 401', (await postHook(b, signed(b, undefined, wrongKey))).status, 401)
+        eq('SMS hook: a 10-minute-old signature (replay) → 401', (await postHook(b, signed(b, Math.floor(Date.now() / 1000) - 600))).status, 401)
+        eq('SMS hook: a body changed after signing → 401', (await postHook(hookBody('+919800000003'), signed(b))).status, 401)
+        const intl = hookBody('+447700900123')
+        eq('SMS hook: a signed call to a non-Indian number → 422', (await postHook(intl, signed(intl))).status, 422)
+        const noCode = hookBody('+919800000004', 'no code in this message')
+        const ctl = await postHook(noCode, signed(noCode))
+        eq('SMS hook: a signed call gets past the signature check (control)', ctl.status !== 401 && ctl.status !== 422, true)
+      } else {
+        console.log('  (SEND_SMS_HOOK_SECRET unset for this run — hook cases skipped; CI sets it)')
+      }
+
+      // M6 / M25 — no redirect off this origin from a crafted path.
+      const hostile = await fetch(`${BASE}/en/%09/evil%2Eexample`, { redirect: 'manual' })
+      eq('middleware: /en/%09/evil%2Eexample is refused (400), never redirected off-site', hostile.status, 400)
+
+      // M1 — the order sequence is not an RPC.
+      const anonDb = createClient(URL_, ANON, { auth: { persistSession: false } })
+      eq('anon cannot call generate_order_number over RPC', Boolean((await anonDb.rpc('generate_order_number')).error), true)
+      eq('a signed-in user cannot call generate_order_number over RPC', Boolean((await bClient.rpc('generate_order_number')).error), true)
+
+      // H10 — image uploads are checked by their bytes, not the declared type.
+      const upload = (bytes: Buffer, type: string) => {
+        const fd = new FormData()
+        fd.append('file', new Blob([new Uint8Array(bytes)], { type }), 'upload')
+        return fetch(`${BASE}/api/v1/profile/provider/logo`, { method: 'POST', headers: { Authorization: `Bearer ${provA.token}` }, body: fd })
+      }
+      const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>')
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64')
+      eq('logo: SVG bytes declared as image/png → 422', (await upload(svg, 'image/png')).status, 422)
+      eq('logo: PNG bytes declared as image/jpeg → 422', (await upload(png, 'image/jpeg')).status, 422)
+      eq('logo: a real PNG → 200 (control)', (await upload(png, 'image/png')).status, 200)
     }
   } finally {
     // Cleanup — children before parents; loud on error.

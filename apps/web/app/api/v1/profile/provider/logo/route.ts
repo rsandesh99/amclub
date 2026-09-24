@@ -1,14 +1,13 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
-import sharp from 'sharp'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireNotDelegated } from '@/lib/agent/scope'
 import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { UPLOAD_IMAGE_TYPES, openUploadImage } from '@/lib/images/untrusted'
 
-const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_IN = 2 * 1024 * 1024
 /** 1:1, enough for a 96 px avatar at 4× — ~15–40 KB as WebP (≤ 200 KB stored). */
 const EDGE = 384
@@ -36,12 +35,14 @@ export async function POST(request: NextRequest) {
   const form = await request.formData().catch(() => null)
   const file = form?.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
-  if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_type' }, { status: 422 })
+  if (!UPLOAD_IMAGE_TYPES.has(file.type)) return NextResponse.json({ error: 'unsupported_type' }, { status: 422 })
   if (file.size > MAX_IN) return NextResponse.json({ error: 'too_large' }, { status: 422 })
 
+  const img = openUploadImage(Buffer.from(await file.arrayBuffer()), file.type)
+  if (!img) return NextResponse.json({ error: 'unreadable_image' }, { status: 422 })
   let body: Buffer
   try {
-    body = await sharp(Buffer.from(await file.arrayBuffer())).rotate().resize({ width: EDGE, height: EDGE, fit: 'cover' }).webp({ quality: 82 }).toBuffer()
+    body = await img.rotate().resize({ width: EDGE, height: EDGE, fit: 'cover' }).webp({ quality: 82 }).toBuffer()
   } catch {
     return NextResponse.json({ error: 'unreadable_image' }, { status: 422 })
   }

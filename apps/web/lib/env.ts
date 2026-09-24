@@ -34,6 +34,8 @@ const serverEnvSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   MSG91_AUTH_KEY: z.string().optional(),
+  // Supabase Auth "Send SMS" hook secret ("v1,whsec_…"); production refuses unsigned hook calls without it.
+  SEND_SMS_HOOK_SECRET: z.string().optional(),
   WHATSAPP_API_KEY: z.string().optional(),
   // S0.5 WhatsApp rails. Driver is stub (no bill) unless WHATSAPP_DRIVER + creds are set.
   WHATSAPP_DRIVER: z.enum(['meta_cloud', 'interakt', 'stub']).optional(),

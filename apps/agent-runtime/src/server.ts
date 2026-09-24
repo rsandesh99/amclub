@@ -5,6 +5,7 @@ import { sessionByOpenRun } from './agents/procurement/store'
 import { admin, buildMunshiDeps, buildProcurementDeps } from './deps'
 import { serve } from '@hono/node-server'
 import { HTTPException } from 'hono/http-exception'
+import { bodyLimit } from 'hono/body-limit'
 import {
   AgentRun,
   extractRuntimeCredential,
@@ -84,7 +85,9 @@ app.get('/webhooks/whatsapp', (c) => {
   const challenge = waVerifyChallenge(c.req.query())
   return challenge === null ? c.text('forbidden', 403) : c.text(challenge, 200)
 })
-app.post('/webhooks/whatsapp', async (c) => {
+// Vendor webhook bodies are a few KB; media arrives by reference, never inline.
+const WEBHOOK_BODY_LIMIT = 256 * 1024
+app.post('/webhooks/whatsapp', bodyLimit({ maxSize: WEBHOOK_BODY_LIMIT, onError: (c) => c.json({ error: 'too_large' }, 413) }), async (c) => {
   const raw = await c.req.text()
   const headers: Record<string, string | undefined> = {
     'x-hub-signature-256': c.req.header('x-hub-signature-256'),

@@ -8,7 +8,7 @@
 
 The money core is well built. Payments trust only the HMAC-verified webhook, `materialize_order` is atomic and replay-safe, prices are computed only on the server, and ADR 018 / 022 closed the money tables. The agent confirm gates are enforced in code, not in prompts. The serious problems sat **around** that core:
 
-1. **Critical, now fixed on production: provider and catalog tables were client-writable** (C1, C2, H1, H2, M18). Supabase's default privileges grant `ALL` to `anon` and `authenticated` on every new table and view. ADR 018 revoked that for the money tables, but the provider and catalog tables kept it. With only the public anon key, anyone could rename, re-rate or delete any live provider through the `public_providers` view. Any signed-in user could create an **active** provider profile (skipping verification), lift a suspension, or join credential-gated categories and receive those buyers' requests. Migration **0072** closed all of this on production on 2026-09-24, and a catalog query confirmed the result. The `packages` part (0073) lands after PR #58 deploys.
+1. **Critical, now fixed on production: provider and catalog tables were client-writable** (C1, C2, H1, H2, M18). Supabase's default privileges grant `ALL` to `anon` and `authenticated` on every new table and view. ADR 018 revoked that for the money tables, but the provider and catalog tables kept it. With only the public anon key, anyone could rename, re-rate or delete any live provider through the `public_providers` view. Any signed-in user could create an **active** provider profile (skipping verification), lift a suspension, or join credential-gated categories and receive those buyers' requests. Migration **0072** closed all of this on production on 2026-09-24, and a catalog query confirmed the result. The `packages` part (0073) followed once PR #58 was live, the same day.
 2. **High: unauthenticated inbound endpoints.**
    - The Supabase SMS hook (H3) sends a real OTP SMS to any number for anyone who calls it.
    - The WhatsApp webhook (H4) skips its signature check when the driver falls back to `stub`.
@@ -38,7 +38,7 @@ The money core is well built. Payments trust only the HMAC-verified webhook, `ma
 | Reproduced C1 / C2 / H1 / H2 / M18 on a scratch Postgres 16 with the same grants and policies. Proved 0072 + 0073 close every hole, keep owner and public reads, and re-run cleanly | local |
 | Wrote migration **0072**: `public_providers` SELECT-only; no client writes on `provider_profiles`, `provider_categories`, `products`, `price_tiers`; `buyer_pool_discipline_v1` becomes `security_invoker` with no client grant | PR #58 |
 | **Applied 0072 to production** (approved by the founder) and verified the grants and view options with a read-only query. The security advisor's definer-view count dropped from 2 to 1; the one left is the deliberate public projection `public_providers` | production |
-| Wrote migration **0073** (`packages`). The partner package routes now check ownership on the session client and write with the service role. Apply 0073 after #58 is live | PR #58 |
+| Wrote migration **0073** (`packages`). The partner package routes now check ownership on the session client and write with the service role. **Applied to production** once #58 was live; clients hold SELECT only | PR #58, production |
 | Added `verify-authz` §7a6 (every denial asserted as an error, plus owner-read controls) and route checks in `verify-experience` E2b | PR #58 |
 | ADR 025 and a CLAUDE.md rule: every new table or view gets an explicit grant decision | PR #58 |
 
@@ -48,8 +48,8 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 
 | Wave | Items | Notes |
 |---|---|---|
-| **0 — done** | C1, C2, H1, H2, M18 | 0072 live. 0073 after the #58 deploy |
-| **1 — inbound and dependencies (next)** | H3 SMS hook signature (Standard Webhooks, fail closed, +91 only); H4 WhatsApp webhook fails closed without a verified signature; M6 `safeNext` control characters; H10 sharp, M27 next, M25 next-intl upgrades; M1 revoke `generate_order_number` from clients; the advisor items (revoke EXECUTE on internal definer functions from anon, pin `search_path`) | H3 needs a `SEND_SMS_HOOK_SECRET` in Vercel and the Supabase hook config |
+| **0 — done** | C1, C2, H1, H2, M18 | 0072 and 0073 live |
+| **1 — inbound and dependencies (in review)** | H3 SMS hook signature (Standard Webhooks, +91 only; closed once the secret is set); H4 WhatsApp webhook fails closed without a verified signature; M6 `safeNext` control characters; H10 sharp, M27 next, M25 next-intl upgrades; M1 revoke `generate_order_number` from clients; the advisor items (revoke EXECUTE on internal definer functions from anon, pin `search_path`) | H3 needs a `SEND_SMS_HOOK_SECRET` in Vercel and the Supabase hook config |
 | **2 — money path** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
 | **3 — authorisation and abuse** | M7 / M8 delegated tokens refused unless a route opts in; M13 suspension enforced in `resolveActor`; M9 review flags go to a queue; M10 coupons: no public read, atomic redemption, per-buyer limit; M12 ownership checks on Udyam and penny-drop; M22 self-dealing guard; M17 clarification provider id hidden; M5 / L2 attachment and certificate paths pinned; M3 no token renewal from a delegated token | M12 touches KYC, so an ADR is needed |
 | **4 — Mart, pools and agents** | M14 return window; M15 rationale off the public API; M16 re-review on material edits; M44 / M45 / L9 pool quote and offer sealing; M41–M43 WhatsApp binding, Munshi "yes" routing, trusted-part hygiene; M23 / M24 residency and budget; L3 runtime service-role scope | Several are dark features; fix before their cohort widens |
@@ -83,20 +83,20 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | C2 | Any signed-in user could create or rewrite a provider profile (self-activation, lifting a suspension, fake trust badges) | Fixed |
 | H1 | Sellers could write Mart `products` / `price_tiers` directly (self-approval, reversing a suspension, BIS-blocked items) | Fixed |
 | H2 | Providers could join any category directly, including credential-gated ones, and receive those RFQs | Fixed |
-| H3 | The Supabase "Send SMS" hook is unauthenticated: SMS pumping, SMS bombing, branded smishing | Open |
-| H4 | The WhatsApp webhook accepts unsigned requests whenever the driver resolves to `stub` | Open |
+| H3 | The Supabase "Send SMS" hook is unauthenticated: SMS pumping, SMS bombing, branded smishing | Fixed in code (wave 1); needs `SEND_SMS_HOOK_SECRET` |
+| H4 | The WhatsApp webhook accepts unsigned requests whenever the driver resolves to `stub` | Fixed in code (wave 1) |
 | H5 | Admin "Retry payout" releases held payouts past the dispute hold and the release gates | Open |
 | H6 | Order status writes are not compare-and-set, so crons can overwrite a dispute or revision and still run money side effects | Open |
 | H7 | A refund that fails after the status write is never retried, and ops cannot finish it from admin | Open |
 | H8 | Invoice PDF generation throws on Indic-script names, so no tax invoice is created and accept-delivery returns 500 | Open |
 | H9 | Payout transfer is not idempotent: a timeout after Razorpay creates the transfer marks it failed, and a retry pays again | Open |
-| H10 | sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes | Open |
-| M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Open |
+| H10 | sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes | Fixed in code (wave 1) |
+| M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Fixed in code (wave 1); migration 0074 |
 | M2 | Refunds, payouts and reconcile still go through the simulation gateway on production | Open |
 | M3 | The agent token endpoint accepts delegated tokens: renewal forever, wider scopes, any run id | Open |
 | M4 | A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order | Open |
 | M5 | RFQ attachment URLs are client-supplied and re-signed with the service role (IDOR on the private bucket) | Open |
-| M6 | `safeNext` open redirect via tab / CR / LF in `next` | Open |
+| M6 | `safeNext` open redirect via tab / CR / LF in `next` | Fixed in code (wave 1) |
 | M7 | Admin mutation routes accept delegated agent tokens by default | Open |
 | M8 | Delegated tokens are allowed by default on buyer, provider and pool write routes; the transition scope covers every action | Open |
 | M9 | Any signed-in user can instantly hide any published review | Open |
@@ -115,9 +115,9 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M22 | No self-dealing guard: one person can buy from, quote to, review and settle with their own provider profile | Open |
 | M23 | The model-provider residency and retention guard is off by default | Open |
 | M24 | The platform AI budget can be drained from outside the cohort; the Mart catalog agent and speech-to-text bypass it | Open |
-| M25 | next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j) | Open |
+| M25 | next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j) | Mitigated (wave 1 guard); v4 upgrade open |
 | M26 | The agent-runtime deploy workflow trusts a mutable action ref and `latest` flyctl next to FLY_API_TOKEN | Open |
-| M27 | next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories) | Open |
+| M27 | next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories) | Fixed in code (wave 1) |
 | M28 | The state-machine rule is not enforced by the DB, the types or lint; status literals are spread through the apps | Open |
 | M29 | Tax and money formulas are duplicated outside shared, on different bases | Open |
 | M30 | Three different contact-masking rule sets; the weakest one guards pre-payment human messages | Open |
@@ -153,8 +153,8 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | Lint | Count | Assessment |
 |---|---|---|
 | Security definer view | 1 (`public_providers`) | Deliberate public projection of fixed columns of active providers. Since 0072 it is SELECT-only; it was 2 before 0072 |
-| SECURITY DEFINER function executable by anon / authenticated | 8 each | `auth_user_id`, `has_role` and `is_provider_matched_to_rfq` are RLS helpers and must stay callable by `authenticated`, but anon needs none of them. `packages_group_same_provider` and `recompute_provider_rating` are trigger functions and should not be callable over RPC at all. The `search_*` functions are the public search path and are fine. Wave 1 revokes the rest |
-| Function search_path mutable | 15 | Pin `SET search_path = public` (Wave 1); `has_role` / `auth_user_id` first |
+| SECURITY DEFINER function executable by anon / authenticated | 8 each | `auth_user_id`, `has_role` and `is_provider_matched_to_rfq` are RLS helpers and must stay callable by `authenticated`, but anon needs none of them. `packages_group_same_provider` and `recompute_provider_rating` are trigger functions and should not be callable over RPC at all. The `search_*` functions are the public search path and are fine. Wave 1 (0074) revokes `generate_order_number`, the sequence and the two trigger functions from clients |
+| Function search_path mutable | 15 | Wave 1: `auth_user_id` / `has_role` carry `SET search_path = public, pg_temp`, and 0074 pins the other 14 |
 | Extension in public (`pg_trgm`) | 1 | Low. Moving it means re-creating the trigram indexes; leave until a maintenance window |
 | Leaked password protection disabled | 1 | Turn it on in Supabase Auth settings. Login is OTP-first, but email / password exists for staff and tests |
 | RLS enabled, no policy | 22 (info) | Intended: these are server-only tables (service role), for example `quote_options`, `service_pool_*`, `search_queries`, `cron_heartbeats` |
@@ -188,7 +188,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### C2. Any signed-in user could create or rewrite a provider profile (self-activation, lifting a suspension, fake trust badges)
 
-- **Status:** Fixed on production (0072, applied 2026-09-24; PR #58). The `packages` part is fixed in code in PR #58; its migration 0073 is applied after that build is live
+- **Status:** Fixed on production (0072 and 0073, applied 2026-09-24; PR #58)
 - **Where:** `packages/db/src/rls/policies.sql:111`, `packages/db/src/rls/policies.sql:110`
 - **Raised by:** 4 findings from 4 audit teams (AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); AuthZ: provider (partner) and Mart routes; Database: RLS, grants, functions, views, storage; Server-rendered pages: service-role data serialized into client components, and public ISR pages)
 - **Impact:** KYC review, credential requirements for regulated categories, the legal-acceptance gate and admin suspension are all bypassed. An ordinary signed-in account receives every future buyer RFQ in the categories and states it picks, including private business details and attachments. It can take buyer payments as a 'provider' nobody vetted and can forge trust badges and ranking signals. Payout of money stays blocked (bank rows are write-revoked and the approval gate holds payouts), but the data exposure and marketplace fraud happen immediately.
@@ -220,7 +220,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H3. The Supabase "Send SMS" hook is unauthenticated: SMS pumping, SMS bombing, branded smishing
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 1); fully closed once `SEND_SMS_HOOK_SECRET` is set. With the secret, the hook refuses any call without a valid Standard Webhooks signature. Without it on production (transition only, so the deploy cannot stop phone login), every call logs an error and is held to a global cap of 120 an hour. Either way: +91 mobiles only, 5 per number per 15 minutes, an 8 s MSG91 timeout, and only the 6-digit code reaches the fixed DLT template. Set the secret in the Supabase "Send SMS" hook and in Vercel
 - **Where:** `apps/web/app/api/v1/auth/sms-hook/route.ts:32`
 - **Raised by:** 3 findings from 3 audit teams (AuthZ: admin, cron and misc routes; Reliability, scalability and operability; Web application security)
 - **Impact:** SMS bill-drain and international toll-fraud (SMS pumping) at AMClub's cost. The attack defeats the OTP limiter the team added specifically for bill-drain. It enables SMS-bombing of any phone number, and branded phishing, e.g. 'AMClub code 123456, share it with our agent'. MSG91/DLT sender reputation could be suspended, which would break login for everyone. If MSG91_AUTH_KEY is not yet set in production, the hook returns 500 and this is latent. It becomes live the moment SMS goes live.
@@ -228,7 +228,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H4. The WhatsApp webhook accepts unsigned requests whenever the driver resolves to `stub`
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 1). The stub driver answers 401 `webhook_not_configured` unless NODE_ENV is not production and `WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=true`; the server caps bodies at 256 KB
 - **Where:** `apps/agent-runtime/src/whatsapp/inbound.ts:71`
 - **Raised by:** 3 findings from 3 audit teams (AI agents and LLM security; Reliability, scalability and operability; Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** Unauthenticated impersonation of users' WhatsApp channel: forged consent records (DPDP), mass opt-out, and confirmations that bypass the confirm gate for quotes and requests, all recorded as the user's own decision. The spoofed traffic can also drain the platform AI budget and cause DB and queue growth.
@@ -276,7 +276,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H10. sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 1). sharp 0.35.4; every loader blocked except JPEG / PNG / WebP; uploads are magic-byte sniffed before decode and capped at 40 MP (`lib/images/untrusted.ts`)
 - **Where:** `apps/web/app/api/v1/profile/provider/logo/route.ts:44`
 - **Raised by:** 1 finding from 1 audit team (Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** The vulnerable libheif/libvips parsers are reachable by any signed-in user. At minimum this is a function crash or DoS. At worst it is code execution in a function that holds SUPABASE_SERVICE_ROLE_KEY, the Razorpay secrets, CRON_SECRET and COLUMN_ENCRYPTION_KEY, which would compromise the whole database. I could not verify a working exploit for these specific CVEs.
@@ -284,7 +284,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M1. `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 1): migration 0074 revokes EXECUTE from clients, revokes the sequence, and pads to at least 6 digits without truncation. Applies to production after approval
 - **Where:** `packages/db/src/migrations/0000_robust_phalanx.sql:500`
 - **Raised by:** 1 finding from 1 audit team (Database: RLS, grants, functions, views, storage)
 - **Impact:** Unauthenticated denial of the order-materialisation money path once live Razorpay payments are enabled. It produces captured payments with no order and manual refunds. The gaps in invoice serials also cause GST record-keeping noise.
@@ -324,7 +324,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M6. `safeNext` open redirect via tab / CR / LF in `next`
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 1). `safeNext` rejects control characters and backslashes and any value that resolves off-origin; the OAuth callback re-checks the origin
 - **Where:** `packages/shared/src/safe-next.ts:16`, `packages/shared/src/safe-next.ts:17`
 - **Raised by:** 2 findings from 2 audit teams (AuthZ: admin, cron and misc routes; Web application security)
 - **Impact:** A trusted AMClub login flow ends on an attacker page that can pose as AMClub, e.g. 'session expired, re-enter OTP' or a fake UPI payment page, right after a real login. Admins are not affected: their destination is fixed. Session tokens are not leaked by the redirect itself.
@@ -483,7 +483,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M25. next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j)
 
-- **Status:** Open
+- **Status:** Mitigated (wave 1). The middleware answers 400 for encoded or decoded control characters and backslashes, and replaces any off-origin redirect from next-intl with `/`. The next-intl v4 upgrade stays open
 - **Where:** `apps/web/middleware.ts:56`
 - **Raised by:** 1 finding from 1 audit team (Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** Phishing and credential or OTP theft that borrows the production domain's trust, and it defeats link-domain checks. This was verified against the library locally, not against production: Vercel or Next could normalise %09 before the middleware sees it.
@@ -499,7 +499,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M27. next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories)
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 1). next and eslint-config-next 15.5.26
 - **Where:** `apps/web/package.json:55`
 - **Raised by:** 1 finding from 1 audit team (Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** Current production exposure on Vercel is probably limited. But the deployed framework carries a critical RCE advisory whose preconditions (AVIF on, an attacker-reachable remote pattern) the app's own config meets, so any hosting change or self-hosted run is exposed. The cache-confusion advisories concern server-side fetch with request bodies, which the agent and LLM calls make.
