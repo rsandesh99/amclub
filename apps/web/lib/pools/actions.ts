@@ -15,7 +15,7 @@ import { recordAiDecision } from '@/lib/mart/events'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
 import { notifyText } from '@/lib/i18n/notify'
 import { captureServerEvent } from '@/lib/analytics/server'
-import { addPoolEvent, chunks, cohortUserIds, loadPool, poolSettings, providerUsers, type PoolRow } from './core'
+import { addPoolEvent, chunks, cohortUserIds, dualRoleMsmeIds, loadPool, poolSettings, providerUsers, type PoolRow } from './core'
 import { providerOwnsRequest } from '@/lib/orders/self-dealing'
 
 /**
@@ -36,6 +36,7 @@ export type PoolActionError =
   | 'tiers_incoherent'
   | 'validity_too_short'
   | 'pool_not_open'
+  | 'dual_role'
   | 'failed'
 
 export type PoolActionResult<T = Record<string, unknown>> = ({ ok: true } & T) | { ok: false; error: PoolActionError; detail?: unknown }
@@ -52,6 +53,7 @@ const STATUS: Record<PoolActionError, number> = {
   tiers_incoherent: 400,
   validity_too_short: 422,
   pool_not_open: 409,
+  dual_role: 403,
   failed: 500,
 }
 export const poolErrorStatus = (e: PoolActionError): number => STATUS[e]
@@ -162,6 +164,8 @@ export async function memberAction(
   if (!memberActionAllowed(a.action, member.status, poolStatus)) return { ok: false, error: 'not_allowed' }
 
   if (a.action === 'join') {
+    // Audit M45 — an account that also sells services never joins a group (it would see rival sealed offers).
+    if ((await dualRoleMsmeIds(admin, [a.msmeId])).has(a.msmeId)) return { ok: false, error: 'dual_role' }
     const w = await rfqWindow(admin, member.rfq_id)
     if (!w || (w.status !== 'open' && w.status !== 'quoted') || Date.parse(w.expires_at) <= Date.now()) return { ok: false, error: 'rfq_closed' }
     if (poolStatus === 'open' && pool.closes_at) {
@@ -224,6 +228,8 @@ export async function commit(
   if (!pool || !member) return { ok: false, error: 'not_found' }
   if (pool.status !== 'open') return { ok: false, error: 'pool_not_open' }
   if (member.status !== 'joined') return { ok: false, error: 'not_allowed' }
+  // Audit M45 — a dual-role member (joined before it opened a provider profile) cannot choose among rival offers.
+  if (a.offerId && (await dualRoleMsmeIds(admin, [a.msmeId])).has(a.msmeId)) return { ok: false, error: 'dual_role' }
   if (a.offerId) {
     const { data: offer } = await admin.from('service_pool_offers').select('id, pool_id, provider_id, status').eq('id', a.offerId).maybeSingle()
     const o = offer as { id: string; pool_id: string; provider_id: string; status: string } | null

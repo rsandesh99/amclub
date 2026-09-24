@@ -5,6 +5,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { resolveActor } from '@/lib/orders/actor'
 import { orderDisputeWindowEndsAt } from '@/lib/orders/queries'
+import { goodsReturnDeadlineFor } from '@/lib/mart/release'
 
 /** Order detail for a party (cookie or Bearer auth) — used by web + mobile. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,11 +25,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const isProvider = actor.providerId && order.provider_id === actor.providerId
   if (!isMsme && !isProvider) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const [{ data: events }, disputeWindowEndsAt] = await Promise.all([
+  const [{ data: events }, disputeWindowEndsAt, returnDeadline] = await Promise.all([
     admin.from('order_events').select('id, event, created_at').eq('order_id', id).order('created_at', { ascending: true }),
     orderDisputeWindowEndsAt(admin, order),
+    // Audit M14 — goods only: a completed order's last moment to open a return (category + dispute window).
+    order.kind === 'goods' ? goodsReturnDeadlineFor(admin, order) : Promise.resolve(null),
   ])
 
   // ADR-014 (H2) — disputeWindowEndsAt: a completed order's last moment to report a problem (null otherwise).
-  return NextResponse.json({ order, events: events ?? [], viewerRole: isProvider ? 'provider' : 'msme', disputeWindowEndsAt })
+  return NextResponse.json({ order, events: events ?? [], viewerRole: isProvider ? 'provider' : 'msme', disputeWindowEndsAt, ...(order.kind === 'goods' ? { returnDeadline } : {}) })
 }

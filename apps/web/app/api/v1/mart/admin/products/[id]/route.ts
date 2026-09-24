@@ -38,8 +38,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const now = new Date().toISOString()
   const patch: Record<string, unknown> = { status: to, updated_at: now }
   if (d.action === 'approve') Object.assign(patch, { approved_by: auth.userId, approved_at: now })
-  const { error } = await admin.from('products').update(patch).eq('id', id).eq('status', from)
+  // Compare-and-set on the status; an approval is also pinned to the version the admin
+  // reviewed (audit M16) — an edit that landed since → 409 listing_changed, nothing moves.
+  let q = admin.from('products').update(patch).eq('id', id).eq('status', from)
+  if (d.action === 'approve') q = d.reviewed_updated_at === null ? q.is('updated_at', null) : q.eq('updated_at', d.reviewed_updated_at)
+  const { data: moved, error } = await q.select('id')
   if (error) return serverError('[mart/admin/products review]', error)
+  if (!moved?.length) return NextResponse.json({ error: d.action === 'approve' ? 'listing_changed' : 'product_changed' }, { status: 409 })
 
   const reason = d.action === 'approve' ? undefined : d.reason
   await addProductEvent(admin, id, auth.userId, d.action === 'approve' ? 'activated' : d.action === 'reject' ? 'rejected' : 'suspended', {
@@ -51,7 +56,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     action: `mart_product_${d.action}`,
     entity: 'products',
     entityId: id,
-    before: { status: from },
+    before: { status: from, ...(d.action === 'approve' ? { reviewed_updated_at: d.reviewed_updated_at } : {}) },
     after: { status: to, ...(reason ? { reason } : {}) },
   })
   // Edge cache purge so an approval is live in seconds (Phase 3 "<5s" criterion).

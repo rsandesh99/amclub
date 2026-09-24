@@ -198,7 +198,7 @@ export function CatalogWizard({
     }
   }
 
-  async function save(): Promise<string | null> {
+  async function save(): Promise<{ id: string; status: string | null } | null> {
     setBusy('save'); setError('')
     try {
       const payload = { ...body(), ...(proposed && !savedId ? { ai: { input_refs: inputRefs ?? {}, proposed } } : {}) }
@@ -206,16 +206,23 @@ export function CatalogWizard({
         method: savedId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       })
       const d = await res.json()
-      if (!res.ok) throw new Error(d.error === 'invalid_attributes' ? t('err_attributes') : typeof d.error === 'string' ? d.error : t('error_generic'))
+      if (!res.ok) {
+        const code = typeof d.error === 'string' ? d.error : ''
+        // Audit M16 — a live group buy froze the listing's name / photos / unit / HSN / GST / category.
+        throw new Error(code === 'invalid_attributes' ? t('err_attributes') : code === 'pool_live' ? t('err_pool_live') : code === 'product_changed' ? t('err_product_changed') : code || t('error_generic'))
+      }
       const id = (d.id as string | undefined) ?? savedId
       setSavedId(id)
-      return id
+      return id ? { id, status: typeof d.status === 'string' ? d.status : null } : null
     } catch (e) { setError(e instanceof Error ? e.message : t('error_generic')); return null } finally { setBusy(null) }
   }
 
   async function saveAndSubmit() {
-    const id = await save()
-    if (!id) return
+    const saved = await save()
+    if (!saved) return
+    // Audit M16 — the edit already sent the approved listing back for review.
+    if (saved.status === 'pending_approval') { setDone('submitted'); return }
+    const id = saved.id
     setBusy('submit'); setError('')
     try {
       const res = await fetch(`/api/v1/mart/seller/products/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit' }) })
@@ -508,7 +515,7 @@ export function CatalogWizard({
           <div className="flex flex-wrap justify-between gap-2">
             <Button variant="ghost" onClick={() => setStepIdx(2)}>{t('back')}</Button>
             <div className="flex gap-2">
-              <Button variant="outline" loading={busy === 'save'} onClick={async () => { const id = await save(); if (id) router.push('/partner/goods' as '/partner') }}>{t('save_draft')}</Button>
+              <Button variant="outline" loading={busy === 'save'} onClick={async () => { const saved = await save(); if (saved) router.push('/partner/goods' as '/partner') }}>{t('save_draft')}</Button>
               <Button className="bg-gold-metal text-emerald-ink" loading={busy === 'submit' || busy === 'save'} onClick={saveAndSubmit}>{t('submit_for_approval')}</Button>
             </div>
           </div>

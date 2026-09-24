@@ -6,6 +6,8 @@
  *     services row is untouched (category_id set, no Mart columns).
  *  2. Shape check: a goods RFQ needs mart_category_slug + goods_spec and no
  *     category_id; a services RFQ needs category_id and no Mart columns.
+ *  2b. goods_spec (the buyer's delivery contact) is not readable by anon /
+ *     authenticated (0077, audit M4); every other rfqs column still is.
  *  3. mart_category_slug references mart_categories (FK).
  *  4. quotes goods terms are all-or-nothing and price_paise = unit × qty;
  *     product_id is SET NULL when the listing is deleted (the quote survives).
@@ -65,6 +67,20 @@ async function main() {
     await rejects('goods RFQ with an unknown Mart category refused (FK)', () => sql`INSERT INTO rfqs (msme_id, kind, mart_category_slug, goods_spec, title, details, expires_at) VALUES (${ids.msme}, 'goods', 'no-such-category', ${sql.json(spec)}, ${`${tag} g2`}, '{}', now() + interval '3 days')`, /foreign key|mart_category/)
     ids.goodsRfq = (await sql`INSERT INTO rfqs (msme_id, kind, mart_category_slug, goods_spec, title, details, expires_at) VALUES (${ids.msme}, 'goods', 'fasteners', ${sql.json(spec)}, ${`${tag} g3`}, '{}', now() + interval '3 days') RETURNING id`)[0]!['id'] as string
     ok('well-formed goods RFQ inserts with category_id NULL', !!ids.goodsRfq)
+
+    // Audit M4 (0077): the buyer's delivery contact inside goods_spec is not client-readable.
+    console.log('2b. goods_spec is server-only (0077)')
+    const asRole = (role: 'anon' | 'authenticated', q: string) => sql.begin(async (tx) => {
+      await tx.unsafe(`SET LOCAL ROLE ${role}`)
+      return tx.unsafe(q)
+    })
+    await rejects('authenticated cannot SELECT rfqs.goods_spec', () => asRole('authenticated', 'SELECT goods_spec FROM rfqs LIMIT 1'), /permission denied/)
+    await rejects('authenticated cannot SELECT * FROM rfqs', () => asRole('authenticated', 'SELECT * FROM rfqs LIMIT 1'), /permission denied/)
+    await rejects('anon cannot SELECT rfqs.goods_spec', () => asRole('anon', 'SELECT goods_spec FROM rfqs LIMIT 1'), /permission denied/)
+    try {
+      await asRole('authenticated', 'SELECT id, title, kind, mart_category_slug FROM rfqs LIMIT 1')
+      ok('authenticated still reads the other rfqs columns (control)', true)
+    } catch (e) { ok('authenticated still reads the other rfqs columns (control)', false, String(e).split('\n')[0]!) }
 
     console.log('3. Quote goods terms')
     const clearQuotes = () => sql`DELETE FROM quotes WHERE rfq_id = ${ids.goodsRfq}`

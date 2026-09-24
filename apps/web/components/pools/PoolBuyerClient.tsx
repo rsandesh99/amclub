@@ -30,7 +30,7 @@ export function PoolBuyerClient({ view, labels }: {
       const res = await fetch(`/api/v1/pools/${view.id}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) {
         const d = (await res.json().catch(() => ({}))) as { error?: string }
-        const known = ['rfq_closed', 'too_late', 'offer_unavailable', 'pool_not_open'] as const
+        const known = ['rfq_closed', 'too_late', 'offer_unavailable', 'pool_not_open', 'dual_role'] as const
         const k = known.find((x) => x === d.error)
         setError(k ? t(`err_${k}`) : t('err'))
         return

@@ -19,7 +19,9 @@ export function GoodsListingActions({ productId, status, sellsGoods }: { product
     })
     setBusy(false)
     if (res.ok) {
-      toast(action === 'submit' ? t('sent_for_approval') : t('confirmed'), 'success')
+      // Audit M16 — a reactivation after a material edit goes to review, not live.
+      const d = (await res.json().catch(() => ({}))) as { status?: string }
+      toast(action === 'submit' || d.status === 'pending_approval' ? t('sent_for_approval') : t('confirmed'), 'success')
       router.refresh()
     } else {
       const d = await res.json().catch(() => ({}))

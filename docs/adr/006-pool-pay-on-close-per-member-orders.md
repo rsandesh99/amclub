@@ -53,3 +53,34 @@ invoicing model open (consolidated seller order vs one order per member).
   admins. If defaults prove common in the pilot, the block-and-capture flip is the remedy.
 - Reversal: `pool_payment_mode` and `pool_categories` are config; cancelling every open pool
   releases all commitments with no money moved.
+
+## Addendum (2026-09-24) — frozen listing terms, re-review, server totals (audit M16, L4)
+
+- **A pool freezes the listing's tax identity when it opens.** `approveAndOpenPool` writes
+  the listing's `gst_rate_bps`, `hsn_code` and `unit` onto the pool (migration 0077;
+  backfilled for pools already open or closed met), and `prepareMemberCheckout` charges
+  those, never the listing's current values. A member pays the GST they committed to.
+- **Material listing edits wait while a pool is live.** The seller route refuses a change
+  to name, images, unit, HSN, GST slab or category (shared `PRODUCT_MATERIAL_FIELDS`)
+  with 409 `pool_live` while a pool on the listing is `open` or `closed_met`
+  (`POOL_LIVE_STATUSES`). Otherwise the edit would send the listing back to review and
+  leave members unable to pay inside their window (a default through no fault of theirs).
+- **What the admin approved is what stays live** (ADR-005 one-spine catalogue): a material
+  edit of an `active` listing moves it `active → pending_approval` and clears its approval
+  (always for a category change; a seller already past `auto_approve_after_listings` keeps
+  other material edits live, the same trust the submit path gives — shared
+  `productEditReview`). A `suspended` listing edited that way is reactivated into
+  `pending_approval`, not `active`. Both are **extensions** of `PRODUCT_TRANSITIONS`
+  (`active → pending_approval`, `suspended → pending_approval`); no edge into `active`
+  starts anywhere but a reviewed state. The admin approval is pinned to the version
+  reviewed (`reviewed_updated_at` = the listing's `updated_at`; a later edit → 409
+  `listing_changed`).
+- **The member's figure is the server's (L4).** The pool API returns `member.amounts`
+  (taxable, GST, total for the member's quantity) and `pool.unitDisplay` (one unit with
+  GST) from `poolMemberAmounts` — the same `computeGoodsOrderAmounts` on the same inputs as
+  `prepareMemberCheckout`, which refuses (`amount_mismatch`) if they ever differ. "Pay ₹X
+  to confirm" (web and mobile) is the amount charged; clients never multiply.
+- **Verification:** `verify-mart.ts` §H (re-review, pinned approval, snapshot at open,
+  `pool_live`, checkout at the frozen slab after the listing changed underneath, the pool
+  API totals); shared `mart.test.ts` (transitions, `productEditReview`, the pinned review
+  schema); `killtest-mart-pools` / `killtest-mart-schema` green on a bootstrapped 0077.

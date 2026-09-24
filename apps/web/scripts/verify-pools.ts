@@ -12,6 +12,9 @@
  *      clears commitments
  *   5  close: exactly one ORDINARY quote per committed member at the tier reached; quote_count +1 each; replay writes
  *      nothing; members linked; the offer records count + price
+ *      audit L9: a close holding the pool's lease runs alone; a resumed close relinks its own quote and keeps the slot
+ *      audit M44: a group quote cannot be revised (409 pool_quote_fixed)
+ *   audit M45 (1, 4): an account that also sells services is never grouped, cannot join or choose, sees no offers
  *   6  pay: a member accepts & pays the group quote through the ordinary checkout; total = quoteChargeAmounts
  *   7  lapse and cancel
  *
@@ -107,6 +110,11 @@ async function main() {
   const pA = await mkProvider('pa', STATE)
   const pB = await mkProvider('pb', STATE)
   const pC = await mkProvider('pc', STATE) // matched but NOT in the cohort
+  // Audit M45 — a provider in the category that ALSO keeps a buyer profile (the attack account).
+  const dual = await mkProvider('dual', STATE)
+  const { data: dualMsme } = await admin.from('msme_profiles').insert({ user_id: dual.uid, business_name: 'Pool Dual', state: STATE, sector: 'services' }).select('id').single()
+  created.msmeIds.push(dualMsme!.id)
+  const dualBuyer = { ...dual, msmeId: dualMsme!.id as string }
   const ops = await mkUser('ops', ['msme', 'admin'])
   const [b1, b2, b3, b4, b5] = buyers as [U & { msmeId: string }, U & { msmeId: string }, U & { msmeId: string }, U & { msmeId: string }, U & { msmeId: string }]
 
@@ -126,7 +134,7 @@ async function main() {
     const offD = await json(offCron)
     check('AGENT_ENABLED off: routes 404 and the cron touches no pool table', off.status === 404 && offCron.status === 200 && offD['enabled'] === false, `${off.status} ${offCron.status} ${JSON.stringify(offD)}`)
     await setSetting('agents_enabled', { ...enabled, demand_aggregation: true })
-    await setSetting('cohort_user_ids', [...buyers.map((b) => b.uid), pA.uid, pB.uid, ops.uid])
+    await setSetting('cohort_user_ids', [...buyers.map((b) => b.uid), pA.uid, pB.uid, dual.uid, ops.uid])
     await setSetting('pool_min_members', 3)
   }
 
@@ -137,6 +145,7 @@ async function main() {
   const rfq3 = await newRfq(b3, 'itr-filing')
   const rfq4 = await newRfq(b4, 'itr-filing')
   const rfq5 = await newRfq(b5, 'itr-filing', { must_haves: { credentials: [], languages: ['ta'], onSite: false, inStateOnly: false } })
+  const rfqDual = await newRfq(dualBuyer, 'itr-filing')
   const c1 = await json(await cron())
   const { data: pools1 } = await admin.from('service_pools').select('id, status, min_members, form_by').eq('state', STATE).eq('service_slug', 'itr-filing')
   const pool = (pools1 ?? [])[0] as { id: string; status: string } | undefined
@@ -144,6 +153,7 @@ async function main() {
   const memberRfqs = new Set((mem1 ?? []).map((m) => m.rfq_id as string))
   check('four same-service requests → one forming group with four invites', (pools1?.length ?? 0) === 1 && pool?.status === 'forming' && memberRfqs.size === 4 && [rfq1, rfq2, rfq3, rfq4].every((r) => memberRfqs.has(r)), `${JSON.stringify(c1)} pools=${pools1?.length} members=${memberRfqs.size}`)
   check('a request with must-haves is never grouped', !memberRfqs.has(rfq5))
+  check('M45: a buyer whose account also sells services is never grouped', !memberRfqs.has(rfqDual))
   const again = await json(await cron())
   const { count: poolCount } = await admin.from('service_pools').select('id', { count: 'exact', head: true }).eq('state', STATE)
   check('a second detection run proposes nothing new', poolCount === 1 && again['proposed'] === 0, JSON.stringify(again))
@@ -193,6 +203,21 @@ async function main() {
   const offers = ((bv['pool'] as { offers?: Array<{ id: string; gstIncluded: boolean; tiers: Array<{ pricePaise: number; totalPaise: number }> }> })?.offers) ?? []
   const figuresOk = offers.length === 2 && offers.every((o) => o.tiers.every((t) => t.totalPaise === quoteChargeAmounts({ pricePaise: t.pricePaise, gstIncluded: o.gstIncluded, commissionBps }).totalPaise))
   check('the buyer sees both offers with the checkout\'s own figure per tier', figuresOk, JSON.stringify(offers).slice(0, 300))
+  // Audit M45 — even placed in the group by hand, a dual-role account can neither join nor read rival offers.
+  {
+    const { data: dm } = await admin.from('service_pool_members').insert({ pool_id: pool.id, rfq_id: rfqDual, msme_id: dualBuyer.msmeId, status: 'invited' }).select('id').single()
+    const dj = await api(dual.token, `/api/v1/pools/${pool.id}/membership`, { action: 'join' })
+    const dErr = (await json(dj))['error']
+    check('M45: a dual-role buyer is refused the join (403 dual_role)', dj.status === 403 && dErr === 'dual_role', `${dj.status} ${String(dErr)}`)
+    await admin.from('service_pool_members').update({ status: 'joined', joined_at: new Date().toISOString() }).eq('id', dm!.id)
+    const dvRaw = await api(dual.token, `/api/v1/pools/${pool.id}`)
+    const dvText = await dvRaw.text()
+    const dv = JSON.parse(dvText || '{}') as { role?: string; pool?: { offers?: unknown[] } }
+    check("M45: a dual-role member's view carries no competitor offer", dvRaw.ok && dv.role === 'buyer' && (dv.pool?.offers ?? []).length === 0 && !dvText.includes(offB['offerId'] as string) && !dvText.includes(offA['offerId'] as string), dvText.slice(0, 200))
+    const dc = await api(dual.token, `/api/v1/pools/${pool.id}/commit`, { offer_id: offA['offerId'] })
+    check('M45: a dual-role member cannot choose an offer (403)', dc.status === 403, `${dc.status}`)
+    await admin.from('service_pool_members').delete().eq('id', dm!.id)
+  }
   const b4c = await api(b4.token, `/api/v1/pools/${pool.id}/commit`, { offer_id: offA['offerId'] })
   check('a member who did not join cannot choose (409)', b4c.status === 409, `${b4c.status}`)
   const foreign = await api(b1.token, `/api/v1/pools/${pool.id}/commit`, { offer_id: randomUUID() })
@@ -212,7 +237,14 @@ async function main() {
     return new Map((data ?? []).map((r) => [r.id as string, r.quote_count as number]))
   }
   const before = await counts()
-  await admin.from('service_pools').update({ closes_at: new Date(Date.now() - 60_000).toISOString() }).eq('id', pool.id)
+  // Audit L9 — a close holding the pool's lease runs alone: another run (the clock, a second cron) does nothing.
+  await admin.from('service_pools').update({ status: 'closing', closes_at: new Date(Date.now() - 60_000).toISOString(), close_lease_until: new Date(Date.now() + 5 * 60_000).toISOString() }).eq('id', pool.id)
+  await cron()
+  const { data: leased } = await admin.from('service_pools').select('status').eq('id', pool.id).single()
+  const { count: leasedQuotes } = await admin.from('quotes').select('id', { count: 'exact', head: true }).eq('provider_id', pA.providerId).in('rfq_id', [rfq1, rfq2, rfq3])
+  const leasedCounts = await counts()
+  check('L9: while another close holds the lease, a close run claims and writes nothing', leased?.status === 'closing' && leasedQuotes === 0 && [rfq1, rfq2, rfq3].every((r) => leasedCounts.get(r) === before.get(r)), `${leased?.status} quotes=${leasedQuotes}`)
+  await admin.from('service_pools').update({ close_lease_until: new Date(Date.now() - 1000).toISOString() }).eq('id', pool.id) // the holder died: its lease lapses
   const cl = await json(await cron())
   const { data: closedPool } = await admin.from('service_pools').select('status').eq('id', pool.id).single()
   const { data: groupQuotes } = await admin.from('quotes').select('id, rfq_id, price_paise, status, gst_included').eq('provider_id', pA.providerId).in('rfq_id', [rfq1, rfq2, rfq3])
@@ -229,6 +261,29 @@ async function main() {
   const { count: quoteReplay } = await admin.from('quotes').select('id', { count: 'exact', head: true }).eq('provider_id', pA.providerId).in('rfq_id', [rfq1, rfq2, rfq3])
   const replayCounts = await counts()
   check('a replayed close writes nothing new', quoteReplay === 3 && [rfq1, rfq2, rfq3].every((r) => replayCounts.get(r) === after.get(r)), `quotes=${quoteReplay}`)
+  // Audit M44 — a group quote keeps the tier the group reached: the ordinary revision route refuses it.
+  {
+    const q2 = (groupQuotes ?? []).find((q) => q.rfq_id === rfq2)!
+    const rev = await api(pA.token, `/api/v1/rfq/${rfq2}/quote`, { price_paise: 12_000_00, delivery_days: 6, scope: base.scope, gst_included: true, valid_until: validUntil }, 'PATCH')
+    const revErr = (await json(rev))['error']
+    const { data: q2After } = await admin.from('quotes').select('price_paise, gst_included, revision').eq('id', q2.id).single()
+    check('M44: PATCH on a group quote → 409 pool_quote_fixed; price stays at the tier (₹8,000), GST mode unchanged', rev.status === 409 && revErr === 'pool_quote_fixed' && Number(q2After?.price_paise) === 8_000_00 && q2After?.gst_included === false && Number(q2After?.revision ?? 1) === 1, `${rev.status} ${String(revErr)} ${JSON.stringify(q2After)}`)
+  }
+  // Audit L9 — a close that stopped between writing a member's quote and linking it: the resume meets its OWN quote
+  // (quotes.pool_member_id) on the unique (rfq, provider) key — it links it and keeps the slot (never releases it).
+  {
+    const q2 = (groupQuotes ?? []).find((q) => q.rfq_id === rfq2)!
+    const { data: m2 } = await admin.from('service_pool_members').select('id').eq('pool_id', pool.id).eq('rfq_id', rfq2).single()
+    const { data: marker } = await admin.from('quotes').select('pool_member_id').eq('id', q2.id).single()
+    check('each group quote names its member (quotes.pool_member_id)', marker?.pool_member_id === m2?.id, JSON.stringify(marker))
+    await admin.from('service_pool_members').update({ quote_id: null }).eq('id', m2!.id)
+    await admin.from('service_pools').update({ status: 'closing' }).eq('id', pool.id)
+    await cron()
+    const { data: relinked } = await admin.from('service_pool_members').select('quote_id, claim_state, skip_reason').eq('id', m2!.id).single()
+    const resumed = await counts()
+    const { count: q2Count } = await admin.from('quotes').select('id', { count: 'exact', head: true }).eq('rfq_id', rfq2)
+    check('L9: the resumed close relinks its own quote; the slot is kept (quote_count unchanged), the member stays claimed', relinked?.quote_id === q2.id && relinked?.claim_state === 'claimed' && !relinked?.skip_reason && resumed.get(rfq2) === after.get(rfq2) && q2Count === 1, `${JSON.stringify(relinked)} count ${after.get(rfq2)} → ${resumed.get(rfq2)}`)
+  }
 
   // ── 6. pay through the ordinary checkout ─────────────────────────────────
   console.log('6 — pay')

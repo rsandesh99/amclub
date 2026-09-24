@@ -88,7 +88,7 @@ export async function getPoolOpenLimits(admin: Admin): Promise<{ minOpenHours: n
 
 const POOL_SELECT =
   'id, product_id, category_slug, spec, title, unit, target_qty, min_qty, unit_price_paise, closes_at, status, seller_id, ' +
-  'created_by, approved_at, closed_at, rationale, card_i18n, created_at, ' +
+  'created_by, approved_at, closed_at, rationale, card_i18n, created_at, gst_rate_bps, hsn_code, ' +
   'product:products(id, name, images, list_price_paise, gst_rate_bps, hsn_code, min_order_qty, unit, status), ' +
   'seller:provider_profiles(id, display_name, slug, city, state)'
 
@@ -100,7 +100,15 @@ export interface PoolDetail extends Omit<PoolSummary, 'status'> {
   imageUrl: string | null
   seller: { id: string; displayName: string; slug: string; city: string | null; state: string } | null
   productName: string | null
+  /**
+   * The GST slab a member pays at: the tax snapshot frozen when the pool opened (audit M16,
+   * 0077), or — for a draft / a pre-0077 pool — the listing's current slab.
+   */
   gstRateBps: number | null
+  /** HSN on the member's order line: the snapshot, else the listing's current code. */
+  hsnCode: string | null
+  /** True once the pool froze the listing's tax identity (gst_rate_bps + hsn_code) at open. */
+  taxSnapshot: boolean
   closedAt: string | null
   cardI18n: Record<string, string> | null
   rationale: Record<string, unknown>
@@ -129,6 +137,7 @@ export function mapPool(r: any, counts: { committed_qty: number; member_count: n
   const product = Array.isArray(r.product) ? r.product[0] : r.product
   const seller = Array.isArray(r.seller) ? r.seller[0] : r.seller
   const listPrice = product?.list_price_paise != null ? Number(product.list_price_paise) : null
+  const taxSnapshot = r.gst_rate_bps != null && typeof r.hsn_code === 'string'
   return {
     id: r.id,
     product_id: r.product_id ?? null,
@@ -148,7 +157,9 @@ export function mapPool(r: any, counts: { committed_qty: number; member_count: n
     imageUrl: product?.images?.[0] ? publicAssetUrl(product.images[0]) : null,
     seller: seller ? { id: seller.id, displayName: seller.display_name, slug: seller.slug, city: seller.city ?? null, state: seller.state ?? '' } : null,
     productName: product?.name ?? null,
-    gstRateBps: product?.gst_rate_bps != null ? Number(product.gst_rate_bps) : null,
+    gstRateBps: taxSnapshot ? Number(r.gst_rate_bps) : product?.gst_rate_bps != null ? Number(product.gst_rate_bps) : null,
+    hsnCode: taxSnapshot ? (r.hsn_code as string) : (product?.hsn_code ?? null),
+    taxSnapshot,
     closedAt: r.closed_at ?? null,
     cardI18n: r.card_i18n ?? null,
     rationale: r.rationale ?? {},
@@ -287,7 +298,8 @@ export type PoolActionResult = { ok: true; pool: PoolDetail } | { ok: false; sta
 /**
  * draft → open. The founder may correct any term first; validation is the
  * shared poolOpenProblem (product required, min ≤ target, close window,
- * price below list). The seller is the product's seller.
+ * price below list). The seller is the product's seller. Audit M16: the listing's
+ * GST slab, HSN and unit are frozen onto the pool here; member checkout charges them.
  */
 export async function approveAndOpenPool(admin: Admin, poolId: string, edits: PoolOpenInput, adminId: string, cardI18n?: Record<string, string> | null): Promise<PoolActionResult> {
   const pool = await getPool(admin, poolId)
@@ -303,7 +315,7 @@ export async function approveAndOpenPool(admin: Admin, poolId: string, edits: Po
   }
   const problem = poolOpenProblem(next, new Date(), await getPoolOpenLimits(admin))
   if (problem) return { ok: false, status: 422, error: problem }
-  const { data: product } = await admin.from('products').select('seller_id, status').eq('id', pool.product_id!).maybeSingle()
+  const { data: product } = await admin.from('products').select('seller_id, status, gst_rate_bps, hsn_code, unit').eq('id', pool.product_id!).maybeSingle()
   if (!product || product.status !== 'active') return { ok: false, status: 422, error: 'product_unavailable' }
   const { data, error } = await admin
     .from('pools')
@@ -314,6 +326,10 @@ export async function approveAndOpenPool(admin: Admin, poolId: string, edits: Po
       unit_price_paise: next.unit_price_paise,
       closes_at: next.closes_at,
       seller_id: product.seller_id,
+      // Audit M16 — the listing's tax identity as approved, frozen for every member's checkout.
+      gst_rate_bps: product.gst_rate_bps,
+      hsn_code: product.hsn_code,
+      unit: product.unit,
       status: 'open',
       approved_by: adminId,
       approved_at: new Date().toISOString(),
@@ -324,7 +340,7 @@ export async function approveAndOpenPool(admin: Admin, poolId: string, edits: Po
     .eq('status', 'draft')
     .select('id')
   if (error || !data?.length) return { ok: false, status: 409, error: 'not_draft' }
-  await addPoolEvent(admin, poolId, 'approved', { actorId: adminId, payload: { edits } })
+  await addPoolEvent(admin, poolId, 'approved', { actorId: adminId, payload: { edits, tax_snapshot: { gst_rate_bps: product.gst_rate_bps, hsn_code: product.hsn_code, unit: product.unit } } })
   await addPoolEvent(admin, poolId, 'opened', { actorId: adminId })
   return { ok: true, pool: (await getPool(admin, poolId))! }
 }
@@ -554,23 +570,29 @@ export async function prepareMemberCheckout(
   const cat = await getMartCategory(admin, product.category_slug)
   if (!cat || !cat.is_active || cat.bis_blocked) return { ok: false, status: 422, error: 'category_blocked' }
 
-  const gstRateBps = Number(product.gst_rate_bps)
+  // Audit M16 — the member pays at the tax identity frozen when the pool opened (a later
+  // listing edit changes nothing here); a pre-0077 pool falls back to the listing's own.
+  const gstRateBps = Number(pool.gstRateBps)
+  const hsnCode = pool.taxSnapshot && pool.hsnCode ? pool.hsnCode : (product.hsn_code as string)
+  const unit = (pool.taxSnapshot ? pool.unit : product.unit) as GoodsLineItem['unit']
   const taxable = member.qty * pool.unit_price_paise
   const lineItems: GoodsLineItem[] = [
     {
       product_id: product.id,
       name: product.name,
-      unit: product.unit,
+      unit,
       qty: member.qty,
       tier_min_qty: pool.min_qty,
       tier_unit_price_paise: pool.unit_price_paise,
-      hsn_code: product.hsn_code,
+      hsn_code: hsnCode,
       gst_rate_bps: gstRateBps as GoodsLineItem['gst_rate_bps'],
       line_taxable_paise: taxable,
       line_gst_paise: Math.round((taxable * gstRateBps) / 10000),
     },
   ]
   const amounts = computeGoodsOrderAmounts({ lines: [{ qty: member.qty, unitPricePaise: pool.unit_price_paise, gstRateBps, commissionBps: cat.commission_bps }], commissionBps: cat.commission_bps })
+  // The figure the pool page showed (poolMemberAmounts) is the figure charged: same inputs, one rule.
+  if (amounts.totalPaise !== poolMemberAmounts(pool, member.qty)?.totalPaise) return { ok: false, status: 500, error: 'amount_mismatch' }
   const deliveryDays = Number(await getMartSetting<number | string>(admin, 'goods_delivery_days', 3))
   const idempotencyKey = poolMemberIdempotencyKey(pool.id, member.id)
 
@@ -586,7 +608,7 @@ export async function prepareMemberCheckout(
           source: 'catalog',
           package_id: null,
           quote_id: null,
-          title: `${member.qty} ${product.unit} ${product.name} (group buy)`,
+          title: `${member.qty} ${unit} ${product.name} (group buy)`,
           scope_snapshot: { kind: 'goods', pool_id: pool.id, pool_member_id: member.id, seller_name: seller.display_name, categories: [cat.slug] },
           price_paise: amounts.pricePaise,
           discount_paise: 0,
@@ -825,4 +847,40 @@ async function notifySeller(admin: Admin, pool: PoolDetail, kind: 'pool_met' | '
 /** Progress shape for clients (server computes; clients render). */
 export function poolProgressFor(pool: Pick<PoolSummary, 'committed_qty' | 'min_qty' | 'target_qty'>) {
   return poolProgress(pool.committed_qty, pool.min_qty, pool.target_qty)
+}
+
+/**
+ * Audit L4 — what a member pays for `qty` at the pool price, GST included: the same
+ * computeGoodsOrderAmounts on the same inputs as prepareMemberCheckout (the pool's
+ * frozen GST slab), so "Pay ₹X to confirm" is the amount charged. Clients render
+ * these paise and never multiply. Null when the pool has no GST slab (no listing).
+ */
+export function poolMemberAmounts(pool: Pick<PoolDetail, 'gstRateBps' | 'unit_price_paise'>, qty: number): { taxablePaise: number; gstPaise: number; totalPaise: number } | null {
+  if (pool.gstRateBps == null || !Number.isInteger(qty) || qty <= 0) return null
+  const a = computeGoodsOrderAmounts({ lines: [{ qty, unitPricePaise: pool.unit_price_paise, gstRateBps: pool.gstRateBps }], commissionBps: 0 })
+  return { taxablePaise: a.taxablePaise, gstPaise: a.gstPaise, totalPaise: a.totalPaise }
+}
+
+/** Audit L4 — one unit at the pool price, with its GST (server display for the join form). */
+export function poolUnitDisplay(pool: Pick<PoolDetail, 'gstRateBps' | 'unit_price_paise'>): { unit_price_paise: number; unit_gst_paise: number; unit_incl_gst_paise: number } | null {
+  const one = poolMemberAmounts(pool, 1)
+  return one ? { unit_price_paise: one.taxablePaise, unit_gst_paise: one.gstPaise, unit_incl_gst_paise: one.totalPaise } : null
+}
+
+/** The pool as every buyer-facing route returns it: no rationale (M15), progress and the unit display (L4). */
+export function buyerPoolPayload(pool: PoolDetail) {
+  return { ...publicPool(pool), progress: poolProgressFor(pool), unitDisplay: poolUnitDisplay(pool) }
+}
+
+/** A member as the buyer-facing routes return it, with the server's total for their quantity (L4). */
+export function buyerMemberPayload(pool: PoolDetail, m: Pick<PoolMemberRow, 'id' | 'qty' | 'payment_state' | 'pay_by' | 'order_id'> & { committed_at?: string }) {
+  return {
+    id: m.id,
+    qty: m.qty,
+    payment_state: m.payment_state,
+    pay_by: m.pay_by,
+    order_id: m.order_id,
+    ...(m.committed_at ? { committed_at: m.committed_at } : {}),
+    amounts: poolMemberAmounts(pool, m.qty),
+  }
 }

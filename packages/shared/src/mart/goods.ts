@@ -9,6 +9,8 @@
  */
 import { z } from 'zod'
 import { hsnCodeSchema, gstRateBpsSchema, productUnitSchema } from './catalog'
+import { canRaiseDispute, disputeWindowEndsAt } from '../dispute-window'
+import type { OrderStatus } from '../state-machines'
 
 // ── Line items ───────────────────────────────────────────────────────────────
 
@@ -240,6 +242,55 @@ export function evaluateGoodsReleaseGate(f: GoodsReleaseFacts): GoodsReleaseGate
   }
 
   return { ok: reasons.length === 0, reasons, returnWindowEndsAt, autoReceiptAt }
+}
+
+// ── Opening a return (audit M14, ADR-014 addendum) ─────────────────────────────
+
+export type GoodsReturnCheck = { ok: true } | { ok: false; reason: 'status' } | { ok: false; reason: 'window_closed'; endsAt: string | null }
+
+/**
+ * The last moment a buyer may open a return on a COMPLETED goods order (ISO), or
+ * null when there is none to show. Two bounds apply and the earlier wins:
+ *   - the category return window (release gate: delivery evidence + return_window_hours) — the binding one
+ *     for goods, and the promise the seller was given;
+ *   - the platform's post-completion dispute window (`dispute_window_days` from completed_at,
+ *     shared `disputeWindowEndsAt`), so `completed → disputed` never outlives it for any order.
+ * A missing bound means "closed" (fail safe on money). Only `completed` has a deadline:
+ * `delivered` is pre-completion (§3.7 any-pre-completed → disputed) and ends at the 72 h auto-accept.
+ */
+export function goodsReturnDeadline(p: {
+  status: OrderStatus
+  returnWindowEndsAt: Date | string | null
+  completedAt: string | null | undefined
+  disputeWindowDays: number
+}): string | null {
+  if (p.status !== 'completed') return null
+  const ret = p.returnWindowEndsAt == null ? NaN : new Date(p.returnWindowEndsAt).getTime()
+  const disp = disputeWindowEndsAt(p.completedAt, p.disputeWindowDays)
+  const dispT = disp ? Date.parse(disp) : NaN
+  if (!Number.isFinite(ret) || !Number.isFinite(dispT)) return null
+  return new Date(Math.min(ret, dispT)).toISOString()
+}
+
+/**
+ * The one rule `open_return` enforces (web workspace mirrors it with the server's deadline).
+ * `delivered` → allowed (pre-completion). `completed` → allowed only before goodsReturnDeadline and only
+ * while shared `canRaiseDispute` (ADR-014 §6) allows `completed → disputed`. Anything else → 'status'.
+ */
+export function canOpenGoodsReturn(p: {
+  status: OrderStatus
+  returnWindowEndsAt: Date | string | null
+  completedAt: string | null | undefined
+  disputeWindowDays: number
+  now?: number
+}): GoodsReturnCheck {
+  if (p.status === 'delivered') return { ok: true }
+  if (p.status !== 'completed') return { ok: false, reason: 'status' }
+  const now = p.now ?? Date.now()
+  const endsAt = goodsReturnDeadline(p)
+  const dispute = canRaiseDispute({ status: 'completed', completedAt: p.completedAt, windowDays: p.disputeWindowDays, now })
+  if (!dispute.ok || !endsAt || now >= Date.parse(endsAt)) return { ok: false, reason: 'window_closed', endsAt }
+  return { ok: true }
 }
 
 // ── M2: goods RFQ (MART_DESIGN.md §7 M2 — bulk/spec goods through the

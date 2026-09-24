@@ -137,7 +137,10 @@ export default function MartPoolScreen() {
 
           {member?.payment_state === 'blocked' && live && (
             <View className="flex-row flex-wrap items-center justify-between gap-2 rounded-card border border-brass bg-ivory p-3">
-              <Text className="text-base font-semibold text-emerald-ink">✓ {t('mart.pool_joined', { qty: member.qty, unit: pool.unit })}</Text>
+              <View className="flex-1">
+                <Text className="text-base font-semibold text-emerald-ink">✓ {t('mart.pool_joined', { qty: member.qty, unit: pool.unit })}</Text>
+                {member.amounts ? <Text className="mt-1 text-xs text-foreground-secondary">{t('mart.pool_commit_total', { amount: formatINRExact(member.amounts.totalPaise) })}</Text> : null}
+              </View>
               <View className="flex-row gap-2">
                 <TouchableOpacity onPress={() => setEditing((e) => !e)} className="h-10 justify-center rounded-lg border border-emerald px-3"><Text className="text-xs font-semibold text-emerald">{t('mart.pool_change')}</Text></TouchableOpacity>
                 <TouchableOpacity onPress={leave} disabled={busy} className="h-10 justify-center px-3"><Text className="text-xs font-semibold text-foreground-secondary">{t('mart.pool_leave')}</Text></TouchableOpacity>
@@ -149,7 +152,7 @@ export default function MartPoolScreen() {
               <Text className="text-base font-semibold text-emerald-ink">{t('mart.pool_met_line')}</Text>
               {member.pay_by && <Text className="mt-1 text-xs text-foreground-secondary">{t('mart.pool_pay_by', { date: istDate(member.pay_by) })}</Text>}
               <TouchableOpacity onPress={pay} disabled={busy} accessibilityRole="button" className="mt-3 h-12 items-center justify-center rounded-button bg-gold">
-                <Text className="text-base font-semibold text-emerald-ink">{busy ? '…' : t('mart.pool_pay_now', { amount: formatINR(member.qty * pool.unit_price_paise) })}</Text>
+                <Text className="text-base font-semibold text-emerald-ink">{busy ? '…' : member.amounts ? t('mart.pool_pay_now', { amount: formatINR(member.amounts.totalPaise) }) : t('mart.pool_pay_title')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -164,7 +167,8 @@ export default function MartPoolScreen() {
             <View className="gap-3 rounded-card border border-border bg-ivory p-4">
               <Text className="text-sm font-semibold text-emerald-ink">{t('mart.pool_join_qty', { unit: pool.unit })}</Text>
               <TextInput className="h-12 rounded-lg border border-border bg-white px-3 text-base text-ink" keyboardType="number-pad" value={qty} onChangeText={(v) => setQty(v.replace(/\D/g, ''))} />
-              {qtyN >= 1 && <Text className="text-xs text-foreground-secondary">{qtyN} × {formatINRExact(pool.unit_price_paise)} = <Text className="font-semibold text-emerald-ink">{formatINR(qtyN * pool.unit_price_paise)}</Text> + GST</Text>}
+              {/* Audit L4 — the server's per-unit price with GST; the member's total arrives with the join. */}
+              {qtyN >= 1 && pool.unitDisplay ? <Text className="text-xs text-foreground-secondary">{qtyN} × {formatINRExact(pool.unitDisplay.unit_incl_gst_paise)} <Text className="font-semibold text-emerald-ink">{t('mart.incl_gst')}</Text></Text> : null}
               <Text className="text-sm font-semibold text-emerald-ink">{t('mart.delivery_title')}</Text>
               {([['contact_name', 'default'], ['contact_phone', 'phone-pad'], ['address', 'default'], ['city', 'default'], ['pincode', 'number-pad']] as const).map(([k, kb]) => (
                 <TextInput key={k} className="h-12 rounded-lg border border-border bg-white px-3 text-base text-ink" placeholder={t(`mart.${k}`)} placeholderTextColor="#9CA3AF" keyboardType={kb} value={String(form[k])} onChangeText={(v) => setForm((f) => ({ ...f, [k]: v }))} />

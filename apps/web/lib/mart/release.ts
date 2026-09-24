@@ -6,8 +6,9 @@
  * (refuses while the gate holds), and the payout-evidence dossier.
  */
 import 'server-only'
-import { evaluateGoodsReleaseGate, type GoodsReleaseGate, type GoodsLineItem } from '@amclub/shared'
+import { evaluateGoodsReleaseGate, goodsReturnDeadline, type GoodsReleaseGate, type GoodsLineItem } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
+import { getAgentSetting } from '@/lib/agent/settings'
 import { getMartCategory } from './config'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -113,5 +114,26 @@ export async function getGoodsDossier(admin: Admin, order: any, now = new Date()
     evidenceDocIds,
     lineItems: (order.line_items ?? []) as GoodsLineItem[],
   }
+}
+
+/**
+ * Audit M14 — the facts shared canOpenGoodsReturn / goodsReturnDeadline need: the
+ * category return window's end (from the dossier) and the post-completion dispute
+ * window (agent_settings.dispute_window_days from completed_at). Server only; clients
+ * receive the resulting deadline, never these inputs.
+ */
+export async function goodsReturnFacts(
+  admin: Admin,
+  order: any,
+  dossier?: GoodsDossier,
+): Promise<{ returnWindowEndsAt: Date | null; completedAt: string | null; disputeWindowDays: number }> {
+  const [d, days] = await Promise.all([dossier ? Promise.resolve(dossier) : getGoodsDossier(admin, order), getAgentSetting(admin, 'dispute_window_days')])
+  return { returnWindowEndsAt: d.gate.returnWindowEndsAt, completedAt: typeof order.completed_at === 'string' ? order.completed_at : null, disputeWindowDays: Number(days) }
+}
+
+/** Audit M14 — a completed goods order's last moment to open a return (ISO), else null (GET /orders/[id]). */
+export async function goodsReturnDeadlineFor(admin: Admin, order: any): Promise<string | null> {
+  if (order?.kind !== 'goods' || order.status !== 'completed') return null
+  return goodsReturnDeadline({ status: 'completed', ...(await goodsReturnFacts(admin, order)) })
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

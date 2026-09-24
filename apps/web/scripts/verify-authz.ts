@@ -1062,6 +1062,26 @@ async function main() {
       eq('a signed-in buyer cannot call record_coupon_redemption', Boolean((await asUser(buyerA.token).rpc('record_coupon_redemption', { p_order_id: orderA })).error), true)
       eq('anon cannot call claim_coupon_for_session', Boolean((await createClient(URL_, ANON, { auth: { persistSession: false } }).rpc('claim_coupon_for_session', { p_session_id: crypto.randomUUID() })).error), true)
     }
+
+    // ── 11. Audit M4 / M44 / L9 (0077): server-only columns ──────────────────
+    console.log('\naudit 0077 — goods_spec, group-quote marker and close lease are server-only:')
+    {
+      // A missing column grant fails when the statement is planned: an ERROR, whatever the rows.
+      if (!(await admin.from('rfqs').select('goods_spec').limit(1)).error) {
+        eq('buyerA reads OWN rfq (id, title) through PostgREST (control)', ((await asUser(buyerA.token).from('rfqs').select('id, title').eq('id', rfqA)).data ?? []).length, 1)
+        eq('buyerA cannot read rfqs.goods_spec directly (the API serves it)', Boolean((await asUser(buyerA.token).from('rfqs').select('goods_spec').eq('id', rfqA)).error), true)
+        eq('a matched provider cannot read rfqs.goods_spec directly', Boolean((await asUser(provA.token).from('rfqs').select('goods_spec').eq('id', rfqA)).error), true)
+        eq('select=* on rfqs is refused too (no way around the column grant)', Boolean((await asUser(provA.token).from('rfqs').select('*').eq('id', rfqA)).error), true)
+      } else {
+        console.log('  (skipped goods_spec checks — staged Mart column absent)')
+      }
+      if (!(await admin.from('quotes').select('pool_member_id').limit(1)).error) {
+        eq('no client reads quotes.pool_member_id (the group-quote marker)', Boolean((await asUser(provA.token).from('quotes').select('pool_member_id').eq('rfq_id', rfqA)).error), true)
+        eq('no client reads service_pools (close lease included)', Boolean((await asUser(buyerA.token).from('service_pools').select('id, close_lease_until').limit(1)).error), true)
+      } else {
+        console.log('  (skipped group-quote checks — 0077 not applied)')
+      }
+    }
   } finally {
     // Cleanup — children before parents; loud on error.
     const del = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {

@@ -460,6 +460,10 @@ const MANIFEST: Entry[] = [
     note: 'Audit M15: pools.rationale (source order ids, seller 30-day volume) not client-readable; column grant built from the catalogue; no-op without the Mart tables',
   },
   {
+    file: '0077_listing_pool_integrity.sql',
+    note: 'Audit M16 / M4 / M44 / L9: pools.gst_rate_bps + hsn_code (tax snapshot at open; backfilled for live pools); rfqs.goods_spec not client-readable (column grant from the catalogue); quotes.pool_member_id (unique group-quote marker, no client grant; backfilled from service_pool_members.quote_id); service_pools.close_lease_until (per-pool close lease); Mart parts no-op without the staged tables',
+  },
+  {
     file: '0078_payment_truth.sql',
     tables: ['capture_exceptions'],
     functions: ['capture_payment'],

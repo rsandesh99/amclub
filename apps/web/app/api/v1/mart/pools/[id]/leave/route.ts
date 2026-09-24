@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
-import { leavePool, poolProgressFor } from '@/lib/mart/pools'
+import { leavePool, buyerPoolPayload } from '@/lib/mart/pools'
 
 /** Withdraw a commitment — only while the pool is open. */
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -17,5 +17,6 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   if (!msme) return NextResponse.json({ error: 'No business profile' }, { status: 403 })
   const r = await leavePool(admin, { poolId: id, userId, msmeId: msme.id })
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
-  return NextResponse.json({ pool: { ...r.pool, progress: poolProgressFor(r.pool) } })
+  // Audit M15 — never the agent rationale.
+  return NextResponse.json({ pool: buyerPoolPayload(r.pool) })
 }

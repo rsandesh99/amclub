@@ -154,6 +154,7 @@ export default function ProviderRfqScreen() {
         : e === 'revision_cap' ? t('rfq.revise_err_cap')
         : e === 'revision_conflict' ? t('rfq.revise_err_conflict')
         : e === 'quote_not_revisable' || e === 'quote_not_found' ? t('rfq.revise_err_not_revisable')
+        : e === 'pool_quote_fixed' ? t('rfq.revise_err_pool_fixed')
         : revising ? t('rfq.revise_err_generic') : t('rfq.err_quote'),
       )
       return

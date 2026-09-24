@@ -36,6 +36,8 @@ interface AdminProduct {
   tiers: Tier[]
   createdAt: string
   approvedAt: string | null
+  /** Audit M16 — the reviewed version; an approval names it and is refused if the seller edited since. */
+  updatedAt: string | null
 }
 
 interface GoodsOrder {
@@ -107,7 +109,8 @@ export function MartAdminClient() {
   useEffect(() => { loadProducts() }, [loadProducts])
   useEffect(() => { loadOrders() }, [loadOrders])
 
-  async function review(id: string, action: ReviewAction) {
+  async function review(p: AdminProduct, action: ReviewAction) {
+    const id = p.id
     let reason: string | undefined
     if (action !== 'approve') {
       const r = window.prompt(action === 'reject' ? t('reject_reason_prompt') : t('suspend_reason_prompt'))
@@ -123,10 +126,16 @@ export function MartAdminClient() {
       const res = await fetch(`/api/v1/mart/admin/products/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action === 'approve' ? { action } : { action, reason }),
+        body: JSON.stringify(action === 'approve' ? { action, reviewed_updated_at: p.updatedAt } : { action, reason }),
       })
       const d: { error?: unknown } = await res.json().catch(() => ({}))
       if (!res.ok) {
+        // Audit M16 — the seller edited the listing after this card loaded: show the new version.
+        if (d.error === 'listing_changed') {
+          toast(t('listing_changed'), 'error')
+          loadProducts()
+          return
+        }
         toast(typeof d.error === 'string' ? d.error : t('action_failed'), 'error')
         return
       }
@@ -258,12 +267,12 @@ export function MartAdminClient() {
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
                   {p.status === 'pending_approval' && (
                     <>
-                      <Button size="sm" onClick={() => review(p.id, 'approve')} loading={busy === p.id}>{t('approve')}</Button>
+                      <Button size="sm" onClick={() => review(p, 'approve')} loading={busy === p.id}>{t('approve')}</Button>
                       <Button
                         size="sm"
                         variant="outline"
                         className="border-danger text-danger hover:bg-danger/10"
-                        onClick={() => review(p.id, 'reject')}
+                        onClick={() => review(p, 'reject')}
                         loading={busy === p.id}
                       >
                         {t('reject')}
@@ -271,10 +280,10 @@ export function MartAdminClient() {
                     </>
                   )}
                   {p.status === 'active' && (
-                    <Button size="sm" variant="danger" onClick={() => review(p.id, 'suspend')} loading={busy === p.id}>{t('suspend')}</Button>
+                    <Button size="sm" variant="danger" onClick={() => review(p, 'suspend')} loading={busy === p.id}>{t('suspend')}</Button>
                   )}
                   {p.status === 'suspended' && (
-                    <Button size="sm" onClick={() => review(p.id, 'approve')} loading={busy === p.id}>{t('reinstate')}</Button>
+                    <Button size="sm" onClick={() => review(p, 'approve')} loading={busy === p.id}>{t('reinstate')}</Button>
                   )}
                   {p.status === 'draft' && <p className="text-xs text-foreground-secondary">{t('draft_hint')}</p>}
                 </div>

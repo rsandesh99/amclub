@@ -13,8 +13,11 @@ import { SheetCard, GoldStamp } from './primitives'
 import { istDateTime } from './PoolProgress'
 
 type Progress = { pct: number; metPct: number; met: boolean; remainingToMin: number }
-interface PoolView { id: string; status: string; unit: string; unit_price_paise: number; target_qty: number; min_qty: number; committed_qty: number; member_count: number; closes_at: string; progress: Progress }
-interface Member { id: string; qty: number; payment_state: 'blocked' | 'captured' | 'released' | 'failed'; pay_by: string | null; order_id: string | null }
+/** Audit L4 — server paise only: one unit at the pool price with its GST, and the member's own total. */
+type UnitDisplay = { unit_price_paise: number; unit_gst_paise: number; unit_incl_gst_paise: number }
+type Amounts = { taxablePaise: number; gstPaise: number; totalPaise: number }
+interface PoolView { id: string; status: string; unit: string; unit_price_paise: number; target_qty: number; min_qty: number; committed_qty: number; member_count: number; closes_at: string; progress: Progress; unitDisplay: UnitDisplay | null }
+interface Member { id: string; qty: number; payment_state: 'blocked' | 'captured' | 'released' | 'failed'; pay_by: string | null; order_id: string | null; amounts: Amounts | null }
 
 /**
  * Join / update / leave a pool, and the member's state after close (pay now,
@@ -73,7 +76,7 @@ export function PoolJoin({ poolId, states, minOrderQty }: { poolId: string; stat
       })
       const d = await res.json().catch(() => ({}))
       if (!res.ok) { setError(typeof d.error === 'string' ? errKey(d.error) : t('failed')); return }
-      setPool(d.pool); setMember({ ...d.member, pay_by: null, order_id: null }); setOpen(false)
+      setPool(d.pool); setMember(d.member); setOpen(false)
     } finally { setBusy(false) }
   }
   async function leave() {
@@ -95,7 +98,10 @@ export function PoolJoin({ poolId, states, minOrderQty }: { poolId: string; stat
     <div className="space-y-3">
       {member && member.payment_state === 'blocked' && live && (
         <SheetCard gold className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-body font-semibold text-emerald-ink"><GoldStamp className="mr-2">✓</GoldStamp>{t('pool_joined', { qty: member.qty, unit: pool.unit })}</p>
+          <div>
+            <p className="text-body font-semibold text-emerald-ink"><GoldStamp className="mr-2">✓</GoldStamp>{t('pool_joined', { qty: member.qty, unit: pool.unit })}</p>
+            {member.amounts && <p className="mt-1 text-meta text-foreground-secondary">{t('pool_commit_total', { amount: formatINRExact(member.amounts.totalPaise) })}</p>}
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setOpen((o) => !o)}>{t('pool_change')}</Button>
             <Button variant="ghost" size="sm" onClick={leave} loading={busy}>{t('pool_leave')}</Button>
@@ -107,7 +113,7 @@ export function PoolJoin({ poolId, states, minOrderQty }: { poolId: string; stat
           <p className="text-body font-semibold text-emerald-ink">{t('pool_met_line')}</p>
           {member.pay_by && <p className="mt-1 text-meta text-foreground-secondary">{t('pool_pay_by', { date: istDateTime(member.pay_by) })}</p>}
           <Link href={`/app/mart/pools/${poolId}/pay` as '/app'} className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-button bg-gold-metal px-5 text-base font-semibold text-emerald-ink">
-            {t('pool_pay_now', { amount: formatINR(member.qty * pool.unit_price_paise) })}
+            {member.amounts ? t('pool_pay_now', { amount: formatINR(member.amounts.totalPaise) }) : t('pool_pay_title')}
           </Link>
         </SheetCard>
       )}
@@ -130,7 +136,7 @@ export function PoolJoin({ poolId, states, minOrderQty }: { poolId: string; stat
           <div>
             <Label htmlFor="pq">{t('pool_join_qty', { unit: pool.unit })}</Label>
             <Input id="pq" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, ''))} />
-            {qtyN >= 1 && <p className="mt-1 text-meta text-foreground-secondary">{t('pool_pay_line', { qty: qtyN, unit: pool.unit, price: formatINRExact(pool.unit_price_paise) })} = <span className="font-semibold text-emerald-ink">{formatINR(qtyN * pool.unit_price_paise)}</span> + GST</p>}
+            {qtyN >= 1 && pool.unitDisplay && <p className="mt-1 text-meta text-foreground-secondary">{t('pool_pay_line', { qty: qtyN, unit: pool.unit, price: formatINRExact(pool.unitDisplay.unit_incl_gst_paise) })} <span className="font-semibold text-emerald-ink">{t('incl_gst')}</span></p>}
           </div>
           <h3 className="text-meta font-semibold text-emerald-ink">{t('pool_delivery_title')}</h3>
           {defaults && <p className="text-xs text-foreground-secondary">{t('address_prefilled')}</p>}

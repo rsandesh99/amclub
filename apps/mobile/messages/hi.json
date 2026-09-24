@@ -357,7 +357,8 @@
     "cmp3_group_time": "समय",
     "cmp3_group_terms": "शर्तें",
     "new_label": "नया",
-    "compare_completed_orders": "पूरे ऑर्डर"
+    "compare_completed_orders": "पूरे ऑर्डर",
+    "revise_err_pool_fixed": "यह समूह कोटेशन है: इसका दाम और शर्तें वही हैं जिन पर समूह पहुँचा था, इन्हें संशोधित नहीं किया जा सकता।"
   },
   "checkout": {
     "title": "चेकआउट",
@@ -778,7 +779,9 @@
     "pool_err_pool_closed": "यह पूल बंद हो चुका है।",
     "pool_err_cannot_leave": "पूल खुला रहते ही छोड़ सकते हैं।",
     "pool_err_already_paid": "पहले ही भुगतान हो चुका।",
-    "pool_err_pay_window_lapsed": "भुगतान समय सीमा बीत गई।"
+    "pool_err_pay_window_lapsed": "भुगतान समय सीमा बीत गई।",
+    "pool_commit_total": "पूल तय होने पर आप GST सहित {amount} चुकाएँगे।",
+    "pool_pay_title": "अपना ग्रुप बाय ऑर्डर पक्का करें"
   },
   "support": {
     "title": "सहायता",

@@ -227,6 +227,20 @@ DROP POLICY IF EXISTS "rfqs: admin all" ON rfqs;
 CREATE POLICY "rfqs: admin all" ON rfqs
   FOR ALL USING (has_role('admin') OR has_role('ops'));
 
+-- 0077 (audit M4): clients read every rfqs column except goods_spec (the buyer's
+-- delivery contact on a goods request). The /api/v1 routes read it with the service
+-- role: the buyer in full, a matched seller through shared goodsSpecForSeller. Built
+-- from the catalogue; skipped where the staged Mart column (0024) is absent.
+DO $rfq_cols$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'rfqs' AND column_name = 'goods_spec') THEN
+    EXECUTE 'REVOKE SELECT ON rfqs FROM anon, authenticated';
+    EXECUTE (SELECT format('GRANT SELECT (%s) ON rfqs TO anon, authenticated', string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position))
+               FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'rfqs' AND column_name <> 'goods_spec');
+  END IF;
+END
+$rfq_cols$;
+
 -- ─── rfq_matches ──────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "rfq_matches: provider read own" ON rfq_matches;
@@ -307,6 +321,7 @@ CREATE POLICY "quotes: admin all" ON quotes
 -- hidden via grants. Every quote read in the app goes through /api/v1 with the
 -- service role (the buyer sees the note there); no client selects quotes directly.
 -- Staged Mart columns (0024) are granted inside the guarded Mart block below.
+-- pool_member_id (0077, the S3.4 group-quote marker) is deliberately NOT granted.
 REVOKE SELECT ON quotes FROM anon, authenticated;
 GRANT SELECT (
   id, rfq_id, provider_id, price_paise, delivery_days, scope, message,
@@ -1191,7 +1206,8 @@ BEGIN
   EXECUTE 'DROP POLICY IF EXISTS "pools: admin all" ON pools';
   EXECUTE 'CREATE POLICY "pools: admin all" ON pools FOR ALL USING (has_role(''admin'') OR has_role(''ops''))';
   EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON pools FROM anon, authenticated';
-  -- 0076 (audit M15): clients read every pools column except the agent's rationale.
+  -- 0076 (audit M15): clients read every pools column except the agent's rationale
+  -- (0077's tax snapshot gst_rate_bps / hsn_code included — public listing facts).
   EXECUTE 'REVOKE SELECT ON pools FROM anon, authenticated';
   EXECUTE (SELECT format('GRANT SELECT (%s) ON pools TO anon, authenticated', string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position))
              FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pools' AND column_name <> 'rationale');

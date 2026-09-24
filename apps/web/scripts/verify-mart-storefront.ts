@@ -77,6 +77,11 @@ async function main() {
     // ── Cast: one goods-activated seller, an admin, one kill-test category with typed attributes.
     const seller = await mkUser('seller', ['provider'])
     const ops = await mkUser('admin', ['msme', 'admin'])
+    // Audit M16 — an approval names the version reviewed (the listing's updated_at, verbatim).
+    const approve = async (id: string) => {
+      const { data: v } = await admin.from('products').select('updated_at').eq('id', id).single()
+      return api(ops.token, `/api/v1/mart/admin/products/${id}`, { action: 'approve', reviewed_updated_at: (v?.updated_at as string | null) ?? null })
+    }
     const buyer = await mkUser('buyer', ['msme'])
     const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'KT Buyer', state: 'AP' }).select('id').single()
     created.msmeIds.push(msme!.id)
@@ -129,7 +134,7 @@ async function main() {
 
     for (const id of [p1, p2]) {
       await api(seller.token, `/api/v1/mart/seller/products/${id}`, { action: 'submit' })
-      await api(ops.token, `/api/v1/mart/admin/products/${id}`, { action: 'approve' })
+      await approve(id)
     }
     const ids = async (qs: string) => ((await json(await api(null, `/api/v1/mart/products?category=${cat}${qs}`))).body.products ?? []).map((p: { id: string }) => p.id).sort()
     ok('no facet → both listings', JSON.stringify(await ids('')) === JSON.stringify([p1, p2].sort()))
@@ -159,7 +164,7 @@ async function main() {
     const pp = cp.body.id as string
     created.productIds.push(pp)
     await api(seller.token, `/api/v1/mart/seller/products/${pp}`, { action: 'submit' })
-    await api(ops.token, `/api/v1/mart/admin/products/${pp}`, { action: 'approve' })
+    await approve(pp)
     const { data: prow } = await admin.from('products').select('promises').eq('id', pp).single()
     ok('promises stored as opted in', JSON.stringify(prow?.promises) === JSON.stringify(['ships_48h', 'gst_invoice_24h']))
     const ppHtml = await html(`/mart/p/${pp}`)
@@ -200,7 +205,7 @@ async function main() {
     const pn = cn.body.id as string
     created.productIds.push(pn)
     await api(seller.token, `/api/v1/mart/seller/products/${pn}`, { action: 'submit' })
-    await api(ops.token, `/api/v1/mart/admin/products/${pn}`, { action: 'approve' })
+    await approve(pn)
     const pnHtml = await html(`/mart/p/${pn}`)
     ok('product page: "Not returnable" and "ITC may not be available"', pnHtml.includes('data-testid="not-returnable"') && pnHtml.includes('data-testid="itc-ineligible"'))
     const pv = await json(await api(buyer.token, '/api/v1/mart/cart/preview', { items: [{ product_id: pn, qty: 2 }] }))
@@ -220,7 +225,7 @@ async function main() {
     const ps = cs.body.id as string
     created.productIds.push(ps)
     await api(seller.token, `/api/v1/mart/seller/products/${ps}`, { action: 'submit' })
-    await api(ops.token, `/api/v1/mart/admin/products/${ps}`, { action: 'approve' })
+    await approve(ps)
     const psHtml = await html(`/mart/p/${ps}`)
     ok('product page offers "Request a sample" and "Customise"', psHtml.includes('data-testid="request-sample"') && psHtml.includes(`/app/mart/rfq/new?product_id=${ps}&amp;customise=1`))
     const sp = await json(await api(buyer.token, '/api/v1/mart/cart/preview', { items: [{ product_id: ps, qty: 1 }], sample: true }))

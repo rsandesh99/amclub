@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getPool, poolProgressFor, publicPool, buyerDiscipline } from '@/lib/mart/pools'
+import { getPool, buyerPoolPayload, buyerMemberPayload, buyerDiscipline } from '@/lib/mart/pools'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,8 +21,8 @@ export async function GET() {
     const pool = await getPool(admin, m.pool_id)
     if (!pool) continue
     memberships.push({
-      member: { id: m.id, qty: m.qty, payment_state: m.payment_state, pay_by: m.pay_by, order_id: m.order_id, committed_at: m.committed_at },
-      pool: { ...publicPool(pool), progress: poolProgressFor(pool) },
+      member: buyerMemberPayload(pool, m),
+      pool: buyerPoolPayload(pool),
     })
   }
   return NextResponse.json({ memberships, discipline: await buyerDiscipline(admin, msme.id) }, { headers: { 'Cache-Control': 'private, no-store' } })

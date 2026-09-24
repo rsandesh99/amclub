@@ -188,6 +188,9 @@ export const pools = pgTable('pools', {
   closedAt: timestamp('closed_at', { withTimezone: true }),
   rationale: jsonb('rationale').default(sql`'{}'`).notNull(),
   cardI18n: jsonb('card_i18n'),
+  // Audit M16 (0077) — the listing's tax identity frozen when the pool opens; member checkout charges these.
+  gstRateBps: integer('gst_rate_bps'),
+  hsnCode: text('hsn_code'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

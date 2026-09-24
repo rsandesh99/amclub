@@ -18,6 +18,12 @@
  *  F. Authz: outsiders get 401/403/404 on every goods surface.
  *  G. Services inertness on the same server: a services checkout still yields
  *     kind='service', line_items NULL; services transitions unchanged.
+ *  H. Audit M16 / L4: a material edit of an approved listing goes back to review;
+ *     approval is pinned to the reviewed version; a pool freezes the listing's
+ *     GST / HSN / unit at open and charges them; material edits wait while it is
+ *     live; the pool API returns the member's total with GST (server paise).
+ *  (E also carries audit M14: a goods return from `completed` only inside the
+ *   category return window and dispute_window_days — 409 return_window_closed.)
  *
  * Run: BASE_URL=http://localhost:3000 pnpm --filter @amclub/web exec tsx scripts/verify-mart.ts
  * Creates only kill-test rows; removes everything in `finally` (zero residue).
@@ -41,7 +47,7 @@ let fail = 0
 const ok = (name: string, cond: boolean, extra = '') => { console.log(`  ${cond ? '✓' : '✗'} ${name}${extra ? ' ' + extra : ''}`); cond ? pass++ : fail++ }
 const denied = (name: string, status: number) => ok(`${name} → ${status}`, status === 401 || status === 403 || status === 404)
 
-const created = { users: [] as string[], providerIds: [] as string[], msmeIds: [] as string[], productIds: [] as string[], orderIds: [] as string[], categories: [] as string[] }
+const created = { users: [] as string[], providerIds: [] as string[], msmeIds: [] as string[], productIds: [] as string[], orderIds: [] as string[], categories: [] as string[], poolIds: [] as string[] }
 
 async function mkUser(label: string, roles: string[]) {
   const email = `${tag}_${label}@killtest.amclub`
@@ -79,6 +85,9 @@ async function main() {
     const buyer = await mkUser('buyer', ['msme'])
     const buyerB = await mkUser('buyerB', ['msme'])
     const ops = await mkUser('admin', ['msme', 'admin'])
+    // Audit M16 — an approval names the version the admin reviewed (the listing's updated_at, verbatim).
+    const reviewedVersion = async (id: string) => ((await admin.from('products').select('updated_at').eq('id', id).single()).data?.updated_at as string | null) ?? null
+    const approve = async (id: string) => api(ops.token, `/api/v1/mart/admin/products/${id}`, { action: 'approve', reviewed_updated_at: await reviewedVersion(id) })
 
     const mkProvider = async (uid: string, label: string, g: string) => {
       const { data: p, error } = await admin.from('provider_profiles').insert({
@@ -133,8 +142,11 @@ async function main() {
     ok('buyer cannot approve', (await api(buyer.token, `/api/v1/mart/admin/products/${p1}`, { action: 'approve' })).status === 403)
     const q = await json(await api(ops.token, '/api/v1/mart/admin/products?status=pending_approval'))
     ok('admin queue lists it', Array.isArray(q.body.products) && q.body.products.some((x: { id: string }) => x.id === p1))
-    const appr = await json(await api(ops.token, `/api/v1/mart/admin/products/${p1}`, { action: 'approve' }))
-    ok('admin approve → active', appr.status === 200 && appr.body.status === 'active')
+    const queued = (q.body.products as Array<{ id: string; updatedAt?: string | null }> | undefined)?.find((x) => x.id === p1)
+    ok('the queue carries the version under review (updatedAt)', !!queued && queued.updatedAt !== undefined)
+    ok('an approval without the reviewed version → 422', (await api(ops.token, `/api/v1/mart/admin/products/${p1}`, { action: 'approve' })).status === 422)
+    const appr = await json(await api(ops.token, `/api/v1/mart/admin/products/${p1}`, { action: 'approve', reviewed_updated_at: queued?.updatedAt ?? null }))
+    ok('admin approve (pinned to the queued version) → active', appr.status === 200 && appr.body.status === 'active', JSON.stringify(appr.body))
     ok('active listing is public', (await api(null, `/api/v1/mart/products/${p1}`)).status === 200)
     const list = await json(await api(null, `/api/v1/mart/products?query=${encodeURIComponent(tag)}`))
     ok('public FTS finds it', list.body.products?.some((x: { id: string }) => x.id === p1) === true)
@@ -145,7 +157,7 @@ async function main() {
     const p2 = c2.body.id as string
     created.productIds.push(p2)
     await api(sellerA.token, `/api/v1/mart/seller/products/${p2}`, { action: 'submit' })
-    await api(ops.token, `/api/v1/mart/admin/products/${p2}`, { action: 'approve' })
+    await approve(p2)
 
     // ── C. Goods checkout ──────────────────────────────────────────────────
     console.log('C. Goods checkout (server totals, frozen snapshot, replay):')
@@ -214,6 +226,22 @@ async function main() {
 
     // ── E. Return + refund replay ──────────────────────────────────────────
     console.log('E. Return → dispute console → refund (replay-safe):')
+    // Audit M14 — the return window. orderB's category window is 0 h: it closed at the delivery photo.
+    const detB = await json(await api(buyer.token, `/api/v1/orders/${orderB}`))
+    ok('GET a completed goods order carries the server’s return deadline', typeof detB.body.returnDeadline === 'string' && Date.parse(detB.body.returnDeadline) <= Date.now(), JSON.stringify(detB.body.returnDeadline))
+    const lateRet = await json(await api(buyer.token, `/api/v1/mart/orders/${orderB}/transition`, { action: 'open_return', return: { reason: 'damaged' } }))
+    const { data: oBafter } = await admin.from('orders').select('status').eq('id', orderB).single()
+    const { data: dispB } = await admin.from('disputes').select('id').eq('order_id', orderB).maybeSingle()
+    ok('open_return past the category window → 409 return_window_closed + endsAt; order stays completed, no dispute', lateRet.status === 409 && lateRet.body.error === 'return_window_closed' && typeof lateRet.body.endsAt === 'string' && oBafter?.status === 'completed' && !dispB, JSON.stringify(lateRet.body))
+    // …and dispute_window_days caps a completed goods order even inside its (48 h) category window.
+    const { data: dwRow } = await admin.from('agent_settings').select('value').eq('key', 'dispute_window_days').maybeSingle()
+    const windowDays = Number(dwRow?.value ?? 7)
+    const { data: oAc } = await admin.from('orders').select('completed_at').eq('id', orderA).single()
+    await admin.from('orders').update({ completed_at: new Date(Date.now() - (windowDays + 1) * 86_400_000).toISOString() }).eq('id', orderA)
+    const capped = await json(await api(buyer.token, `/api/v1/mart/orders/${orderA}/transition`, { action: 'open_return', return: { reason: 'damaged' } }))
+    await admin.from('orders').update({ completed_at: oAc!.completed_at }).eq('id', orderA)
+    const { data: oAstill } = await admin.from('orders').select('status').eq('id', orderA).single()
+    ok('completed longer ago than dispute_window_days → 409 return_window_closed (category window still open)', capped.status === 409 && capped.body.error === 'return_window_closed' && oAstill?.status === 'completed', JSON.stringify(capped.body))
     const ret = await json(await api(buyer.token, `/api/v1/mart/orders/${orderA}/transition`, { action: 'open_return', return: { reason: 'short_quantity', details: '90 of 100' } }))
     ok('open_return on a completed order → disputed', ret.body.status === 'disputed', JSON.stringify(ret.body))
     const { data: disp } = await admin.from('disputes').select('id, reason').eq('order_id', orderA).maybeSingle()
@@ -254,12 +282,53 @@ async function main() {
     ok('goods route refuses a services order', (await api(sellerB.token, `/api/v1/mart/orders/${svcOrder}/transition`, { action: 'accept' })).status === 409)
     await admin.from('packages').delete().eq('id', pkg!.id)
 
+    // ── H. Listing edits after approval + pool terms (audit M16 / L4) ───────
+    console.log('H. Approved-listing edits, pinned approvals, pool tax snapshot, pool totals:')
+    // sellerA has one OTHER approved listing (p2), below auto_approve_after_listings (3): review required.
+    const editBody = productBody(`${tag}-hold`, `${tag} M8 bolt (hold) v2`)
+    const ed = await json(await api(sellerA.token, `/api/v1/mart/seller/products/${p1}`, editBody, 'PATCH'))
+    ok('a material edit (name) of an approved listing → pending_approval, off the public catalogue', ed.status === 200 && ed.body.status === 'pending_approval' && (await api(null, `/api/v1/mart/products/${p1}`)).status === 404, JSON.stringify(ed.body))
+    const stale = await json(await api(ops.token, `/api/v1/mart/admin/products/${p1}`, { action: 'approve', reviewed_updated_at: '2020-01-01T00:00:00+00:00' }))
+    const { data: p1Pending } = await admin.from('products').select('status').eq('id', p1).single()
+    ok('an approval pinned to an older version → 409 listing_changed; nothing moves', stale.status === 409 && stale.body.error === 'listing_changed' && p1Pending?.status === 'pending_approval', JSON.stringify(stale.body))
+    ok('approving the version reviewed → active again', (await json(await approve(p1))).body.status === 'active')
+    const ed2 = await json(await api(sellerA.token, `/api/v1/mart/seller/products/${p1}`, { ...editBody, description: 'Zinc plated, grade 8.8, DIN 933' }, 'PATCH'))
+    ok('a non-material edit (description) keeps the listing active', ed2.status === 200 && ed2.body.status === 'active', JSON.stringify(ed2.body))
+
+    const { data: draftPool, error: poolErr } = await admin.from('pools').insert({
+      product_id: p1, category_slug: `${tag}-hold`, title: `${tag} bolt pool`, unit: 'pcs', target_qty: 500, min_qty: 100, unit_price_paise: 380,
+      closes_at: new Date(Date.now() + 3 * 86_400_000).toISOString(), status: 'draft', seller_id: provA, rationale: {},
+    }).select('id').single()
+    if (poolErr || !draftPool) throw new Error(`pool fixture: ${poolErr?.message}`)
+    const poolId = draftPool.id as string
+    created.poolIds.push(poolId)
+    const opened = await json(await api(ops.token, `/api/v1/mart/admin/pools/${poolId}`, { action: 'approve' }))
+    const { data: snap } = await admin.from('pools').select('status, gst_rate_bps, hsn_code, unit').eq('id', poolId).single()
+    ok('opening the pool freezes the listing’s GST / HSN / unit on it', opened.status === 200 && snap?.status === 'open' && snap?.gst_rate_bps === 1800 && snap?.hsn_code === '7318' && snap?.unit === 'pcs', JSON.stringify(snap))
+    const joinQty = 150
+    const expectPool = computeGoodsOrderAmounts({ lines: [{ qty: joinQty, unitPricePaise: 380, gstRateBps: 1800 }], commissionBps: 500 })
+    const expectUnit = computeGoodsOrderAmounts({ lines: [{ qty: 1, unitPricePaise: 380, gstRateBps: 1800 }], commissionBps: 0 })
+    const jn = await json(await api(buyer.token, `/api/v1/mart/pools/${poolId}/join`, { qty: joinQty, delivery }))
+    ok('join returns the member’s total with GST (= computeGoodsOrderAmounts) and the unit display, never the rationale', jn.status === 200 && jn.body.member?.amounts?.totalPaise === expectPool.totalPaise && jn.body.pool?.unitDisplay?.unit_incl_gst_paise === expectUnit.totalPaise && !('rationale' in (jn.body.pool ?? {})), JSON.stringify(jn.body).slice(0, 300))
+    const pv = await json(await api(buyer.token, `/api/v1/mart/pools/${poolId}`))
+    ok('the pool page’s member total is the same server figure', pv.body.member?.amounts?.totalPaise === expectPool.totalPaise, JSON.stringify(pv.body.member))
+    const locked = await json(await api(sellerA.token, `/api/v1/mart/seller/products/${p1}`, { ...editBody, gst_rate_bps: 1200 }, 'PATCH'))
+    const { data: p1Gst } = await admin.from('products').select('gst_rate_bps, status').eq('id', p1).single()
+    ok('a material edit (GST) while the pool is live → 409 pool_live; the listing keeps 18 %', locked.status === 409 && locked.body.error === 'pool_live' && p1Gst?.gst_rate_bps === 1800 && p1Gst?.status === 'active', JSON.stringify(locked.body))
+    // A listing changed underneath (e.g. an edit from before this fix) never changes what the member pays.
+    await admin.from('products').update({ gst_rate_bps: 1200 }).eq('id', p1)
+    await api(ops.token, `/api/v1/mart/admin/pools/${poolId}`, { action: 'close' })
+    const pc = await json(await api(buyer.token, `/api/v1/mart/pools/${poolId}/checkout`, {}))
+    await admin.from('products').update({ gst_rate_bps: 1800 }).eq('id', p1)
+    ok('member checkout charges the frozen 18 % — exactly the total the pool page showed', pc.status === 200 && pc.body.amountPaise === expectPool.totalPaise && pc.body.lineItems?.[0]?.gst_rate_bps === 1800 && pc.body.lineItems?.[0]?.hsn_code === '7318', JSON.stringify(pc.body).slice(0, 300))
+
     console.log(`\n${fail === 0 ? '✅' : '❌'} verify-mart: ${pass} passed, ${fail} failed\n`)
   } catch (e) {
     fail++
     console.error('\n✗ suite aborted:', e instanceof Error ? e.message : e)
   } finally {
-    // Zero residue — order of deletes follows the FK graph.
+    // Zero residue — order of deletes follows the FK graph. Pools first (members + events cascade).
+    for (const id of created.poolIds) await admin.from('pools').delete().eq('id', id)
     for (const id of created.orderIds) {
       const { data: pays } = await admin.from('payments').select('id').eq('order_id', id)
       for (const p of pays ?? []) await admin.from('refunds').delete().eq('payment_id', p.id)

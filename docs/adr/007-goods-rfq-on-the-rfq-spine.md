@@ -53,3 +53,20 @@ goods would duplicate all of it and create a second path into `orders`.
   services workspace copy is never shown for a goods order born from a quote.
 - Not now: multi-line goods RFQs (one item per request at M2), attachments on goods RFQs
   (drawings) — logged in FOLLOWUPS.md.
+
+## Addendum (2026-09-24) — the buyer's contact is server-only (audit M4)
+
+`goods_spec.delivery` carries the buyer's contact name, phone and street address. Audit
+wave 4 stripped them from the matched seller's API view (shared `goodsSpecForSeller`), but
+the `rfqs: matched provider read` policy still let a matched seller read the whole column
+straight through PostgREST. Migration **0077** withdraws `rfqs.goods_spec` from client
+roles (`REVOKE SELECT` + a column grant of every other column, built from the catalogue;
+mirrored in `rls/policies.sql`). Every reader is a `/api/v1` route on the service role:
+the buyer sees the spec in full, a matched seller through `goodsSpecForSeller`, and the
+paid order carries the contact on its delivery snapshot. The one session-client read that
+named the column (the checkout quote branch) now reads `kind` / `mart_category_slug` on the
+buyer's session and the spec on the service role after ownership is established
+(`prepareGoodsQuoteCheckout`). A future `rfqs` column a session client must read needs
+its own grant. Proof: `killtest-mart-goods-rfq` 2b (anon / authenticated → permission
+denied; other columns readable), `verify-goods-rfq` §B (seller and buyer PostgREST reads
+refused; the API views unchanged), `verify-authz` §11.

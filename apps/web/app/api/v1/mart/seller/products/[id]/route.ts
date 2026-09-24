@@ -1,6 +1,15 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { productInputSchema, productStatusActionSchema, isValidProductTransition, validateProductAttributes, type ProductStatus } from '@amclub/shared'
+import {
+  productInputSchema,
+  productStatusActionSchema,
+  isValidProductTransition,
+  validateProductAttributes,
+  productEditReview,
+  PRODUCT_MATERIAL_FIELDS,
+  POOL_LIVE_STATUSES,
+  type ProductStatus,
+} from '@amclub/shared'
 import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
@@ -45,7 +54,11 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
   )
 }
 
-/** Full edit (fields + tiers). Emits 'edited' with a before/after diff and 'price_changed' when tiers move. */
+/**
+ * Full edit (fields + tiers). Emits 'edited' with a before/after diff and 'price_changed' when tiers move.
+ * Audit M16: a material field (shared PRODUCT_MATERIAL_FIELDS) on an approved listing sends it back to
+ * review (shared productEditReview); refused (409 pool_live) while a pool on the listing is live.
+ */
 export async function PATCH(request: NextRequest, { params }: Ctx) {
   const gate = martApiGate()
   if (gate) return gate
@@ -79,11 +92,58 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     promises: d.promises,
     sample_price_paise: d.sample_price_paise,
   }
-  const { error } = await c.admin
+  const changed = Object.keys(after).filter((k) => JSON.stringify((before as Record<string, unknown>)[k]) !== JSON.stringify((after as Record<string, unknown>)[k]))
+  const material = changed.filter((k) => (PRODUCT_MATERIAL_FIELDS as readonly string[]).includes(k))
+  const from = c.product.status as ProductStatus
+
+  // Audit M16 — a live pool froze this listing's terms for its members (the pool's tax
+  // snapshot, and a listing that must stay active for them to pay): no material edit
+  // until it settles.
+  if (material.length > 0) {
+    const { count: livePools, error: poolErr } = await c.admin
+      .from('pools')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', id)
+      .in('status', POOL_LIVE_STATUSES as string[])
+      .is('deleted_at', null)
+    if (poolErr) return serverError('[mart/seller/products PATCH pools]', poolErr)
+    if ((livePools ?? 0) > 0) return NextResponse.json({ error: 'pool_live', fields: material }, { status: 409 })
+  }
+
+  // Audit M16 — what the admin approved is what stays live: a material edit of an
+  // approved listing goes back to review (always for a category change; a seller
+  // past the auto-approve threshold keeps other material edits live, as on submit).
+  let review: 'none' | 'auto' | 'required' = 'none'
+  if (material.length > 0 && (from === 'active' || from === 'suspended')) {
+    const n = await getAutoApproveAfterListings(c.admin)
+    const { count: approvedOthers } = await c.admin
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('seller_id', c.seller.id)
+      .neq('id', id)
+      .not('approved_at', 'is', null)
+    review = productEditReview(changed, (approvedOthers ?? 0) >= n)
+  }
+  const reReview = review === 'required'
+  // An active listing leaves the catalogue now; a suspended one keeps its status but loses
+  // its approval, so a later seller reactivation goes to review (POST reactivate below).
+  const to: ProductStatus = reReview && from === 'active' ? 'pending_approval' : from
+  if (to !== from && !isValidProductTransition(from, to)) return NextResponse.json({ error: `Illegal transition ${from} → ${to}` }, { status: 409 })
+
+  // Compare-and-set on the status read above: an admin decision that landed meanwhile wins.
+  const { data: moved, error } = await c.admin
     .from('products')
-    .update({ ...after, list_price_paise: d.tiers[0]?.unit_price_paise ?? null, updated_at: new Date().toISOString() })
+    .update({
+      ...after,
+      list_price_paise: d.tiers[0]?.unit_price_paise ?? null,
+      updated_at: new Date().toISOString(),
+      ...(reReview ? { status: to, approved_at: null, approved_by: null } : {}),
+    })
     .eq('id', id)
+    .eq('status', from)
+    .select('id')
   if (error) return serverError('[mart/seller/products PATCH]', error)
+  if (!moved?.length) return NextResponse.json({ error: 'product_changed' }, { status: 409 })
 
   const oldTiers = c.product.tiers.map((t) => ({ min_qty: t.min_qty, unit_price_paise: t.unit_price_paise }))
   const newTiers = d.tiers.map((t) => ({ min_qty: t.min_qty, unit_price_paise: t.unit_price_paise }))
@@ -93,23 +153,28 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     const { error: tErr } = await c.admin.from('price_tiers').insert(newTiers.map((t) => ({ product_id: id, ...t })))
     if (tErr) return serverError('[mart/seller/products PATCH tiers]', tErr)
   }
-  const changed = Object.keys(after).filter((k) => JSON.stringify((before as Record<string, unknown>)[k]) !== JSON.stringify((after as Record<string, unknown>)[k]))
   if (changed.length > 0) {
     await addProductEvent(c.admin, id, c.userId, 'edited', {
       before: Object.fromEntries(changed.map((k) => [k, (before as Record<string, unknown>)[k]])),
       after: Object.fromEntries(changed.map((k) => [k, (after as Record<string, unknown>)[k]])),
+      ...(review !== 'none' ? { review, material } : {}),
     })
   }
+  if (reReview && to === 'pending_approval') await addProductEvent(c.admin, id, c.userId, 'submitted', { rereview: true, from, fields: material })
   if (tiersChanged) await addProductEvent(c.admin, id, c.userId, 'price_changed', { before: oldTiers, after: newTiers })
-  if (c.product.status === 'active') revalidateMart({ productId: id, categorySlug: d.category_slug, providerSlug: c.product.seller.slug })
-  return NextResponse.json({ id, status: c.product.status })
+  if (from === 'active') {
+    revalidateMart({ productId: id, categorySlug: d.category_slug, providerSlug: c.product.seller.slug })
+    if (d.category_slug !== c.product.categorySlug) revalidateMart({ productId: id, categorySlug: c.product.categorySlug, providerSlug: c.product.seller.slug })
+  }
+  return NextResponse.json({ id, status: to, ...(review !== 'none' ? { review } : {}) })
 }
 
 /**
  * Seller status actions: submit (draft → pending_approval, or straight to
  * active once the seller has N admin-approved listings — config), suspend
  * (active → suspended), reactivate (suspended → active; only if the seller
- * suspended it themselves and it was approved before).
+ * suspended it themselves and it was approved before; a listing whose current version
+ * lost its approval to a material edit goes to pending_approval instead — audit M16).
  */
 export async function POST(request: NextRequest, { params }: Ctx) {
   const gate = martApiGate()
@@ -157,8 +222,19 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     .from('product_events').select('payload').eq('product_id', id).eq('event_type', 'suspended').order('created_at', { ascending: false }).limit(1).maybeSingle()
   if ((lastSuspend?.payload as { by?: string } | null)?.by === 'admin') return NextResponse.json({ error: 'suspended_by_admin' }, { status: 403 })
   if (!c.seller.sellsGoods) return NextResponse.json({ error: 'activation_required' }, { status: 409 })
-  const { error } = await c.admin.from('products').update({ status: 'active', updated_at: now }).eq('id', id).eq('status', 'suspended')
+  // Audit M16 — a material edit while suspended removed the approval: the listing comes back through review.
+  const { data: appr } = await c.admin.from('products').select('approved_at').eq('id', id).maybeSingle()
+  if (!appr?.approved_at) {
+    if (!isValidProductTransition(from, 'pending_approval')) return NextResponse.json({ error: `Cannot reactivate from ${from}` }, { status: 409 })
+    const { data: moved, error } = await c.admin.from('products').update({ status: 'pending_approval', updated_at: now }).eq('id', id).eq('status', 'suspended').select('id')
+    if (error) return serverError('[mart/seller/products reactivate → review]', error)
+    if (!moved?.length) return NextResponse.json({ error: 'product_changed' }, { status: 409 })
+    await addProductEvent(c.admin, id, c.userId, 'submitted', { by: 'seller', rereview: true, from: 'suspended' })
+    return NextResponse.json({ id, status: 'pending_approval', review: 'required' })
+  }
+  const { data: moved, error } = await c.admin.from('products').update({ status: 'active', updated_at: now }).eq('id', id).eq('status', 'suspended').select('id')
   if (error) return serverError('[mart/seller/products reactivate]', error)
+  if (!moved?.length) return NextResponse.json({ error: 'product_changed' }, { status: 409 })
   await addProductEvent(c.admin, id, c.userId, 'activated', { by: 'seller', reactivated: true })
   revalidateMart({ productId: id, categorySlug: c.product.categorySlug, providerSlug: c.product.seller.slug })
   return NextResponse.json({ id, status: 'active' })

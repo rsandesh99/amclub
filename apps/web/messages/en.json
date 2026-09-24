@@ -1335,7 +1335,8 @@
     "cmp3_option_express": "Express",
     "cmp3_options_lowest": "Lowest: {who} {option}, {total}",
     "cmp3_options_fastest": "Fastest: {who} {option}, {days, plural, one {# day} other {# days}}",
-    "quote_err_self_dealing": "This is your own business's request, so you can't quote on it."
+    "quote_err_self_dealing": "This is your own business's request, so you can't quote on it.",
+    "revise_err_pool_fixed": "This is a group quote: its price and terms are the ones the group reached and cannot be revised."
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -2666,7 +2667,11 @@
     "reorder_link": "Your usual orders",
     "why_label": "Why AMClub",
     "pool_err_self_dealing": "This group buy is for your own listing, so you can't join it.",
-    "self_dealing_order": "You are both the buyer and the seller on this order, so only a cancellation is possible."
+    "self_dealing_order": "You are both the buyer and the seller on this order, so only a cancellation is possible.",
+    "return_window_closed": "The return window for this order has closed.",
+    "err_pool_live": "A group buy on this listing is still live. Name, photos, unit, HSN, GST rate and category can change once it settles.",
+    "err_product_changed": "This listing changed while you were editing. Reload it and try again.",
+    "pool_commit_total": "You pay {amount} incl. GST if the pool closes met."
   },
   "admin_mart": {
     "title": "AMC Mart",
@@ -2853,7 +2858,8 @@
     "block_capture_warning": "block_capture is refused at pool join until docs/mart/PSP_BLOCK_CAPTURE_REPORT.md §5 is signed off. Saving it here does not enable it.",
     "save": "Save",
     "col_returnable": "Returnable",
-    "col_itc": "ITC eligible"
+    "col_itc": "ITC eligible",
+    "listing_changed": "The seller changed this listing after you opened it. Review the latest version."
   },
   "suspended": {
     "title": "Your buyer account is suspended",
@@ -4120,7 +4126,8 @@
     "col_closes": "Closes",
     "cancel": "Cancel group",
     "cancel_reason": "Reason (kept in the audit log)",
-    "cancelled_ok": "Group cancelled. Members were told."
+    "cancelled_ok": "Group cancelled. Members were told.",
+    "err_dual_role": "Group requests are for buyers only. An account that also sells services cannot join one or see its offers."
   },
   "assistant_home": {
     "title": "Your AI assistant",
