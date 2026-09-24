@@ -50,7 +50,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 |---|---|---|
 | **0 — done** | C1, C2, H1, H2, M18 | 0072 and 0073 live |
 | **1 — inbound and dependencies (in review)** | H3 SMS hook signature (Standard Webhooks, +91 only; closed once the secret is set); H4 WhatsApp webhook fails closed without a verified signature; M6 `safeNext` control characters; H10 sharp, M27 next, M25 next-intl upgrades; M1 revoke `generate_order_number` from clients; the advisor items (revoke EXECUTE on internal definer functions from anon, pin `search_path`) | H3 needs a `SEND_SMS_HOOK_SECRET` in Vercel and the Supabase hook config |
-| **2 — money path** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
+| **2 — money path (in review: H5–H9, M19, M39)** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
 | **3 — authorisation and abuse** | M7 / M8 delegated tokens refused unless a route opts in; M13 suspension enforced in `resolveActor`; M9 review flags go to a queue; M10 coupons: no public read, atomic redemption, per-buyer limit; M12 ownership checks on Udyam and penny-drop; M22 self-dealing guard; M17 clarification provider id hidden; M5 / L2 attachment and certificate paths pinned; M3 no token renewal from a delegated token | M12 touches KYC, so an ADR is needed |
 | **4 — Mart, pools and agents** | M14 return window; M15 rationale off the public API; M16 re-review on material edits; M44 / M45 / L9 pool quote and offer sealing; M41–M43 WhatsApp binding, Munshi "yes" routing, trusted-part hygiene; M23 / M24 residency and budget; L3 runtime service-role scope | Several are dark features; fix before their cohort widens |
 | **5 — operations and architecture** | M32–M38 (queue creation, stuck-inbound alert, media caps, failing heartbeats, Upstash fail-open for reads, timeouts, re-drive); M28 / M29 / M30 (state-machine enforcement, one money-formula home, one masking rule set); M31 (a CI job with production flags, web unit tests); M26 (pin actions, OIDC for Fly); L4–L8; the performance advisor (119 unindexed foreign keys, the `notifications` index) | |
@@ -85,11 +85,11 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | H2 | Providers could join any category directly, including credential-gated ones, and receive those RFQs | Fixed |
 | H3 | The Supabase "Send SMS" hook is unauthenticated: SMS pumping, SMS bombing, branded smishing | Fixed in code (wave 1); needs `SEND_SMS_HOOK_SECRET` |
 | H4 | The WhatsApp webhook accepts unsigned requests whenever the driver resolves to `stub` | Fixed in code (wave 1) |
-| H5 | Admin "Retry payout" releases held payouts past the dispute hold and the release gates | Open |
-| H6 | Order status writes are not compare-and-set, so crons can overwrite a dispute or revision and still run money side effects | Open |
-| H7 | A refund that fails after the status write is never retried, and ops cannot finish it from admin | Open |
-| H8 | Invoice PDF generation throws on Indic-script names, so no tax invoice is created and accept-delivery returns 500 | Open |
-| H9 | Payout transfer is not idempotent: a timeout after Razorpay creates the transfer marks it failed, and a retry pays again | Open |
+| H5 | Admin "Retry payout" releases held payouts past the dispute hold and the release gates | Fixed in code (wave 2, ADR 026) |
+| H6 | Order status writes are not compare-and-set, so crons can overwrite a dispute or revision and still run money side effects | Fixed in code (wave 2, ADR 026) |
+| H7 | A refund that fails after the status write is never retried, and ops cannot finish it from admin | Fixed in code (wave 2, ADR 026) |
+| H8 | Invoice PDF generation throws on Indic-script names, so no tax invoice is created and accept-delivery returns 500 | Mitigated (wave 2, ADR 026); Indic rendering open |
+| H9 | Payout transfer is not idempotent: a timeout after Razorpay creates the transfer marks it failed, and a retry pays again | Fixed in code (wave 2, ADR 026) |
 | H10 | sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes | Fixed in code (wave 1) |
 | M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Fixed in code (wave 1); migration 0074 |
 | M2 | Refunds, payouts and reconcile still go through the simulation gateway on production | Open |
@@ -109,7 +109,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M16 | Edits to approved Mart listings go live without re-review (category / commission, GST rate, images) | Open |
 | M17 | `rfq_clarifications.provider_id` is readable by every matched competitor | Open |
 | M18 | `buyer_pool_discipline_v1` let every buyer read every buyer's pool record | Fixed |
-| M19 | Services payout release never re-checks the order status or an open dispute | Open |
+| M19 | Services payout release never re-checks the order status or an open dispute | Fixed in code (wave 2, ADR 026) |
 | M20 | Only `payment.captured` is consumed; refund, transfer and chargeback outcomes are never reconciled | Open |
 | M21 | Checkout sessions never expire at payment time (withdrawn quotes, lapsed pools, expired coupons honoured) | Open |
 | M22 | No self-dealing guard: one person can buy from, quote to, review and settle with their own provider profile | Open |
@@ -129,7 +129,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M36 | An Upstash error makes every rate-limited route return 500, and a slow Upstash adds 5 s per request | Open |
 | M37 | Outbound calls (Resend, Surepass, MSG91, WhatsApp, Razorpay) have no timeouts and run inline in money paths | Open |
 | M38 | Crons write the new status first and are never re-driven when the side effects fail; money crons set no maxDuration | Open |
-| M39 | Reconciliation reads only the first 100 Razorpay payments and never flags a second capture | Open |
+| M39 | Reconciliation reads only the first 100 Razorpay payments and never flags a second capture | Partly fixed (wave 2): all pages read; second-capture flag open |
 | M40 | Quote and group-offer scope / message text reaches buyers without contact masking | Open |
 | M41 | A WhatsApp conversation stays bound to a user after a phone change | Open |
 | M42 | A typed or spoken "yes" is captured by Munshi before procurement and approves the wrong proposal | Open |
@@ -236,7 +236,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H5. Admin "Retry payout" releases held payouts past the dispute hold and the release gates
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 2, ADR 026). "Retry payout" reschedules `failed` payouts only (409 `payout_held_use_release` for a held one), and every payout run passes `payoutRunBlockers` after the claim
 - **Where:** `apps/web/app/api/v1/admin/orders/[id]/route.ts:65`, `apps/web/app/api/v1/admin/orders/[id]/route.ts:67`
 - **Raised by:** 4 findings from 4 audit teams (Architecture and code health; AuthZ: admin, cron and misc routes; Payments and money integrity; Reliability, scalability and operability)
 - **Impact:** Money leaves the platform in exactly the states the release gates exist to block: open dispute, open return, missing delivery evidence, return window running. This breaks the MART_DESIGN §4.3 'NEVER released' rule and the ADR-014 dispute protections. The buyer's refund is then blocked, or the platform pays twice. Any `ops` account (not only the founder) can do this with one click, and no dossier is required.
@@ -244,7 +244,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H6. Order status writes are not compare-and-set, so crons can overwrite a dispute or revision and still run money side effects
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 2, ADR 026). Every order status write is compare-and-set: a party that loses gets 409 `order_changed` and runs no side effect, a cron that loses skips the order, and goods actions stop at a 0-row update
 - **Where:** `apps/web/lib/orders/transitions.ts:404`, `apps/web/lib/orders/transitions.ts:304`
 - **Raised by:** 4 findings from 4 audit teams (Architecture and code health; AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); Payments and money integrity; Reliability, scalability and operability)
 - **Impact:** The order ends 'completed' while a dispute is open. The dispute console's resolve CAS (`.eq('status','disputed')`) can then never match, so the dispute cannot be settled through ADR-014's single rule. A requested revision is silently dropped. A payout is scheduled on a contested order, and only the founder approval gate stops the transfer. Double submits also write duplicate events and notifications. This breaks hard rule 8: the API is supposed to reject illegal transitions.
@@ -252,7 +252,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H7. A refund that fails after the status write is never retried, and ops cannot finish it from admin
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 2, ADR 026). A failed refund leaves a `refund_failed` event; the auto-cancel cron re-drives owed refunds through the key-guarded `processRefund` after 10 idle minutes, and admin has "Finish refund"
 - **Where:** `apps/web/lib/orders/transitions.ts:390`
 - **Raised by:** 2 findings from 2 audit teams (Architecture and code health; Reliability, scalability and operability)
 - **Impact:** The buyer's captured money is never returned. Nothing alerts anyone, and ops have no supported way to finish the refund short of a manual database edit. Once live keys are on, any transient gateway error on a refund causes this.
@@ -260,7 +260,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H8. Invoice PDF generation throws on Indic-script names, so no tax invoice is created and accept-delivery returns 500
 
-- **Status:** Open
+- **Status:** Mitigated (wave 2, ADR 026). Every drawn string passes a WinAnsi-safe filter, so the invoice is always created; an invoice failure is recorded as `invoice_failed` and never fails the order action, and the reconcile cron generates missing invoices. Rendering Indic names properly needs a shaping-capable renderer (open)
 - **Where:** `apps/web/lib/invoices/generate.ts:34`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** No buyer or commission GST invoice is ever created for these orders, and nothing retries it, so B2B buyers cannot claim input tax credit. The buyer sees an error on an action that actually succeeded, the completion notices are lost, and every auto-accept batch aborts when it reaches such an order. Hindi, Telugu and Tamil are launch languages, so this hits the target market.
@@ -268,7 +268,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H9. Payout transfer is not idempotent: a timeout after Razorpay creates the transfer marks it failed, and a retry pays again
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 2, ADR 026). Transfers carry `notes.payout_id`; only a definite rejection marks a payout `failed`, anything ambiguous stays `processing` with `payout_unconfirmed`; a retry first asks the gateway for that payout's transfer, and the reconcile cron settles stuck payouts after 30 minutes
 - **Where:** `apps/web/lib/payments/payout.ts:69`, `apps/web/lib/payments/payout.ts:64`
 - **Raised by:** 2 findings from 2 audit teams (Payments and money integrity; Reliability, scalability and operability)
 - **Impact:** The provider's full earnings are transferred twice from the platform balance, which cannot be recovered without a Route reversal. Or a provider is silently never paid. FOLLOWUPS already lists the missing gateway key for a crash between the transfer and the 'paid' write. This is a different case: a transfer that throws but did execute, which the UI currently routes to a one-click retry.
@@ -435,7 +435,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M19. Services payout release never re-checks the order status or an open dispute
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 2, ADR 026). The release route answers 409 `order_not_releasable` outside the release statuses, and `runPayouts` holds any payout whose order is not releasable (reason `order_status:<s>`)
 - **Where:** `apps/web/app/api/v1/admin/payouts/[id]/route.ts:58`, `apps/web/app/api/v1/admin/payouts/[id]/route.ts:71`
 - **Raised by:** 2 findings from 2 audit teams (Payments and money integrity; Web-side agent libraries and the deferred-release RFQ lifecycle)
 - **Impact:** Breaks the invariant that payouts release ONLY from completed/resolved_release/resolved_partial. The provider is paid during an open dispute and the buyer's refund path is blocked.
@@ -595,7 +595,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M39. Reconciliation reads only the first 100 Razorpay payments and never flags a second capture
 
-- **Status:** Open
+- **Status:** Partly fixed (wave 2, ADR 026). The captured-payment scan pages through the whole window (up to 5,000). Flagging a second capture on one Razorpay order is still open
 - **Where:** `apps/web/lib/payments/razorpay.ts:257`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** Once volume grows past very low levels, buyers are charged with no order created. Double charges are never refunded, and the 'recovered' metric is misleading.
