@@ -93,7 +93,9 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
-        style={{ transform: visible ? `translateY(${drag}px)` : undefined }}
+        // Only while a phone drag is in progress: an inline transform replaces the
+        // translate classes, and on ≥ sm those classes are what centre the panel.
+        style={drag > 0 ? { transform: `translateY(${drag}px)` } : undefined}
         className={cn(
           'sheet-panel absolute inset-x-0 bottom-0 flex flex-col bg-surface shadow-modal',
           'rounded-t-sheet sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:-translate-x-1/2 sm:rounded-sheet',

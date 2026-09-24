@@ -64,6 +64,8 @@ export async function AppShell({
       <div data-ui="v3" data-density={density} className={role ? 'flex min-h-screen flex-col bg-background text-foreground [--tabbar-h:3.5rem] lg:[--tabbar-h:0px]' : 'flex min-h-screen flex-col bg-background text-foreground'}>
         <ActionsProvider>
           <ShellTopBar
+            // A buyer's full results page; provider / admin shells use the public catalog.
+            fullResultsPath={context === 'msme' ? '/app/search' : '/services'}
             brand={
               <Link href={homeHref as '/app'} className="shrink-0 text-[22px] font-bold leading-none tracking-tight text-primary">
                 AMClub<span className="font-medium text-foreground-secondary">{suffix}</span>

@@ -2960,7 +2960,10 @@
     "group_services": "Services",
     "group_providers": "Providers",
     "group_categories": "Categories",
-    "price_plus_gst": "{price} + GST"
+    "price_plus_gst": "{price} + GST",
+    "hint": "Type at least two letters: a service, a provider, or one of your orders.",
+    "searching": "Searching…",
+    "see_all_results": "See all results for “{q}”"
   },
   "next_action": {
     "accept_order": "Accept this order",

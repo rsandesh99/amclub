@@ -10,10 +10,23 @@ import { pickI18n } from '@/lib/format'
 import type { I18nText } from '@amclub/shared'
 import { CategoryIcon } from '@/components/catalog/CategoryIcon'
 import { useAnalytics } from '@/components/providers/posthog'
+import { focusHeaderSearch } from './focus-header-search'
 
 // Loaded on first open only — every public page carries this header (§3.8 JS budget).
 const Sheet = dynamic(() => import('@/components/ui-v3/Sheet').then((m) => m.Sheet), { ssr: false })
 const CommandSearch = dynamic(() => import('./CommandSearch').then((m) => m.CommandSearch), { ssr: false })
+// The desktop field is typed into in place; its chunk loads right after hydration, with a look-alike until then.
+const HeaderSearch = dynamic(() => import('./HeaderSearch').then((m) => m.HeaderSearch), { ssr: false, loading: () => <FieldPlaceholder /> })
+
+function FieldPlaceholder() {
+  const t = useTranslations('public_nav')
+  return (
+    <div className="hidden h-9 w-full max-w-xl items-center gap-2 rounded-input bg-sunken px-3 text-[14px] text-foreground-tertiary lg:flex" aria-hidden>
+      <Search className="h-4 w-4" strokeWidth={1.75} />
+      <span className="truncate">{t('search')}</span>
+    </div>
+  )
+}
 
 export interface NavCategory {
   slug: string
@@ -40,6 +53,16 @@ export function PublicNav({ categories }: { categories: NavCategory[] }) {
   const panel = useRef<HTMLDivElement>(null)
 
   useEffect(() => { setMenu(false); setSheet(false) }, [pathname])
+  // ⌘K / Ctrl+K: focus the header field on wide screens, open the search sheet on narrow ones.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) return
+      e.preventDefault()
+      if (!focusHeaderSearch()) { setSearchMounted(true); setSearchState(true); analytics.capture('command_search_opened', { via: 'keyboard' }) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [analytics])
   useEffect(() => {
     if (!menu) return
     const onDown = (e: MouseEvent) => { if (panel.current && !panel.current.contains(e.target as Node)) setMenu(false) }
@@ -92,14 +115,7 @@ export function PublicNav({ categories }: { categories: NavCategory[] }) {
       </div>
 
       <div className="flex flex-1 justify-end md:justify-center">
-        <button
-          type="button"
-          onClick={() => { setSearch(true); analytics.capture('command_search_opened', { via: 'public_header' }) }}
-          className="hidden h-9 w-full max-w-sm items-center gap-2 rounded-input bg-sunken px-3 text-left text-[14px] text-foreground-tertiary lg:flex"
-        >
-          <Search className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          <span className="truncate">{t('search')}</span>
-        </button>
+        <HeaderSearch fullResultsPath="/services" placeholder={t('search')} className="hidden lg:block" />
         <button type="button" onClick={() => setSearch(true)} aria-label={t('search')} className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground-secondary hover:bg-foreground/5 lg:hidden">
           <Search className="h-5 w-5" strokeWidth={1.75} aria-hidden />
         </button>
@@ -137,7 +153,7 @@ export function PublicNav({ categories }: { categories: NavCategory[] }) {
         </div>
       </Sheet>}
       {/* Mounted once opened (then kept, so ⌘K keeps working and the sheet can animate out). */}
-      {searchMounted && <CommandSearch open={search} onOpenChange={setSearch} />}
+      {searchMounted && <CommandSearch open={search} onOpenChange={setSearch} fullResultsPath="/services" />}
     </>
   )
 }
