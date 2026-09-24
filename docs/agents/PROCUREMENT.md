@@ -77,8 +77,16 @@ them to that same decision (no second `rfq_intake` row) when the call carries th
 
 ## WhatsApp dispatcher order
 
-STOP → active onboarding session → Munshi (S2.2) → **procurement (S3.1)** → opt-in keywords → JOIN → support (S2.3,
-incl. the `new_need` offer) → holding reply.
+STOP → active onboarding session → Munshi buttons (S2.2) → **procurement `pr:` buttons (S3.1)** → **free text vs the
+open proposals (audit M42)** → opt-in keywords → JOIN → support (S2.3, incl. the `new_need` offer) → holding reply.
+
+**A typed / spoken yes confirms at most one proposal (audit M42).** A buyer who is also a provider can have a Munshi
+draft, a procurement proposal and a support nudge open on one conversation. `whatsapp/confirmations.ts` binds free
+text with agent-core `bindTextConfirmation`: a reply that quotes this session's card, or the session's proposal being
+the ONLY open one, reaches the turn with `textApproval: true`; anything else is ambiguous, so an approving yes re-sends
+the card (and the other open cards) and approves nothing (`runProcurementTurn` enforces it too: on WhatsApp a yes
+approves only with `textApproval: true`). The session still takes every other message. The web / mobile composer is
+the session's own UI and is unchanged.
 
 Procurement sits **before the opt-in keywords** because "yes" / "ok" / "hi" are S0.5 opt-in words: after them, a
 buyer's typed yes to a draft would never reach the session (FOLLOWUPS "Agent S3.1"). It takes a `pr:` button of this

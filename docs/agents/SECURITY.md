@@ -170,7 +170,7 @@ discloses this, and the programme holds itself to these terms before any cohort 
   | posture | when | effect |
   |---|---|---|
   | `enforced` | `AGENT_RESIDENCY_ENFORCE=true` + `AGENT_IN_RESIDENCY_HOSTS` | `'in'` classes go only to the listed hosts |
-  | `waived` | `AGENT_RESIDENCY_WAIVER=<reason>` (≥ 12 chars: why, the DPA reference, a review date) | calls allowed; the reason is logged at boot and shown on runtime `/health` and `/admin/agents` |
+  | `waived` | `AGENT_RESIDENCY_WAIVER=<reason>` (≥ 12 chars: why, the DPA reference, a review date) | calls allowed; the reason is logged at boot and shown on `/admin/agents` (runtime `/health` shows the mode) |
   | `unconfigured` | production + agents on + neither | **every `'in'` model call is refused** (`ResidencyUnconfiguredError`, code `residency_unconfigured`) before a byte leaves; features fall back (templates, rule-only reports, stub drafts) |
   | `opt_in` | not production, or agents off | unchanged: enforcement only when `AGENT_RESIDENCY_ENFORCE=true` |
 

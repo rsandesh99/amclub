@@ -9,6 +9,7 @@ import type {
   WhatsAppConfig,
   WhatsAppProvider,
 } from './types'
+import { DEFAULT_MEDIA_LIMITS, MediaRefusedError, baseMime, fetchWithTimeout, mimeAllowed, readCappedBody } from './media'
 
 /**
  * Meta WhatsApp Cloud API driver (Graph v20+). Webhook signature is
@@ -84,13 +85,23 @@ export function makeMetaCloudDriver(cfg: WhatsAppConfig, fetchImpl: typeof fetch
       if (!media.url) return Promise.resolve(err('meta_cloud sendMedia needs a public url (upload flow not wired)'))
       return send({ to, type: kind, [kind]: { link: media.url, ...(media.caption && kind !== 'audio' ? { caption: media.caption } : {}) } })
     },
-    async downloadMedia(mediaId): Promise<MediaDownload> {
-      const meta = await fetchImpl(`${base}/${mediaId}`, { headers: { Authorization: `Bearer ${token}` } })
-      const info = (await meta.json()) as { url?: string; mime_type?: string }
-      if (!meta.ok || !info.url) throw new Error(`meta media lookup failed (${meta.status})`)
-      const bin = await fetchImpl(info.url, { headers: { Authorization: `Bearer ${token}` } })
-      if (!bin.ok) throw new Error(`meta media download failed (${bin.status})`)
-      return { bytes: new Uint8Array(await bin.arrayBuffer()), mime: info.mime_type ?? bin.headers.get('content-type') ?? 'application/octet-stream' }
+    async downloadMedia(mediaId, limits = DEFAULT_MEDIA_LIMITS): Promise<MediaDownload> {
+      // A Graph media id is digits; anything else never reaches a URL.
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(mediaId)) throw new MediaRefusedError('bad_ref', 'media id')
+      const meta = await fetchWithTimeout(fetchImpl, `${base}/${mediaId}`, { headers: { Authorization: `Bearer ${token}` } }, limits.timeoutMs)
+      const info = (await meta.json().catch(() => ({}))) as { url?: string; mime_type?: string; file_size?: number }
+      if (!meta.ok || !info.url) throw new MediaRefusedError('http', `meta media lookup failed (${meta.status})`)
+      // Refuse before a byte is downloaded: the declared type and size.
+      if (!mimeAllowed(info.mime_type, limits)) throw new MediaRefusedError('mime_not_allowed', baseMime(info.mime_type) || 'unknown')
+      if (typeof info.file_size === 'number' && info.file_size > limits.maxBytes) throw new MediaRefusedError('too_large', `declared ${info.file_size} > ${limits.maxBytes}`)
+      if (!/^https:\/\//i.test(info.url)) throw new MediaRefusedError('bad_ref', 'media url scheme')
+      const bin = await fetchWithTimeout(fetchImpl, info.url, { headers: { Authorization: `Bearer ${token}` } }, limits.timeoutMs)
+      if (!bin.ok) {
+        await bin.body?.cancel().catch(() => undefined)
+        throw new MediaRefusedError('http', `meta media download failed (${bin.status})`)
+      }
+      const bytes = await readCappedBody(bin, limits.maxBytes)
+      return { bytes, mime: baseMime(info.mime_type) }
     },
     parseInbound(body): ParsedInbound {
       const messages: InboundMessage[] = []

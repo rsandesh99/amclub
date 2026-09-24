@@ -4,6 +4,29 @@ import { makeInteraktDriver } from './interakt'
 
 export * from './types'
 export * from './templates'
+export * from './media'
+
+/**
+ * Audit M42 — the vendor id of the message a WhatsApp reply QUOTES (Meta:
+ * `messages[].context.id`, stored in wa_messages.payload as the raw message).
+ * The dispatcher maps it to the outbound row it quoted, whose payload carries
+ * the proposal's run id, so a quoted "yes" binds to exactly that proposal.
+ * Interakt carries no quote context here → null.
+ */
+export function quotedVendorMessageId(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const ctx = (payload as { context?: { id?: unknown } }).context
+  const id = ctx && typeof ctx === 'object' ? ctx.id : null
+  return typeof id === 'string' && id.length > 0 && id.length <= 256 ? id : null
+}
+
+/** Audit M34 — the vendor media reference the webhook stored for the job to download (payload.amc_media_ref). */
+export const PENDING_MEDIA_KEY = 'amc_media_ref'
+export function pendingMediaRef(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const v = (payload as Record<string, unknown>)[PENDING_MEDIA_KEY]
+  return typeof v === 'string' && v.length > 0 && v.length <= 2048 ? v : null
+}
 export { makeMetaCloudDriver, metaVerifyChallenge } from './meta-cloud'
 export { makeInteraktDriver } from './interakt'
 

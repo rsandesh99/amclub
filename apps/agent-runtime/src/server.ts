@@ -9,13 +9,14 @@ import { bodyLimit } from 'hono/body-limit'
 import {
   AgentRun,
   extractRuntimeCredential,
+  residencyPosture,
   verifyRuntimeCredential,
   type RuntimeCredentialClaims,
 } from '@amclub/agent-core'
 import { agentToolNameSchema } from '@amclub/shared'
 import { missingRuntimeConfig, RUNTIME_ENV } from './env'
 import { buildRunContext } from './deps'
-import { enqueueJob, enqueueWaInbound } from './worker'
+import { enqueueJob, enqueueWaInbound, workerHealth } from './worker'
 import { ingestWaWebhook, waVerifyChallenge } from './whatsapp/inbound'
 
 /**
@@ -33,7 +34,34 @@ function requireRuntime(authorization: string | undefined): RuntimeCredentialCla
   return claims
 }
 
-app.get('/health', (c) => c.json({ ok: true, service: 'agent-runtime', missing: missingRuntimeConfig(), ts: Date.now() }))
+/**
+ * Liveness + readiness (audit M33 / M23). `worker` = the pg-boss worker state,
+ * whether DATABASE_URL is set, and the last inbound sweep (stored-but-unprocessed
+ * WhatsApp messages); `residency` = the model gateway's data-residency posture.
+ * 503 when agents are enabled but the worker is not running, so the platform
+ * check turns red instead of the runtime silently storing messages nobody reads.
+ */
+app.get('/health', (c) => {
+  const worker = workerHealth()
+  const residency = residencyPosture()
+  const degraded: string[] = []
+  if (RUNTIME_ENV.AGENT_ENABLED && worker.state !== 'running') degraded.push(`worker_${worker.state}`)
+  if (worker.lastSweep && (worker.lastSweep.requeued > 0 || worker.lastSweep.stale > 0)) degraded.push('inbound_unprocessed')
+  if (worker.lastSweep?.error) degraded.push('inbound_sweep_failed')
+  if (residency.mode === 'unconfigured') degraded.push('residency_unconfigured')
+  const down = RUNTIME_ENV.AGENT_ENABLED && worker.state !== 'running'
+  // public endpoint: states and counts only — error text, the waiver reason and hosts stay in the logs
+  const body = {
+    ok: !down && degraded.length === 0,
+    service: 'agent-runtime',
+    missing: missingRuntimeConfig(),
+    degraded,
+    worker: { state: worker.state, databaseUrl: worker.databaseUrl, since: worker.since, queues: worker.queues, lastErrorAt: worker.lastError?.at ?? null, lastSweep: worker.lastSweep },
+    residency: { mode: residency.mode, required: residency.required },
+    ts: Date.now(),
+  }
+  return c.json(body, down ? 503 : 200)
+})
 
 // Resume a parked run after the surface recorded an approval (the confirm gate
 // verifies the ai_decisions row inside AgentRun.resume before calling the tool).
@@ -69,18 +97,21 @@ app.post('/internal/jobs/:name', async (c) => {
   const name = c.req.param('name')
   const data = (await c.req.json().catch(() => ({}))) as unknown
   try {
-    const jobId = await enqueueJob(name, data)
-    return c.json({ ok: true, jobId })
+    // audit M32: a send that inserted nothing (and was not a singleton collision) throws → 503, never a silent 200
+    const { jobId, deduped } = await enqueueJob(name, data)
+    return c.json({ ok: true, jobId, deduped })
   } catch (e) {
+    console.error(`[server] enqueue ${name} failed`, (e as Error).message)
     return c.json({ error: (e as Error).message }, 503)
   }
 })
 
 // S0.5 — WhatsApp webhook. GET answers the Meta verify challenge; POST verifies
-// the vendor signature, stores conversation + message idempotently, downloads
-// media to the private wa-media bucket and enqueues wa.inbound. Always 200 after
-// a successful store (vendors retry on non-2xx). No runtime credential here —
-// the vendor signature IS the auth.
+// the vendor signature, stores conversation + message idempotently and enqueues
+// wa.inbound. Media is NOT downloaded here (audit M34): the job fetches it, with
+// caps, only for a bound, opted-in number. 200 after a successful store; a store
+// failure answers 5xx so the vendor retries (audit M33). No runtime credential
+// here — the vendor signature IS the auth.
 app.get('/webhooks/whatsapp', (c) => {
   const challenge = waVerifyChallenge(c.req.query())
   return challenge === null ? c.text('forbidden', 403) : c.text(challenge, 200)

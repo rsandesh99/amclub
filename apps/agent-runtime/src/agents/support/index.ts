@@ -27,6 +27,7 @@ import {
   type SupportRfqView,
 } from '@amclub/shared'
 import { isAgentEnabledForUser, readAgentSettings } from '../../settings'
+import { channelIdentityOf, conversationServesUser } from '../../whatsapp/binding'
 import { PROCUREMENT_BUTTON_TITLES, hasProcurementScopes, procurementButtonId, toProcurementLocale } from '@amclub/shared'
 import { transcribeVoiceNote } from '../onboarding/stt'
 import { buttonPayloadOf } from '../onboarding/index'
@@ -327,9 +328,12 @@ async function conversationRow(admin: SupabaseClient, id: string): Promise<Conve
   return (data as ConversationRow | null) ?? null
 }
 
-/** The persona of the user's active WhatsApp grant (START stores 'buyer' for an msme user, else 'provider'). */
-async function whatsappPersona(admin: SupabaseClient, userId: string, roles: readonly ('buyer' | 'provider')[]): Promise<'buyer' | 'provider'> {
-  const { data } = await admin.from('agent_grants').select('persona').eq('user_id', userId).eq('channel', 'whatsapp').is('revoked_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
+/**
+ * The persona of the user's active WhatsApp grant given from THIS conversation's phone (START stores 'buyer' for an msme
+ * user, else 'provider'). Audit M41: a grant from another phone never speaks for this conversation.
+ */
+async function whatsappPersona(admin: SupabaseClient, userId: string, roles: readonly ('buyer' | 'provider')[], phoneE164: string): Promise<'buyer' | 'provider'> {
+  const { data } = await admin.from('agent_grants').select('persona').eq('user_id', userId).eq('channel', 'whatsapp').eq('channel_identity', channelIdentityOf(phoneE164)).is('revoked_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
   const p = (data as { persona?: string } | null)?.persona
   return p === 'provider' || p === 'buyer' ? p : roles.includes('buyer') ? 'buyer' : 'provider'
 }
@@ -352,7 +356,9 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
   const roles = await userRoles(deps.admin, conv.user_id)
   if (!roles.length) return { status: 'failed', error: 'no_profile' }
   const settings = await supportSettings(deps.admin)
-  const persona = await whatsappPersona(deps.admin, conv.user_id, roles)
+  // audit M41: the conversation must still be this user's current phone (the dispatcher re-derives the owner first)
+  if (!(await conversationServesUser(deps.admin, conv, conv.user_id))) return { status: 'failed', error: 'conversation_not_found' }
+  const persona = await whatsappPersona(deps.admin, conv.user_id, roles, conv.phone_e164)
 
   // audio → the existing web STT route under the user's token (S1.6 precedent)
   let text = String((msg as any).body ?? '')

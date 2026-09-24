@@ -51,6 +51,12 @@ export interface ProcurementTurnJob {
   /** … or a procurement_turns id (the web / mobile composer already stored the buyer's turn). */
   turnId?: string | null
   forced?: { label?: string; sessionChoice?: 'new' | 'current' } | null
+  /**
+   * Audit M42 — may a typed / spoken yes in this message approve the session's open proposal? The WhatsApp dispatcher
+   * sets true only when `bindTextConfirmation` bound the text to exactly this proposal; false / absent on WhatsApp →
+   * a yes re-sends the card. The web / mobile composer is the session's own UI (always allowed there).
+   */
+  textApproval?: boolean
   jobId?: string | null
 }
 
@@ -177,7 +183,10 @@ export async function runProcurementTurn(deps: ProcurementRuntimeDeps, job: Proc
         if (t.ok) said = t.text
       }
     }
-    const read = said ? readUtteranceOnProposal(view.openProposal.tool, said, view.locale) : 'not_a_yes'
+    let read = said ? readUtteranceOnProposal(view.openProposal.tool, said, view.locale) : 'not_a_yes'
+    // audit M42: on WhatsApp a yes approves only when the dispatcher bound it to THIS proposal; else the card comes back
+    const textApproval = job.surface !== 'whatsapp' || job.textApproval === true
+    if (read === 'approve' && !textApproval) read = 'resend_buttons'
     if (read === 'approve') return decideProcurement(deps, { kind: 'decide', runId: view.openProposal.runId, userId: row.user_id, action: 'ok', via: media?.kind === 'audio' ? 'voice_yes' : row.surface === 'whatsapp' ? 'text_yes' : 'web_text_yes', messageId: job.messageId ?? null })
     if (read === 'resend_buttons') {
       await resendCard(deps, row, view.openProposal.runId, whatsapp)

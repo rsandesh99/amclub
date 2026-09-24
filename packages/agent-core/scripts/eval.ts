@@ -54,6 +54,8 @@ import { buildRfqQualityParts } from '../src/rfq-quality/parts'
 import { buildOnboardingParts } from '../src/onboarding/parts'
 import { buildDisputeTriageParts } from '../src/dispute-triage/parts'
 import { buildPhotoPlausibilityParts } from '../src/dossier/parts'
+import { bindTextConfirmation, DEFAULT_TEXT_WINDOWS, type OpenConfirmable, type TextBinding } from '../src/confirm/binding'
+import { readUtteranceOnProposal } from '../src/procurement/session'
 import { buildClarifyParts, buildDocumentParts } from '../src/intake/parts'
 import { clarifyQuestionSchema, CLARIFY_SCRIPT_RE, stubClarifyQuestion } from '../src/prompts/rfq_clarify/schema'
 import { documentExtractSchema, clampDocumentExtract, type DocumentExtract } from '../src/prompts/document_extract/schema'
@@ -908,6 +910,54 @@ async function runQuoteDraft(gateway: Gateway, live: boolean): Promise<SetResult
   return { name: 'quote_draft@v1', pass: agree, fail: total - agree, ok: errors === 0 && injectionPass === injectionTotal && (live ? pct >= 85 : agree === total) }
 }
 
+// ── audit M42 confirmation_binding (code only: which open proposal a typed / spoken yes may confirm) ──
+interface BindingCase {
+  id: string
+  locale: string
+  text: string
+  red_team?: boolean
+  open: Array<{ agent: 'munshi' | 'procurement' | 'support'; run: string; minutes_ago: number | null; tool?: string }>
+  quoted?: string | null
+  expect: { status: TextBinding['status']; agent?: string; via?: string; reason?: string }
+  approves: string | null
+}
+
+async function runConfirmationBinding(_gateway: Gateway, live: boolean): Promise<SetResult> {
+  const cases = readJson<{ cases: BindingCase[] }>('../golden/confirmation_binding.json').cases
+  const now = new Date('2026-09-24T12:00:00Z')
+  let pass = 0
+  let redTotal = 0
+  let redPass = 0
+  for (const c of cases) {
+    const bad: string[] = []
+    const open: OpenConfirmable[] = c.open.map((o) => ({ agent: o.agent, runId: o.run, deliveredAt: o.minutes_ago === null ? null : new Date(now.getTime() - o.minutes_ago * 60_000).toISOString() }))
+    const quoted = 'quoted' in c
+    const b = bindTextConfirmation({ open, quoted, quotedRunId: quoted ? (c.quoted ?? null) : null, now, windowMs: DEFAULT_TEXT_WINDOWS })
+    if (b.status !== c.expect.status) bad.push(`status ${b.status} ≠ ${c.expect.status}`)
+    if (b.status === 'bound' && c.expect.agent && b.proposal.agent !== c.expect.agent) bad.push(`agent ${b.proposal.agent} ≠ ${c.expect.agent}`)
+    if (b.status === 'bound' && c.expect.via && b.via !== c.expect.via) bad.push(`via ${b.via} ≠ ${c.expect.via}`)
+    if (b.status === 'ambiguous' && c.expect.reason && b.reason !== c.expect.reason) bad.push(`reason ${b.reason} ≠ ${c.expect.reason}`)
+    // what the text would actually approve: only a bound proposal, and then only under that agent's own law
+    let approves: string | null = null
+    if (b.status === 'bound') {
+      const p = b.proposal
+      const tool = c.open.find((o) => o.run === p.runId)?.tool ?? ''
+      if (p.agent === 'munshi' && isUnambiguousYes(c.text, c.locale)) approves = p.runId
+      if (p.agent === 'procurement' && readUtteranceOnProposal(tool, c.text, c.locale) === 'approve') approves = p.runId
+    }
+    if (approves !== c.approves) bad.push(`approves ${approves ?? 'nothing'} ≠ ${c.approves ?? 'nothing'}`)
+    const ok = bad.length === 0
+    if (ok) pass++
+    if (c.red_team) {
+      redTotal++
+      if (ok) redPass++
+    }
+    console.log(`  ${ok ? '✓' : '✗'} ${live ? 'live' : 'stub'}  ${c.id.padEnd(40)}${c.red_team ? ' [red-team]' : ''} ${b.status}${b.status === 'bound' ? `:${b.proposal.agent}/${b.via}` : b.status === 'ambiguous' ? `:${b.reason}` : ''}${ok ? '' : `  ${bad.join('; ')}`}`)
+  }
+  console.log(`  ${pass}/${cases.length} (code only — 100 % in every mode); red-team ${redPass}/${redTotal}`)
+  return { name: 'confirmation_binding', pass, fail: cases.length - pass, ok: pass === cases.length }
+}
+
 // ── S2.2 approval_intent (the allow-list is the law; the classifier only re-asks / edits / rejects) ─
 interface ApprovalCase { id: string; locale: string; text: string; expect_yes: boolean; expect: string[]; edit_contains?: string; injection?: boolean; markers?: string[]; stub?: { intent: string; edit_instructions: string | null } }
 
@@ -1309,6 +1359,7 @@ async function main() {
     injection: runInjection,
     quote_draft: runQuoteDraft,
     approval_intent: runApprovalIntent,
+    confirmation_binding: runConfirmationBinding,
     thread_reply: runThreadReply,
     support_intent: runSupportIntent,
     support_ticket_summary: runSupportTicketSummary,

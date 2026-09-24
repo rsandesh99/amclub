@@ -5,6 +5,10 @@ import { users } from './identity'
 // WhatsApp rails (0030, S0.5). One conversation per phone (E.164 digits, no
 // '+'), bound to a user when the phone matches users.phone. Service-role
 // writes only (runtime webhook + web dispatcher); admin/ops read.
+// 0079 (audit M41): the binding holds only while users.phone IS this phone — the
+// trigger users_phone_change_wa_unbind unbinds it (and revokes the WhatsApp grants
+// given from the old number) when the phone changes; the runtime re-derives the
+// owner on every inbound message.
 export const waConversations = pgTable('wa_conversations', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   phoneE164: text('phone_e164').notNull().unique(),
@@ -43,6 +47,9 @@ export const waMessages = pgTable('wa_messages', {
   status: text('status').default('received').notNull(), // sent | delivered | read | failed | received | stub
   payload: jsonb('payload'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
+  // 0079 (audit M33): when the wa.inbound job finished. The webhook inserts NULL; the runtime's minute sweep
+  // re-enqueues inbound rows still NULL after a minute. Default now(): every other writer's row counts as processed.
+  processedAt: timestamp('processed_at', { withTimezone: true }).default(sql`now()`),
 }, (table) => [
   index('wa_messages_conversation_created_idx').on(table.conversationId, table.createdAt),
   check('wa_messages_direction_check', sql`${table.direction} IN ('in', 'out')`),

@@ -12,15 +12,19 @@ Deploy, secrets, and rollback live in **`docs/agents/RUNTIME.md`**.
 
 ```bash
 pnpm --filter @amclub/agent-runtime typecheck
+pnpm --filter @amclub/agent-runtime test    # node:test via tsx: queue registry, WhatsApp binding / confirmations / sweep / media
 pnpm --filter @amclub/agent-runtime dev     # tsx watch; GET http://localhost:8080/health
 ```
 
-Without `DATABASE_URL` the job worker is disabled but `/health` still serves.
-Without an LLM key, agent-core runs in stub mode (no bill).
+Without `DATABASE_URL` the job worker is disabled but `/health` still serves
+(`worker.state = disabled`). A worker that fails to start exits the process.
+Without an LLM key, agent-core runs in stub mode (no bill). The package is
+CommonJS on purpose (see `docs/agents/RUNTIME.md` "Module format").
 
 ## Endpoints (internal — require the `AMC-Runtime` HMAC credential)
 
-- `GET  /health` — liveness + which config is missing.
+- `GET  /health` — liveness, missing config, the worker state + last inbound sweep, the residency posture
+  (503 while agents are on and the worker is not running).
 - `POST /internal/runs/:id/resume` — resume a parked run after the surface
   approved it (verifies the `ai_decisions` row before calling the tool).
 - `POST /internal/jobs/:name` — enqueue a job on the `agent.run` pg-boss queue.

@@ -26,8 +26,20 @@ export function agentRuntimeReady(): boolean {
 export interface EnqueueResult {
   ok: boolean
   jobId: string | null
+  /** The runtime collapsed this onto an existing singleton job (an overlapping cron tick) — nothing new was queued. */
+  deduped?: boolean
   /** Why it did not enqueue (not_configured | http_<status> | <error name>). */
   reason?: string
+}
+
+/**
+ * Audit M32 — what a cron heartbeat records: `enqueued` only when the runtime
+ * returned a job id (a 200 with no job used to read as healthy while the weekly
+ * growth job was silently dropped); `deduped` when an overlapping tick collapsed.
+ */
+export function cronEnqueueOutcome(r: EnqueueResult): { enqueued: boolean; jobId: string | null; deduped: boolean; reason: string | null } {
+  const enqueued = r.ok && r.jobId != null
+  return { enqueued, jobId: r.jobId, deduped: r.deduped === true, reason: r.reason ?? (r.ok && !enqueued && r.deduped !== true ? 'no_job_id' : null) }
 }
 
 export async function enqueueRuntimeJob(
@@ -49,12 +61,12 @@ export async function enqueueRuntimeJob(
       signal: ctrl.signal,
       cache: 'no-store',
     })
-    const body = (await res.json().catch(() => null)) as { jobId?: string | null } | null
+    const body = (await res.json().catch(() => null)) as { jobId?: string | null; deduped?: boolean; error?: string } | null
     if (!res.ok) {
-      console.error(`[runtime-client] enqueue ${name} -> ${res.status}`)
-      return { ok: false, jobId: null, reason: `http_${res.status}` }
+      console.error(`[runtime-client] enqueue ${name} -> ${res.status}${body?.error ? ` (${body.error})` : ''}`)
+      return { ok: false, jobId: null, reason: body?.error ? `http_${res.status}:${body.error.slice(0, 80)}` : `http_${res.status}` }
     }
-    return { ok: true, jobId: body?.jobId ?? null }
+    return { ok: true, jobId: body?.jobId ?? null, ...(body?.deduped === true ? { deduped: true } : {}) }
   } catch (e) {
     console.error(`[runtime-client] enqueue ${name} failed`, (e as Error).message)
     return { ok: false, jobId: null, reason: (e as Error).name || 'error' }

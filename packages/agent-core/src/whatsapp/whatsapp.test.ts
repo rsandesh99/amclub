@@ -1,6 +1,12 @@
 import { createHmac } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  DEFAULT_MEDIA_LIMITS,
+  MediaRefusedError,
+  mediaLimitsFromEnv,
+  mimeAllowed,
+  pendingMediaRef,
+  quotedVendorMessageId,
   WA_ALWAYS_ALLOWED_KINDS,
   WA_TEMPLATES,
   allTemplateNames,
@@ -151,5 +157,84 @@ describe('stub driver + env selection', () => {
     expect(whatsappConfigFromEnv({ WHATSAPP_DRIVER: 'meta_cloud', WHATSAPP_PHONE_NUMBER_ID: 'p', WHATSAPP_ACCESS_TOKEN: 't' }).driver).toBe('meta_cloud')
     expect(whatsappConfigFromEnv({ WHATSAPP_DRIVER: 'interakt', INTERAKT_API_KEY: 'k' }).driver).toBe('interakt')
     expect(createWhatsAppProvider(whatsappConfigFromEnv({})).name).toBe('stub')
+  })
+})
+
+// ── audit M34: bounded media downloads (the wa.inbound job, never the webhook) ──
+describe('downloadMedia limits (audit M34)', () => {
+  const cfg = { driver: 'meta_cloud' as const, phoneNumberId: 'PNID', accessToken: 'tok', appSecret: 'app-secret', verifyToken: 'vt' }
+  const limits = { ...DEFAULT_MEDIA_LIMITS, maxBytes: 1024 }
+  /** A Graph lookup answer, then the binary response the test supplies. */
+  function metaFetch(lookup: Record<string, unknown>, bin: () => Response): { f: typeof fetch; urls: string[] } {
+    const urls: string[] = []
+    const f = (async (url: string) => {
+      urls.push(url)
+      if (url.includes('/MEDIA')) return new Response(JSON.stringify({ url: 'https://lookaside.fbsbx.com/x', ...lookup }), { status: 200 })
+      return bin()
+    }) as unknown as typeof fetch
+    return { f, urls }
+  }
+  function streamOf(total: number, chunk = 256): ReadableStream<Uint8Array> {
+    let sent = 0
+    return new ReadableStream({
+      pull(c) {
+        if (sent >= total) {
+          c.close()
+          return
+        }
+        const n = Math.min(chunk, total - sent)
+        sent += n
+        c.enqueue(new Uint8Array(n))
+      },
+    })
+  }
+
+  it('downloads an allowed type under the cap', async () => {
+    const { f } = metaFetch({ mime_type: 'image/jpeg', file_size: 500 }, () => new Response(new Uint8Array(500), { status: 200, headers: { 'content-type': 'image/jpeg' } }))
+    const r = await makeMetaCloudDriver(cfg, f).downloadMedia('MEDIA1', limits)
+    expect(r.bytes.byteLength).toBe(500)
+    expect(r.mime).toBe('image/jpeg')
+  })
+  it('refuses a disallowed MIME before downloading any bytes', async () => {
+    const { f, urls } = metaFetch({ mime_type: 'video/mp4', file_size: 10 }, () => new Response('x'))
+    await expect(makeMetaCloudDriver(cfg, f).downloadMedia('MEDIA2', limits)).rejects.toMatchObject({ code: 'mime_not_allowed' })
+    expect(urls).toHaveLength(1)
+  })
+  it('refuses a declared size over the cap (Graph file_size, then Content-Length)', async () => {
+    const a = metaFetch({ mime_type: 'image/png', file_size: 5000 }, () => new Response('x'))
+    await expect(makeMetaCloudDriver(cfg, a.f).downloadMedia('MEDIA3', limits)).rejects.toMatchObject({ code: 'too_large' })
+    expect(a.urls).toHaveLength(1)
+    const b = metaFetch({ mime_type: 'image/png' }, () => new Response(streamOf(10), { status: 200, headers: { 'content-length': '999999' } }))
+    await expect(makeMetaCloudDriver(cfg, b.f).downloadMedia('MEDIA4', limits)).rejects.toMatchObject({ code: 'too_large' })
+  })
+  it('caps the STREAM when Content-Length is missing or lies', async () => {
+    const { f } = metaFetch({ mime_type: 'audio/ogg' }, () => new Response(streamOf(4096), { status: 200, headers: { 'content-length': '100' } }))
+    await expect(makeMetaCloudDriver(cfg, f).downloadMedia('MEDIA5', limits)).rejects.toMatchObject({ code: 'too_large' })
+  })
+  it('times out a slow vendor', async () => {
+    const slow = (async (_url: string, init: RequestInit) =>
+      new Promise((_res, rej) => {
+        init.signal?.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'TimeoutError' })))
+      })) as unknown as typeof fetch
+    await expect(makeMetaCloudDriver(cfg, slow).downloadMedia('MEDIA6', { ...limits, timeoutMs: 20 })).rejects.toMatchObject({ code: 'timeout' })
+  })
+  it('refuses a malformed media id and a non-https / internal Interakt URL', async () => {
+    await expect(makeMetaCloudDriver(cfg, noNetwork).downloadMedia('../../etc', limits)).rejects.toBeInstanceOf(MediaRefusedError)
+    const d = makeInteraktDriver({ driver: 'interakt', interaktApiKey: 'k', interaktWebhookSecret: 's' }, noNetwork)
+    await expect(d.downloadMedia('http://169.254.169.254/latest', limits)).rejects.toMatchObject({ code: 'bad_ref' })
+    await expect(d.downloadMedia('https://localhost/x', limits)).rejects.toMatchObject({ code: 'bad_ref' })
+  })
+  it('media limits come from env, clamped; the allow-list is code', () => {
+    expect(mediaLimitsFromEnv({}).maxBytes).toBe(DEFAULT_MEDIA_LIMITS.maxBytes)
+    expect(mediaLimitsFromEnv({ WA_MEDIA_MAX_BYTES: '2097152' }).maxBytes).toBe(2097152)
+    expect(mediaLimitsFromEnv({ WA_MEDIA_MAX_BYTES: '999999999999' }).maxBytes).toBe(DEFAULT_MEDIA_LIMITS.maxBytes)
+    expect(mimeAllowed('audio/ogg; codecs=opus')).toBe(true)
+    expect(mimeAllowed('image/svg+xml')).toBe(false)
+  })
+  it('reads the quoted message id and the pending media ref from a stored payload', () => {
+    expect(quotedVendorMessageId({ context: { id: 'wamid.OUT7' } })).toBe('wamid.OUT7')
+    expect(quotedVendorMessageId({})).toBeNull()
+    expect(pendingMediaRef({ amc_media_ref: 'MEDIA9' })).toBe('MEDIA9')
+    expect(pendingMediaRef({ image: { id: 'x' } })).toBeNull()
   })
 })

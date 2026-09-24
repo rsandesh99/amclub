@@ -12,8 +12,11 @@ section is gated on the web `AGENT_ENABLED`.
 ```
  user's WhatsApp ──► vendor (Meta Cloud API | Interakt) ──► POST https://<runtime>/webhooks/whatsapp
                                                               │ verify signature → wa_conversations/wa_messages
-                                                              │ media → private bucket `wa-media`
-                                                              └► pg-boss `wa.inbound` → START/STOP/holding reply
+                                                              │ (store only; 5xx on a store failure → the vendor retries)
+                                                              └► pg-boss `wa.inbound` (job id = message id)
+                                                                   │ re-derive the owner from users.phone (M41)
+                                                                   │ media → private bucket `wa-media` (capped; opted-in numbers only, M34)
+                                                                   └► the dispatcher → processed_at (the minute sweep re-drives the rest, M33)
  web dispatcher (createNotification … channels:['whatsapp']) ──► agent-core sendTemplate (approved templates only)
 ```
 
@@ -107,7 +110,8 @@ number; the draft confirmation (`confirm:<runId>`) therefore needs Meta
 `docs/agents/ONBOARDING.md` and PRE_LAUNCH_CHECKLIST 1.3.
 
 **Media retention.** Voice notes and workshop photos stay as objects in the
-private `wa-media` bucket at `<conversationId>/<vendorMessageId>.<ext>`;
+private `wa-media` bucket at `<conversationId>/<vendorMessageId>.<ext>` (fetched by
+the `wa.inbound` job, capped, opted-in numbers only — see "Audit wave 5");
 `onboarding_sessions.photo_refs` holds the paths; reads are 15-minute signed
 URLs (wizard, partner dashboard, admin). Nothing is copied into the provider
 media pipeline in this stage.
@@ -155,6 +159,58 @@ scopes).
 **Template** `procurement_update` (`amc_procurement_update_{en,hi,te}`, params `[one line, the assistant link]`; opt-in
 gated) carries any procurement message outside the 24 h window; the buttons are in-window only, so decisions then
 happen in the app. Runbook `docs/agents/PROCUREMENT.md`.
+
+## Audit wave 5 — reliability and identity (M33, M34, M41, M42; migration 0079)
+
+**Stored means processed (M33).** The webhook stores the message and answers 200; a store failure answers 500
+so the vendor retries (a replay of a stored message is a no-op, and re-enqueues it when it was never processed).
+The `wa.inbound` job's id IS the message id, so a message has at most one job while pg-boss keeps it (≥ 12 h).
+The job stamps `wa_messages.processed_at` when the dispatcher finished (0079; the webhook inserts NULL, every
+other writer gets `now()` by default). The runtime schedules `wa.inbound.sweep` every minute: inbound rows still
+unprocessed after a minute and younger than 6 h get a job when they have none (their first enqueue failed or the
+worker was down); older ones are counted as `stale`. The runtime exits when the worker cannot start (Fly
+restarts it) and `/health` reports `worker` (state, DATABASE_URL, the last sweep) and answers 503 while agents are
+on and the worker is not running. Before 0079 is applied the webhook stores without the column (logged once) and
+the sweep reports `sweep_read_failed`.
+
+**Media is fetched by the job, capped (M34).** The webhook never downloads: it keeps the vendor media id in the
+payload (`amc_media_ref`). The job downloads only for a number bound to a user who holds a WhatsApp grant given
+FROM that number; an unknown or non-opted-in number's media is never fetched (`payload.amc_media_status =
+skipped_not_opted_in`). Every download goes through the driver's limits (agent-core `whatsapp/media.ts`): a
+timeout on each fetch (`WA_MEDIA_TIMEOUT_MS`, default 20 s), a MIME allow-list checked before a byte is read
+(JPEG / PNG / WebP, OGG / Opus / MP3 / MP4 / AAC / AMR audio, PDF), Graph's declared `file_size`, then
+Content-Length, then a streamed byte cap (`WA_MEDIA_MAX_BYTES`, default 10 MB). Interakt media URLs must be
+https on a public host. A refusal is recorded (`refused:<code>`) and the message is still handled without media.
+
+**A conversation is a phone, not an account (M41).** Every inbound message re-derives the owner
+(`whatsapp/binding.ts`): when the bound user's `users.phone` is no longer this number, the conversation is
+unbound (`user_id`, `active_session_id`, `procurement_session_id`, `support_ticket_id` → null), the WhatsApp
+grants given from this number are revoked, the Munshi drafts delivered here are expired (their runs cancelled)
+and the procurement sessions delivering here fail (`phone_changed`); then the number's current holder is bound.
+Migration 0079's trigger `users_phone_change_wa_unbind` does the same unbind + revoke the moment `users.phone`
+changes. Every WhatsApp grant lookup requires `channel_identity = '+' || phone_e164` (the inbound grant checks,
+Munshi's `enabledProviders` / `providerStateFor`, procurement's `buyerGrant`, support's persona, onboarding, the
+web notification dispatcher), and every outbound picks the conversation of the user's CURRENT phone
+(`boundConversationFor`) — never "the most recent inbound". STOP still revokes every WhatsApp grant of the
+(re-derived) owner.
+
+**A typed yes confirms at most one proposal (M42).** Buttons carry their run id and are routed first. Free text
+(text / audio / image / document) goes through `whatsapp/confirmations.ts`, which collects the user's open
+confirmable proposals on this conversation — Munshi drafts whose card went out here, the procurement session's
+open proposal, a support nudge offer — and binds with agent-core `bindTextConfirmation`:
+
+- a reply that QUOTES one of our cards (Meta `context.id` → our outbound row → its `run_id`) binds to exactly that
+  card; a quote of anything else binds to nothing;
+- otherwise exactly one open proposal, inside its agent's text window (Munshi: 30 min after its latest card;
+  its buttons stay valid for the 24 h draft TTL), binds to it;
+- anything else is ambiguous: the open cards are re-sent (`munshi.decide` action `reask`; procurement's own card)
+  and NOTHING is approved. The agents enforce it too: `munshi.decide` reads text only with `textApproval: true`,
+  and a WhatsApp procurement turn turns an approving yes into a card re-send unless `textApproval: true`.
+
+**Dispatcher order** now: re-derive the owner → STOP → media → active onboarding session → Munshi buttons →
+procurement `pr:` buttons → **free text vs the open proposals** (above) → opt-in keywords → JOIN → support →
+holding reply. An active procurement session still takes the buyer's messages (with text approval off unless the
+binding pointed at it).
 
 ## S1.4 note — founder one-tap
 

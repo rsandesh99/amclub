@@ -470,6 +470,12 @@ const MANIFEST: Entry[] = [
     note: 'ADR 027 (audit M21 / M39): a capture on an expired or already-paid session is recorded in capture_exceptions and refunded, never an order; capture_payment() locks the session and calls materialize_order for a live one (replay-safe); both service-role only',
   },
   {
+    file: '0079_whatsapp_inbound_binding.sql',
+    functions: ['wa_unbind_on_phone_change'],
+    triggers: [['users', 'users_phone_change_wa_unbind']],
+    note: 'Audit M33 + M41 (agent migration, NOT staged): wa_messages.processed_at (default now(); the webhook inserts NULL, the runtime sweep re-drives unprocessed inbound rows) + partial index; users.phone change unbinds the old number\'s wa_conversations and revokes its WhatsApp grants (definer trigger, no client EXECUTE)',
+  },
+  {
     file: '0080_ops_heartbeat_status_hot_indexes.sql',
     tables: ['cron_heartbeats'],
     note: 'Audit M35 + L7: cron_heartbeats.status / summary (run outcome; no client grant) + hot-table indexes (notifications, payments, checkout_sessions, orders, quotes, rfq_matches, payouts)',

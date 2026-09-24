@@ -90,11 +90,17 @@ async function fanout(
     .select('id, email, phone, preferred_locale')
     .in('id', userIds)
   const byId = new Map((users ?? []).map((u) => [u.id, u]))
-  // S0.5 — who has opted in to WhatsApp (an active whatsapp grant). One query per batch.
+  // S0.5 — who has opted in to WhatsApp (an active whatsapp grant). One query per batch. Audit M41: the grant must have
+  // been given FROM the number we would send to (users.phone) — consent belongs to the phone, not the account, so a
+  // grant from an old number never authorises messages to a new one.
   const optIn = new Set<string>()
   if (extra.includes('whatsapp')) {
-    const { data: grants } = await admin.from('agent_grants').select('user_id').in('user_id', userIds).eq('channel', 'whatsapp').is('revoked_at', null)
-    for (const g of grants ?? []) optIn.add((g as { user_id: string }).user_id)
+    const digits = (p: string | null | undefined) => String(p ?? '').replace(/\D/g, '')
+    const { data: grants } = await admin.from('agent_grants').select('user_id, channel_identity').in('user_id', userIds).eq('channel', 'whatsapp').is('revoked_at', null)
+    for (const g of (grants ?? []) as { user_id: string; channel_identity: string | null }[]) {
+      const phone = digits(byId.get(g.user_id)?.phone)
+      if (phone && digits(g.channel_identity) === phone) optIn.add(g.user_id)
+    }
   }
 
   const tasks: Promise<ChannelResult>[] = []

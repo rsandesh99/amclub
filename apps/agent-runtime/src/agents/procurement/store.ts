@@ -10,6 +10,7 @@ import {
 } from '@amclub/shared'
 import type { ProcurementPatch, ProcurementSessionView, RunAgentDeps, WhatsAppProvider } from '@amclub/agent-core'
 import { isAgentEnabledForUser, readAgentSettings } from '../../settings'
+import { currentPhoneDigits, phoneDigits } from '../../whatsapp/binding'
 
 /**
  * S3.1 — the procurement runtime's store. The service role here touches ONLY agent-owned tables
@@ -60,12 +61,19 @@ export async function procurementSettings(admin: SupabaseClient): Promise<Procur
   }
 }
 
-/** The union of the buyer's ACTIVE grant scopes (the token carries the same union) + whether WhatsApp is granted with them. */
+/**
+ * The union of the buyer's ACTIVE grant scopes (the token carries the same union) + whether WhatsApp is granted with
+ * them. Audit M41: a WhatsApp grant counts for delivery only when it was given from the buyer's CURRENT phone.
+ */
 export async function buyerGrant(admin: SupabaseClient, userId: string): Promise<{ scopes: string[]; whatsapp: boolean; web: boolean }> {
-  const { data } = await admin.from('agent_grants').select('scopes, channel').eq('user_id', userId).eq('persona', 'buyer').is('revoked_at', null)
-  const rows = (data as { scopes: string[] | null; channel: string }[] | null) ?? []
+  const [{ data }, phone] = await Promise.all([
+    admin.from('agent_grants').select('scopes, channel, channel_identity').eq('user_id', userId).eq('persona', 'buyer').is('revoked_at', null),
+    currentPhoneDigits(admin, userId),
+  ])
+  const rows = (data as { scopes: string[] | null; channel: string; channel_identity: string | null }[] | null) ?? []
   const scopes = [...new Set(rows.flatMap((r) => r.scopes ?? []))]
-  return { scopes, whatsapp: rows.some((r) => r.channel === 'whatsapp' && hasProcurementScopes(r.scopes)), web: rows.some((r) => r.channel !== 'whatsapp' && hasProcurementScopes(r.scopes)) }
+  const waHere = (r: { channel: string; channel_identity: string | null }) => r.channel === 'whatsapp' && !!phone && phoneDigits(r.channel_identity) === phone
+  return { scopes, whatsapp: rows.some((r) => waHere(r) && hasProcurementScopes(r.scopes)), web: rows.some((r) => r.channel !== 'whatsapp' && hasProcurementScopes(r.scopes)) }
 }
 
 /** AGENT_ENABLED (runtime) + agents_enabled.procurement + cohort + a grant carrying the procurement scopes. */

@@ -54,6 +54,14 @@ the ledgers), or approves through a model.
    normalisation against `MUNSHI_YES_PHRASES` (≤ 6 words; en / hi / te / ta, Latin and native script). The
    `approval_intent` classifier (a child run, no tools) can only **re-ask, treat the note as edit
    instructions, or reject**; a model `approve` is treated as unclear and the buttons are re-sent.
+4. **A typed / spoken reply is read only when it is bound to exactly this draft (audit M42).** The WhatsApp
+   dispatcher (`whatsapp/confirmations.ts`, agent-core `bindTextConfirmation`) looks at every open confirmable
+   proposal of the user — Munshi drafts, a procurement proposal, a support nudge. The text reaches
+   `munshi.decide` with `textApproval: true` only when it QUOTES this draft's card, or this draft is the only
+   open proposal and its latest card went out less than **30 minutes** ago (`MUNSHI_TEXT_WINDOW_MS`; it was the
+   whole 24 h TTL). Otherwise nothing is decided on text: the open cards are re-sent (action `reask`, the draft
+   text + buttons) and the provider taps. The buttons stay valid for the draft's TTL. Golden + red-team cases:
+   `eval --set confirmation_binding` (code only, 100 % in both modes).
 
 ## Enablement bootstrap (nothing runs until all are true)
 
@@ -97,7 +105,8 @@ run | composer | system, outcome, kind }` · `munshi_reminder_sent` · `munshi_r
 
 `pnpm --filter @amclub/agent-core eval -- --set quote_draft` (≥ 85 % + every injection case; every case
 drives the agent definition through the harness), `--set approval_intent` (≥ 85 % + injections; the
-allow-list law is asserted in both modes), `--set thread_reply` (≥ 85 % + injections), and
+allow-list law is asserted in both modes), `--set confirmation_binding` (100 %; which proposal a typed yes
+may confirm), `--set thread_reply` (≥ 85 % + injections), and
 `--set injection` must stay green (the three prompts are targets: 202 case × prompt pairs).
 
 ## Rollback

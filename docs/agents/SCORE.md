@@ -87,6 +87,11 @@ component's tip **when that component is below 70**, (4) a score rise of ≥ 5 t
 (`munshi-growth.ts`), WhatsApp template `munshi_growth` (only with the WhatsApp grant — STOP halts it) + in-app
 `munshi_growth` via `POST /api/v1/agent/munshi/growth` (runtime credential). No confirm, no `ai_decisions`.
 
+**Audit M32:** until wave 5 the runtime never created the pg-boss queue `agent.munshi.growth`, so every weekly send
+was silently dropped while the heartbeat read `enqueued: true`. The queue is now in the runtime registry
+(`apps/agent-runtime/src/queues.ts`), a dropped send is a 503, and the heartbeat records `enqueued` only with a job
+id (`deduped` for a collapsed tick). The WhatsApp line needs a grant given from the provider's CURRENT phone (M41).
+
 ## Appeal path
 
 A provider raises a support ticket (S2.3) citing a component. Ops opens the admin provider page: the snapshot, every

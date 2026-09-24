@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
 import { runCronJob } from '@/lib/jobs/heartbeat'
 import { AGENT_ENABLED } from '@/lib/flags'
-import { enqueueRuntimeJob, NIL_UUID } from '@/lib/agent/runtime-client'
+import { cronEnqueueOutcome, enqueueRuntimeJob, NIL_UUID } from '@/lib/agent/runtime-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     if (AGENT_ENABLED) {
       result = await enqueueRuntimeJob('onboarding.expire', {}, { userId: NIL_UUID, persona: 'provider' })
     }
-    return { enqueued: result.ok, jobId: result.jobId, reason: result.reason ?? null }
+    // audit M32: enqueued only with a job id (a dropped job used to read as a healthy tick)
+    return cronEnqueueOutcome(result)
   })
 }
