@@ -27,6 +27,9 @@ export class PoolTransitionError extends Error {
   }
 }
 
+/** Audit M16 — pools whose members still pay at the frozen terms: a listing's material fields stay put meanwhile. */
+export const POOL_LIVE_STATUSES: readonly PoolStatus[] = ['open', 'closed_met']
+
 export function isValidPoolTransition(from: PoolStatus, to: PoolStatus): boolean {
   return (POOL_TRANSITIONS[from] as readonly string[]).includes(to)
 }

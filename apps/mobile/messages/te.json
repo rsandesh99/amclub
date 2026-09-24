@@ -191,7 +191,9 @@
     "pool_err_pool_closed": "ఈ పూల్ ముగిసింది.",
     "pool_err_cannot_leave": "పూల్ తెరిచి ఉన్నప్పుడే వదలగలరు.",
     "pool_err_already_paid": "ఇప్పటికే చెల్లించారు.",
-    "pool_err_pay_window_lapsed": "చెల్లింపు గడువు ముగిసింది."
+    "pool_err_pay_window_lapsed": "చెల్లింపు గడువు ముగిసింది.",
+    "pool_commit_total": "పూల్ ఖాయమైతే మీరు GSTతో కలిపి {amount} చెల్లిస్తారు.",
+    "pool_pay_title": "మీ గ్రూప్ కొనుగోలు ఆర్డర్ ఖాయం చేయండి"
   },
   "support": {
     "title": "సహాయం",
@@ -271,7 +273,8 @@
     "cmp3_group_time": "సమయం",
     "cmp3_group_terms": "నిబంధనలు",
     "new_label": "కొత్త",
-    "compare_completed_orders": "పూర్తయిన ఆర్డర్లు"
+    "compare_completed_orders": "పూర్తయిన ఆర్డర్లు",
+    "revise_err_pool_fixed": "ఇది గ్రూప్ కోట్: దీని ధర, షరతులు గ్రూప్ చేరుకున్నవే, వాటిని సవరించలేరు."
   },
   "home_v3": {
     "needs_your_action": "మీ చర్య అవసరం",

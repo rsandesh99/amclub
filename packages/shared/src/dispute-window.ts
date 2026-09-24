@@ -1,7 +1,9 @@
 // ADR-014 (H2) — who may raise a dispute on a SERVICES order, and until when.
 // Before completion: any status in DISPUTABLE_STATUSES (each has a → disputed
 // edge). After completion: only inside `dispute_window_days` from completion.
-// Goods orders never use this: their returns follow the Mart category window.
+// Goods orders never raise_dispute; a goods return (open_return) from `completed`
+// must pass this rule AND the Mart category return window (shared
+// canOpenGoodsReturn, audit M14 / ADR-014 addendum).
 
 import { DISPUTABLE_STATUSES, ORDER_TRANSITIONS, type OrderStatus } from './state-machines'
 

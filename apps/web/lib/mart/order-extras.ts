@@ -1,7 +1,8 @@
 import 'server-only'
+import { goodsReturnDeadline, type OrderStatus } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import type { OrderDetail } from '@/lib/orders/queries'
-import { orderReturnable, returnWindowHoursForOrder } from './release'
+import { getGoodsDossier, goodsReturnFacts, orderReturnable } from './release'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -13,6 +14,14 @@ type Admin = Awaited<ReturnType<typeof createAdminClient>>
  */
 export interface GoodsOrderExtras {
   returnWindowHours: number
+  /** When the category return window ends (release gate; ISO), null before delivery evidence. */
+  returnWindowEndsAt: string | null
+  /**
+   * Audit M14 — a completed order's last moment to open a return (ISO; the earlier of
+   * the category window and the dispute window). Null when not completed. Clients hide
+   * the action once it has passed; they never compute it.
+   */
+  returnDeadline: string | null
   /** E16 N43 — false: only damaged / wrong / short claims can be opened. */
   returnable: boolean
   /** The seller's payout: only for the seller. Always null for the buyer (audit L8). */
@@ -28,16 +37,19 @@ export interface GoodsOrderExtras {
  * read only for the provider, mirroring the services gate in lib/orders/queries.ts.
  */
 export async function getGoodsOrderExtras(admin: Admin, order: any, viewerRole: OrderDetail['viewerRole']): Promise<GoodsOrderExtras> {
-  const [returnWindowHours, returnable, { data: payout }, { data: seller }] = await Promise.all([
-    returnWindowHoursForOrder(admin, order),
+  const [dossier, returnable, { data: payout }, { data: seller }] = await Promise.all([
+    getGoodsDossier(admin, order),
     orderReturnable(admin, order),
     viewerRole === 'provider'
       ? admin.from('payouts').select('status, scheduled_for, amount_paise').eq('order_id', order.id).maybeSingle()
       : Promise.resolve({ data: null }),
     admin.from('provider_profiles').select('display_name, slug').eq('id', order.provider_id).maybeSingle(),
   ])
+  const facts = await goodsReturnFacts(admin, order, dossier)
   return {
-    returnWindowHours,
+    returnWindowHours: dossier.returnWindowHours,
+    returnWindowEndsAt: dossier.gate.returnWindowEndsAt ? dossier.gate.returnWindowEndsAt.toISOString() : null,
+    returnDeadline: goodsReturnDeadline({ status: order.status as OrderStatus, ...facts }),
     returnable,
     payout: payout ? { status: payout.status, scheduledFor: payout.scheduled_for ?? null, amountPaise: Number(payout.amount_paise) } : null,
     sellerName: seller?.display_name ?? '',

@@ -8,7 +8,9 @@ import {
   SUPPORTED_LOCALES,
   PROVIDER_LANGUAGES,
   type CredentialOption,
+  kycOwnership,
 } from '@amclub/shared'
+import { kycReferences } from '@/lib/kyc/ownership'
 import { createAdminClient } from '@/lib/supabase/server'
 import { upsertUserRow } from '@/lib/auth/session'
 import { getRequestUser } from '@/lib/auth/request'
@@ -273,17 +275,37 @@ export async function POST(request: NextRequest) {
   // success for this user + this exact account|IFSC within the last 24h from a
   // real vendor (the dev stub never counts). d.bankVerified is deliberately
   // ignored — a client flag must never be able to clear a payout hold.
+  // Audit M12 / ADR 028: the holder name the bank returned must also match the
+  // GST-locked name of the GSTIN submitted here (an admin override row is an
+  // audited decision and counts as is); a mismatch stays on the attempt row as
+  // 'name_mismatch' for the admin verification queue.
   const fingerprint = fingerprintColumn(`${d.bankAccount}|${d.bankIfsc}`)
   const { data: bankVerification } = await admin
     .from('bank_account_verifications')
-    .select('verified, stub')
+    .select('id, verified, stub, provider, outcome, result')
     .eq('user_id', user.id)
     .eq('account_fingerprint', fingerprint)
     .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  const pennyDropVerified = Boolean(bankVerification?.verified) && !bankVerification?.stub
+  let pennyDropVerified = false
+  if (bankVerification?.verified && !bankVerification.stub) {
+    if (bankVerification.provider === 'admin_override') {
+      pennyDropVerified = true
+    } else {
+      const bankResult = (bankVerification.result ?? {}) as Record<string, unknown>
+      const holder = typeof bankResult['accountHolderName'] === 'string' ? bankResult['accountHolderName'] : null
+      const refs = await kycReferences(admin, { userId: user.id, target: 'provider', gstin: d.gstin ?? null })
+      const match = kycOwnership({ name: holder }, refs)
+      pennyDropVerified = match.outcome === 'verified'
+      // The attempt row carries the outcome as decided against THIS submission's GSTIN.
+      if (bankVerification.outcome !== match.outcome) {
+        const { error: outErr } = await admin.from('bank_account_verifications').update({ outcome: match.outcome, result: { ...bankResult, match } }).eq('id', bankVerification.id)
+        if (outErr) console.error('[profile/provider POST] bank ownership outcome:', outErr.message)
+      }
+    }
+  }
 
   const { error: bankErr } = await admin.from('provider_bank_accounts').upsert(
     {

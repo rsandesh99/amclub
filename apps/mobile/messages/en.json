@@ -357,7 +357,8 @@
     "cmp3_group_time": "Time",
     "cmp3_group_terms": "Terms",
     "new_label": "New",
-    "compare_completed_orders": "Completed orders"
+    "compare_completed_orders": "Completed orders",
+    "revise_err_pool_fixed": "This is a group quote: its price and terms are the ones the group reached and cannot be revised."
   },
   "checkout": {
     "title": "Checkout",
@@ -778,7 +779,9 @@
     "pool_err_pool_closed": "This pool has closed.",
     "pool_err_cannot_leave": "You can only leave while the pool is open.",
     "pool_err_already_paid": "Already paid.",
-    "pool_err_pay_window_lapsed": "The payment window has lapsed."
+    "pool_err_pay_window_lapsed": "The payment window has lapsed.",
+    "pool_commit_total": "You pay {amount} incl. GST if the pool closes met.",
+    "pool_pay_title": "Confirm your group-buy order"
   },
   "support": {
     "title": "Help",

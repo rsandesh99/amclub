@@ -9,7 +9,7 @@ import {
   type PoolOfferView,
   type ServicePoolStatus,
 } from '@amclub/shared'
-import { chunks, loadPool, providerUsers, type PoolRow } from './core'
+import { chunks, dualRoleMsmeIds, loadPool, providerUsers, type PoolRow } from './core'
 import type { PoolProviderView, PoolRfqCard } from './types'
 
 export type { PoolProviderView, PoolRfqCard } from './types'
@@ -70,9 +70,10 @@ export async function poolBuyerView(admin: SupabaseClient, poolId: string, msmeI
   if (!m) return null
   const cat = await categoryOf(admin, pool.category_id, locale)
 
-  // Offers are shown only to members who joined (an invitee sees the group, not its prices).
+  // Offers are shown only to members who joined (an invitee sees the group, not its prices), and never to an
+  // account that also sells services (audit M45: the sealed offers of its competitors).
   let offers: PoolOfferView[] = []
-  if (m.status === 'joined' || m.status === 'released') {
+  if ((m.status === 'joined' || m.status === 'released') && !(await dualRoleMsmeIds(admin, [msmeId])).has(msmeId)) {
     const { data } = await admin.from('service_pool_offers').select(OFFER_COLS).eq('pool_id', poolId).eq('status', 'active').order('created_at')
     const rows = (data ?? []) as OfferRow[]
     const tiers = await tiersFor(admin, rows.map((r) => r.id))

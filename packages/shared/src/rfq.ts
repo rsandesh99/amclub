@@ -4,6 +4,7 @@
  * (§9.3 — anti-disintermediation). The masking is a pure function so both
  * surfaces and the server agree, and it's unit-testable.
  */
+import { maskContactInfo } from './contact-mask'
 
 export type RfqFieldType = 'text' | 'textarea' | 'select'
 
@@ -44,32 +45,15 @@ export function rfqIsActive(status: string): boolean {
 
 // ── Contact masking (§9.3) ────────────────────────────────────────────────────
 
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
-// 10-digit Indian mobile, optional +91 and space/dash separators between digits.
-const PHONE_RE = /(?:\+?91[\s-]?)?(?:\d[\s-]?){10}/g
-
 /**
- * Redact phone numbers and emails from free text BEFORE a pre-payment quote
- * message is stored (so contact details can't be exchanged off-platform).
- * Returns the masked text and whether anything was masked.
+ * Redact contact details from free text BEFORE it is stored where the other
+ * party can read it (quote threads, clarifications, order messages, statements
+ * — so contact details can't be exchanged off-platform). Audit M30: the rules
+ * are the ONE shared set in contact-mask.ts (phones incl. Indic / spelled-out /
+ * spaced digits, emails, UPI ids, links, handles); each is replaced with
+ * `[contact hidden]`. Returns the masked text and whether anything was masked.
  */
 export function redactContactInfo(input: string): { text: string; redacted: boolean } {
-  let redacted = false
-
-  let text = input.replace(EMAIL_RE, () => {
-    redacted = true
-    return '[contact hidden]'
-  })
-
-  text = text.replace(PHONE_RE, (match) => {
-    const digits = match.replace(/\D/g, '')
-    // Only mask things that look like an Indian mobile (avoids gutting amounts/years).
-    if (/^(?:91)?[6-9]\d{9}$/.test(digits)) {
-      redacted = true
-      return '[contact hidden]'
-    }
-    return match
-  })
-
+  const { text, redacted } = maskContactInfo(input)
   return { text, redacted }
 }

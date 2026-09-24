@@ -4,7 +4,7 @@ import { clusterPoolCandidates, poolCandidateFits, poolKey, type PoolCandidate }
 import { createNotification } from '@/lib/notifications/create'
 import { notifyText } from '@/lib/i18n/notify'
 import { captureServerEvent } from '@/lib/analytics/server'
-import { addPoolEvent, chunks, cohortUserIds, poolSettings, type PoolSettings } from './core'
+import { addPoolEvent, chunks, cohortUserIds, dualRoleMsmeIds, poolSettings, type PoolSettings } from './core'
 
 /**
  * S3.4 (ADR 024) — the agent's proposal: code, no model. Groups open, released services requests from cohort buyers
@@ -35,6 +35,8 @@ async function loadCandidates(admin: SupabaseClient, now: Date): Promise<PoolCan
     const { data } = await admin.from('msme_profiles').select('id, state').in('user_id', part).is('deleted_at', null)
     for (const m of (data ?? []) as Array<{ id: string; state: string | null }>) stateOf.set(m.id, m.state)
   }
+  // Audit M45 — a buyer whose account also sells services is never grouped (it could read rival offers).
+  for (const id of await dualRoleMsmeIds(admin, [...stateOf.keys()])) stateOf.delete(id)
   if (stateOf.size === 0) return []
 
   const rows: RfqCandidateRow[] = []

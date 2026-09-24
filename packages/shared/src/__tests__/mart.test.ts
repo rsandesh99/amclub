@@ -24,6 +24,11 @@ import {
   ORDER_STATUSES,
   ORDER_TRANSITIONS,
   isValidOrderTransition,
+  PRODUCT_MATERIAL_FIELDS,
+  productEditReview,
+  productReviewSchema,
+  canOpenGoodsReturn,
+  goodsReturnDeadline,
 } from '../index'
 
 describe('product state machine', () => {
@@ -39,7 +44,40 @@ describe('product state machine', () => {
   })
   it('rejects a seller skipping approval', () => {
     expect(isValidProductTransition('draft', 'active')).toBe(false)
-    expect(isValidProductTransition('suspended', 'pending_approval')).toBe(false)
+    expect(isValidProductTransition('draft', 'suspended')).toBe(false)
+    expect(isValidProductTransition('pending_approval', 'suspended')).toBe(false)
+  })
+  it('audit M16: an approved listing can go back to review, never around it', () => {
+    expect(isValidProductTransition('active', 'pending_approval')).toBe(true)
+    expect(isValidProductTransition('suspended', 'pending_approval')).toBe(true)
+    // Every edge INTO active starts at a reviewed state: pending_approval (the admin) or suspended (a reinstatement).
+    for (const s of PRODUCT_STATUSES) {
+      if (isValidProductTransition(s, 'active')) expect(['pending_approval', 'suspended']).toContain(s)
+    }
+  })
+})
+
+describe('listing edits (audit M16)', () => {
+  it('only the material fields matter', () => {
+    expect(PRODUCT_MATERIAL_FIELDS).toEqual(['category_slug', 'name', 'images', 'hsn_code', 'gst_rate_bps', 'unit'])
+    expect(productEditReview([], false)).toBe('none')
+    expect(productEditReview(['description', 'specs', 'promises', 'sample_price_paise'], false)).toBe('none')
+  })
+  it('a seller under the threshold goes back to review for any material change', () => {
+    for (const f of PRODUCT_MATERIAL_FIELDS) expect(productEditReview([f], false)).toBe('required')
+  })
+  it('a trusted seller keeps the listing live, except for a category change', () => {
+    expect(productEditReview(['name', 'images'], true)).toBe('auto')
+    expect(productEditReview(['gst_rate_bps'], true)).toBe('auto')
+    expect(productEditReview(['category_slug'], true)).toBe('required')
+    expect(productEditReview(['name', 'category_slug'], true)).toBe('required')
+  })
+  it('an approval must name the version it reviewed', () => {
+    expect(productReviewSchema.safeParse({ action: 'approve' }).success).toBe(false)
+    expect(productReviewSchema.safeParse({ action: 'approve', reviewed_updated_at: '2026-09-24T10:00:00.123456+00:00' }).success).toBe(true)
+    expect(productReviewSchema.safeParse({ action: 'approve', reviewed_updated_at: null }).success).toBe(true)
+    expect(productReviewSchema.safeParse({ action: 'approve', reviewed_updated_at: 'yesterday' }).success).toBe(false)
+    expect(productReviewSchema.safeParse({ action: 'reject', reason: 'blurry photos' }).success).toBe(true)
   })
 })
 
@@ -209,6 +247,43 @@ describe('goods release gate', () => {
     expect(open.reasons).toEqual(['return_open'])
     const resolved = evaluateGoodsReleaseGate({ ...base, buyerReceivedAt: h(1), returnOpenedAt: h(10), returnResolvedAt: h(20), now: h(100) })
     expect(resolved.ok).toBe(true)
+  })
+})
+
+describe('opening a goods return (audit M14)', () => {
+  const t0 = new Date('2026-09-01T10:00:00Z') // delivery photo
+  const h = (n: number) => t0.getTime() + n * 3600 * 1000
+  const iso = (n: number) => new Date(h(n)).toISOString()
+  // 48 h category window from the photo; completed at +24 h; 7-day dispute window.
+  const done = { status: 'completed' as const, returnWindowEndsAt: new Date(h(48)), completedAt: iso(24), disputeWindowDays: 7 }
+
+  it('a delivered order (pre-completion) can always open a return', () => {
+    expect(canOpenGoodsReturn({ ...done, status: 'delivered', returnWindowEndsAt: new Date(h(0)), now: h(70) })).toEqual({ ok: true })
+    expect(goodsReturnDeadline({ ...done, status: 'delivered' })).toBeNull()
+  })
+  it('a completed order: the category window binds when it is the shorter bound', () => {
+    expect(goodsReturnDeadline(done)).toBe(iso(48))
+    expect(canOpenGoodsReturn({ ...done, now: h(47) })).toEqual({ ok: true })
+    expect(canOpenGoodsReturn({ ...done, now: h(48) })).toEqual({ ok: false, reason: 'window_closed', endsAt: iso(48) })
+    expect(canOpenGoodsReturn({ ...done, now: h(24 * 400) }).ok).toBe(false)
+  })
+  it('the dispute window caps a longer category window', () => {
+    const long = { ...done, returnWindowEndsAt: new Date(h(720)) } // 30-day category
+    expect(goodsReturnDeadline(long)).toBe(iso(24 + 7 * 24))
+    expect(canOpenGoodsReturn({ ...long, now: h(24 + 7 * 24) - 1 })).toEqual({ ok: true })
+    expect(canOpenGoodsReturn({ ...long, now: h(24 + 7 * 24) })).toEqual({ ok: false, reason: 'window_closed', endsAt: iso(24 + 7 * 24) })
+  })
+  it('fails safe: a missing bound means closed', () => {
+    expect(canOpenGoodsReturn({ ...done, returnWindowEndsAt: null, now: h(1) })).toEqual({ ok: false, reason: 'window_closed', endsAt: null })
+    expect(canOpenGoodsReturn({ ...done, completedAt: null, now: h(1) })).toEqual({ ok: false, reason: 'window_closed', endsAt: null })
+  })
+  it('a zero-hour category closes at the delivery evidence', () => {
+    expect(canOpenGoodsReturn({ ...done, returnWindowEndsAt: new Date(h(0)), now: h(25) }).ok).toBe(false)
+  })
+  it('other statuses are refused', () => {
+    for (const s of ['placed', 'accepted', 'in_progress', 'disputed', 'reviewed', 'refunded'] as const) {
+      expect(canOpenGoodsReturn({ ...done, status: s, now: h(1) })).toEqual({ ok: false, reason: 'status' })
+    }
   })
 })
 

@@ -8,6 +8,7 @@ import { bankFacts, payoutReadiness } from '@/lib/payments/readiness'
 import { PendingLogos, type PendingLogo } from '@/components/trust/PendingLogos'
 import { autofillSources, type AutofillSource } from '@/lib/onboarding-v3/autofill-source'
 import { LegalNameOverride } from './LegalNameOverride'
+import { KycOwnershipFlags } from '@/components/admin/KycOwnershipFlags'
 
 interface ProviderRow {
   id: string
@@ -150,6 +151,9 @@ export default async function VerificationsPage() {
           </ul>
         </section>
       )}
+
+      {/* Audit M12 / ADR 028 — KYC records that are not the account's own business, and contested Udyam claims. */}
+      <KycOwnershipFlags />
 
       <PendingLogos items={logos} />
 

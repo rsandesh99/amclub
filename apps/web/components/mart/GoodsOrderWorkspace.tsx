@@ -37,7 +37,6 @@ const EVENT_KEY: Record<string, string> = {
 const RETURN_REASONS = ['damaged', 'wrong_item', 'short_quantity', 'quality', 'other'] as const
 /** E16 N43 — what a non-returnable order can still claim (shared ALWAYS_CLAIMABLE_RETURN_REASONS). */
 const CLAIM_REASONS: readonly (typeof RETURN_REASONS)[number][] = ALWAYS_CLAIMABLE_RETURN_REASONS
-const HOUR = 3600 * 1000
 
 /** "Thu 8 Sep, 9:07 am" in IST — the mandate wants dates, not "in 72 hours". */
 function fmtDate(iso: string | Date | null | undefined, withTime = true): string {
@@ -83,8 +82,10 @@ export function GoodsOrderWorkspace({
   const total = Number(order['total_paise'])
   const earning = Number(order['provider_earning_paise'])
   const paidEvent = events.find((e) => e.event === 'payout_paid')
-  const deliveredAt = events.find((e) => e.event === 'delivered_photo')?.created_at ?? null
-  const returnWindowEndsAt = deliveredAt && goods ? new Date(new Date(deliveredAt).getTime() + goods.returnWindowHours * HOUR) : null
+  // Server dates only (audit M14): the release gate's window end, and the buyer's last moment to open a return.
+  const returnWindowEndsAt = goods?.returnWindowEndsAt ? new Date(goods.returnWindowEndsAt) : null
+  const returnDeadline = goods?.returnDeadline ? new Date(goods.returnDeadline) : null
+  const returnOpen = status === 'delivered' || (status === 'completed' && !!returnDeadline && returnDeadline.getTime() > Date.now())
 
   // Paisa Moment — once per order per device (FRONTEND.md §3.1 #2).
   useEffect(() => {
@@ -103,7 +104,7 @@ export function GoodsOrderWorkspace({
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }),
       })
       const d = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(d.error === 'eway_bill_required' ? t('eway_required_note') : d.error === 'not_returnable' ? t('not_returnable_claims_only') : d.error === 'self_dealing' ? t('self_dealing_order') : typeof d.error === 'string' ? d.error : t('action_failed'))
+      if (!res.ok) throw new Error(d.error === 'eway_bill_required' ? t('eway_required_note') : d.error === 'not_returnable' ? t('not_returnable_claims_only') : d.error === 'self_dealing' ? t('self_dealing_order') : d.error === 'return_window_closed' ? t('return_window_closed') : typeof d.error === 'string' ? d.error : t('action_failed'))
       setPanel(null)
       if (action === 'accept_delivery') { setStamp('received'); await new Promise((r) => setTimeout(r, 900)) }
       router.refresh()
@@ -126,7 +127,7 @@ export function GoodsOrderWorkspace({
       : []
     : [
         ...(status === 'delivered' ? [{ key: 'buyer_received', run: () => act('accept_delivery') }] : []),
-        ...(status === 'delivered' || status === 'completed' ? [{ key: 'open_return', run: () => setPanel('return'), tone: 'outline' as const }] : []),
+        ...(returnOpen ? [{ key: 'open_return', run: () => setPanel('return'), tone: 'outline' as const }] : []),
         ...(status === 'placed' || status === 'accepted' ? [{ key: 'cancel', run: () => act('cancel'), tone: 'danger' as const }] : []),
         ...(['completed', 'reviewed', 'resolved_release', 'resolved_partial', 'resolved_refund', 'refunded'].includes(status) ? [{ key: 'reorder', run: reorder, tone: 'outline' as const }] : []),
       ]
@@ -141,7 +142,7 @@ export function GoodsOrderWorkspace({
     else if (order['due_at'] && ['placed', 'accepted', 'in_progress', 'requirements_submitted'].includes(status)) next = t('delivery_by', { date: fmtDate(order['due_at'] as string, false) })
   } else {
     if (status === 'delivered' && order['auto_accept_at']) next = t('auto_receipt_on', { date: fmtDate(order['auto_accept_at'] as string) })
-    else if (completed && returnWindowEndsAt && returnWindowEndsAt.getTime() > Date.now()) next = t('return_window_until', { date: fmtDate(returnWindowEndsAt) })
+    else if (status === 'completed' && returnOpen && returnDeadline) next = t('return_window_until', { date: fmtDate(returnDeadline) })
     else if (order['due_at'] && ['placed', 'accepted', 'in_progress', 'requirements_submitted'].includes(status)) next = t('delivery_by', { date: fmtDate(order['due_at'] as string, false) })
   }
 

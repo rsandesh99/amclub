@@ -260,6 +260,8 @@ export function QuoteComposer({ rfqId, goods, extractEnabled = false, mode = 'su
         if (d.error === 'revision_cap') throw new Error(t('revise_err_cap'))
         if (d.error === 'revision_conflict') throw new Error(t('revise_err_conflict'))
         if (d.error === 'quote_not_revisable' || d.error === 'quote_not_found') throw new Error(t('revise_err_not_revisable'))
+        // Audit M44 — a group quote keeps the price the group reached.
+        if (d.error === 'pool_quote_fixed') throw new Error(t('revise_err_pool_fixed'))
         if (d.error === 'options_incoherent') throw new Error(t3('options_err_incoherent'))
         if (d.error === 'options_unavailable') throw new Error(t3('options_err_unavailable'))
         throw new Error(revise ? t('revise_err_generic') : t('err_quote'))

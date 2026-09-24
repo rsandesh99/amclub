@@ -1335,7 +1335,8 @@
     "cmp3_option_express": "Express",
     "cmp3_options_lowest": "Lowest: {who} {option}, {total}",
     "cmp3_options_fastest": "Fastest: {who} {option}, {days, plural, one {# day} other {# days}}",
-    "quote_err_self_dealing": "This is your own business's request, so you can't quote on it."
+    "quote_err_self_dealing": "This is your own business's request, so you can't quote on it.",
+    "revise_err_pool_fixed": "This is a group quote: its price and terms are the ones the group reached and cannot be revised."
   },
   "coming_soon": {
     "badge": "Coming soon",
@@ -2395,6 +2396,8 @@
     "submit_for_approval": "Send for approval",
     "sent_for_approval": "Sent for approval",
     "sent_stamp_body": "AMC reviews new listings before they go live. You'll be notified.",
+    "changes_saved_title": "Changes saved",
+    "changes_saved_body": "No review was needed, so your listing keeps its current status.",
     "err_name": "Enter a product name (3+ characters)",
     "err_category": "Choose a category",
     "err_hsn": "HSN code must be 4, 6 or 8 digits",
@@ -2666,7 +2669,11 @@
     "reorder_link": "Your usual orders",
     "why_label": "Why AMClub",
     "pool_err_self_dealing": "This group buy is for your own listing, so you can't join it.",
-    "self_dealing_order": "You are both the buyer and the seller on this order, so only a cancellation is possible."
+    "self_dealing_order": "You are both the buyer and the seller on this order, so only a cancellation is possible.",
+    "return_window_closed": "The return window for this order has closed.",
+    "err_pool_live": "A group buy on this listing is still live. Name, photos, unit, HSN, GST rate and category can change once it settles.",
+    "err_product_changed": "This listing changed while you were editing. Reload it and try again.",
+    "pool_commit_total": "You pay {amount} incl. GST if the pool closes met."
   },
   "admin_mart": {
     "title": "AMC Mart",
@@ -2853,7 +2860,8 @@
     "block_capture_warning": "block_capture is refused at pool join until docs/mart/PSP_BLOCK_CAPTURE_REPORT.md §5 is signed off. Saving it here does not enable it.",
     "save": "Save",
     "col_returnable": "Returnable",
-    "col_itc": "ITC eligible"
+    "col_itc": "ITC eligible",
+    "listing_changed": "The seller changed this listing after you opened it. Review the latest version."
   },
   "suspended": {
     "title": "Your buyer account is suspended",
@@ -3168,7 +3176,19 @@
     "gstin_flags_body": "The nightly re-check found these GSTINs cancelled or suspended. Nothing was changed automatically — review each provider.",
     "category_flags": "{count, plural, one {# provider works mostly outside their declared categories} other {# providers work mostly outside their declared categories}}",
     "category_flags_body": "From the nightly check: more than half of their paid orders in the last 180 days (at least 5) are in categories they did not declare. Review their categories; nothing changes for the provider until you act.",
-    "category_flag_line": "{pct} % of {n} paid orders outside"
+    "category_flag_line": "{pct} % of {n} paid orders outside",
+    "kyc_flags": "{count, plural, one {# KYC check needs review} other {# KYC checks need review}}",
+    "kyc_flags_body": "The vendor's record did not match the account's GST-registered name or IDs, or another account already holds the Udyam number. No Udyam chip was granted and the bank account stays unverified, so payouts hold. Nothing changes until you act.",
+    "kyc_flag_udyam": "Udyam {number}",
+    "kyc_flag_bank": "Bank account ({ifsc})",
+    "kyc_flag_buyer": "Buyer: {name}",
+    "kyc_flag_no_profile": "No profile yet",
+    "kyc_flag_claimed": "Held by another account",
+    "kyc_flag_names": "Vendor record: {vendor} · On file: {reference}",
+    "kyc_reason_mismatch": "Name does not match",
+    "kyc_reason_no_reference": "No GST-verified name on file",
+    "kyc_reason_no_vendor_name": "Vendor returned no name",
+    "kyc_reason_id_conflict": "Vendor PAN / GSTIN differs"
   },
   "packages_v3": {
     "included": "Included",
@@ -3550,6 +3570,7 @@
     "primary_category": "Main category",
     "more_categories": "Also offer (optional)",
     "holder_from_bank": "Account holder: {name}",
+    "bank_name_review": "The account holder's name does not match your GST-registered name. You can still submit; payouts stay on hold until our team checks the account.",
     "edit": "Edit",
     "go_dashboard": "Go to your dashboard",
     "typed": "Typed by the provider",
@@ -4120,7 +4141,8 @@
     "col_closes": "Closes",
     "cancel": "Cancel group",
     "cancel_reason": "Reason (kept in the audit log)",
-    "cancelled_ok": "Group cancelled. Members were told."
+    "cancelled_ok": "Group cancelled. Members were told.",
+    "err_dual_role": "Group requests are for buyers only. An account that also sells services cannot join one or see its offers."
   },
   "assistant_home": {
     "title": "Your AI assistant",

@@ -559,7 +559,8 @@
     "cmp3_option_express": "ఎక్స్‌ప్రెస్",
     "cmp3_options_lowest": "అత్యల్పం: {who} {option}, {total}",
     "cmp3_options_fastest": "అత్యంత వేగం: {who} {option}, {days, plural, one {# రోజు} other {# రోజులు}}",
-    "quote_err_self_dealing": "ఇది మీ సొంత వ్యాపారం అభ్యర్థన, కాబట్టి మీరు దీనిపై కొటేషన్ ఇవ్వలేరు."
+    "quote_err_self_dealing": "ఇది మీ సొంత వ్యాపారం అభ్యర్థన, కాబట్టి మీరు దీనిపై కొటేషన్ ఇవ్వలేరు.",
+    "revise_err_pool_fixed": "ఇది గ్రూప్ కోట్: దీని ధర, షరతులు గ్రూప్ చేరుకున్నవే, వాటిని సవరించలేరు."
   },
   "invoices": {
     "title": "ఇన్వాయిస్‌లు",

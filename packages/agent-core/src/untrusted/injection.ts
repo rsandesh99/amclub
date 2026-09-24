@@ -16,6 +16,8 @@
  * "approved", "system") stays below it.
  */
 
+import { foldIndicDigits } from '@amclub/shared'
+
 export type InjectionFamily = 'override' | 'role' | 'tool' | 'exfil' | 'payment' | 'tag_forge' | 'json_forge'
 
 export interface InjectionRule {
@@ -27,21 +29,10 @@ export interface InjectionRule {
 
 export const INJECTION_SUSPECT_THRESHOLD = 40
 
-// Devanagari, Telugu, Tamil, Bengali and Gujarati digits → ASCII, so phone
-// masking and the detector see the same number the reader sees.
-const INDIC_DIGIT_BLOCKS = [0x0966, 0x0c66, 0x0be6, 0x09e6, 0x0ae6]
-export function foldIndicDigits(s: string): string {
-  let out = ''
-  for (const ch of s) {
-    const cp = ch.codePointAt(0) ?? 0
-    let mapped: string | null = null
-    for (const base of INDIC_DIGIT_BLOCKS) {
-      if (cp >= base && cp <= base + 9) { mapped = String(cp - base); break }
-    }
-    out += mapped ?? ch
-  }
-  return out
-}
+// Indic digits → ASCII, so phone masking and the detector see the same number
+// the reader sees. Audit M30: the ONE fold lives in @amclub/shared
+// (contact-mask.ts) next to the contact patterns; re-exported here for callers.
+export { foldIndicDigits }
 
 const r = (id: string, family: InjectionFamily, re: RegExp, weight: number): InjectionRule => ({ id, family, re, weight })
 

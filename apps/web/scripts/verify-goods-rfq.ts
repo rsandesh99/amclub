@@ -113,6 +113,24 @@ async function main() {
   { const m = await matches(g2.body.rfqId); ok('no listing in category → every in-state goods seller (still not TS, not services)', ok2xx(g2.status) && m.includes(sellerId) && !m.includes(svcId) && !m.includes(sellerTSId), m.join(',')) }
   ok('services provider cannot read the goods RFQ', (await api(svc.token, `/api/v1/rfq/${goodsRfq}`)).status === 404)
   ok('out-of-state goods seller cannot read it', (await api(sellerTS.token, `/api/v1/rfq/${goodsRfq}`)).status === 404)
+  // Audit M4 (0077) — the buyer's delivery contact: the matched seller's API view has where, not who, and no
+  // client role reads rfqs.goods_spec straight through PostgREST (the routes read it on the service role).
+  {
+    const asUser = (token: string) => createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } })
+    const sv = await api(seller.token, `/api/v1/rfq/${goodsRfq}`)
+    const sellerSpec = JSON.stringify(sv.body.rfq?.goodsSpec ?? sv.body.goodsSpec ?? null)
+    ok("matched seller's API view: city / pincode, never the buyer's phone or name", sv.status === 200 && sellerSpec.includes('518001') && !sellerSpec.includes('9876543210') && !sellerSpec.includes('Ravi'), sellerSpec.slice(0, 200))
+    const sellerRow = await asUser(seller.token).from('rfqs').select('id').eq('id', goodsRfq)
+    ok('matched seller reads the RFQ row through PostgREST (control)', !sellerRow.error && (sellerRow.data ?? []).length === 1, sellerRow.error?.message ?? '')
+    const sellerSpecRead = await asUser(seller.token).from('rfqs').select('goods_spec').eq('id', goodsRfq)
+    ok('matched seller reading rfqs.goods_spec through PostgREST → permission error', !!sellerSpecRead.error, JSON.stringify(sellerSpecRead.data))
+    const sellerStar = await asUser(seller.token).from('rfqs').select('*').eq('id', goodsRfq)
+    ok('matched seller select=* on rfqs → permission error (no way around the column grant)', !!sellerStar.error, JSON.stringify(sellerStar.data).slice(0, 120))
+    const buyerSpecRead = await asUser(buyer.token).from('rfqs').select('goods_spec').eq('id', goodsRfq)
+    ok('the buyer too reads goods_spec only through the API (PostgREST → permission error)', !!buyerSpecRead.error, JSON.stringify(buyerSpecRead.data))
+    const bOwn = await api(buyer.token, `/api/v1/rfq/${goodsRfq}`)
+    ok("the buyer's API view keeps the full delivery contact", JSON.stringify(bOwn.body.rfq?.goodsSpec ?? null).includes('9876543210'), JSON.stringify(bOwn.body.rfq?.goodsSpec ?? null).slice(0, 200))
+  }
 
   console.log('C. Goods quote')
   const q0 = await api(seller.token, `/api/v1/rfq/${goodsRfq}/quote`, { price_paise: 100, delivery_days: 5, scope: 'Zinc plated grade 8.8, IS 1364, packed 100 per box, ex Kurnool.' })

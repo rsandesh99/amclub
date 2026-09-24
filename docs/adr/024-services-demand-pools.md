@@ -172,3 +172,12 @@ These are registry keys, so none can be written unregistered:
   - **Close:** it writes exactly one quote per committed member at the achieved tier. `quote_count` moves by one each. A replayed close writes nothing.
   - **Payment:** a member pays the pool quote through the ordinary checkout, and the order total equals `quoteChargeAmounts` at the tier price.
   - **Other paths:** lapse, withdraw and cancel.
+
+## 5. Addendum (2026-09-24) — sealing and the close, hardened (audit M44, M45, L9)
+
+- **A group quote is fixed (M44).** The argument in §2 that a group is not a negotiation or an auction (§8.3, ADR-013) rests on the tier the group reached being the price. The ordinary quote revision (`PATCH /api/v1/rfq/[id]/quote`) now refuses a quote a close wrote (`quotes.pool_member_id`, or the member's `service_pool_members.quote_id` for a quote written before 0077) with **409 `pool_quote_fixed`**: no re-pricing and no GST-mode flip after the competitors' offers are shut out. The provider can still withdraw it; the buyer pays it or not.
+- **Sealed means sealed to providers wearing a buyer hat (M45).** An account whose user also owns a provider profile (any status, not deleted) is never proposed into a group (detection), is refused the join and the choice (**403 `dual_role`**), and its buyer view carries no offers. The check fails closed (a read error stops the action).
+- **One close per pool, and a resume never gives its own slot back (L9).**
+  - The close takes a per-pool lease (`service_pools.close_lease_until`, compare-and-set, 10 minutes) before any claim; a second run while it is held does nothing, and a run that died is resumed once the lease lapses. A finished close clears it.
+  - Each group quote names its member in the same INSERT (`quotes.pool_member_id`, unique, not client-readable; 0077 backfills it). On a unique (rfq, provider) violation the close reads the existing quote: its own → link it, keep the slot, and write the event / notice only if the stopped run had not; anyone else's → give the slot back and record `already_quoted` as before.
+- **Verification** (`verify-pools.ts`): a dual-role buyer is not grouped, is refused the join and the choice, and sees no offers; a close under someone else's lease writes nothing; a resumed close relinks its own quote with `quote_count` unchanged; a PATCH on a group quote → 409 with the price still at the tier. `verify-authz` §11: `quotes.pool_member_id` and `service_pools` are not client-readable.

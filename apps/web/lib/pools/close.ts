@@ -21,6 +21,8 @@ import { providerOwnsRequest } from '@/lib/orders/self-dealing'
  *   3. one quote per claimed member at that price; member ↔ quote linked; buyer and provider told;
  *   4. closing → closed; memberships released.
  * Replay-safe at every step: guarded updates, the claim function's own guard, the unique (rfq, provider) quote.
+ * Audit L9: one close per pool at a time (a compare-and-set lease, close_lease_until), and a resumed close that
+ * meets its own earlier quote (quotes.pool_member_id) links it instead of giving its slot back.
  */
 
 interface OfferRow {
@@ -80,9 +82,48 @@ async function precheck(admin: SupabaseClient, m: MemberRow, providerId: string,
   return null
 }
 
+/** How long one close may hold a pool before another run may resume it (the clock runs hourly). */
+export const CLOSE_LEASE_MS = 10 * 60_000
+
+/**
+ * Audit L9 — take the per-pool close lease (compare-and-set on close_lease_until, 0077):
+ * at most one close runs a pool at a time; a run that dies leaves the lease to expire,
+ * and the next clock tick resumes. False = another close holds it (or the read failed).
+ */
+async function takeCloseLease(admin: SupabaseClient, poolId: string, now = new Date()): Promise<boolean> {
+  const nowIso = now.toISOString()
+  const { data, error } = await admin
+    .from('service_pools')
+    .update({ close_lease_until: new Date(now.getTime() + CLOSE_LEASE_MS).toISOString() })
+    .eq('id', poolId)
+    .eq('status', 'closing')
+    .or(`close_lease_until.is.null,close_lease_until.lt."${nowIso}"`)
+    .select('id')
+  if (error) {
+    console.error('[pools] close lease failed', { poolId, message: error.message })
+    return false
+  }
+  return (data ?? []).length > 0
+}
+
+/**
+ * Audit L9 — on a unique (rfq, provider) violation: is the quote already there THIS
+ * member's group quote (a resumed close wrote it, then stopped before linking)? Then it
+ * is linked and its slot kept. Also says whether its 'submitted' event was written, so
+ * a resume finishes exactly what the stopped run did not.
+ */
+async function ownGroupQuote(admin: SupabaseClient, m: MemberRow, providerId: string): Promise<{ id: string; hasEvent: boolean } | null> {
+  const { data } = await admin.from('quotes').select('id, pool_member_id').eq('rfq_id', m.rfq_id).eq('provider_id', providerId).maybeSingle()
+  const q = data as { id: string; pool_member_id: string | null } | null
+  if (!q || q.pool_member_id !== m.id) return null
+  const { count } = await admin.from('quote_events').select('id', { count: 'exact', head: true }).eq('quote_id', q.id).eq('event_type', 'submitted')
+  return { id: q.id, hasEvent: (count ?? 0) > 0 }
+}
+
 export async function closePool(admin: SupabaseClient, poolId: string): Promise<CloseResult> {
   const pool = await loadPool(admin, poolId)
   if (!pool || pool.status !== 'closing') return { poolId, closed: false, quotes: 0, skipped: 0 }
+  if (!(await takeCloseLease(admin, poolId))) return { poolId, closed: false, quotes: 0, skipped: 0 }
 
   const { data: offerData } = await admin.from('service_pool_offers').select(OFFER_COLS).eq('pool_id', poolId).eq('status', 'active')
   const offers = new Map(((offerData ?? []) as OfferRow[]).map((o) => [o.id, o]))
@@ -157,19 +198,32 @@ export async function closePool(admin: SupabaseClient, poolId: string): Promise<
       console.error('[pools] quote terms refused', { member: m.id, error: resolved.error })
       continue
     }
-    const { data: quote, error } = await admin
+    // The quote names its member in the same INSERT (quotes.pool_member_id, 0077): a replay
+    // can always tell this group's quote from a direct one.
+    const { data: inserted, error } = await admin
       .from('quotes')
-      .insert({ rfq_id: m.rfq_id, provider_id: o.provider_id, ...quoteRowColumns(resolved.value, body), status: 'submitted' })
+      .insert({ rfq_id: m.rfq_id, provider_id: o.provider_id, ...quoteRowColumns(resolved.value, body), status: 'submitted', pool_member_id: m.id })
       .select('id')
       .single()
-    if (error || !quote) {
-      // A direct quote landed between the pre-check and here (unique rfq + provider): give the slot back, record it.
-      await admin.rpc('release_quote_slot', { p_rfq_id: m.rfq_id })
-      await admin.from('service_pool_members').update({ claim_state: 'skipped', skip_reason: 'already_quoted' }).eq('id', m.id).eq('claim_state', 'claimed').is('quote_id', null)
-      if ((error as { code?: string } | null)?.code !== '23505') console.error('[pools] quote insert failed', { member: m.id, message: error?.message })
-      continue
+    let quoteId = (inserted as { id: string } | null)?.id ?? null
+    let finishQuote = true
+    if (!quoteId) {
+      const unique = (error as { code?: string } | null)?.code === '23505'
+      // Audit L9 — this member's own quote from a stopped run: link it, keep its slot (never release it).
+      const own = unique ? await ownGroupQuote(admin, m, o.provider_id) : null
+      if (!own) {
+        // A direct quote landed between the pre-check and here (unique rfq + provider): give the slot back, record it.
+        await admin.rpc('release_quote_slot', { p_rfq_id: m.rfq_id })
+        await admin.from('service_pool_members').update({ claim_state: 'skipped', skip_reason: 'already_quoted' }).eq('id', m.id).eq('claim_state', 'claimed').is('quote_id', null)
+        if (!unique) console.error('[pools] quote insert failed', { member: m.id, message: error?.message })
+        continue
+      }
+      quoteId = own.id
+      finishQuote = !own.hasEvent
     }
-    await admin.from('service_pool_members').update({ quote_id: quote.id }).eq('id', m.id)
+    await admin.from('service_pool_members').update({ quote_id: quoteId }).eq('id', m.id).is('quote_id', null)
+    if (!finishQuote) { perOffer.set(o.id, (perOffer.get(o.id) ?? 0) + 1); continue }
+    const quote = { id: quoteId }
     const provider = providers.get(o.provider_id)
     await addQuoteEvent(admin, {
       quoteId: quote.id,
@@ -222,7 +276,7 @@ export async function closePool(admin: SupabaseClient, poolId: string): Promise<
   }
 
   // 4. closing → closed; every live membership released (the request can be grouped again in future).
-  const { data: done } = await admin.from('service_pools').update({ status: 'closed', closed_at: new Date().toISOString() }).eq('id', poolId).eq('status', 'closing').select('id')
+  const { data: done } = await admin.from('service_pools').update({ status: 'closed', closed_at: new Date().toISOString(), close_lease_until: null }).eq('id', poolId).eq('status', 'closing').select('id')
   if (done?.length) {
     await admin.from('service_pool_members').update({ status: 'released' }).eq('pool_id', poolId).in('status', ['invited', 'joined'])
     await addPoolEvent(admin, poolId, 'closed', null, { quotes: [...perOffer.values()].reduce((a, b) => a + b, 0), skipped: settled.filter((m) => m.claim_state === 'skipped').length, offers: plan.map((p) => ({ offer_id: p.offerId, count: p.count, min_members: p.tier?.min_members ?? null })) })

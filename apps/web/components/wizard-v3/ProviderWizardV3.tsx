@@ -51,13 +51,15 @@ interface Draft {
   bankVerified: boolean
   bankStub: boolean
   bankHolderFromBank: string | null
+  /** ADR 028 — the bank's holder name does not match the GST-registered name (payouts hold until ops review). */
+  bankNameReview: boolean
 }
 
 const EMPTY: Draft = {
   fullName: '', gstin: '', autofill: null, legalName: '', displayName: '', stateCode: '', city: '', yearsExperience: '',
   primaryCategory: '', extraCategories: [], languages: ['en'],
   credentialKinds: {}, credentialNumbers: {}, credentialUploads: {},
-  bankAccount: '', bankIfsc: '', bankHolder: '', bankVerified: false, bankStub: false, bankHolderFromBank: null,
+  bankAccount: '', bankIfsc: '', bankHolder: '', bankVerified: false, bankStub: false, bankHolderFromBank: null, bankNameReview: false,
 }
 
 type View = 'needs' | OnboardingV3Step | 'done'
@@ -106,7 +108,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
       if (!raw) return
       const env = JSON.parse(raw) as { savedAt?: number; draft?: Partial<Draft> }
       if (!env.savedAt || Date.now() - env.savedAt > DRAFT_TTL_MS) { localStorage.removeItem(DRAFT_KEY); return }
-      setDraft((d) => ({ ...d, ...env.draft, bankAccount: '', bankVerified: false, bankStub: false, bankHolderFromBank: null, fullName: env.draft?.fullName || d.fullName }))
+      setDraft((d) => ({ ...d, ...env.draft, bankAccount: '', bankVerified: false, bankStub: false, bankHolderFromBank: null, bankNameReview: false, fullName: env.draft?.fullName || d.fullName }))
       if (!initialStep) setView('contact')
     } catch { /* bad JSON / private mode: start fresh */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount
@@ -189,11 +191,11 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
     const holder = draft.bankHolder.trim() || draft.legalName
     setBusy('bank'); setError('')
     try {
-      const res = await fetch('/api/v1/profile/provider/kyc/verify-bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountNumber: account, ifsc, holderName: holder }) })
-      const d = (await res.json().catch(() => ({}))) as { verified?: boolean; stub?: boolean; accountHolderName?: string }
+      const res = await fetch('/api/v1/profile/provider/kyc/verify-bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountNumber: account, ifsc, holderName: holder, ...(draft.gstin.length === 15 ? { gstin: draft.gstin } : {}) }) })
+      const d = (await res.json().catch(() => ({}))) as { verified?: boolean; stub?: boolean; accountHolderName?: string; nameMatch?: boolean }
       if (!res.ok || !d.verified) { setError(tp('bank_verify_failed')); return }
       // FR-10.2 — the holder name comes from bank verification.
-      update({ bankIfsc: ifsc, bankHolder: d.accountHolderName || holder, bankHolderFromBank: d.accountHolderName ?? null, bankVerified: true, bankStub: d.stub === true })
+      update({ bankIfsc: ifsc, bankHolder: d.accountHolderName || holder, bankHolderFromBank: d.accountHolderName ?? null, bankVerified: true, bankStub: d.stub === true, bankNameReview: d.nameMatch === false })
     } catch {
       setError(tp('bank_verify_failed'))
     } finally {
@@ -440,6 +442,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
               <p className="t-footnote text-success" data-testid="bank-verified">
                 {draft.bankStub ? tp('bank_dev_stub') : tp('bank_verified')}
                 {draft.bankHolderFromBank ? ` · ${t('holder_from_bank', { name: draft.bankHolderFromBank })}` : ''}
+                {draft.bankNameReview && <span className="mt-1 block text-warning" data-testid="bank-name-review">{t('bank_name_review')}</span>}
               </p>
             ) : (
               <Button type="button" variant="secondary" onClick={verifyBank} loading={busy === 'bank'}>{tp('bank_verify_btn')}</Button>

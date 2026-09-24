@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { uuidSchema } from './schemas/index'
 import { GST_RATE_BPS_OPTIONS } from './mart/catalog'
+import { maskContactInfo } from './contact-mask'
 
 /**
  * Quote extraction contract (BUILD_PROMPTS S1.1). A provider types or speaks a
@@ -86,18 +87,14 @@ export function emptyExtraction(text: string): QuoteExtraction {
 
 // ── Contact-info scrub (the platform masks contact details pre-payment) ──────
 
-/** Indian mobiles: optional +91 / 0, then 10 digits starting 6-9 with optional spaces/dashes between any digits; never inside a longer number. */
-const PHONE_RE = /(?<!\d)(?:\+?91[\s-]?)?(?:0[\s-]?)?[6-9](?:[\s-]?\d){9}(?!\d)/g
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
-/** UPI VPAs: user@bank (no dot-TLD), e.g. ravi@upi, 98765@ybl, shop.name@okaxis. */
-const UPI_RE = /\b[A-Za-z0-9._-]{2,}@[A-Za-z]{2,}\b/g
-
+/**
+ * Remove (not mask) contact details from a model-drafted summary. Audit M30:
+ * the same shared rule set as `redactContactInfo` (contact-mask.ts), with an
+ * empty replacement and the whitespace tidied after.
+ */
 export function stripContactInfo(text: string): string {
-  return text
-    .replace(EMAIL_RE, '')
-    .replace(UPI_RE, '')
-    .replace(PHONE_RE, '')
-    .replace(/\s{2,}/g, ' ')
+  return maskContactInfo(text, { replacement: '' })
+    .text.replace(/\s{2,}/g, ' ')
     .replace(/\s+([,.;:])/g, '$1')
     .trim()
 }

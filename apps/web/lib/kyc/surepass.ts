@@ -59,12 +59,19 @@ export function makeSurepassClient(apiKey: string): KycClient {
       try {
         const data = await post('/corporate/udyam', { id_number: udyamNumber }, apiKey)
         const d = data?.data ?? {}
+        const main = (d.main_details ?? {}) as Record<string, unknown>
+        // ADR 028 — when the payload carries the enterprise's IDs they prove ownership better than a name.
+        const firstString = (...vals: unknown[]) => vals.find((v): v is string => typeof v === 'string' && v.trim() !== '')?.trim()
+        const pan = firstString(d.pan, d.pan_number, main['pan'], main['pan_number'])
+        const gstin = firstString(d.gstin, d.gstin_number, main['gstin'], main['gstin_number'])
         return {
           verified: data.success === true,
-          enterpriseName: d.enterprise_name ?? d.name_of_enterprise,
+          enterpriseName: d.enterprise_name ?? d.name_of_enterprise ?? firstString(main['name_of_enterprise'], main['enterprise_name']),
           majorActivity: d.major_activity,
           state: d.state,
           registrationDate: d.date_of_registration ?? d.date_of_udyam_registration,
+          ...(pan ? { pan } : {}),
+          ...(gstin ? { gstin } : {}),
         }
       } catch (e: unknown) {
         return { verified: false, error: e instanceof Error ? e.message : 'KYC error' }

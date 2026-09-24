@@ -204,3 +204,52 @@ alongside. No production data was used.
 
 Revert the commit. There is no migration and no data change; the previous behaviour
 returns, including both defects.
+
+## Addendum (2026-09-24) — goods returns after completion (audit M14)
+
+**Context.** §6 bounded `completed → disputed` for services and said goods orders
+"follow the Mart category return window". The goods action did not: `open_return`
+(`apps/web/lib/mart/goods-transitions.ts`) accepted `completed → disputed` with no time
+limit at all. A buyer could freeze a seller's payout or claim a refund on any past goods
+order, and the canonical invariant ("`completed → disputed` only within
+`dispute_window_days`") did not hold for goods.
+
+**Decision.** One shared rule, `canOpenGoodsReturn` / `goodsReturnDeadline`
+(`packages/shared/src/mart/goods.ts`):
+
+- **`delivered` → always allowed.** It is pre-completion (§3.7 "any-pre-completed →
+  disputed"), and it is already bounded: the 72-hour auto-accept completes the order. A
+  short (or zero-hour) category window must not leave a buyer unable to contest a
+  delivery photo before the order completes.
+- **`completed` → allowed only before the earlier of two bounds:**
+  1. **The category return window** (`mart_categories.return_window_hours` from the
+     delivery evidence — the release gate's `returnWindowEndsAt`). This is the binding
+     bound for goods: it is the promise sellers and buyers are shown, and at the launch
+     configuration (48 h) it always ends first.
+  2. **The post-completion dispute window** — shared `canRaiseDispute` with
+     `agent_settings.dispute_window_days` from `completed_at`, exactly as §6. It caps a
+     category window configured longer than the dispute window, so the canonical
+     invariant holds for every order kind.
+
+  A missing bound (no delivery evidence, no `completed_at`) means closed (fail safe on
+  money), as in §6.
+- **The server refuses** a late return with **409 `return_window_closed`** carrying
+  `endsAt`; the order, the payout and the dispute rows are untouched.
+- **The server sends the deadline; clients never compute it.** `GoodsOrderExtras`
+  carries `returnWindowEndsAt` (the release gate's end, for the seller's "you receive
+  ₹X after …" line) and `returnDeadline` (the buyer's last moment to open a return);
+  `GET /api/v1/orders/[id]` carries `returnDeadline` for goods orders. The web goods
+  workspace hides "Open a return" once it has passed. The mobile app does not render the
+  goods return action.
+
+**Operational note.** If ops set a category's return window longer than
+`dispute_window_days`, the dispute window binds and the product page's "N-hour return
+window" note over-promises for completed orders. Keep `dispute_window_days × 24` ≥ the
+longest category window (the settings screens do not cross-check the two registries).
+
+**Verification.** Shared tests (`mart.test.ts` "opening a goods return": pre-completion
+allowed, the category window binding, the dispute-window cap, fail-safe, zero-hour
+category, other statuses). `verify-mart.ts` §E: a completed order in a zero-hour
+category → 409 `return_window_closed` with `endsAt`, order still `completed`, no dispute
+row; a completed order older than `dispute_window_days` inside its 48-hour category
+window → 409; the in-window return still opens. No migration.

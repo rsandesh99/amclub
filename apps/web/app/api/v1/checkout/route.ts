@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { addonIdsSchema, addonSelectionKey, bundlePlan, bundlePlanSnapshot, couponBasePaise, couponClaimHeld, isValidGstin, packageCharge, quoteChargeAmounts, resolveAddonSelection, type AddonSnapshot, type BundleMilestoneRow, type BundlePlanSnapshot, type OrderAmounts, type PackageAddonRow } from '@amclub/shared'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
-import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
+import { RFQ_GOODS_LIST_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { getPaymentGateway } from '@/lib/payments'
 import { checkoutTimeoutSeconds, MIN_RESUME_SECONDS, paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
@@ -301,11 +301,13 @@ export async function POST(request: NextRequest) {
       bundlePlan: plan ? bundlePlanSnapshot(plan) : null,
     }
   } else {
-    // Quote branch — accepting a submitted quote on the buyer's own RFQ.
+    // Quote branch — accepting a submitted quote on the buyer's own RFQ. Audit M4: the
+    // session client may not read rfqs.goods_spec (0077); the goods branch below reads it
+    // on the service role once ownership is established here.
     const { data: q } = await supabase
       .from('quotes')
       .select(
-        'id, status, provider_id, price_paise, gst_included, delivery_days, scope, revision' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_COLS + ')',
+        'id, status, provider_id, price_paise, gst_included, delivery_days, scope, revision' + QUOTE_GOODS_COLS + ', rfq:rfqs!inner(id, msme_id, category_id, title, status, details' + RFQ_GOODS_LIST_COLS + ')',
       )
       .eq('id', quoteId!)
       .maybeSingle()

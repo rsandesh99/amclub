@@ -451,6 +451,71 @@ async function main() {
       await admin.from('gstin_verifications').delete().in('user_id', [provD.uid])
     }
 
+    // ── 4d2. Audit M12 / ADR 028 — one Udyam claim per number; the stub never earns a chip ──
+    // CI runs the KYC stub (no vendor key), so the name-match path itself is unit-tested
+    // (shared kyc-ownership) and exercised by verify-trust under KYC_FAKE; here: the
+    // database's one-claim rule, the route's pre-check, the recorded outcomes, no client writes.
+    console.log('M12 KYC ownership (ADR 028):')
+    {
+      const kycA = await mkUser('kycA', ['msme'])
+      const kycB = await mkUser('kycB', ['msme'])
+      const { data: mA } = await admin.from('msme_profiles').insert({ user_id: kycA.uid, business_name: 'KYC A Co', state: 'KA', sector: 'services' }).select('id').single()
+      const { data: mB } = await admin.from('msme_profiles').insert({ user_id: kycB.uid, business_name: 'KYC B Co', state: 'KA', sector: 'services' }).select('id').single()
+      created.msmeIds.push(mA!.id, mB!.id)
+      const asKyc = (token: string) => createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } })
+      const udyam = `UDYAM-KA-03-${String(Date.now()).slice(-7)}`
+      try {
+        // A holds the claim, as a real, name-matched verification leaves it.
+        const claimA = await admin.from('udyam_verifications').insert({ user_id: kycA.uid, udyam_number: udyam, verified: true, stub: false, provider: 'surepass', outcome: 'verified', result: { target: 'msme' } })
+        eq('seeded claim for A accepted', claimA.error?.message ?? null, null)
+        const dup = await admin.from('udyam_verifications').insert({ user_id: kycB.uid, udyam_number: udyam.toLowerCase(), verified: true, stub: false, provider: 'surepass', outcome: 'verified' })
+        eq('a second active claim on the same Udyam (any case) → 23505', dup.error?.code ?? null, '23505')
+        const born = await admin.from('udyam_verifications').insert({ user_id: kycB.uid, udyam_number: udyam, verified: true, stub: false, provider: 'surepass', outcome: 'verified', released_at: new Date().toISOString() })
+        eq('a released verified row (not a claim) is allowed', born.error?.message ?? null, null)
+        const odd = await admin.from('udyam_verifications').insert({ user_id: kycB.uid, udyam_number: udyam, verified: true, stub: false, provider: 'surepass', outcome: 'approved' })
+        eq('an unknown outcome is refused (CHECK)', Boolean(odd.error), true)
+
+        // The route refuses B before the paid vendor call, and records the attempt for ops.
+        const rB = await api(kycB.token, '/api/v1/kyc/verify-udyam', { udyam_number: udyam, target: 'msme' })
+        const dB = await rB.json().catch(() => ({}))
+        eq('B verifying A’s Udyam → 409', rB.status, 409)
+        eq("error code 'udyam_already_claimed'", dB.error, 'udyam_already_claimed')
+        const { data: recB } = await admin.from('udyam_verifications').select('id').eq('user_id', kycB.uid).eq('outcome', 'udyam_already_claimed')
+        eq('the refused attempt is recorded (outcome udyam_already_claimed)', (recB ?? []).length >= 1, true)
+        const { data: chipB } = await admin.from('msme_profiles').select('udyam_verified').eq('id', mB!.id).single()
+        eq('B earns no chip', chipB?.udyam_verified, false)
+
+        // The holder is not refused by the claim check; the stub never earns a chip.
+        const rA = await api(kycA.token, '/api/v1/kyc/verify-udyam', { udyam_number: udyam, target: 'msme' })
+        const dA = await rA.json().catch(() => ({}))
+        eq('the holder re-verifying is not refused as already claimed', rA.status !== 409, true)
+        if (dA.stub === true) {
+          eq('stub answer: chip false', dA.chip, false)
+          const { data: stubRow } = await admin.from('udyam_verifications').select('outcome').eq('user_id', kycA.uid).eq('provider', 'stub').limit(1)
+          eq("stub attempt recorded with outcome 'stub'", stubRow?.[0]?.outcome, 'stub')
+          const { data: chipA } = await admin.from('msme_profiles').select('udyam_verified').eq('id', mA!.id).single()
+          eq('the stub leaves the chip unset', chipA?.udyam_verified, false)
+          const bank = await api(kycA.token, '/api/v1/profile/provider/kyc/verify-bank', { accountNumber: '123456789012', ifsc: 'HDFC0000001', holderName: 'KYC A Co' })
+          const bankJson = await bank.json().catch(() => ({}))
+          const { data: bRow } = await admin.from('bank_account_verifications').select('outcome').eq('user_id', kycA.uid).order('created_at', { ascending: false }).limit(1)
+          eq("stub penny drop → 200 and recorded with outcome 'stub' (never penny_drop_verified)", bank.status === 200 && bankJson.stub === true && bRow?.[0]?.outcome === 'stub', true)
+        } else {
+          console.log('  (a real KYC key answered — the stub-only checks are skipped)')
+        }
+
+        // Clients never write the table, and anon never reads it (0082).
+        const forged = await asKyc(kycB.token).from('udyam_verifications').insert({ user_id: kycB.uid, udyam_number: 'UDYAM-KA-03-0000000', verified: true, provider: 'surepass', outcome: 'verified' })
+        eq('client INSERT of a claim denied', Boolean(forged.error), true)
+        const anonRead = await createClient(URL_, ANON, { auth: { persistSession: false } }).from('udyam_verifications').select('id').limit(1)
+        eq('anon cannot read udyam_verifications', Boolean(anonRead.error) || (anonRead.data ?? []).length === 0, true)
+        const ownRead = await asKyc(kycB.token).from('udyam_verifications').select('outcome').eq('user_id', kycB.uid)
+        eq('the owner reads their own outcomes', !ownRead.error && (ownRead.data ?? []).length >= 1, true)
+      } finally {
+        // Residue: udyam_verifications user_id has no FK — delete explicitly.
+        await admin.from('udyam_verifications').delete().in('user_id', [kycA.uid, kycB.uid])
+      }
+    }
+
     // ── 4e. H0 agent groundwork (0026, ADR-008) — RLS + append-only + ledger ──
     // Fresh fixtures (own limiter budget). Tables are service-role-write only;
     // self + admin read. agent_events rejects UPDATE for everyone (trigger).
@@ -1061,6 +1126,26 @@ async function main() {
       eq('a signed-in buyer cannot call claim_coupon_for_session', Boolean((await asUser(buyerA.token).rpc('claim_coupon_for_session', { p_session_id: crypto.randomUUID() })).error), true)
       eq('a signed-in buyer cannot call record_coupon_redemption', Boolean((await asUser(buyerA.token).rpc('record_coupon_redemption', { p_order_id: orderA })).error), true)
       eq('anon cannot call claim_coupon_for_session', Boolean((await createClient(URL_, ANON, { auth: { persistSession: false } }).rpc('claim_coupon_for_session', { p_session_id: crypto.randomUUID() })).error), true)
+    }
+
+    // ── 11. Audit M4 / M44 / L9 (0077): server-only columns ──────────────────
+    console.log('\naudit 0077 — goods_spec, group-quote marker and close lease are server-only:')
+    {
+      // A missing column grant fails when the statement is planned: an ERROR, whatever the rows.
+      if (!(await admin.from('rfqs').select('goods_spec').limit(1)).error) {
+        eq('buyerA reads OWN rfq (id, title) through PostgREST (control)', ((await asUser(buyerA.token).from('rfqs').select('id, title').eq('id', rfqA)).data ?? []).length, 1)
+        eq('buyerA cannot read rfqs.goods_spec directly (the API serves it)', Boolean((await asUser(buyerA.token).from('rfqs').select('goods_spec').eq('id', rfqA)).error), true)
+        eq('a matched provider cannot read rfqs.goods_spec directly', Boolean((await asUser(provA.token).from('rfqs').select('goods_spec').eq('id', rfqA)).error), true)
+        eq('select=* on rfqs is refused too (no way around the column grant)', Boolean((await asUser(provA.token).from('rfqs').select('*').eq('id', rfqA)).error), true)
+      } else {
+        console.log('  (skipped goods_spec checks — staged Mart column absent)')
+      }
+      if (!(await admin.from('quotes').select('pool_member_id').limit(1)).error) {
+        eq('no client reads quotes.pool_member_id (the group-quote marker)', Boolean((await asUser(provA.token).from('quotes').select('pool_member_id').eq('rfq_id', rfqA)).error), true)
+        eq('no client reads service_pools (close lease included)', Boolean((await asUser(buyerA.token).from('service_pools').select('id, close_lease_until').limit(1)).error), true)
+      } else {
+        console.log('  (skipped group-quote checks — 0077 not applied)')
+      }
     }
   } finally {
     // Cleanup — children before parents; loud on error.

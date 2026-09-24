@@ -26,12 +26,40 @@ export const PRODUCT_TRANSITIONS: Record<ProductStatus, readonly ProductStatus[]
   draft: ['pending_approval'],
   // approve → active; reject → back to draft (with a reason in the event payload)
   pending_approval: ['active', 'draft'],
-  active: ['suspended'],
-  suspended: ['active'],
+  // Audit M16 (extension, nothing repurposed): a material edit sends an approved
+  // listing back to review (active → pending_approval), and a seller reactivating
+  // a suspended listing whose current version was never approved goes to review
+  // too (suspended → pending_approval). Neither ever skips the admin.
+  active: ['suspended', 'pending_approval'],
+  suspended: ['active', 'pending_approval'],
 }
 
 export function isValidProductTransition(from: ProductStatus, to: ProductStatus): boolean {
   return (PRODUCT_TRANSITIONS[from] as readonly string[]).includes(to)
+}
+
+/**
+ * Audit M16 — the listing fields an admin approves: what the item IS (name,
+ * images, unit), its tax identity (HSN, GST slab) and its category (commission
+ * and return rights). Price tiers, description, specs and promises are the
+ * seller's to change without review (each change is still a product_events row).
+ */
+export const PRODUCT_MATERIAL_FIELDS = ['category_slug', 'name', 'images', 'hsn_code', 'gst_rate_bps', 'unit'] as const
+export type ProductMaterialField = (typeof PRODUCT_MATERIAL_FIELDS)[number]
+
+/**
+ * What an edit of an approved listing needs (one rule, the seller route applies it):
+ *   'none'     — no material field changed;
+ *   'auto'     — material change by a seller already past the auto-approve threshold
+ *                (the same trust the submit path gives), and NOT a category change;
+ *   'required' — back to admin review: any category change, or any material change by a
+ *                seller still under the threshold.
+ */
+export function productEditReview(changedFields: readonly string[], trustedSeller: boolean): 'none' | 'auto' | 'required' {
+  const material = changedFields.filter((f) => (PRODUCT_MATERIAL_FIELDS as readonly string[]).includes(f))
+  if (material.length === 0) return 'none'
+  if (material.includes('category_slug') || !trustedSeller) return 'required'
+  return 'auto'
 }
 
 /** product_events.event_type vocabulary — append-only, mirrors quote_events. */
@@ -189,9 +217,13 @@ export type ProductInput = z.infer<typeof productInputSchema>
 export const productStatusActionSchema = z.enum(['submit', 'suspend', 'reactivate'])
 export type ProductStatusAction = z.infer<typeof productStatusActionSchema>
 
-/** Admin listing-approval actions. */
+/**
+ * Admin listing-approval actions. Audit M16: an approval is pinned to the version
+ * the admin reviewed — `reviewed_updated_at` is the listing's `updated_at` exactly as
+ * the review queue returned it (null for a row never updated); a later edit → 409.
+ */
 export const productReviewSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('approve') }),
+  z.object({ action: z.literal('approve'), reviewed_updated_at: z.string().datetime({ offset: true }).nullable() }),
   z.object({ action: z.literal('reject'), reason: z.string().trim().min(5).max(500) }),
   z.object({ action: z.literal('suspend'), reason: z.string().trim().min(5).max(500) }),
 ])

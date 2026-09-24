@@ -104,6 +104,9 @@ export const quotes = pgTable('quotes', {
   munshiDraftId: uuid('munshi_draft_id'),
   // E12b / ADR 020 (0066) — the option the buyer paid for (NULL = Standard); FK → quote_options in SQL.
   selectedOptionId: uuid('selected_option_id'),
+  // Audit M44 / L9 (0077) — the S3.4 group member this quote was written for (unique; FK → service_pool_members in
+  // SQL). Set only by the pool close; never client-readable.
+  poolMemberId: uuid('pool_member_id'),
   // submitted | withdrawn | accepted | declined | expired
   status: text('status').default('submitted').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
@@ -216,6 +219,8 @@ export const servicePools = pgTable('service_pools', {
   closesAt: timestamp('closes_at', { withTimezone: true }),
   closedAt: timestamp('closed_at', { withTimezone: true }),
   cancelledReason: text('cancelled_reason'),
+  // Audit L9 (0077) — the close's per-pool lease (compare-and-set; NULL or past = free).
+  closeLeaseUntil: timestamp('close_lease_until', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

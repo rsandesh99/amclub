@@ -27,12 +27,15 @@ export async function prepareGoodsQuoteCheckout(
   quote: any,
 ): Promise<{ ok: true; prep: GoodsQuotePrep } | { ok: false; status: number; error: string }> {
   const rfq = quote.rfq
-  const spec = goodsRfqSpecSchema.safeParse(rfq.goods_spec)
-  if (!spec.success || !rfq.mart_category_slug) return { ok: false, status: 422, error: 'goods_spec_invalid' }
+  // Audit M4 — goods_spec (the buyer's delivery contact) is not client-readable (0077): the
+  // caller established ownership with the buyer's session; the spec is read here on the service role.
+  const { data: specRow } = await admin.from('rfqs').select('goods_spec, mart_category_slug').eq('id', rfq.id).maybeSingle()
+  const spec = goodsRfqSpecSchema.safeParse(specRow?.goods_spec)
+  if (!spec.success || !specRow?.mart_category_slug) return { ok: false, status: 422, error: 'goods_spec_invalid' }
   if (quote.unit_price_paise == null || quote.qty == null || quote.gst_rate_bps == null || !quote.hsn_code) {
     return { ok: false, status: 422, error: 'goods_terms_missing' }
   }
-  const cat = await getMartCategory(admin, rfq.mart_category_slug)
+  const cat = await getMartCategory(admin, specRow.mart_category_slug)
   if (!cat || !cat.is_active || cat.bis_blocked) return { ok: false, status: 422, error: 'category_blocked' }
   const [{ data: seller }, { data: product }] = await Promise.all([
     admin.from('provider_profiles').select('display_name, status, sells_goods, deleted_at').eq('id', quote.provider_id).maybeSingle(),

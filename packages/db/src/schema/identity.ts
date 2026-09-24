@@ -163,9 +163,12 @@ export const bankAccountVerifications = pgTable('bank_account_verifications', {
   accountHolder: text('account_holder').notNull(),
   verified: boolean('verified').notNull(),
   stub: boolean('stub').default(false).notNull(),
-  // 'surepass' | 'stub'
+  // 'surepass' | 'stub' | 'admin_override'
   provider: text('provider').notNull(),
   result: jsonb('result'),
+  // ADR 028 (0082): 'verified' | 'name_mismatch' | 'not_verified' | 'stub' (shared KYC_ATTEMPT_OUTCOMES);
+  // NULL on admin_override rows. Only 'verified' (holder name matches a GST-locked name) sets penny_drop_verified.
+  outcome: text('outcome'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
 })
 
@@ -178,8 +181,12 @@ export const udyamVerifications = pgTable('udyam_verifications', {
   udyamNumber: text('udyam_number').notNull(),
   verified: boolean('verified').notNull(),
   stub: boolean('stub').default(false).notNull(),
-  // 'surepass' | 'stub' | 'admin_attest'
+  // 'surepass' | 'stub' | 'admin_attest' | 'precheck' (refused before any vendor call, ADR 028)
   provider: text('provider').notNull(),
   result: jsonb('result'),
+  // ADR 028 (0082): shared KYC_ATTEMPT_OUTCOMES. A claim = outcome 'verified' AND released_at IS NULL;
+  // one per Udyam number (unique partial index udyam_verifications_one_claim_uidx on upper(udyam_number)).
+  outcome: text('outcome'),
+  releasedAt: timestamp('released_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`now()`).notNull(),
 })

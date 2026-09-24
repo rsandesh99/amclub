@@ -5,7 +5,7 @@ import { Link } from '@/i18n/navigation'
 import { martPageGate } from '@/lib/mart/gate'
 import { getSessionUser } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getPool, poolProgressFor, buyerDiscipline } from '@/lib/mart/pools'
+import { getPool, poolProgressFor, poolMemberAmounts, buyerDiscipline } from '@/lib/mart/pools'
 import { formatINR } from '@/lib/format'
 import { PoolCard } from '@/components/mart/PoolCard'
 import { istDateTime } from '@/components/mart/PoolProgress'
@@ -51,7 +51,8 @@ export default async function MyPoolsPage() {
                 <span className="text-emerald-ink">{t('pool_joined', { qty: m.qty, unit: pool.unit })}</span>
                 {pool.status === 'closed_met' && m.payment_state === 'blocked' && (
                   <Link href={`/app/mart/pools/${pool.id}/pay` as '/app'} className="inline-flex min-h-11 items-center rounded-button bg-gold-metal px-4 font-semibold text-emerald-ink">
-                    {t('pool_pay_now', { amount: formatINR(m.qty * pool.unit_price_paise) })}{m.pay_by ? ` · ${t('pool_pay_by', { date: istDateTime(m.pay_by) })}` : ''}
+                    {/* Audit L4 — the amount charged (GST included), from the server's one rule. */}
+                    {t('pool_pay_now', { amount: formatINR(poolMemberAmounts(pool, m.qty)?.totalPaise ?? 0) })}{m.pay_by ? ` · ${t('pool_pay_by', { date: istDateTime(m.pay_by) })}` : ''}
                   </Link>
                 )}
                 {m.payment_state === 'captured' && m.order_id && <Link href={`/app/orders/${m.order_id}` as '/app'} className="font-medium text-emerald underline underline-offset-2">{t('pool_paid')}</Link>}

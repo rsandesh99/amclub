@@ -746,8 +746,11 @@ export interface MartPool {
   product_id: string | null
   seller: { id: string; displayName: string; city: string | null; state: string } | null
   progress: MartPoolProgress
+  /** Audit L4 — one unit at the pool price with its GST (server paise; null without a listing). */
+  unitDisplay?: { unit_price_paise: number; unit_gst_paise: number; unit_incl_gst_paise: number } | null
 }
-export interface MartPoolMember { id: string; qty: number; payment_state: 'blocked' | 'captured' | 'released' | 'failed'; pay_by: string | null; order_id: string | null }
+/** `amounts` (audit L4) = what this member pays for their quantity, GST included — the server's figure. */
+export interface MartPoolMember { id: string; qty: number; payment_state: 'blocked' | 'captured' | 'released' | 'failed'; pay_by: string | null; order_id: string | null; amounts?: { taxablePaise: number; gstPaise: number; totalPaise: number } | null }
 
 export async function fetchMartPools(): Promise<{ ok: boolean; pools: MartPool[] }> {
   try {
@@ -779,7 +782,7 @@ export async function joinMartPool(id: string, qty: number, delivery: GoodsDeliv
     body: JSON.stringify({ qty, delivery }),
   })
   const d = await res.json().catch(() => ({}))
-  return { ok: res.ok, error: res.ok ? null : typeof d.error === 'string' ? d.error : 'failed', pool: d.pool ?? null, member: d.member ? { ...d.member, pay_by: null, order_id: null } : null }
+  return { ok: res.ok, error: res.ok ? null : typeof d.error === 'string' ? d.error : 'failed', pool: d.pool ?? null, member: d.member ? { pay_by: null, order_id: null, ...d.member } : null }
 }
 
 export async function leaveMartPool(id: string): Promise<{ ok: boolean; error: string | null; pool: MartPool | null }> {

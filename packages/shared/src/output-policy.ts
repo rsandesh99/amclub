@@ -1,4 +1,5 @@
 import { COMPARE_BANNED_PHRASES } from './compare-pointers'
+import { findContactSpans, foldIndicDigits, type ContactKind } from './contact-mask'
 
 /**
  * S2.1 — the customer-facing output policy (lists and patterns only; the Zod
@@ -10,8 +11,9 @@ import { COMPARE_BANNED_PHRASES } from './compare-pointers'
  * back (template message, rule-only report, chips dropped) — never leaks.
  *
  * `redactContactInfo` (rfq.ts) stays the storage-time masker; this file is the
- * output-time refuser. Lists are lowercase-matched; English words are checked
- * in every locale because they leak into Hindi / Tamil / Telugu output.
+ * output-time refuser; both read the ONE contact rule set (contact-mask.ts,
+ * audit M30). Lists are lowercase-matched; English words are checked in every
+ * locale because they leak into Hindi / Tamil / Telugu output.
  */
 
 export type OutputLocale = 'en' | 'hi' | 'ta' | 'te'
@@ -53,19 +55,13 @@ export const APPROVAL_PHRASES: Record<OutputLocale, readonly string[]> = {
   te: ['ఆమోదించబడింది', 'ఆమోదించాము', 'ధృవీకరించబడింది', 'ధృవీకరించాము', 'రీఫండ్ మంజూరు', 'చెల్లింపు విడుదల'],
 }
 
-/** Contact and identity patterns. Text is Indic-digit-folded before matching (see `foldOutputDigits`). */
-export const CONTACT_PATTERNS: Readonly<Record<'phone' | 'email' | 'upi' | 'url' | 'handle' | 'gstin' | 'pan', RegExp>> = {
-  // Indian mobile: optional +91 / 0, then a 10-digit number starting 6–9, digits possibly separated by spaces / dashes / dots.
-  phone: /(?:\+?91[\s.-]?|\b0)?[6-9](?:[\s.-]?\d){9}\b/,
-  email: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
-  // UPI VPA name@bank (known handles + generic short bank codes).
-  upi: /\b[A-Za-z0-9._-]{2,}@(?:ybl|okaxis|oksbi|okicici|okhdfcbank|paytm|upi|ibl|axl|apl|axisbank|icici|hdfcbank|sbi|kotak|yesbank|ptyes|ptaxis|ptsbi|fbl|jio|airtel|waicici|wahdfcbank|wasbi|waaxis)\b/i,
-  url: /\bhttps?:\/\/\S+|\bwww\.[A-Za-z0-9-]+\.[A-Za-z]{2,}\S*|\b[A-Za-z0-9-]+\.(?:com|in|co\.in|org|net|io|app|me|xyz|shop|site|store|online)\b(?:\/\S*)?/i,
-  // WhatsApp / Telegram handles and "whatsapp me on".
-  handle: /(?:\bt\.me\/\S+|\btelegram\s*[:@]\s*\S+|\bwhatsapp\s*(?:me\s*)?(?:on|at|number|no\.?)\s*[:+\d]|\b@[A-Za-z0-9_]{5,}\b(?!\.))/i,
-  gstin: /\b\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b/,
-  pan: /\b[A-Z]{5}\d{4}[A-Z]\b/,
-}
+/**
+ * Contact and identity patterns: audit M30 moved them to contact-mask.ts
+ * (`CONTACT_PATTERNS`), the ONE rule set the storage masker
+ * (`redactContactInfo`) also uses. This file refuses on them: `contact` = phone / email / UPI / handle / the "WhatsApp me
+ * on" cue / full GSTIN / PAN; `urls` = links.
+ */
+const REFUSED_CONTACT_KINDS: readonly ContactKind[] = ['phone', 'email', 'upi', 'handle', 'whatsapp_cue', 'gstin', 'pan']
 
 export type OutputForbid = 'contact' | 'payment' | 'ranking' | 'approval' | 'urls'
 export type OutputViolationCode = 'contact_info' | 'off_platform_payment' | 'ranking_language' | 'approval_language' | 'url'
@@ -75,17 +71,8 @@ export interface OutputViolation {
   match: string
 }
 
-const INDIC_DIGIT_BLOCKS = [0x0966, 0x0c66, 0x0be6, 0x09e6, 0x0ae6]
-export function foldOutputDigits(s: string): string {
-  let out = ''
-  for (const ch of s) {
-    const cp = ch.codePointAt(0) ?? 0
-    let mapped: string | null = null
-    for (const base of INDIC_DIGIT_BLOCKS) if (cp >= base && cp <= base + 9) { mapped = String(cp - base); break }
-    out += mapped ?? ch
-  }
-  return out
-}
+/** Indic digits → ASCII (the shared `foldIndicDigits`; kept under this name for existing callers). */
+export const foldOutputDigits: (s: string) => string = foldIndicDigits
 
 export function toOutputLocale(locale: string | null | undefined): OutputLocale {
   const base = (locale ?? 'en').toLowerCase().split('-')[0]
@@ -99,8 +86,9 @@ function phraseHits(text: string, lists: Record<OutputLocale, readonly string[]>
 }
 
 /**
- * Every violation in one string. `contact` covers phone / email / UPI VPA /
- * handles / full GSTIN / PAN (masked forms like XXXXXXXXXXXA1Z5 pass); `urls`
+ * Every violation in one string. `contact` covers phone (Indic, spaced and
+ * spelled-out digits too) / email / UPI VPA / handles / full GSTIN / PAN
+ * (masked forms like XXXXXXXXXXXA1Z5 pass); `urls`
  * covers links; `payment`, `ranking`, `approval` are per-locale phrase lists
  * (English always included).
  */
@@ -110,14 +98,17 @@ export function findOutputViolations(text: string, opts: { locale?: string | nul
   const locale = toOutputLocale(opts.locale)
   const forbid = new Set(opts.forbid)
   if (forbid.has('contact')) {
-    for (const key of ['phone', 'email', 'upi', 'handle', 'gstin', 'pan'] as const) {
-      const m = CONTACT_PATTERNS[key].exec(t)
-      if (m) out.push({ code: 'contact_info', match: m[0] })
+    // One violation per kind (the first), as before.
+    const seen = new Set<ContactKind>()
+    for (const span of findContactSpans(t, REFUSED_CONTACT_KINDS)) {
+      if (seen.has(span.kind)) continue
+      seen.add(span.kind)
+      out.push({ code: 'contact_info', match: span.match })
     }
   }
   if (forbid.has('urls')) {
-    const m = CONTACT_PATTERNS.url.exec(t)
-    if (m) out.push({ code: 'url', match: m[0] })
+    const first = findContactSpans(t, ['url'])[0]
+    if (first) out.push({ code: 'url', match: first.match })
   }
   if (forbid.has('payment')) for (const p of phraseHits(t, OFF_PLATFORM_PAYMENT_PHRASES, locale)) out.push({ code: 'off_platform_payment', match: p })
   if (forbid.has('ranking')) for (const p of phraseHits(t, RANKING_PHRASES, locale)) out.push({ code: 'ranking_language', match: p })

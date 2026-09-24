@@ -11,7 +11,9 @@
  *   deliver         in_progress → delivered (+72h auto-accept timer)    (seller; delivery photo)
  *   accept_delivery delivered → completed                               (buyer; 'buyer_received')
  *   open_return     delivered | completed → disputed                    (buyer; 'return_opened';
- *                   resolved through the existing dispute console → 'return_resolved')
+ *                   resolved through the existing dispute console → 'return_resolved');
+ *                   from completed only before the category return window / dispute
+ *                   window ends (shared canOpenGoodsReturn, 409 return_window_closed)
  *   cancel          placed | accepted → cancelled_by_buyer (+refund)     (buyer)
  *
  * Money: schedulePayout / processRefund / generateInvoices are the services
@@ -21,6 +23,7 @@
 import 'server-only'
 import {
   isValidOrderTransition,
+  canOpenGoodsReturn,
   goodsDispatchSchema,
   goodsDeliverSchema,
   goodsReturnSchema,
@@ -32,7 +35,7 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { safeGenerateInvoices, schedulePayout, settleCancellationRefund, type Actor, type TransitionResult } from '@/lib/orders/transitions'
 import { notifyOrderTransition } from '@/lib/notifications/events'
 import { getEwayBillThresholdPaise } from './config'
-import { orderReturnable } from './release'
+import { goodsReturnFacts, orderReturnable } from './release'
 import { SELF_DEALING, isSelfDealtOrder } from '@/lib/orders/self-dealing'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
@@ -172,6 +175,14 @@ export async function applyGoodsTransition(
   }
 
   if (action === 'open_return') {
+    // Audit M14 (ADR-014 addendum): from `completed` a return opens only inside the
+    // category return window AND the post-completion dispute window, whichever ends
+    // first (shared canOpenGoodsReturn). `delivered` is pre-completion and always may.
+    const check = canOpenGoodsReturn({ status: from, ...(await goodsReturnFacts(admin, order)) })
+    if (!check.ok) {
+      const endsAt = check.reason === 'window_closed' ? check.endsAt : null
+      return { ok: false, status: 409, error: 'return_window_closed', ...(endsAt ? { endsAt } : {}) }
+    }
     const parsed = goodsReturnSchema.safeParse(extra.return)
     if (!parsed.success) return { ok: false, status: 422, error: 'Return reason required' }
     if (parsed.data.photo_doc_id && !(await docOnOrder(admin, orderId, parsed.data.photo_doc_id, ['delivery_photo', 'other']))) {

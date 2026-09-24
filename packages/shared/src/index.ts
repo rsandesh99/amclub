@@ -17,6 +17,8 @@ export * from './credentials'
 
 // RFQ template fields + contact masking
 export * from './rfq'
+// Audit M30 — the ONE contact rule set (storage masker + output refuser + Indic digit fold)
+export * from './contact-mask'
 export * from './clarifications'
 export * from './rfq-quality'
 
@@ -37,6 +39,8 @@ export * from './states'
 
 // GSTIN format + mod-36 checksum validation
 export * from './gstin'
+// Audit M12 / ADR 028 — KYC ownership: a vendor record earns a chip only when it is the claimant's own
+export * from './kyc-ownership'
 
 // Experience v3 rollout flags (closed registry, server-evaluated)
 export * from './experiments'

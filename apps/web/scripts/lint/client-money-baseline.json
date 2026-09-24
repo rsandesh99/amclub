@@ -8,8 +8,6 @@
   "app/[locale]/(mart-admin)/admin/mart/PoolsAdmin.tsx :: p.list_price_paise - p.unit_price_paise",
   "components/mart/CatalogWizard.tsx :: x.unit_price_paise / 100",
   "components/mart/PaisaMoment.tsx :: amountPaise * eased",
-  "components/mart/PoolJoin.tsx :: member.qty * pool.unit_price_paise",
-  "components/mart/PoolJoin.tsx :: qtyN * pool.unit_price_paise",
   "components/rfq/QuoteCompare.tsx :: a.goods.unitPricePaise - b.goods.unitPricePaise",
   "components/rfq/QuoteComposer.tsx :: f.price_paise / 100",
   "components/rfq/QuoteComposer.tsx :: f.unit_price_paise / 100",

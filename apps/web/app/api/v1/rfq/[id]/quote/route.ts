@@ -299,6 +299,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   /* eslint-enable @typescript-eslint/no-explicit-any */
   if (!q) return NextResponse.json({ error: 'quote_not_found' }, { status: 404 })
   if (q.status !== 'submitted') return NextResponse.json({ error: 'quote_not_revisable', status: q.status }, { status: 409 })
+  // Audit M44 (ADR 024): a group quote is the tier the group reached; its price, GST mode
+  // and terms are fixed (no re-pricing after competitors' offers are shut out).
+  const group = await isGroupQuote(admin, q.id)
+  if (group === null) return serverError('[quote revise] group check', q.id)
+  if (group) return NextResponse.json({ error: 'pool_quote_fixed' }, { status: 409 })
 
   // RFQ still active and inside its window (the 72-hour clock never pauses).
   const { data: rfqState } = await admin.from('rfqs').select('id, status, expires_at').eq('id', rfqId).maybeSingle()
@@ -369,6 +374,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   captureServerEvent(actor.userId, 'quote_revised', { rfq_id: rfqId, quote_id: q.id, revision: nextRevision, price_delta_sign: delta > 0 ? 'up' : delta < 0 ? 'down' : 'same', role: 'provider' })
 
   return NextResponse.json({ quoteId: q.id, revision: nextRevision })
+}
+
+/**
+ * Audit M44 — was this quote written by an S3.4 group close? The quote names its member
+ * (quotes.pool_member_id, 0077, set in the close's INSERT) and the member row links it
+ * (service_pool_members.quote_id, 0071). Read on the service role. A database without
+ * those objects has no group quotes (false); any other read error is null, and the route
+ * refuses the revision rather than guess.
+ */
+async function isGroupQuote(admin: Awaited<ReturnType<typeof createAdminClient>>, quoteId: string): Promise<boolean | null> {
+  const absent = (e: { code?: string } | null) => /^(42P01|42703|PGRST205|PGRST204)$/.test(String(e?.code ?? ''))
+  const [{ data: q, error: qErr }, { data: m, error: mErr }] = await Promise.all([
+    admin.from('quotes').select('pool_member_id').eq('id', quoteId).maybeSingle(),
+    admin.from('service_pool_members').select('id').eq('quote_id', quoteId).limit(1),
+  ])
+  if ((qErr && !absent(qErr)) || (mErr && !absent(mErr))) return null
+  return !!(q as { pool_member_id?: string | null } | null)?.pool_member_id || (m ?? []).length > 0
 }
 
 async function loadRfqForNotify(admin: Awaited<ReturnType<typeof createAdminClient>>, rfqId: string): Promise<{ title: string; buyerUserId: string | null } | null> {

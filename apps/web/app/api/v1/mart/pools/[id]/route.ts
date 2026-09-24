@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getPool, getMember, poolCardText, poolProgressFor, publicPool } from '@/lib/mart/pools'
+import { getPool, getMember, poolCardText, buyerPoolPayload, buyerMemberPayload } from '@/lib/mart/pools'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,8 +25,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const base = process.env['NEXT_PUBLIC_APP_URL'] ?? request.nextUrl.origin
   return NextResponse.json(
     {
-      pool: { ...publicPool(pool), progress: poolProgressFor(pool) },
-      member: member ? { id: member.id, qty: member.qty, payment_state: member.payment_state, pay_by: member.pay_by, order_id: member.order_id } : null,
+      // Audit L4 — the unit display and the member's total are the server's (GST included).
+      pool: buyerPoolPayload(pool),
+      member: member ? buyerMemberPayload(pool, member) : null,
       shareText: poolCardText(pool, ['hi', 'te'].includes(locale) ? locale : 'en', `${base}/mart/pools/${pool.id}`),
     },
     { headers: { 'Cache-Control': 'private, no-store' } },

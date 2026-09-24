@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const { data } = await admin
     .from('products')
     .select(
-      'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, status, created_at, approved_at, ' +
+      'id, name, description, category_slug, hsn_code, gst_rate_bps, unit, images, min_order_qty, country_of_origin, status, created_at, updated_at, approved_at, ' +
         'seller:provider_profiles!inner(id, display_name, slug, city, state, gstin, sells_goods), tiers:price_tiers(min_qty, unit_price_paise)',
     )
     .eq('status', status)
@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
     sellerGstin: (Array.isArray(r.seller) ? r.seller[0] : r.seller)?.gstin ?? null,
     sellerSellsGoods: !!(Array.isArray(r.seller) ? r.seller[0] : r.seller)?.sells_goods,
     approvedAt: r.approved_at ?? null,
+    // Audit M16 — the version under review; an approval sends it back (reviewed_updated_at) and is refused if it moved.
+    updatedAt: (r.updated_at as string | null) ?? null,
   }))
   /* eslint-enable @typescript-eslint/no-explicit-any */
   return NextResponse.json({ products }, { headers: { 'Cache-Control': 'private, no-store' } })

@@ -89,6 +89,28 @@ export async function loadPool(admin: SupabaseClient, poolId: string): Promise<P
   return (data as PoolRow | null) ?? null
 }
 
+/**
+ * Audit M45 — the buyer profiles (msme ids) whose user ALSO owns a provider profile (any status, not deleted).
+ * Such a dual-role account never joins a group and never sees its offers: a provider could otherwise read its
+ * competitors' sealed volume tiers through its own buyer profile (§8.3 — no bidding wars). Fails closed: a read
+ * error throws (the caller's route answers 500; the detection run stops) rather than treating anyone as buyer-only.
+ */
+export async function dualRoleMsmeIds(admin: SupabaseClient, msmeIds: readonly string[]): Promise<Set<string>> {
+  const out = new Set<string>()
+  const msmeByUser = new Map<string, string[]>()
+  for (const part of chunks([...new Set(msmeIds)])) {
+    const { data, error } = await admin.from('msme_profiles').select('id, user_id').in('id', part)
+    if (error) throw new Error(`[pools] dual-role check (buyers): ${error.message}`)
+    for (const m of (data ?? []) as Array<{ id: string; user_id: string }>) msmeByUser.set(m.user_id, [...(msmeByUser.get(m.user_id) ?? []), m.id])
+  }
+  for (const part of chunks([...msmeByUser.keys()])) {
+    const { data, error } = await admin.from('provider_profiles').select('user_id').in('user_id', part).is('deleted_at', null)
+    if (error) throw new Error(`[pools] dual-role check (providers): ${error.message}`)
+    for (const p of (data ?? []) as Array<{ user_id: string }>) for (const id of msmeByUser.get(p.user_id) ?? []) out.add(id)
+  }
+  return out
+}
+
 /** The user id of each provider (for notifications), keyed by provider id. */
 export async function providerUsers(admin: SupabaseClient, providerIds: readonly string[]): Promise<Map<string, { userId: string; name: string; slug: string | null; active: boolean }>> {
   const out = new Map<string, { userId: string; name: string; slug: string | null; active: boolean }>()
