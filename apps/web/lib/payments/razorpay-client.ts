@@ -68,6 +68,7 @@ export const CHECKOUT_ERROR_KEYS: Record<string, string> = {
   addon_changed: 'err_addon_changed',
   option_not_found: 'err_quote_unavailable',
   razorpay_load_failed: 'err_razorpay_load_failed',
+  payments_unavailable: 'err_payments_unavailable',
   network: 'err_network',
   rate_limited: 'err_rate_limited',
 }

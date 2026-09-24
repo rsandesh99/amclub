@@ -4,6 +4,7 @@ import { martApiGate } from '@/lib/mart/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getPaymentGateway } from '@/lib/payments'
+import { paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { prepareMemberCheckout } from '@/lib/mart/pools'
 import { serverError } from '@/lib/api/errors'
@@ -19,6 +20,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   if (gate) return gate
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // ADR 023: no simulated (free) payments on the production deployment.
+  if (!paymentsAvailable(getPaymentGateway().isReal)) return NextResponse.json({ error: { code: PAYMENTS_UNAVAILABLE } }, { status: 503 })
   const rl = await enforce(limiters.checkout, `checkout:${userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
   const { id } = await params

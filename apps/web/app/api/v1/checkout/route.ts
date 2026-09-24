@@ -6,6 +6,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { requireToolScope } from '@/lib/agent/scope'
 import { RFQ_GOODS_COLS, QUOTE_GOODS_COLS, isGoodsRow } from '@/lib/mart/staged-columns'
 import { getPaymentGateway } from '@/lib/payments'
+import { paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { evaluateCoupon } from '@/lib/coupons/apply'
 import { COUPONS_ENABLED } from '@/lib/flags'
@@ -67,6 +68,7 @@ type CheckoutErrorCode =
   | 'goods_quote_unavailable'
   | 'addon_changed'
   | 'option_not_found'
+  | 'payments_unavailable'
 
 function fail(status: number, code: CheckoutErrorCode, error: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error, code, ...(extra ?? {}) }, { status })
@@ -135,6 +137,8 @@ export async function POST(request: NextRequest) {
   if (!userId) return fail(401, 'unauthorized', 'Unauthorized')
   const scope = await requireToolScope('place_order')
   if (scope) return scope
+  // ADR 023: no simulated (free) payments on the production deployment.
+  if (!paymentsAvailable(getPaymentGateway().isReal)) return fail(503, PAYMENTS_UNAVAILABLE, 'Payments are not available right now')
 
   // Per-user request cap (idempotencyKey already prevents double-charge).
   const rl = await enforce(limiters.checkout, `checkout:${userId}`)

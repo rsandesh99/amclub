@@ -68,6 +68,19 @@ const nextConfig: NextConfig = {
     return [{ source: '/(.*)', headers: SECURITY_HEADERS }]
   },
 
+  // The public catalog search lives at /services (signed-in buyers also have
+  // /app/search). /search is the URL people type and link to, so it forwards
+  // there, mapping the common `q` parameter onto the catalog's `query`.
+  // Temporary (307) so the canonical URL can still move.
+  async redirects() {
+    return [
+      { source: '/search', has: [{ type: 'query', key: 'q', value: '(?<q>.+)' }], destination: '/services?query=:q', permanent: false },
+      { source: '/search', destination: '/services', permanent: false },
+      { source: '/:locale(hi|te|ta)/search', has: [{ type: 'query', key: 'q', value: '(?<q>.+)' }], destination: '/:locale/services?query=:q', permanent: false },
+      { source: '/:locale(hi|te|ta)/search', destination: '/:locale/services', permanent: false },
+    ]
+  },
+
   // Chunking: the public header/footer, account menu, language switcher and
   // shared providers are used by every route group. Left to the defaults,
   // webpack folded them into the FIRST page entry that used them — the

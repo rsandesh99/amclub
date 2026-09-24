@@ -185,6 +185,11 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* The page never scrolls sideways: a long label (Tamil, Telugu) in a row
+       that cannot wrap must not widen the viewport. Rows meant to scroll
+       (chip strips) carry their own overflow-x-auto. `clip`, not `hidden`,
+       so no scroll container is created and sticky headers keep working. */
+    overflow-x: clip;
   }
 
   /* Ensure minimum 44px tap targets on mobile §4.4 */
