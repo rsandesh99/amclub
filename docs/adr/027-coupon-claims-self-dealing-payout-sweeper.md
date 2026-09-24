@@ -21,6 +21,10 @@ A user may hold a buyer profile and a provider profile; both are keyed by `user_
 
 The only control was the payout approval gate. The exposure: fraud and chargebacks, and metrics built on paid orders and ratings that the owner could inflate.
 
+### M38 — a completion's payout could be lost for good, and money crons had no ceiling
+
+Accept-delivery, the auto-accept cron and the goods receipt write `completed` first, then schedule the payout. A crash or a function timeout in between left a completed order with no payout row. Nothing re-drove it, so ops had nothing to release and the provider was silently never paid. ADR 026 already sweeps missing invoices. The money crons also set no `maxDuration` and processed their whole batch without regard to time, so a slow gateway cut them off part-way.
+
 ## Decision
 
 ### 1. A checkout claims a coupon use before any payment opens (M10)
@@ -52,6 +56,18 @@ One rule, `lib/orders/self-dealing.ts`, compares the `user_id` that owns each si
 
 Flagging shared bank accounts or phones between two users is still open. Unlike these checks, it needs a signal and an ops queue.
 
+### 3. Stranded payouts are swept; money crons run inside a time budget (M38)
+
+- **`sweepMissingPayouts`** (`lib/orders/transitions.ts`) runs from the reconcile cron (every 6 hours) and from the manual `daily` route. It takes `completed` orders from the last 30 days, idle for 10 minutes and with no payout row, and calls the idempotent `schedulePayout`.
+  - `schedulePayout` applies every hold. With `PAYOUT_AUTO_RELEASE` off, a swept payout is born `held`, so money still moves only on the founder's release, through `runPayouts` and its release rule (ADR 026).
+  - It reads newest first, in pages of 500 (at most 10), and looks up payouts 100 ids at a time.
+- **Resolved orders are not swept.** The audit suggested including `resolved_release` / `resolved_partial`, but `schedulePayout` pays the full earning. A resolved order's payout is its dispute settlement (ADR 014, `planDisputeSettlement`), and a settlement of zero writes no row at all, so sweeping them would overpay. An interrupted resolution (order resolved, dispute still open) is finished only by the resolve route's resume. The sweeper counts those (`stalledResolutions`, in the reconcile heartbeat) for ops.
+- **Every money cron route sets `export const maxDuration = 300`:** `auto-accept`, `auto-cancel`, `payouts`, `reconcile`, `daily` (was 60) and `pool-close`. Each runs inside `timeBudget(maxDuration)` (`lib/jobs/budget.ts`), which stops taking new items 60 seconds before the ceiling.
+  - `auto-accept` takes the oldest 100 due orders.
+  - The payout cron takes the oldest 200 due payouts, each through `runPayouts` for its order (the same claim, release rule and confirmed transfer), and reports `deferred`.
+  - The refund, invoice and payout sweepers stop at the budget.
+  - Whatever a run leaves is picked up by the next run: every item is guarded on the state it expects. A payout claimed when the function was cut off stays `processing`, and the reconcile cron settles it (ADR 026).
+
 ## Consequences
 
 - One buyer with a per-buyer limit of 1 who opens a second checkout while the first is unpaid is refused for up to 30 minutes (the session's life). The message says so (`coupon_in_checkout`).
@@ -66,5 +82,7 @@ Flagging shared bank accounts or phones between two users is still open. Unlike 
     - their own package and their own quote cannot be bought (409, no session);
     - on their own order, `accept` is 409 and `cancel` works;
     - their own provider profile cannot be reviewed.
+  - `verify-phase7` criterion 8 covers M38. A completed order whose payout row was removed gets exactly one payout at its full earning from the reconcile cron, and a second run writes nothing more.
+  - `verify-phase7` criterion 7 covers the M11 audit rows, which are part of the same wave.
   - The claim race was also run by hand on Postgres 16 with two sessions: the second waited on the lock, then got `usage_exceeded`.
 - **Rollback:** revert the code, then drop the two functions, the two columns and the two indexes. The rollback note is in 0081.

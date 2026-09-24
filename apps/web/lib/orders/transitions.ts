@@ -26,6 +26,7 @@ import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { reportOpsError } from '@/lib/observability'
 import { SELF_DEALING, isSelfDealtOrder } from '@/lib/orders/self-dealing'
+import { UNBOUNDED, type TimeBudget } from '@/lib/jobs/budget'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -534,7 +535,7 @@ export async function finishRefund(
 }
 
 /** Sweeper (auto-cancel cron): cancelled orders from the last 30 days still owed a refund, idle ≥ 10 minutes. */
-export async function redriveCancellationRefunds(admin: Admin): Promise<{ checked: number; refunded: number; failed: number; unavailable?: true }> {
+export async function redriveCancellationRefunds(admin: Admin, budget: TimeBudget = UNBOUNDED): Promise<{ checked: number; refunded: number; failed: number; unavailable?: true }> {
   // ADR 027 (audit M2): no re-drive through the simulation gateway on production;
   // the refunds stay owed (and visible) until real keys are configured.
   if (!paymentsAvailable(getPaymentGateway().isReal)) return { checked: 0, refunded: 0, failed: 0, unavailable: true }
@@ -551,6 +552,7 @@ export async function redriveCancellationRefunds(admin: Admin): Promise<{ checke
   let refunded = 0
   let failed = 0
   for (const o of rows ?? []) {
+    if (budget.spent()) break // audit M38 — the next run takes the rest
     const payment = await paymentForOrder<{ id: string; razorpay_payment_id: string | null; simulated: unknown }>(admin, o, 'id, razorpay_payment_id, simulated:webhook_payload->simulated')
     if (!payment) continue
     // ADR 027 — a simulated payment is never refunded by a real gateway; the cutover voids those orders.
@@ -577,7 +579,7 @@ export async function safeGenerateInvoices(admin: Admin, orderId: string): Promi
 }
 
 /** Sweeper (reconcile cron): orders completed in the last 30 days with no invoice yet. */
-export async function generateMissingInvoices(admin: Admin): Promise<{ checked: number; generated: number }> {
+export async function generateMissingInvoices(admin: Admin, budget: TimeBudget = UNBOUNDED): Promise<{ checked: number; generated: number }> {
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
   const { data: rows } = await admin
     .from('orders')
@@ -593,9 +595,81 @@ export async function generateMissingInvoices(admin: Admin): Promise<{ checked: 
   let generated = 0
   for (const id of ids) {
     if (invoiced.has(id)) continue
+    if (budget.spent()) break // audit M38 — the next run takes the rest
     await safeGenerateInvoices(admin, id)
     generated++
   }
   return { checked: ids.length, generated }
+}
+
+/**
+ * Sweeper (reconcile cron; audit M38, ADR 027): a completed order whose payout row
+ * was never written. The status is written first and the payout after it
+ * (accept-delivery, the auto-accept cron, the goods receipt), so a crash or a
+ * timeout in between left the provider unpaid with nothing for ops to release.
+ * schedulePayout is idempotent (one row per order, the event written once) and
+ * applies every hold — with PAYOUT_AUTO_RELEASE off a swept payout is born held,
+ * so no money moves without the founder's release. Bounded: completed in the
+ * last 30 days and idle 10 minutes, newest first, pages of 500 (at most 10),
+ * inside the cron's time budget.
+ *
+ * resolved_release / resolved_partial orders are never swept here: their payout
+ * amount is the dispute settlement (ADR 014; schedulePayout would pay the full
+ * earning), and a settlement of zero writes no row at all. An interrupted
+ * resolution (order resolved, dispute still open) is finished only by the
+ * resolve route's resume, so the sweeper counts those for ops instead.
+ */
+export async function sweepMissingPayouts(
+  admin: Admin,
+  budget: TimeBudget = UNBOUNDED,
+): Promise<{ checked: number; scheduled: number; stalledResolutions: number }> {
+  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+  const idle = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const completed: OrderStatus = 'completed'
+  const PAGE = 500
+  let checked = 0
+  let scheduled = 0
+  for (let page = 0; page < 10 && !budget.spent(); page++) {
+    const { data: rows } = await admin
+      .from('orders')
+      .select('id')
+      .eq('status', completed)
+      .gt('completed_at', since)
+      .lt('completed_at', idle)
+      .order('completed_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(page * PAGE, page * PAGE + PAGE - 1)
+    const ids = (rows ?? []).map((r) => r.id as string)
+    if (ids.length === 0) break
+    checked += ids.length
+    const paid = new Set<string>()
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data: have } = await admin.from('payouts').select('order_id').in('order_id', ids.slice(i, i + 100))
+      for (const r of have ?? []) paid.add(r.order_id as string)
+    }
+    for (const id of ids) {
+      if (paid.has(id)) continue
+      if (budget.spent()) break
+      // Re-read the full row: it must still be completed when the payout is written.
+      const order = await loadOrder(admin, id)
+      if (!order || order.status !== completed) continue
+      try {
+        await schedulePayout(admin, order)
+        scheduled++
+      } catch (e) {
+        console.error('[sweepMissingPayouts]', id, e instanceof Error ? e.message : e)
+      }
+    }
+    if (ids.length < PAGE) break
+  }
+  const resolved: OrderStatus[] = PAYOUT_RELEASE_STATUSES.filter((st) => st !== completed)
+  const { count: stalled } = await admin
+    .from('disputes')
+    .select('id, order:orders!inner(status, updated_at)', { count: 'exact', head: true })
+    .eq('status', 'open')
+    .in('order.status', resolved)
+    .lt('order.updated_at', idle)
+    .gt('order.updated_at', since)
+  return { checked, scheduled, stalledResolutions: stalled ?? 0 }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

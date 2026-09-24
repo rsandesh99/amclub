@@ -303,6 +303,37 @@ async function main() {
     }
   }
 
+  // ── Criterion 8 (audit M38, ADR 027): a completion whose payout was never written is swept, once ──
+  // The status is written before the payout; a crash in between used to leave the
+  // provider unpaid with nothing for ops to release. The reconcile cron re-drives it.
+  {
+    const cronSecret = process.env['CRON_SECRET']
+    if (!cronSecret) {
+      console.log('  ⏭ 8 payout sweeper SKIPPED (no CRON_SECRET in env)')
+    } else {
+      const o8 = await placeOrder(buyer.token, pkg!.id); created.orderIds.push(o8)
+      await completeOrder(buyer, prov, o8)
+      // Simulate the crash: the order is completed (20 minutes ago) but its payout row is gone.
+      await admin.from('payouts').delete().eq('order_id', o8)
+      await admin.from('orders').update({ completed_at: new Date(Date.now() - 20 * 60_000).toISOString() }).eq('id', o8)
+      const payoutEvents = async () => (await admin.from('order_events').select('id', { count: 'exact', head: true }).eq('order_id', o8).in('event', ['payout_scheduled', 'payout_held'])).count ?? 0
+      const eventsBefore = await payoutEvents()
+      const run = () => fetch(`${BASE}/api/v1/cron/reconcile`, { headers: { Authorization: `Bearer ${cronSecret}` } })
+      const r1 = await run()
+      const r1d = (await r1.json().catch(() => ({}))) as { missingPayouts?: { scheduled?: number } }
+      const { data: swept } = await admin.from('payouts').select('id, status, amount_paise').eq('order_id', o8)
+      const { data: o8row } = await admin.from('orders').select('provider_earning_paise').eq('id', o8).single()
+      const r2 = await run()
+      const { count: after2 } = await admin.from('payouts').select('id', { count: 'exact', head: true }).eq('order_id', o8)
+      const eventsAfter = await payoutEvents()
+      check('8. reconcile sweeps a completed order with no payout row: one payout at the full earning (held or scheduled), idempotent on a re-run',
+        r1.status === 200 && (r1d.missingPayouts?.scheduled ?? 0) >= 1 && (swept ?? []).length === 1 &&
+          Number(swept![0]!.amount_paise) === Number(o8row!.provider_earning_paise) && ['held', 'scheduled'].includes(swept![0]!.status as string) &&
+          r2.status === 200 && after2 === 1 && eventsAfter === eventsBefore + 1,
+        `run1=${r1.status} swept=${JSON.stringify(swept)} earning=${o8row?.provider_earning_paise} run2=${r2.status} payouts=${after2} events ${eventsBefore}→${eventsAfter}`)
+    }
+  }
+
   } finally {
   // ── cleanup — ALWAYS runs (even on a thrown assertion) so no residue is left ──
   console.log('\n🧹 cleanup…')
