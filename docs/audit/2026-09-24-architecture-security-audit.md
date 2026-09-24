@@ -51,7 +51,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | **0 — done** | C1, C2, H1, H2, M18 | 0072 and 0073 live |
 | **1 — inbound and dependencies (in review)** | H3 SMS hook signature (Standard Webhooks, +91 only; closed once the secret is set); H4 WhatsApp webhook fails closed without a verified signature; M6 `safeNext` control characters; H10 sharp, M27 next, M25 next-intl upgrades; M1 revoke `generate_order_number` from clients; the advisor items (revoke EXECUTE on internal definer functions from anon, pin `search_path`) | H3 needs a `SEND_SMS_HOOK_SECRET` in Vercel and the Supabase hook config |
 | **2 — money path (in review: H5–H9, M19, M39)** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
-| **3 — authorisation and abuse** | M7 / M8 delegated tokens refused unless a route opts in; M13 suspension enforced in `resolveActor`; M9 review flags go to a queue; M10 coupons: no public read, atomic redemption, per-buyer limit; M12 ownership checks on Udyam and penny-drop; M22 self-dealing guard; M17 clarification provider id hidden; M5 / L2 attachment and certificate paths pinned; M3 no token renewal from a delegated token | M12 touches KYC, so an ADR is needed |
+| **3 — authorisation and abuse (in review: M3, M7–M9, M10 part 1, M13, M17)** | M7 / M8 delegated tokens refused unless a route opts in; M13 suspension enforced in `resolveActor`; M9 review flags go to a queue; M10 coupons: no public read, atomic redemption, per-buyer limit; M12 ownership checks on Udyam and penny-drop; M22 self-dealing guard; M17 clarification provider id hidden; M5 / L2 attachment and certificate paths pinned; M3 no token renewal from a delegated token | M12 touches KYC, so an ADR is needed |
 | **4 — Mart, pools and agents** | M14 return window; M15 rationale off the public API; M16 re-review on material edits; M44 / M45 / L9 pool quote and offer sealing; M41–M43 WhatsApp binding, Munshi "yes" routing, trusted-part hygiene; M23 / M24 residency and budget; L3 runtime service-role scope | Several are dark features; fix before their cohort widens |
 | **5 — operations and architecture** | M32–M38 (queue creation, stuck-inbound alert, media caps, failing heartbeats, Upstash fail-open for reads, timeouts, re-drive); M28 / M29 / M30 (state-machine enforcement, one money-formula home, one masking rule set); M31 (a CI job with production flags, web unit tests); M26 (pin actions, OIDC for Fly); L4–L8; the performance advisor (119 unindexed foreign keys, the `notifications` index) | |
 
@@ -93,21 +93,21 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | H10 | sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes | Fixed in code (wave 1) |
 | M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Fixed in code (wave 1); migration 0074 |
 | M2 | Refunds, payouts and reconcile still go through the simulation gateway on production | Open |
-| M3 | The agent token endpoint accepts delegated tokens: renewal forever, wider scopes, any run id | Open |
+| M3 | The agent token endpoint accepts delegated tokens: renewal forever, wider scopes, any run id | Fixed in code (wave 3) |
 | M4 | A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order | Open |
 | M5 | RFQ attachment URLs are client-supplied and re-signed with the service role (IDOR on the private bucket) | Open |
 | M6 | `safeNext` open redirect via tab / CR / LF in `next` | Fixed in code (wave 1) |
-| M7 | Admin mutation routes accept delegated agent tokens by default | Open |
-| M8 | Delegated tokens are allowed by default on buyer, provider and pool write routes; the transition scope covers every action | Open |
-| M9 | Any signed-in user can instantly hide any published review | Open |
-| M10 | Coupons: every active code is publicly listable, usage limits are not atomic, no per-buyer limit | Open |
+| M7 | Admin mutation routes accept delegated agent tokens by default | Fixed in code (wave 3) |
+| M8 | Delegated tokens are allowed by default on buyer, provider and pool write routes; the transition scope covers every action | Fixed in code (wave 3) |
+| M9 | Any signed-in user can instantly hide any published review | Fixed in code (wave 3) |
+| M10 | Coupons: every active code is publicly listable, usage limits are not atomic, no per-buyer limit | Partly fixed (wave 3, 0075): no client read; atomic + per-buyer limits open |
 | M11 | Key admin decisions are not audit-logged (provider approve / reject, coupon creation, CMS banners) | Open |
 | M12 | Verification flags prove existence, not ownership (Udyam number, penny-drop name match) | Open |
-| M13 | Suspended providers keep their powers: quote, get paid, accept and deliver, read matched RFQs | Open |
+| M13 | Suspended providers keep their powers: quote, get paid, accept and deliver, read matched RFQs | Fixed in code (wave 3) |
 | M14 | A goods return can be opened from `completed` with no time limit | Open |
 | M15 | The public pool API leaks agent rationale (order ids, seller 30-day volume, buyer counts) | Open |
 | M16 | Edits to approved Mart listings go live without re-review (category / commission, GST rate, images) | Open |
-| M17 | `rfq_clarifications.provider_id` is readable by every matched competitor | Open |
+| M17 | `rfq_clarifications.provider_id` is readable by every matched competitor | Fixed in code (wave 3); migration 0075 |
 | M18 | `buyer_pool_discipline_v1` let every buyer read every buyer's pool record | Fixed |
 | M19 | Services payout release never re-checks the order status or an open dispute | Fixed in code (wave 2, ADR 026) |
 | M20 | Only `payment.captured` is consumed; refund, transfer and chargeback outcomes are never reconciled | Open |
@@ -300,7 +300,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M3. The agent token endpoint accepts delegated tokens: renewal forever, wider scopes, any run id
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 3). The session path of `POST /api/v1/agent/token` refuses a delegated token (no self-renewal or scope widening), and `run_id` must be one of the caller's own runs (403 `run_not_yours`)
 - **Where:** `apps/web/app/api/v1/agent/token/route.ts:74`
 - **Raised by:** 1 finding from 1 audit team (AI agents and LLM security)
 - **Impact:** One token theft becomes access the user cannot revoke. It lasts until the user is deleted or SUPABASE_JWT_SECRET is rotated, and for admin users that includes the admin API. The least-privilege amc_scopes model and the run binding can be bypassed at will. This path is live in production because AGENT_ENABLED=true.
@@ -332,7 +332,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M7. Admin mutation routes accept delegated agent tokens by default
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 3). `requireAdmin` refuses every delegated agent token unless the route names its read-only ops tool (`summarize_dispute`, `triage_verification`, `recommend_payout_release`, `read_order_evidence`) and that tool is in scope. Admin mutations are never reachable by an agent token
 - **Where:** `apps/web/lib/auth/admin.ts:12`, `apps/web/app/api/v1/admin/orders/[id]/route.ts:47`, `apps/web/lib/auth/admin.ts:15`
 - **Raised by:** 3 findings from 3 audit teams (AI agents and LLM security; Architecture and code health; AuthZ: admin, cron and misc routes)
 - **Impact:** This breaks the documented invariant that admin actions are never tools and that 'any delegated token is refused … so an agent can never reach them even under an admin's own grant'. The blast radius of a runtime credential compromise grows from read-only evidence to diverting and releasing provider payouts, approving providers, changing commission and minting coupons.
@@ -340,7 +340,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M8. Delegated tokens are allowed by default on buyer, provider and pool write routes; the transition scope covers every action
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 3). The transition route honours `draft_dispute` for `raise_dispute` only; every other action, and the unwrapped writes the audit listed (milestones, documents, review, external-wait, dispute statement, RFQ decline, RFQ attachments, buyer profile, provider settings, simulated checkout, pool join / commit / offer), refuse a delegated token
 - **Where:** `apps/web/lib/agent/scope.ts:17`, `apps/web/lib/pools/route-guard.ts:18`
 - **Raised by:** 2 findings from 2 audit teams (AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); S3.4 services demand pools: detection, tier pricing and the close path that writes quotes)
 - **Impact:** ADR-008/009 treat per-tool scopes as a hard lock, but in practice that lock only covers the handful of wrapped routes. It is not directly reachable by a model today, because tool routes are built from server-side ids, but one leaked runtime token equals the user's full authority on money- and state-changing routes.
@@ -348,7 +348,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M9. Any signed-in user can instantly hide any published review
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 3). A report is recorded, not acted on; a review is hidden pending ops only after three distinct reporters (never counting the reviewed provider), and never again once ops restored it
 - **Where:** `apps/web/app/api/v1/reviews/[id]/flag/route.ts:33`
 - **Raised by:** 1 finding from 1 audit team (AuthZ: admin, cron and misc routes)
 - **Impact:** The integrity of public ratings, which drive search 'rating' sort, trust badges and buyer decisions, can be manipulated unilaterally and repeatedly, at no cost. Moderation effort is unbounded.
@@ -356,7 +356,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M10. Coupons: every active code is publicly listable, usage limits are not atomic, no per-buyer limit
 
-- **Status:** Open
+- **Status:** Partly fixed (wave 3, migration 0075). Coupons are no longer client-readable, and checkout reads the coupon with the service role. Atomic redemption and a per-buyer limit need a product decision on limits (open)
 - **Where:** `packages/db/src/rls/policies.sql:993`, `apps/web/lib/coupons/apply.ts:39`, `packages/db/src/rls/policies.sql:992`, `apps/web/app/api/v1/checkout/route.ts:236`
 - **Raised by:** 5 findings from 4 audit teams (AuthZ: admin, cron and misc routes; AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); Database: RLS, grants, functions, views, storage; Payments and money integrity)
 - **Impact:** Private or targeted discount codes leak and can be redeemed by anyone. With per-code usage_limit the only cap (there is no per-user limit), a leaked code can be burned by strangers. The per-user brute-force limiter becomes pointless. Money impact is bounded by the discounts ops has created.
@@ -380,7 +380,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M13. Suspended providers keep their powers: quote, get paid, accept and deliver, read matched RFQs
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 3). `resolveActor` gives a suspended or soft-deleted provider no provider identity (like a suspended buyer) until an admin reactivates them, so quote, deliver, get-paid and matched-RFQ paths refuse
 - **Where:** `apps/web/lib/orders/actor.ts:37`
 - **Raised by:** 2 findings from 2 audit teams (AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); Server-rendered pages: service-role data serialized into client components, and public ISR pages)
 - **Impact:** Admin suspension doesn't stop a suspended provider from taking new business or buyer money, and buyer RFQ data keeps flowing to the suspended account.
@@ -419,7 +419,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M17. `rfq_clarifications.provider_id` is readable by every matched competitor
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 3). Migration 0075 grants clients every `rfq_clarifications` column except `provider_id` and `answered_by`; the RLS policies that use them keep working
 - **Where:** `packages/db/src/migrations/0034_rfq_clarifications.sql:63`
 - **Raised by:** 1 finding from 1 audit team (Database: RLS, grants, functions, views, storage)
 - **Impact:** Reveals which competitors are bidding on each RFQ and what they asked. This breaks the sealed-bid fairness the S1.3 design relies on (§8.3 no bidding wars). Blast radius is limited to matched providers.
