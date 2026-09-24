@@ -14,7 +14,9 @@ Waves 1–5 in the report's remediation plan are open. Each wave is one or more
 PRs, and each ticks items off in the report's index. Two items need something
 outside the code:
 - **H3** needs a `SEND_SMS_HOOK_SECRET` in Vercel production, matching the
-  secret configured on the Supabase Auth "Send SMS" hook.
+  secret configured on the Supabase Auth "Send SMS" hook. Until then the hook
+  runs in its transition mode (an error log per call, a global cap of 120 OTP
+  SMS an hour); with the secret, unsigned calls are refused.
 - **Leaked password protection** (Supabase advisor) is a dashboard toggle in
   Supabase Auth.
 

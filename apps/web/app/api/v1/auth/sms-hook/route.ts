@@ -15,7 +15,12 @@
  *
  * Dev behaviour: without SEND_SMS_HOOK_SECRET the signature is not checked
  * outside production, and without MSG91_AUTH_KEY the OTP is logged to the
- * server console only. In production a missing secret refuses every request.
+ * server console only.
+ *
+ * Production without the secret (transition only, so this deploy cannot stop
+ * phone login): every call logs an error and is held to +91 mobiles, the
+ * per-phone limit and a global hourly cap. Once the secret is set, an unsigned
+ * or badly signed call is refused.
  */
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
@@ -38,13 +43,12 @@ const INDIAN_MOBILE = /^\+?91[6-9]\d{9}$/
 export async function POST(request: NextRequest) {
   const raw = await request.text()
   const secret = process.env['SEND_SMS_HOOK_SECRET']
-  if (secret) {
-    if (!verifyStandardWebhook(secret, request.headers, raw)) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-    }
-  } else if (process.env.NODE_ENV === 'production') {
-    console.error('[SMS HOOK] SEND_SMS_HOOK_SECRET not configured — refusing unsigned hook calls.')
-    return NextResponse.json({ error: 'Hook not configured' }, { status: 401 })
+  const unsignedInProduction = !secret && process.env.NODE_ENV === 'production'
+  if (secret && !verifyStandardWebhook(secret, request.headers, raw)) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+  }
+  if (unsignedInProduction) {
+    console.error('[SMS HOOK] SEND_SMS_HOOK_SECRET not configured — unsigned hook call accepted under the transition caps. Set the secret (audit H3).')
   }
 
   let body: unknown = null
@@ -72,6 +76,10 @@ export async function POST(request: NextRequest) {
   // Auth (which skip /api/v1/auth/otp and its limiter).
   const rl = await enforce(limiters.smsHookPhone, `sms:${phone.replace(/\D/g, '')}`)
   if (!rl.ok) return NextResponse.json({ error: 'Too many codes for this number' }, { status: 429 })
+  if (unsignedInProduction) {
+    const global = await enforce(limiters.smsHookUnsigned, 'sms:unsigned')
+    if (!global.ok) return NextResponse.json({ error: 'Too many codes' }, { status: 429 })
+  }
 
   const authKey = process.env['MSG91_AUTH_KEY']
   const isRealKey = authKey && !['<msg91-auth-key>', 'placeholder', ''].includes(authKey)

@@ -58,6 +58,8 @@ export const limiters = {
   otpIp: build(15, '15 m', 'rl:otp-ip'),
   /** Supabase SMS hook — every OTP SMS per number, however it was requested (audit H3). */
   smsHookPhone: build(5, '15 m', 'rl:sms-hook'),
+  /** Global cap on OTP SMS while production runs the hook without SEND_SMS_HOOK_SECRET (transition only). */
+  smsHookUnsigned: build(120, '1 h', 'rl:sms-hook-unsigned'),
   /** Paid KYC verification (GSTIN/bank) per user. */
   kyc: build(8, '1 m', 'rl:kyc'),
   /** Checkout creation per user (idempotency already prevents double-charge). */
