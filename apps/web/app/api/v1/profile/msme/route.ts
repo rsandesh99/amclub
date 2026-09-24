@@ -8,6 +8,7 @@ import { upsertUserRow } from '@/lib/auth/session'
 import { serverError } from '@/lib/api/errors'
 import { missingLegalDocs } from '@/lib/legal/acceptance'
 import { accountSuspendedResponse, getMsmeSuspension } from '@/lib/auth/suspension'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 const bodySchema = z.object({
   fullName: z.string().min(2),
@@ -30,6 +31,9 @@ export async function POST(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('POST /profile/msme')
+  if (delegated) return delegated
   const { data: { user: authUser } } = await supabase.auth.getUser()
 
   const json = await request.json().catch(() => null)

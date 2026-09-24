@@ -33,7 +33,7 @@ interface PayoutRow {
  * hold reasons from the payout_held order_event. Open statuses sort oldest first.
  */
 export async function GET(request: NextRequest) {
-  const gate = await requireAdmin()
+  const gate = await requireAdmin({ agentTool: 'recommend_payout_release' })
   if (gate.error) return gate.error
 
   const status = request.nextUrl.searchParams.get('status')

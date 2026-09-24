@@ -233,7 +233,8 @@ export async function POST(request: NextRequest) {
 
     let extraDiscountPaise = 0
     if (couponCode) {
-      const { data: coupon } = await supabase.from('coupons').select('*').eq('code', couponCode).maybeSingle()
+      // Audit M10 — coupons are not client-readable; the lookup is the service role's.
+      const { data: coupon } = await (await createAdminClient()).from('coupons').select('*').eq('code', couponCode).maybeSingle()
       // The coupon applies to the whole pre-GST subtotal (package after its discount + add-ons).
       const taxableBeforeCoupon = couponBasePaise({ pricePaise: Number(p.price_paise), discountBps: p.discount_bps, addons: addonRows })
       extraDiscountPaise = evaluateCoupon(coupon, taxableBeforeCoupon, p.category_id).discountPaise

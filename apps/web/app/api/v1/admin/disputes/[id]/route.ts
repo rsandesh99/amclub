@@ -16,7 +16,7 @@ import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
  * whose grant lacks summarize_dispute — the S1.4 evidence-route precedent.
  */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireAdmin()
+  const gate = await requireAdmin({ agentTool: 'summarize_dispute' })
   if (gate.error) return gate.error
   const scope = await requireToolScope('summarize_dispute')
   if (scope) return scope

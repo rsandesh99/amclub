@@ -7,6 +7,7 @@ import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { maybeFlagAnomalousReview } from '@/lib/reviews/anomaly'
 import { serverError } from '@/lib/api/errors'
 import { accountSuspendedResponse, getMsmeSuspension } from '@/lib/auth/suspension'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 const bodySchema = z.object({
   rating: z.number().int().min(1).max(5),
@@ -53,6 +54,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('POST /orders/[id]/review')
+  if (delegated) return delegated
 
   const rl = await enforce(limiters.reviewWrite, `review:${userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)

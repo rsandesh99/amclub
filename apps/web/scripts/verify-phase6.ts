@@ -113,8 +113,20 @@ async function main() {
     dup.status === 409 && (onPlaced.status === 409 || onPlaced.status === 403) && !!rlsErr,
     `dup=${dup.status} onPlaced=${onPlaced.status} rls=${rlsErr ? 'rejected' : 'ALLOWED!'}`)
 
-  // ── Criterion 3: flag → /admin/reviews queue → ops remove ───────────────────
-  const flag = await api(buyer.token, `/api/v1/reviews/${revd.reviewId}/flag`, { reason: 'spam' })
+  // ── Criterion 3: reports → /admin/reviews queue → ops remove ───────────────
+  // Audit M9: one report is recorded but hides nothing; three distinct reporters
+  // (never the reviewed provider) send the review to the queue.
+  const flag1 = await api(buyer.token, `/api/v1/reviews/${revd.reviewId}/flag`, { reason: 'spam' })
+  const { data: afterOne } = await admin.from('reviews').select('status').eq('id', revd.reviewId).single()
+  const subjectFlag = await api(provUser.token, `/api/v1/reviews/${revd.reviewId}/flag`, { reason: 'unfair' })
+  const { data: afterSubject } = await admin.from('reviews').select('status').eq('id', revd.reviewId).single()
+  check('3a. One report (or the reviewed provider’s) keeps the review published',
+    flag1.ok && afterOne?.status === 'published' && subjectFlag.ok && afterSubject?.status === 'published',
+    `one=${afterOne?.status} subject=${afterSubject?.status}`)
+  const r2 = await mkUser('reporter2')
+  const r3 = await mkUser('reporter3')
+  await api(r2.token, `/api/v1/reviews/${revd.reviewId}/flag`, { reason: 'spam' })
+  const flag = await api(r3.token, `/api/v1/reviews/${revd.reviewId}/flag`, { reason: 'spam' })
   const queue = await api(adminUser.token, '/api/v1/admin/reviews?status=flagged', undefined, 'GET')
   const queued = ((await queue.json()).reviews ?? []).some((r: { id: string }) => r.id === revd.reviewId)
   const remove = await api(adminUser.token, `/api/v1/admin/reviews/${revd.reviewId}`, { action: 'remove' })

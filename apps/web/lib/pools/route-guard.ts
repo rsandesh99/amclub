@@ -2,6 +2,7 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { agentApiGate } from '@/lib/agent/gate'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
@@ -20,6 +21,9 @@ export async function poolRouteGuard(): Promise<PoolGuard> {
   if (gate) return { ok: false, res: gate }
   const { userId } = await getAuthedSupabase()
   if (!userId) return { ok: false, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+  // Audit M85 — joining and offering are a person's taps (ADR 024); no agent tool wraps them.
+  const delegated = await requireNotDelegated('pools')
+  if (delegated) return { ok: false, res: delegated }
   const admin = await createAdminClient()
   if (!(await poolsOnFor(admin, userId))) return { ok: false, res: NextResponse.json({ error: 'Not found' }, { status: 404 }) }
   const actor = await resolveActor(admin, userId)

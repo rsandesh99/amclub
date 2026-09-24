@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { z } from 'zod'
 import { agentPersonaSchema, PERSONA_REQUIRED_ROLE, scopesWithinPersona, uuidSchema } from '@amclub/shared'
 import { extractRuntimeCredential, verifyRuntimeCredential } from '@amclub/agent-core'
@@ -74,6 +75,10 @@ export async function POST(request: NextRequest) {
   // ── session path ───────────────────────────────────────────────────────────
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Audit M3 — only a person's own session may mint here. A delegated token must
+  // not renew itself, widen its scopes or re-bind to another run.
+  const delegated = await requireNotDelegated('POST /agent/token (session)')
+  if (delegated) return delegated
   const rl = await enforce(limiters.authed, `agent-token:${userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
@@ -85,6 +90,11 @@ export async function POST(request: NextRequest) {
   }
   if (parsed.data.scopes && !scopesWithinPersona(persona, parsed.data.scopes)) {
     return NextResponse.json({ error: 'scopes_exceed_persona' }, { status: 422 })
+  }
+  // A run id is bound only when that run is the caller's own.
+  if (parsed.data.run_id) {
+    const { data: run } = await admin.from('agent_runs').select('user_id').eq('id', parsed.data.run_id).maybeSingle()
+    if (!run || run.user_id !== userId) return NextResponse.json({ error: 'run_not_yours' }, { status: 403 })
   }
   const minted = mintDelegatedToken(
     {

@@ -275,6 +275,12 @@ CREATE POLICY "rfq_clarifications: admin all" ON rfq_clarifications
 
 REVOKE INSERT, UPDATE, DELETE ON rfq_clarifications FROM anon, authenticated;
 
+-- 0075 (audit M17): clients read every column except who asked (provider_id)
+-- and the buyer's user id (answered_by).
+REVOKE SELECT ON rfq_clarifications FROM anon, authenticated;
+GRANT SELECT (id, rfq_id, question, question_redacted, answer, answer_redacted, asked_at, answered_at, created_at, updated_at, deleted_at)
+  ON rfq_clarifications TO authenticated;
+
 -- ─── quotes ───────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "quotes: provider crud own" ON quotes;
@@ -1001,9 +1007,9 @@ CREATE POLICY "notifications: owner mark read" ON notifications
 
 -- ─── coupons ──────────────────────────────────────────────────────────────────
 
+-- 0075 (audit M10): no client read; checkout and validate read coupons with the service role.
 DROP POLICY IF EXISTS "coupons: public read active" ON coupons;
-CREATE POLICY "coupons: public read active" ON coupons
-  FOR SELECT USING (is_active = true AND valid_to > now());
+REVOKE SELECT ON coupons FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "coupons: admin all" ON coupons;
 CREATE POLICY "coupons: admin all" ON coupons

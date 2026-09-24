@@ -15,7 +15,7 @@ import { onboardingAdminView } from '@/lib/agent/onboarding'
 
 /** GET — full provider detail for ops: profile, verifications, listings, orders, earnings, reviews. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireAdmin()
+  const gate = await requireAdmin({ agentTool: 'triage_verification' })
   if (gate.error) return gate.error
 
   const { id } = await params

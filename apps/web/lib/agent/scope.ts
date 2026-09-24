@@ -42,6 +42,12 @@ export async function requireNotDelegated(route: string): Promise<NextResponse |
   return null
 }
 
+/** True when the caller holds a delegated agent token (`amc_persona` or `amc_scopes`), not a person's session. */
+export async function isDelegated(): Promise<boolean> {
+  const claims = await bearerClaims()
+  return !!claims && (typeof claims['amc_persona'] === 'string' || Array.isArray(claims['amc_scopes']))
+}
+
 /** S2.2 — the run a delegated token is bound to (`amc_run_id`), or null for an ordinary session. */
 export async function delegatedRunId(): Promise<string | null> {
   const claims = await bearerClaims()

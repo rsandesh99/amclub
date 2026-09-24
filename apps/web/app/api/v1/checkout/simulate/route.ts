@@ -8,6 +8,7 @@ import { paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulati
 import { materializeFromCapture } from '@/lib/payments/materialize'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { accountSuspendedResponse } from '@/lib/auth/suspension'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 const bodySchema = z.object({ checkoutSessionId: z.string().uuid() })
 
@@ -29,6 +30,9 @@ export async function POST(request: NextRequest) {
 
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('POST /checkout/simulate')
+  if (delegated) return delegated
 
   // F9: same per-user cap as /checkout — this is the only materialisation-
   // adjacent endpoint, it must not be free to hammer.

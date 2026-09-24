@@ -7,6 +7,7 @@ import { resolveActor } from '@/lib/orders/actor'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
 import { storeRfqAttachment } from '@/lib/rfq/attachments'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * S1.8 — RFQ attachment upload (SPINE, not flag-gated). Buyer session; one
@@ -21,6 +22,9 @@ export const maxDuration = 30
 export async function POST(request: NextRequest) {
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Audit M8 — no agent tool wraps this write: a delegated token is refused.
+  const delegated = await requireNotDelegated('POST /rfq/attachments')
+  if (delegated) return delegated
   const rl = await enforce(limiters.authed, `rfq-att:${userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
 
