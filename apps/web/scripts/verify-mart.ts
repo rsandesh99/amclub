@@ -321,6 +321,15 @@ async function main() {
     const pc = await json(await api(buyer.token, `/api/v1/mart/pools/${poolId}/checkout`, {}))
     await admin.from('products').update({ gst_rate_bps: 1800 }).eq('id', p1)
     ok('member checkout charges the frozen 18 % — exactly the total the pool page showed', pc.status === 200 && pc.body.amountPaise === expectPool.totalPaise && pc.body.lineItems?.[0]?.gst_rate_bps === 1800 && pc.body.lineItems?.[0]?.hsn_code === '7318', JSON.stringify(pc.body).slice(0, 300))
+    // Submit is draft-only: a live or suspended listing never goes back through "submit"
+    // (it would pull a pooled listing past pool_live, or auto-activate a suspended one).
+    const reSubmit = await json(await api(sellerA.token, `/api/v1/mart/seller/products/${p1}`, { action: 'submit' }))
+    const { data: p1After } = await admin.from('products').select('status').eq('id', p1).single()
+    ok('submit on an ACTIVE listing → 409; it stays active', reSubmit.status === 409 && p1After?.status === 'active', JSON.stringify(reSubmit.body))
+    ok('seller suspends a listing → suspended', (await json(await api(sellerA.token, `/api/v1/mart/seller/products/${p2}`, { action: 'suspend' }))).body.status === 'suspended')
+    const subSusp = await json(await api(sellerA.token, `/api/v1/mart/seller/products/${p2}`, { action: 'submit' }))
+    const { data: p2After } = await admin.from('products').select('status').eq('id', p2).single()
+    ok('submit on a SUSPENDED listing → 409; it stays suspended (only reactivate lifts it)', subSusp.status === 409 && p2After?.status === 'suspended', JSON.stringify(subSusp.body))
 
     console.log(`\n${fail === 0 ? '✅' : '❌'} verify-mart: ${pass} passed, ${fail} failed\n`)
   } catch (e) {

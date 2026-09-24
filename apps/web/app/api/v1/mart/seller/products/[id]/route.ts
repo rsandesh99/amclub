@@ -170,7 +170,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 }
 
 /**
- * Seller status actions: submit (draft → pending_approval, or straight to
+ * Seller status actions: submit (draft only → pending_approval, or straight to
  * active once the seller has N admin-approved listings — config), suspend
  * (active → suspended), reactivate (suspended → active; only if the seller
  * suspended it themselves and it was approved before; a listing whose current version
@@ -190,17 +190,23 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
   if (action === 'submit') {
     if (!c.seller.sellsGoods) return NextResponse.json({ error: 'activation_required' }, { status: 409 })
-    if (!isValidProductTransition(from, 'pending_approval')) return NextResponse.json({ error: `Cannot submit from ${from}` }, { status: 409 })
+    // Submit is draft-only. The M16 edges active / suspended → pending_approval are
+    // reached only through a material edit or a reactivate: a "submit" of a live or
+    // suspended listing would auto-activate an admin-suspended one for a trusted
+    // seller, or pull a pooled listing off the catalogue past the pool_live guard.
+    if (from !== 'draft' || !isValidProductTransition(from, 'pending_approval')) return NextResponse.json({ error: `Cannot submit from ${from}` }, { status: 409 })
     const n = await getAutoApproveAfterListings(c.admin)
     const { count } = await c.admin.from('products').select('id', { count: 'exact', head: true }).eq('seller_id', c.seller.id).not('approved_at', 'is', null)
     const autoApprove = (count ?? 0) >= n
     const to: ProductStatus = autoApprove ? 'active' : 'pending_approval'
-    const { error } = await c.admin
+    const { data: moved, error } = await c.admin
       .from('products')
       .update({ status: to, updated_at: now, ...(autoApprove ? { approved_at: now, approved_by: null } : {}) })
       .eq('id', id)
       .eq('status', from)
+      .select('id')
     if (error) return serverError('[mart/seller/products submit]', error)
+    if (!moved?.length) return NextResponse.json({ error: 'product_changed' }, { status: 409 })
     await addProductEvent(c.admin, id, c.userId, 'submitted', null)
     if (autoApprove) {
       await addProductEvent(c.admin, id, c.userId, 'activated', { auto: true, approved_listings: count })

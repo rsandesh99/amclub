@@ -84,7 +84,7 @@ export function CatalogWizard({
   const [busy, setBusy] = useState<'draft' | 'upload' | 'save' | 'submit' | null>(null)
   const [error, setError] = useState('')
   const [savedId, setSavedId] = useState<string | null>(productId ?? null)
-  const [done, setDone] = useState<'draft' | 'submitted' | null>(null)
+  const [done, setDone] = useState<'draft' | 'submitted' | 'saved' | null>(null)
   const step: Step = STEPS[stepIdx]!
   // E16 N40 — the chosen category's typed attributes (public definitions).
   const [attrDefs, setAttrDefs] = useState<MartAttributeDef[]>([])
@@ -222,6 +222,8 @@ export function CatalogWizard({
     if (!saved) return
     // Audit M16 — the edit already sent the approved listing back for review.
     if (saved.status === 'pending_approval') { setDone('submitted'); return }
+    // A live or paused listing whose edit needed no review keeps its status: only a draft is submitted.
+    if (saved.status && saved.status !== 'draft') { setDone('saved'); return }
     const id = saved.id
     setBusy('submit'); setError('')
     try {
@@ -268,8 +270,8 @@ export function CatalogWizard({
       <div className="mart-enter mx-auto max-w-lg px-4 py-16 text-center">
         <div className="jaali-ivory rounded-[10px] border border-brass/50 px-6 py-12">
           <GoldStamp className="mx-auto h-16 w-16 text-2xl">✓</GoldStamp>
-          <h1 className="mt-4 font-display text-2xl font-bold text-emerald-ink">{done === 'submitted' ? t('sent_for_approval') : t('save_draft')}</h1>
-          <p className="mt-2 text-sm text-foreground-secondary">{done === 'submitted' ? t('sent_stamp_body') : error}</p>
+          <h1 className="mt-4 font-display text-2xl font-bold text-emerald-ink">{done === 'submitted' ? t('sent_for_approval') : done === 'saved' ? t('changes_saved_title') : t('save_draft')}</h1>
+          <p className="mt-2 text-sm text-foreground-secondary">{done === 'submitted' ? t('sent_stamp_body') : done === 'saved' ? t('changes_saved_body') : error}</p>
           <Link href={'/partner/goods' as '/partner'}><Button className="mt-6 bg-emerald hover:bg-emerald-ink">{t('seller_title')}</Button></Link>
         </div>
       </div>

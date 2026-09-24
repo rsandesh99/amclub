@@ -2396,6 +2396,8 @@
     "submit_for_approval": "Send for approval",
     "sent_for_approval": "Sent for approval",
     "sent_stamp_body": "AMC reviews new listings before they go live. You'll be notified.",
+    "changes_saved_title": "Changes saved",
+    "changes_saved_body": "No review was needed, so your listing keeps its current status.",
     "err_name": "Enter a product name (3+ characters)",
     "err_category": "Choose a category",
     "err_hsn": "HSN code must be 4, 6 or 8 digits",
