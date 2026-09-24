@@ -109,7 +109,9 @@ any → held               (dispute open, provider suspended, or bank verificati
   - **Payments:** simulated nowhere on production (ADR-023), so checkout needs real Razorpay keys (ADR-003 cutover).
   - **"Dark" and "default off" below** describe the code defaults, not production.
 - **Agent programme RESUMED (founder, 2026-09-24; it was paused after S3.2 on 2026-09-23 so Experience v3 could take the build).**
-  - **Open now:** S3.4 and S4.3.
+  - **Open now:** S3.4.
+  - **S4.3 paperwork landed:** ADR-013 (Proposed) recommends keeping §8.3 unchanged. Option B (the sealed one-round counter) may be revisited only at the V1.5→V2 gate under its §7 preconditions.
+    - Its spike `packages/shared/src/spikes/negotiation.ts` is not exported and has no caller. Never import it into product code.
   - **Still gated:**
     - S3.3 needs ADR-011 (Proposed, `docs/adr/011-first-order-guarantee.md`) to be Accepted: the founder's numbers, the CA opinion and a recorded Razorpay test-mode run (H7).
     - S4.1 keeps its six-month gate.

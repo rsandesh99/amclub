@@ -2,8 +2,9 @@
 
 > **RESUMED 2026-09-24 (founder).** It was paused after S3.2 on 2026-09-23 while
 > Experience v3 took the build; Wave 1 has since landed.
-> - **Open:** S3.4 (its tiered quotes reuse the E12b `quote_options` design, ADR-020)
->   and S4.3 (paperwork only).
+> - **Open:** S3.4 (its tiered quotes reuse the E12b `quote_options` design, ADR-020).
+> - **Done:** S4.3's paperwork: ADR-013 (Proposed; it recommends keeping §8.3) plus the
+>   unexported spike `packages/shared/src/spikes/negotiation.ts`.
 > - **Still gated:**
 >   - S3.3 needs ADR-011 Accepted: the founder's numbers, the CA opinion and H7.
 >   - S4.2 needs decision D1.
