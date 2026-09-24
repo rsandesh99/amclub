@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { parseInboxQuery } from '@amclub/shared'
 import { isOnFor } from '@/lib/experiments'
 import { InboxV3 } from '@/components/partner-v3/InboxV3'
+import { PoolsBanner } from '@/components/pools/PoolsBanner'
 
 function parseTab(v: string | undefined): ProviderInboxTab {
   return (PROVIDER_INBOX_TABS as readonly string[]).includes(v ?? '') ? (v as ProviderInboxTab) : 'open'
@@ -33,13 +34,17 @@ export default async function PartnerRfqsPage({ searchParams }: { searchParams: 
   const profile = await getProviderProfile(user.id)
   if (!profile) redirect('/partner/onboarding')
   // Experience v3 E11 (flag `partner`): inbox v2 — filters, sort and search in the URL, over my own matches.
-  if (isOnFor('partner', user.id)) return <InboxV3 userId={user.id} query={parseInboxQuery(sp)} />
+  // S3.4 (dark) — group requests open for this provider, above either inbox.
+  const poolsBanner = <PoolsBanner userId={user.id} providerId={profile.id} />
+  if (isOnFor('partner', user.id)) return <>{poolsBanner}<InboxV3 userId={user.id} query={parseInboxQuery(sp)} /></>
   const t = await getTranslations('rfq')
   const tab = parseTab(sp['tab'])
   const inbox = await listProviderRfqInbox(user.id, { tab, page: Number(sp['page'] ?? '1') })
   const total = inbox.counts.open + inbox.counts.quoted + inbox.counts.closed
 
   return (
+    <>
+    {poolsBanner}
     <div className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="font-display text-2xl font-bold">{t('inbox_title')}</h1>
       <p className="mt-1 text-sm text-foreground-secondary">{t('inbox_subtitle')}</p>
@@ -106,6 +111,7 @@ export default async function PartnerRfqsPage({ searchParams }: { searchParams: 
         </nav>
       )}
     </div>
+    </>
   )
 }
 

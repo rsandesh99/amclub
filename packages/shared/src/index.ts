@@ -146,6 +146,9 @@ export * from './procurement'
 export * from './benchmarks'
 export * from './procurement-copy'
 
+// S3.4 — demand aggregation for services (ADR 024): the pool machine, clustering, volume tiers, the close plan
+export * from './service-pools'
+
 // S1.6 — onboarding agent contract (steps + transitions, strict draft schema, capability facts) and interview copy (en/hi/te)
 export * from './onboarding'
 export * from './onboarding-copy'

@@ -3819,6 +3819,42 @@
     "rfq_sent_as_is": {
       "title": "We sent your request",
       "body": "We sent your request to {matched} providers; you can still answer questions from them."
+    },
+    "pool_invite": {
+      "title": "Join a group for a better price",
+      "body": "{n, plural, one {# other business} other {# other businesses}} in your state asked for the same service. Join the group and providers can offer a volume price. Your details stay private."
+    },
+    "pool_open": {
+      "title": "A group of businesses needs the same service",
+      "body": "{n, plural, one {# business} other {# businesses}} joined. Offer one volume price for the group."
+    },
+    "pool_opened_buyer": {
+      "title": "Your group is open",
+      "body": "{n, plural, one {# business} other {# businesses}} joined. Providers can now make group offers."
+    },
+    "pool_offer": {
+      "title": "New group offer",
+      "body": "A provider made an offer to your group. Compare and choose one before the group closes."
+    },
+    "pool_offer_withdrawn": {
+      "title": "A group offer was withdrawn",
+      "body": "The offer you chose was withdrawn. You can choose another before the group closes."
+    },
+    "pool_quote": {
+      "title": "Your group price is in",
+      "body": "{provider}: {total} in all. {n, plural, one {# business} other {# businesses}} chose this offer. It is in your quotes, ready to accept."
+    },
+    "pool_closed_provider": {
+      "title": "Your group offer closed",
+      "body": "{n, plural, one {# business} other {# businesses}} chose your offer. Each got a quote at {price}."
+    },
+    "pool_ended": {
+      "title": "Your group has ended",
+      "body": "Your request carries on as usual. You can still compare and accept any quote on it."
+    },
+    "pool_lapsed": {
+      "title": "Not enough businesses joined",
+      "body": "The group did not open. Your request carries on as usual."
     }
   },
   "content_translate": {
@@ -3928,5 +3964,102 @@
     "state_granted": "Usage measurement: on. You can turn it off any time.",
     "state_denied": "Usage measurement: off. Nothing is measured.",
     "state_unset": "You haven't chosen yet. Nothing is measured until you accept."
+  },
+  "pools": {
+    "card_title": "Group request",
+    "invite_body": "{n, plural, one {# other business} other {# other businesses}} in {state} asked for {service} too. Join them and providers can offer a volume price. Other businesses never see your request.",
+    "join": "Join the group",
+    "dismiss": "No thanks",
+    "joined_forming": "You joined. The group opens to providers once {min} businesses have joined ({n} so far).",
+    "joined_open": "The group is open until {when}. Choose an offer before then.",
+    "closing": "The group is closing. Your group price arrives shortly.",
+    "quoted": "Your group price is in your quotes below.",
+    "view_group": "See the group",
+    "leave": "Leave the group",
+    "how_it_works": "You keep your own request and any direct quotes. If you choose a group offer, you get one quote at the price for the number of businesses that chose it, and you pay only if you accept it.",
+    "err": "That did not work. Please try again.",
+    "err_rfq_closed": "This request is no longer open.",
+    "err_too_late": "This group closes too near your request’s deadline.",
+    "err_offer_unavailable": "That offer is no longer available to you.",
+    "err_pool_not_open": "The group is not taking choices now.",
+    "page_title": "Group request: {service}",
+    "page_subtitle": "{n, plural, one {# business} other {# businesses}} in {state}",
+    "status_forming": "Gathering businesses",
+    "status_open": "Open for offers",
+    "status_closing": "Closing",
+    "status_closed": "Closed",
+    "status_lapsed": "Did not open",
+    "status_cancelled": "Cancelled",
+    "closes_at": "Closes {when}",
+    "forms_by": "Needs {min} businesses by {when}",
+    "offers_title": "Group offers",
+    "no_offers": "No offers yet. Providers matched to your request can make one while the group is open.",
+    "invitee_note": "Join the group to see its offers.",
+    "tier_one": "On its own",
+    "tier_many": "If {n} or more choose it",
+    "tier_extra": "{price} + GST {gst} = {total}",
+    "tier_included": "{total}, GST included",
+    "chosen_by": "{n, plural, =0 {No business has chosen it yet} one {# business chose it} other {# businesses chose it}}",
+    "delivery": "Delivery in {n, plural, one {# day} other {# days}}",
+    "valid_until": "Valid until {date}",
+    "advance": "{n}% advance",
+    "choose": "Choose this offer",
+    "chosen": "Your choice",
+    "unchoose": "Remove my choice",
+    "unavailable": "This provider already quoted or declined your request directly. See your quotes.",
+    "choice_note": "Choosing moves no money. When the group closes you get one quote at the price for the number that chose this offer, and you decide then.",
+    "back_to_request": "Back to your request",
+    "ended_note": "This group has ended. Your request carries on as usual.",
+    "partner_title": "Group requests",
+    "partner_subtitle": "Several businesses need the same service. Offer one volume price; each business that chooses you gets its own quote.",
+    "partner_empty": "No open groups for you right now.",
+    "partner_row": "{n, plural, one {# business} other {# businesses}} in {state}",
+    "partner_offered": "Offer sent",
+    "partner_banner": "{n, plural, one {# group request} other {# group requests}} open for a volume price",
+    "open_group": "Open",
+    "offer_title": "Your group offer",
+    "offer_intro": "{n, plural, one {# business is} other {# businesses are}} in this group. You are matched to {m, plural, one {# of their requests} other {# of their requests}}; open one to read it in full.",
+    "request_link": "Request {i}",
+    "tiers_label": "Price per business",
+    "tier_min_one": "One business on its own",
+    "tier_min_label": "When at least this many choose you",
+    "tier_price_label": "Price per business (₹, before GST)",
+    "add_tier": "Add a lower price for more businesses",
+    "remove_tier": "Remove",
+    "days_label": "Delivery (days)",
+    "scope_label": "What is included",
+    "scope_placeholder": "The work, the documents you file or deliver, and what is not included.",
+    "gst_label": "GST",
+    "gst_extra": "Extra",
+    "gst_included": "Included",
+    "valid_label": "Valid until",
+    "advance_label": "Advance (%)",
+    "message_label": "Note to the businesses (optional)",
+    "authorise": "When the group closes, AMClub sends this offer as a quote to each business that chose it, at the price for the number that chose you. You can withdraw it until the group closes.",
+    "submit": "Send group offer",
+    "withdraw": "Withdraw offer",
+    "sent": "Offer sent. It is sealed: other providers never see it.",
+    "err_tiers": "Each extra price needs more businesses and a lower price than the one before.",
+    "err_validity": "The offer must stay valid until the group closes.",
+    "err_exists": "You already have an offer on this group.",
+    "err_not_eligible": "You cannot make an offer on this group.",
+    "err_fields": "Fill in the price, days, what is included, GST and validity.",
+    "result": "{n, plural, =0 {No business chose your offer.} one {# business chose your offer: each got a quote at {price}.} other {# businesses chose your offer: each got a quote at {price}.}}",
+    "your_tiers": "Your prices",
+    "withdrawn": "You withdrew this offer.",
+    "admin_title": "Group requests",
+    "admin_subtitle": "Demand aggregation (S3.4): groups the agent proposed, how many joined, and how many group quotes were paid.",
+    "admin_empty": "No groups yet.",
+    "col_service": "Service",
+    "col_state": "State",
+    "col_status": "Status",
+    "col_joined": "Joined",
+    "col_offers": "Offers",
+    "col_quoted": "Quoted",
+    "col_paid": "Paid",
+    "col_closes": "Closes",
+    "cancel": "Cancel group",
+    "cancel_reason": "Reason (kept in the audit log)",
+    "cancelled_ok": "Group cancelled. Members were told."
   }
 }

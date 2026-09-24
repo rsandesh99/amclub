@@ -28,6 +28,7 @@ const CRON_JOBS = [
   { name: 'agent-onboarding-expire', staleAfterMs: 3 * 3600_000 },
   { name: 'agent-munshi-growth', staleAfterMs: 8 * 24 * 3600_000 }, // weekly (S2.4)
   { name: 'agent-procurement-watch', staleAfterMs: 1 * 3600_000 }, // every 15 min (S3.1)
+  { name: 'agent-demand-pools', staleAfterMs: 3 * 3600_000 }, // hourly (S3.4); a no-op beat while the switch is off
   // pool-close is omitted: it deliberately records no beat while MART_ENABLED=false.
 ]
 
