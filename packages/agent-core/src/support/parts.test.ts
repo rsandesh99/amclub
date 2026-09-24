@@ -19,6 +19,15 @@ describe('S2.3 parts builders — taint', () => {
     expect(trusted).toContain('AMC-2026-000123')
     expect(trusted).toContain('"GST filing b"')
   })
+  it('audit M23: the live message, the previous one and user transcript turns are contact-masked before the prompt', () => {
+    const parts = buildSupportIntentParts({ text: 'where is my order? call 98765 43210 or mail ravi@example.com', messageId: 'm-9', channel: 'support_chat', roles: ['buyer'], locale: 'en', recentIntents: [], unclearStreak: 0, orders: [], rfqs: [], previousText: 'my number is +91 9876543210', previousMessageId: 'm-8' })
+    const payloads = parts.untrusted!.map((e) => e.text).join('\n')
+    expect(payloads).not.toMatch(/98765\s?43210|ravi@example\.com/)
+    expect(payloads).toContain('[contact hidden]')
+    expect(payloads).toContain('where is my order?')
+    const summary = buildTicketSummaryParts({ ticketId: 't-2', locale: 'en', role: 'buyer', channel: 'whatsapp', order: null, rfq: null, reason: 'complaint', transcript: [{ id: 'u1', role: 'user', text: 'reach me on 9876543210' }] })
+    expect(summary.untrusted![0]!.text).not.toContain('9876543210')
+  })
   it('ticket summary: every transcript turn is an Envelope tagged by speaker; the facts line carries numbers only', () => {
     const parts = buildTicketSummaryParts({ ticketId: 't-1', locale: 'en', role: 'buyer', channel: 'web', order: { order_number: 'AMC-1', status: 'in_progress', amount: '₹2,500' }, rfq: null, reason: 'complaint', transcript: [{ id: 'u1', role: 'user', text: POISON }, { id: 'a1', role: 'assistant', text: 'Order AMC-1 is in progress.' }] })
     expect(parts.untrusted!.map((e) => e.provenance.kind)).toEqual(['support_transcript_user', 'support_transcript_assistant'])

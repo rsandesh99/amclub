@@ -94,11 +94,14 @@ const serverEnvSchema = z.object({
   AGENT_LLM_BASE_URL_ROUTINE: z.string().url().optional(),
   AGENT_LLM_BASE_URL_REASONING: z.string().url().optional(),
   AGENT_LLM_BASE_URL_FRONTIER: z.string().url().optional(),
-  // Data-residency guard (OPT-IN; default off = today's behaviour). When 'true' the
-  // gateway refuses an 'in' task class (TASK_CLASS_RESIDENCY) to any host not in
-  // AGENT_IN_RESIDENCY_HOSTS (comma-separated hostnames).
+  // Data-residency guard. When 'true' the gateway refuses an 'in' task class
+  // (TASK_CLASS_RESIDENCY) to any host not in AGENT_IN_RESIDENCY_HOSTS (comma-separated
+  // hostnames). Audit M23: in PRODUCTION with AGENT_ENABLED=true the guard fails closed —
+  // either ENFORCE=true + HOSTS, or a recorded AGENT_RESIDENCY_WAIVER (the reason, ≥ 12
+  // chars) is required, else every 'in' model call is refused (/admin/agents shows it).
   AGENT_RESIDENCY_ENFORCE: z.enum(['true', 'false']).optional(),
   AGENT_IN_RESIDENCY_HOSTS: z.string().optional(),
+  AGENT_RESIDENCY_WAIVER: z.string().max(300).optional(),
   // Cost estimation when the vendor reports no cost: JSON
   // {"<model id>": {"inPerMTokUsd": n, "outPerMTokUsd": n}}. Missing model -> a
   // conservative fallback rate (never ₹0 for a live call).
@@ -112,6 +115,8 @@ const serverEnvSchema = z.object({
   AGENT_BUDGET_RUN_PAISE: z.string().optional(),
   AGENT_BUDGET_USER_DAY_PAISE: z.string().optional(),
   AGENT_BUDGET_MONTH_PAISE: z.string().optional(),
+  // Audit M24 — the open (non-cohort) month envelope override.
+  AGENT_BUDGET_MONTH_OPEN_PAISE: z.string().optional(),
   // AGENT_ENABLED gates every /api/v1/agent/* surface (dark build). Default OFF.
   AGENT_ENABLED: z.string().optional(),
   // Feature flags. 'true' enables; anything else (incl. unset) = OFF.

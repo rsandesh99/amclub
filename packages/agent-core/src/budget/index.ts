@@ -14,15 +14,24 @@ export interface BudgetCaps {
   runPaise: number
   userDayPaise: number
   monthPaise: number
+  /**
+   * Audit M24 — the share of the month that OPEN traffic (users outside the cohort, on the ungated paid endpoints:
+   * the voice parser, speech-to-text, Mart catalog drafts) may spend, on its own month counter. The rest of
+   * `monthPaise` stays for the cohort and ops, so outside traffic can no longer drain every AI feature.
+   */
+  monthOpenPaise?: number
 }
 
-/** 'store_unavailable' = production agent call with no budget store (fail closed). */
-export type BudgetBreach = 'run_cap' | 'user_day_cap' | 'month_cap' | 'store_unavailable'
+/** 'store_unavailable' = production agent call with no budget store (fail closed). 'month_open_cap' = the open envelope is spent. */
+export type BudgetBreach = 'run_cap' | 'user_day_cap' | 'month_cap' | 'month_open_cap' | 'store_unavailable'
+
+/** Who a call spends for (audit M24): `open` = outside the cohort → also the open envelope; `cohort` / `ops` = the month cap only. */
+export type BudgetAudience = 'open' | 'cohort' | 'ops'
 
 export interface BudgetStatus {
   ok: boolean
   breach?: BudgetBreach
-  spent: { run: number; userDay: number; month: number }
+  spent: { run: number; userDay: number; month: number; monthOpen?: number }
 }
 
 export interface Budget {
@@ -55,10 +64,14 @@ export function resolveCaps(settings?: Partial<Record<string, unknown>>, agentNa
   const byAgent = settings?.['budget_run_paise_by_agent']
   const override = agentName && byAgent && typeof byAgent === 'object' ? (byAgent as Record<string, unknown>)[agentName] : undefined
   const runSetting = override !== undefined && override !== null ? override : settings?.['budget_run_paise']
+  const dOpen = agentSettingDefault('budget_month_open_paise') as number
+  const monthPaise = num(process.env['AGENT_BUDGET_MONTH_PAISE'] ?? settings?.['budget_month_paise'], dMonth)
   return {
     runPaise: num(process.env['AGENT_BUDGET_RUN_PAISE'] ?? runSetting, dRun),
     userDayPaise: num(process.env['AGENT_BUDGET_USER_DAY_PAISE'] ?? settings?.['budget_user_day_paise'], dDay),
-    monthPaise: num(process.env['AGENT_BUDGET_MONTH_PAISE'] ?? settings?.['budget_month_paise'], dMonth),
+    monthPaise,
+    // never above the month cap itself
+    monthOpenPaise: Math.min(monthPaise, num(process.env['AGENT_BUDGET_MONTH_OPEN_PAISE'] ?? settings?.['budget_month_open_paise'], dOpen)),
   }
 }
 
@@ -77,6 +90,8 @@ export interface RedisBudgetOptions {
   userId: string
   now?: () => Date
   keyPrefix?: string
+  /** Audit M24 — `open` also checks + increments the open month envelope (default `cohort`: unchanged). */
+  audience?: BudgetAudience
 }
 
 const DAY_SECONDS = 86_400
@@ -89,23 +104,26 @@ export function createRedisBudget(opts: RedisBudgetOptions): Budget {
     if (!capsPromise) capsPromise = typeof opts.caps === 'function' ? opts.caps() : Promise.resolve(opts.caps)
     return capsPromise
   }
+  const open = opts.audience === 'open'
   const keys = () => {
     const d = now()
     return {
       run: `${prefix}:run:${opts.runId}`,
       userDay: `${prefix}:uday:${opts.userId}:${ymd(d)}`,
       month: `${prefix}:month:${ym(d)}`,
+      monthOpen: `${prefix}:month_open:${ym(d)}`,
     }
   }
   return {
     async check(): Promise<BudgetStatus> {
       const k = keys()
-      const [run, userDay, month] = await opts.redis.mget<number>(k.run, k.userDay, k.month)
-      const spent = { run: Number(run ?? 0), userDay: Number(userDay ?? 0), month: Number(month ?? 0) }
+      const [run, userDay, month, monthOpen] = await opts.redis.mget<number>(k.run, k.userDay, k.month, ...(open ? [k.monthOpen] : []))
+      const spent = { run: Number(run ?? 0), userDay: Number(userDay ?? 0), month: Number(month ?? 0), ...(open ? { monthOpen: Number(monthOpen ?? 0) } : {}) }
       const c = await caps()
       if (spent.run >= c.runPaise) return { ok: false, breach: 'run_cap', spent }
       if (spent.userDay >= c.userDayPaise) return { ok: false, breach: 'user_day_cap', spent }
       if (spent.month >= c.monthPaise) return { ok: false, breach: 'month_cap', spent }
+      if (open && c.monthOpenPaise !== undefined && (spent.monthOpen ?? 0) >= c.monthOpenPaise) return { ok: false, breach: 'month_open_cap', spent }
       return { ok: true, spent }
     },
     async add(paise: number): Promise<void> {
@@ -118,6 +136,10 @@ export function createRedisBudget(opts: RedisBudgetOptions): Budget {
       await opts.redis.expire(k.userDay, DAY_SECONDS * 2)
       await opts.redis.incrby(k.month, amount)
       await opts.redis.expire(k.month, DAY_SECONDS * 40)
+      if (open) {
+        await opts.redis.incrby(k.monthOpen, amount)
+        await opts.redis.expire(k.monthOpen, DAY_SECONDS * 40)
+      }
     },
   }
 }
