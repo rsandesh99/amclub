@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
-import { recordHeartbeat } from '@/lib/jobs/heartbeat'
+import { runCronJob } from '@/lib/jobs/heartbeat'
 import { computeBenchmarks } from '@/lib/benchmarks/compute'
 
 export const runtime = 'nodejs'
@@ -17,12 +17,5 @@ export const maxDuration = 60
 export async function GET(request: NextRequest) {
   if (!verifyCron(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const admin = await createAdminClient()
-  try {
-    const result = await computeBenchmarks(admin)
-    await recordHeartbeat(admin, 'benchmark-compute', { ...result })
-    return NextResponse.json(result)
-  } catch (e) {
-    console.error('[cron/benchmark-compute]', (e as Error).message)
-    return NextResponse.json({ error: 'failed' }, { status: 500 })
-  }
+  return runCronJob(admin, 'benchmark-compute', () => computeBenchmarks(admin))
 }

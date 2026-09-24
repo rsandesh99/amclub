@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
-import { recordHeartbeat } from '@/lib/jobs/heartbeat'
+import { runCronJob } from '@/lib/jobs/heartbeat'
 import { addQuoteEvents } from '@/lib/rfq/events'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { quoteWindowLapsed } from '@amclub/shared'
@@ -15,14 +15,22 @@ import { notifyText } from '@/lib/i18n/notify'
 
 export const dynamic = 'force-dynamic'
 
+type Admin = Awaited<ReturnType<typeof createAdminClient>>
+
 /** `rfq.expire` (§5.9) — RFQs past their 72h window with no accepted quote → 'expired'.
  *  (Accepted RFQs are already 'accepted' and untouched.)
  *  Then: quotes still 'submitted' on any closed RFQ → 'expired' (+ quote_events),
- *  so silent expiry becomes a measurable, distinct outcome from active decisions. */
+ *  so silent expiry becomes a measurable, distinct outcome from active decisions.
+ *  A later step that fails is counted in `stepErrors` and marks the run degraded (M35). */
 export async function GET(request: NextRequest) {
   if (!verifyCron(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const admin = await createAdminClient()
+  return runCronJob(admin, 'rfq-expire', () => expireRfqs(admin))
+}
+
+async function expireRfqs(admin: Admin) {
   const nowIso = new Date().toISOString()
+  let stepErrors = 0
 
   const { data, error } = await admin
     .from('rfqs')
@@ -30,10 +38,7 @@ export async function GET(request: NextRequest) {
     .in('status', ['open', 'quoted'])
     .lte('expires_at', nowIso)
     .select('id, title, msme_id')
-  if (error) {
-    console.error('[cron/rfq-expire]', error)
-    return NextResponse.json({ error: 'failed' }, { status: 500 })
-  }
+  if (error) throw new Error(`rfq expiry: ${error.message}`)
 
   // Tell each buyer once: only the rows THIS run moved to 'expired' are in `data`
   // (a re-run finds them already expired and moves nothing), so no duplicates.
@@ -43,6 +48,7 @@ export async function GET(request: NextRequest) {
       await notifyRfqExpired(admin, r)
       buyersExpiredNotified++
     } catch (e) {
+      stepErrors++
       console.error('[cron/rfq-expire] notify buyer', r.id, e)
     }
   }
@@ -63,7 +69,10 @@ export async function GET(request: NextRequest) {
       .lte('created_at', cutoff)
       .order('created_at', { ascending: true })
       .limit(200)
-    if (defErr) console.error('[cron/rfq-expire] deferred lookup', defErr)
+    if (defErr) {
+      stepErrors++
+      console.error('[cron/rfq-expire] deferred lookup', defErr)
+    }
     for (const row of (deferred ?? []) as unknown as { id: string; msme: { user_id: string } | null }[]) {
       const { released, matched } = await releaseDeferredRfq(admin, row.id, 'auto_released')
       if (!released) continue
@@ -82,6 +91,7 @@ export async function GET(request: NextRequest) {
       }
     }
   } catch (e) {
+    stepErrors++
     console.error('[cron/rfq-expire] quality hold guard', e)
   }
 
@@ -94,7 +104,10 @@ export async function GET(request: NextRequest) {
     .eq('status', 'submitted')
     .in('rfq.status', ['expired', 'cancelled'])
     .limit(500)
-  if (staleErr) console.error('[cron/rfq-expire] stale quotes lookup', staleErr)
+  if (staleErr) {
+    stepErrors++
+    console.error('[cron/rfq-expire] stale quotes lookup', staleErr)
+  }
 
   let quotesExpired = 0
   if (stale && stale.length > 0) {
@@ -106,7 +119,10 @@ export async function GET(request: NextRequest) {
       .in('id', [...rfqOf.keys()])
       .eq('status', 'submitted')
       .select('id')
-    if (moveErr) console.error('[cron/rfq-expire] quote expiry', moveErr)
+    if (moveErr) {
+      stepErrors++
+      console.error('[cron/rfq-expire] quote expiry', moveErr)
+    }
     const movedIds = (moved ?? []).map((m) => m.id)
     await addQuoteEvents(
       admin,
@@ -128,6 +144,7 @@ export async function GET(request: NextRequest) {
         }),
       )
     } catch (e) {
+      stepErrors++
       console.error('[cron/rfq-expire] notify providers', e)
     }
   }
@@ -184,10 +201,9 @@ export async function GET(request: NextRequest) {
       }
     }
   } catch (e) {
+    stepErrors++
     console.error('[cron/rfq-expire] quote-window sweep', e)
   }
 
-  const result = { expired: data?.length ?? 0, buyersExpiredNotified, quotesExpired, matchesLapsed, buyersNotified, qualityReleased }
-  await recordHeartbeat(admin, 'rfq-expire', result)
-  return NextResponse.json(result)
+  return { expired: data?.length ?? 0, buyersExpiredNotified, quotesExpired, matchesLapsed, buyersNotified, qualityReleased, stepErrors }
 }

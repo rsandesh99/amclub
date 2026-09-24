@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCron } from '@/lib/jobs/cron-auth'
-import { recordHeartbeat } from '@/lib/jobs/heartbeat'
+import { runCronJob } from '@/lib/jobs/heartbeat'
 import { runLicenceReminders } from '@/lib/licences'
 
 export const runtime = 'nodejs'
@@ -18,12 +18,5 @@ export const maxDuration = 60
 export async function GET(request: NextRequest) {
   if (!verifyCron(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const admin = await createAdminClient()
-  try {
-    const result = await runLicenceReminders(admin)
-    await recordHeartbeat(admin, 'licence-reminders', { ...result })
-    return NextResponse.json(result)
-  } catch (e) {
-    console.error('[cron/licence-reminders]', (e as Error).message)
-    return NextResponse.json({ error: 'failed' }, { status: 500 })
-  }
+  return runCronJob(admin, 'licence-reminders', () => runLicenceReminders(admin))
 }

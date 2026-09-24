@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint && tsx scripts/lint/client-money.ts",
+    "lint": "next lint && tsx scripts/lint/client-money.ts && tsx scripts/lint/cron-registry.ts",
     "typecheck": "tsc --noEmit",
     "killtest:replay": "tsx scripts/killtest-webhook-replay.ts",
     "killtest:dropped": "tsx scripts/killtest-dropped-webhook.ts",

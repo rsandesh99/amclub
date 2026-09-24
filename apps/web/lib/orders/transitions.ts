@@ -21,6 +21,7 @@ import { maybeEnqueuePayoutDossier } from '@/lib/agent/dossier-trigger'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
 import { captureServerEvent } from '@/lib/analytics/server'
+import { reportOpsError } from '@/lib/observability'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -446,6 +447,7 @@ export async function settleCancellationRefund(
   } catch (e) {
     const reason = e instanceof Error ? e.message.slice(0, 200) : 'refund_error'
     console.error('[settleCancellationRefund] refund failed', order.id, reason)
+    reportOpsError(e, 'refund_failed', { tags: { order_id: order.id, from: fromStatus } })
     await addEvent(admin, order.id, 'refund_failed', null, { reason, from: fromStatus })
     return { status: order.status, refundedPaise: 0, error: 'refund_failed' }
   }
@@ -518,6 +520,7 @@ export async function safeGenerateInvoices(admin: Admin, orderId: string): Promi
   } catch (e) {
     const reason = e instanceof Error ? e.message.slice(0, 200) : 'invoice_error'
     console.error('[generateInvoices]', orderId, reason)
+    reportOpsError(e, 'invoice_failed', { tags: { order_id: orderId } })
     await addEvent(admin, orderId, 'invoice_failed', null, { reason })
   }
 }
