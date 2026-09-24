@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 export function StickyActionBar({ children, hideFrom = 'lg', className }: { children: ReactNode; hideFrom?: 'md' | 'lg' | 'never'; className?: string }) {
   return (
     <div
+      data-bottom-bar
       className={cn(
         'material hairline-t fixed inset-x-0 bottom-0 z-30 px-4 pt-3',
         hideFrom === 'md' && 'md:hidden',

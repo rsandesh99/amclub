@@ -22,6 +22,10 @@ const admin = createClient(URL_, SERVICE, { auth: { persistSession: false } })
 let pass = 0, fail = 0
 const check = (n: string, ok: boolean, extra = '') => { console.log(`  ${ok ? '✓' : '✗'} ${n}${extra ? ' — ' + extra : ''}`); ok ? pass++ : fail++ }
 const tag = `expv_${Date.now()}`
+// E18: the `guide` flag as the server under test reads it (money-rigs sets EXP_V3_GUIDE=on).
+const GUIDE_ON = /^(on|true|100)$/i.test((process.env['EXP_V3_GUIDE'] ?? '').trim())
+// E18: a second server with AGENT_ENABLED=true (money-rigs :3001), for the assistant home. Unset → only the flag-off checks.
+const AGENT_BASE = process.env['AGENT_BASE_URL']
 const created: { users: string[]; providerIds: string[]; msmeIds: string[]; orderIds: string[]; packageIds: string[]; rfqIds: string[] } = { users: [], providerIds: [], msmeIds: [], orderIds: [], packageIds: [], rfqIds: [] }
 
 async function mkUser(label: string, roles: string[] = ['msme']): Promise<{ uid: string; token: string; cookie: string }> {
@@ -842,6 +846,17 @@ async function e9() {
   for (const it of items.slice(0, 5)) positions.push(block.indexOf(`href="${it.href}"`, (positions[positions.length - 1] ?? -1) + 1))
   check('FR-9.1: the home lists the first 5 rows in order, then "See all"', v.includes('data-testid="home-v3"') && positions.every((p) => p >= 0) && block.includes('href="/app/actions"'), positions.join(','))
   check('FR-9.4: the five tiles are gone; the completeness card stays under 80 %', !v.includes('📨') && !v.includes('📦') && v.includes('data-testid="home-completeness"'))
+  // E18 (flag `guide`): the right rail's numbers come from these same fixtures — 2 live requirements (2 quotes),
+  // 3 orders in flight (placed, accepted, delivered; the dispute is not "in progress") holding 3 × ₹1,180, 1 completed.
+  if (GUIDE_ON) {
+    const rail = v.slice(v.indexOf('data-testid="home-rail"'))
+    const value = (k: string) => new RegExp(`data-testid="snapshot-${k}" data-value="([^"]*)"`).exec(rail)?.[1] ?? ''
+    const got = ['requirements', 'in_progress', 'held', 'completed'].map(value)
+    check('E18: the home rail shows the buyer\'s numbers (2 open · 2 quotes · 3 in progress · ₹3,540 held · 1 completed) and "Why AMClub"',
+      v.includes('data-testid="home-rail"') && JSON.stringify(got) === JSON.stringify(['2', '3', '₹3,540', '1']) && rail.includes('2 quotes received') && rail.includes('data-testid="why-amclub"'),
+      got.join(' | '))
+    check('E18: the side rail carries "Post a requirement" under the menu', v.includes('data-testid="rail-card"') && v.includes('href="/app/rfq/new?entry=rail"'))
+  }
   const all = visible(await (await fetch(`${BASE}/app/actions`, { headers: { cookie: buyer.cookie } })).text())
   check('FR-9.1: "See all" lists every row', all.includes('data-testid="actions-all"') && items.every((i) => all.includes(`href="${i.href}"`)))
   const me = (await (await fetch(`${BASE}/api/v1/profile/me`, { headers: { Authorization: `Bearer ${buyer.token}` } })).json()) as { homeV3Enabled?: boolean }
@@ -1807,8 +1822,57 @@ async function e15b() {
   }
 }
 
+async function e18() {
+  console.log('\nE18 — "Why AMClub", the trust strip, the assistant home (AGENT_ENABLED)')
+  const services = visible(await (await fetch(`${BASE}/services`)).text())
+  if (!GUIDE_ON) {
+    check('E18 off: /services has no panel and no trust strip', !services.includes('data-testid="why-amclub"') && !services.includes('data-testid="trust-strip"'))
+  } else {
+    check('E18: the /services front page shows "Why AMClub" with both tabs, and the trust strip under the search',
+      services.includes('data-testid="why-amclub"') && services.includes('data-testid="why-amclub-tab-buyers"') && services.includes('data-testid="why-amclub-tab-providers"') && services.includes('data-testid="trust-strip"'))
+    const count = /data-testid="why-amclub-items" data-count="(\d+)"/.exec(services)?.[1]
+    // 11 buyer promises + the Mart one only with MART_ENABLED (off on this server).
+    check('E18: the buyer tab counts every buyer promise; the headline ones render first', count === '11' && services.includes('No spam calls') && services.includes('Speak, don') && services.includes('Up to 7 quotes'), String(count))
+    const searching = visible(await (await fetch(`${BASE}/services?query=gst`)).text())
+    check('E18: a search keeps the trust strip; the panel gives the results the width', searching.includes('data-testid="trust-strip"') && !searching.includes('data-testid="why-amclub"'))
+  }
+
+  const buyer = await mkUser('e18buyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'E18 Buyer Co', state: 'MZ', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const offPage = await fetch(`${BASE}/app/ai`, { headers: { cookie: buyer.cookie }, redirect: 'manual' })
+  const offApi = await fetch(`${BASE}/api/v1/agent/assistant`, { headers: { Authorization: `Bearer ${buyer.token}` } })
+  check('E18: with AGENT_ENABLED off, /app/ai and /api/v1/agent/assistant do not exist (404)', offPage.status === 404 && offApi.status === 404, `${offPage.status}/${offApi.status}`)
+  if (!AGENT_BASE) return
+
+  const page = visible(await (await fetch(`${AGENT_BASE}/app/ai`, { headers: { cookie: buyer.cookie } })).text())
+  const caps = page.match(/data-capability="/g)?.length ?? 0
+  check('E18: /app/ai explains the assistant — 9 capabilities with their state, what it asks first, what it never does, its settings',
+    page.includes('data-testid="assistant-home"') && caps === 9 && page.includes('It always asks you first') && page.includes('It never') && page.includes('data-testid="assistant-permission"'), `capabilities ${caps}`)
+  check('E18: outside the cohort only the always-on capability reads "On"', (page.match(/data-on="true"/g)?.length ?? 0) === 1 && page.includes('data-capability="voice_rfq" data-on="true"'))
+  check('E18: the permission card speaks plainly (no tool names), split by what needs a tap', page.includes('Accept a quote') && page.includes('Only after you tap') && !/accept_quote|place_order|search_catalog/.test(page))
+  const a = await fetch(`${AGENT_BASE}/api/v1/agent/assistant?persona=buyer`, { headers: { Authorization: `Bearer ${buyer.token}` } })
+  const aj = (await a.json().catch(() => ({}))) as { on?: Record<string, boolean>; allowed?: boolean }
+  check('E18: the launcher API — voice is always on, agent features off outside the cohort, not allowed yet', a.ok && aj.on?.['voice_rfq'] === true && aj.on?.['support'] === false && aj.allowed === false, JSON.stringify(aj))
+  const profile = visible(await (await fetch(`${AGENT_BASE}/app/profile`, { headers: { cookie: buyer.cookie } })).text())
+  check('E18: the profile page links to the assistant home instead of listing tool names', profile.includes('data-testid="assistant-profile-link"') && profile.includes('href="/app/ai"') && !profile.includes('font-mono">search_catalog'))
+
+  const prov = await mkUser('e18prov', ['provider'])
+  const { data: pp } = await admin.from('provider_profiles').insert({ user_id: prov.uid, legal_name: 'E18 Firm', display_name: 'E18 Firm', slug: `${tag.replace(/_/g, '-')}-e18prov`, state: 'MZ', status: 'active', languages: ['en'] }).select('id').single()
+  created.providerIds.push(pp!.id)
+  const ppage = visible(await (await fetch(`${AGENT_BASE}/partner/ai`, { headers: { cookie: prov.cookie } })).text())
+  check('E18: /partner/ai lists the 6 provider capabilities (Munshi first)', ppage.includes('data-persona="provider"') && (ppage.match(/data-capability="/g)?.length ?? 0) === 6 && ppage.indexOf('data-capability="munshi"') > 0)
+}
+
 async function main() {
   console.log(`\nExperience v3 verification → ${BASE}\n`)
+  // `--only=e18` (money-rigs, once the agent-on server is up): just that section.
+  if (process.argv.includes('--only=e18')) {
+    try { await e18() } finally { await cleanup() }
+    console.log(`\n${pass} passed, ${fail} failed\n`)
+    process.exit(fail ? 1 : 0)
+  }
   try {
     await e0()
     await e1()
@@ -1834,18 +1898,23 @@ async function main() {
     await e15a()
     await e15b()
     await e17()
+    await e18()
   } finally {
-    console.log('\n🧹 cleanup…')
-    const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }
-    for (const id of created.orderIds) { await t(admin.from('order_events').delete().eq('order_id', id)); await t(admin.from('orders').delete().eq('id', id)) }
-    for (const id of created.packageIds) await t(admin.from('packages').delete().eq('id', id))
-    for (const id of created.rfqIds) await t(admin.from('rfqs').delete().eq('id', id))
-    for (const id of created.providerIds) { await t(admin.from('provider_categories').delete().eq('provider_id', id)); await t(admin.from('provider_verifications').delete().eq('provider_id', id)); await t(admin.from('provider_public_stats').delete().eq('provider_id', id)); await t(admin.from('provider_profiles').delete().eq('id', id)) }
-    for (const id of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', id))
-    for (const uid of created.users) { await t(admin.from('audit_logs').delete().eq('actor_id', uid)); await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
+    await cleanup()
   }
   console.log(`\n${pass} passed, ${fail} failed\n`)
   process.exit(fail ? 1 : 0)
+}
+
+async function cleanup() {
+  console.log('\n🧹 cleanup…')
+  const t = async (p: PromiseLike<unknown>) => { try { const r = (await p) as { error?: { message: string } | null } | null; if (r?.error) console.error('  ! delete error', r.error.message) } catch (e) { console.error('  ! delete error', (e as Error)?.message ?? e) } }
+  for (const id of created.orderIds) { await t(admin.from('order_events').delete().eq('order_id', id)); await t(admin.from('orders').delete().eq('id', id)) }
+  for (const id of created.packageIds) await t(admin.from('packages').delete().eq('id', id))
+  for (const id of created.rfqIds) await t(admin.from('rfqs').delete().eq('id', id))
+  for (const id of created.providerIds) { await t(admin.from('provider_categories').delete().eq('provider_id', id)); await t(admin.from('provider_verifications').delete().eq('provider_id', id)); await t(admin.from('provider_public_stats').delete().eq('provider_id', id)); await t(admin.from('provider_profiles').delete().eq('id', id)) }
+  for (const id of created.msmeIds) await t(admin.from('msme_profiles').delete().eq('id', id))
+  for (const uid of created.users) { await t(admin.from('audit_logs').delete().eq('actor_id', uid)); await t(admin.from('users').delete().eq('id', uid)); await admin.auth.admin.deleteUser(uid).catch(() => {}) }
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })

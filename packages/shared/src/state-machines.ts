@@ -118,6 +118,9 @@ export const RFQ_TRANSITIONS: Record<RfqStatus, readonly RfqStatus[]> = {
   cancelled: [],
 }
 
+/** Live requirements: still collecting or choosing quotes (dashboards, "open requirements"). */
+export const RFQ_LIVE_STATUSES: readonly RfqStatus[] = ['open', 'quoted']
+
 export function isValidRfqTransition(from: RfqStatus, to: RfqStatus): boolean {
   return (RFQ_TRANSITIONS[from] as readonly string[]).includes(to)
 }

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { ClipboardList, Heart, Home, Inbox, LayoutGrid, Package, Receipt, Search, ShoppingBag, Star, Sun, User, Wallet } from 'lucide-react'
+import { ClipboardList, Heart, Home, Inbox, LayoutGrid, Package, Receipt, Search, ShoppingBag, Sparkles, Star, Sun, User, Wallet } from 'lucide-react'
 import type { MeActions } from '@amclub/shared'
 
 export interface NavItem {
@@ -14,8 +14,8 @@ export interface NavItem {
   railOnly?: boolean
 }
 
-/** Buyer nav (PRD §4.2): Home · Search · Requirements · Orders · Saved (+ Mart when live). */
-export function buyerNav(martEnabled: boolean): NavItem[] {
+/** Buyer nav (PRD §4.2): Home · Search · Requirements · Orders · Saved (+ Mart when live, + the assistant home when AGENT_ENABLED). */
+export function buyerNav(martEnabled: boolean, agentEnabled = false): NavItem[] {
   return [
     { href: '/app', labelKey: 'home', icon: Home, exact: true },
     { href: '/app/search', labelKey: 'search', icon: Search },
@@ -24,12 +24,13 @@ export function buyerNav(martEnabled: boolean): NavItem[] {
     { href: '/app/saved', labelKey: 'saved', icon: Heart },
     ...(martEnabled ? [{ href: '/mart', labelKey: 'mart', icon: ShoppingBag, railOnly: true } as NavItem] : []),
     { href: '/app/invoices', labelKey: 'invoices', icon: Receipt, railOnly: true },
+    ...(agentEnabled ? [{ href: '/app/ai', labelKey: 'assistant', icon: Sparkles, railOnly: true } as NavItem] : []),
     { href: '/app/profile', labelKey: 'profile', icon: User, railOnly: true },
   ]
 }
 
 /** Provider nav (PRD §4.2): Today · RFQs · Orders · Listings · Earnings (+ Reviews, Profile on the rail). */
-export function providerNav(): NavItem[] {
+export function providerNav(agentEnabled = false): NavItem[] {
   return [
     { href: '/partner', labelKey: 'today', icon: Sun, exact: true },
     { href: '/partner/rfqs', labelKey: 'rfqs', icon: Inbox, badge: (a) => a.provider?.counts.rfqs ?? 0 },
@@ -37,6 +38,7 @@ export function providerNav(): NavItem[] {
     { href: '/partner/listings', labelKey: 'listings', icon: LayoutGrid },
     { href: '/partner/earnings', labelKey: 'earnings', icon: Wallet },
     { href: '/partner/reviews', labelKey: 'reviews', icon: Star, railOnly: true },
+    ...(agentEnabled ? [{ href: '/partner/ai', labelKey: 'assistant', icon: Sparkles, railOnly: true } as NavItem] : []),
     { href: '/partner/profile', labelKey: 'profile', icon: User, railOnly: true },
   ]
 }

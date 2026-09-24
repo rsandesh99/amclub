@@ -35,7 +35,7 @@ export function PwaManager() {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center gap-2 bg-foreground px-4 py-2.5 text-sm font-medium text-white"
+      data-bottom-bar className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center gap-2 bg-foreground px-4 py-2.5 text-sm font-medium text-white"
     >
       <WifiOff className="h-4 w-4" aria-hidden />
       {t('offline_banner')}

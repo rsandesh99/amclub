@@ -30,6 +30,8 @@ const ANON = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!
 const SERVICE = process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? ''
 const BASE = process.env['BASE_URL'] ?? 'http://localhost:3000'
 const ENFORCE = process.env['A11Y_ENFORCE'] === '1'
+// E18: the agent-on server (money-rigs :3001) for the assistant surfaces; unset → they are not scanned.
+const AGENT_BASE = process.env['A11Y_AGENT_BASE_URL'] || ''
 const REPORT_PATH = process.env['A11Y_REPORT'] ?? path.resolve(__dirname, '../a11y-report.json')
 
 interface Surface {
@@ -38,6 +40,8 @@ interface Surface {
   as?: 'buyer' | 'provider' | 'admin'
   /** Extra settle time (ms) after networkidle, e.g. for choreographed reveals. */
   settle?: number
+  /** Another server of the same stack (the agent-on one); default BASE. Cookies are per host, so sessions carry over. */
+  base?: string
 }
 
 interface Violation {
@@ -199,6 +203,13 @@ async function main() {
       { name: 'admin audit', path: '/admin/audit', as: 'admin' },
       { name: 'admin cms', path: '/admin/cms', as: 'admin' },
       { name: 'admin payouts', path: '/admin/payouts', as: 'admin' },
+      ...(AGENT_BASE
+        ? [
+            { name: 'assistant home (buyer)', path: '/app/ai', as: 'buyer' as const, base: AGENT_BASE },
+            { name: 'assistant home (provider)', path: '/partner/ai', as: 'provider' as const, base: AGENT_BASE },
+            { name: 'msme home + corner assistant', path: '/app', as: 'buyer' as const, base: AGENT_BASE },
+          ]
+        : []),
     )
   }
 
@@ -231,7 +242,7 @@ async function main() {
       const ctx = contexts[s.as ?? 'public']!
       const page = await ctx.newPage()
       try {
-        const res = await page.goto(`${BASE}${s.path}`, { waitUntil: 'networkidle', timeout: 45_000 })
+        const res = await page.goto(`${s.base ?? BASE}${s.path}`, { waitUntil: 'networkidle', timeout: 45_000 })
         await page.waitForTimeout(s.settle ?? 400)
         const finalUrl = page.url()
         if (res && res.status() >= 400) {

@@ -408,7 +408,8 @@
     "new": "New",
     "translated": "Translated",
     "view_original": "View original",
-    "view_translation": "View translation"
+    "view_translation": "View translation",
+    "why_label": "Why AMClub"
   },
   "landing": {
     "hero_title": "Every service your business needs. Verified. Transparent.",
@@ -855,7 +856,8 @@
     "search": "Search services",
     "compact_view": "Compact view",
     "on": "On",
-    "off": "Off"
+    "off": "Off",
+    "assistant_menu": "AI assistant"
   },
   "help": {
     "title": "Help & support",
@@ -1593,16 +1595,16 @@
     "runtime_missing_body": "These agents are off until AGENT_RUNTIME_URL, AGENT_RUNTIME_SECRET and SUPABASE_JWT_SECRET are set in Vercel and the runtime is deployed: {agents}. Their switches below are kept, and they turn on by themselves once the runtime is ready."
   },
   "agent_grants": {
-    "title": "AI assistant",
-    "subtitle": "Let the AMClub assistant act on your behalf. You can turn this off any time.",
+    "title": "Let the assistant work on your account",
+    "subtitle": "Allow it to read your own requests, quotes and orders and suggest next steps. Turn it off any time.",
     "confirm_note": "Anything that spends money or changes an order still needs your explicit tap each time.",
-    "consent_text": "By allowing this, you let the AMClub assistant read your account and propose actions on your behalf. Payments and status changes always require your confirmation. You can revoke this any time.",
+    "consent_text": "By allowing this, you let the AMClub assistant read your own account and propose actions for you. Anything that sends, spends money or changes an order needs your confirmation each time. You can turn this off at any time.",
     "loading": "Loading…",
-    "active": "Allowed",
-    "allow": "Allow assistant",
-    "revoke": "Revoke",
-    "granted": "Assistant allowed.",
-    "revoked": "Assistant access revoked.",
+    "active": "On",
+    "allow": "Turn on",
+    "revoke": "Turn off",
+    "granted": "Assistant turned on.",
+    "revoked": "Assistant turned off.",
     "action_failed": "That didn't work. Try again.",
     "whatsapp_title": "WhatsApp updates",
     "whatsapp_subtitle": "Get order and request updates on WhatsApp, and talk to the assistant there once it's on.",
@@ -1611,7 +1613,10 @@
     "whatsapp_message_us": "Message us on WhatsApp",
     "whatsapp_not_available": "WhatsApp updates aren't available yet.",
     "whatsapp_hint": "Send START from your registered number to opt in, STOP any time to opt out. Order and payment updates are sent regardless of opt-in; everything else needs it.",
-    "whatsapp_revoked": "WhatsApp updates stopped."
+    "whatsapp_revoked": "WhatsApp updates stopped.",
+    "inactive": "Off",
+    "on_its_own": "It can, on its own",
+    "after_your_tap": "Only after you tap “Yes”"
   },
   "evidence": {
     "title": "Progress",
@@ -2617,7 +2622,8 @@
     "reorder_reminder_off": "Remind me every {days} days",
     "reorder_reminder_on": "Reminder on · every {days} days · next {date}",
     "reorder_reminder_failed": "Could not change the reminder. Try again.",
-    "reorder_link": "Your usual orders"
+    "reorder_link": "Your usual orders",
+    "why_label": "Why AMClub"
   },
   "admin_mart": {
     "title": "AMC Mart",
@@ -2945,7 +2951,8 @@
     "rfqs": "RFQs",
     "listings": "Listings",
     "earnings": "Earnings",
-    "reviews": "Reviews"
+    "reviews": "Reviews",
+    "assistant": "Assistant"
   },
   "search_v3": {
     "title": "Search AMClub",
@@ -3410,7 +3417,8 @@
     "find_similar": "Find similar",
     "repeat_requirement": "Repeat requirement",
     "complete_profile": "Complete your business profile so providers can quote accurately",
-    "dismiss": "Hide for a week"
+    "dismiss": "Hide for a week",
+    "rail_label": "Your numbers and why AMClub"
   },
   "licences_v3": {
     "title": "My licences",
@@ -3592,7 +3600,8 @@
     "tender_portal": "Open the official portal",
     "tender_closes": "closes",
     "ob_reviewed_short": "Reviewed by {by} on {date}",
-    "gem_unavailable": "The GeM checklist is being reviewed. Check back soon."
+    "gem_unavailable": "The GeM checklist is being reviewed. Check back soon.",
+    "why_label": "Why AMClub"
   },
   "quote_v3": {
     "gst": "GST",
@@ -4064,5 +4073,351 @@
     "cancel": "Cancel group",
     "cancel_reason": "Reason (kept in the audit log)",
     "cancelled_ok": "Group cancelled. Members were told."
+  },
+  "assistant_home": {
+    "title": "Your AI assistant",
+    "lead_buyer": "It takes the paperwork out of buying. It turns a voice note into a clear requirement, checks it before providers see it, lines quotes up side by side and chases replies. Anything that sends, spends money or changes an order waits for your tap.",
+    "lead_provider": "It takes the paperwork out of selling. It watches new requirements, drafts quotes from your own prices, fills a quote from what you type or say, and reminds you of deadlines. Nothing reaches a buyer until you tap.",
+    "stat_on_label": "On for you",
+    "stat_on_value": "{on} of {total} features",
+    "stat_asks_label": "Money and orders",
+    "stat_asks_value": "Always your tap",
+    "stat_languages_label": "Speaks",
+    "stat_languages_value": "4 languages",
+    "stat_off_label": "Turn it off",
+    "stat_off_value": "Any time, below",
+    "section_try": "Try it now",
+    "section_does": "What it does for you",
+    "rolling_out": "Features reach accounts in stages. When one is switched on for you, it shows “On” here.",
+    "chip_on": "On",
+    "chip_soon": "Coming to your account",
+    "cap": {
+      "voice_rfq": {
+        "title": "Speak your requirement",
+        "body": "Say what you need in Telugu, Tamil, Hindi or English, for up to 30 seconds. It fills in the requirement form; you check it and send.",
+        "example": "“Need GST registration for a new trading firm in Guntur”",
+        "try": "Speak or type what you need"
+      },
+      "document_intake": {
+        "title": "Share a photo, PDF or drawing",
+        "body": "It reads quantities, specs and dates from what you share and fills the form. You check every field before it goes out.",
+        "example": "A photo of a handwritten spec sheet becomes a filled-in requirement.",
+        "try": "Start from a photo or file"
+      },
+      "rfq_quality": {
+        "title": "A check before providers see it",
+        "body": "It points out details providers usually ask for, so you get accurate quotes the first time. You decide what to add.",
+        "example": "“Add the financial year so providers can quote the right return.”",
+        "try": "Check a requirement"
+      },
+      "compare": {
+        "title": "Quotes explained side by side",
+        "body": "Short pointers on how the quotes differ (GST, delivery time, what is included), next to totals that are already made comparable.",
+        "example": "“B is cheapest but excludes the annual filing that A includes.”",
+        "try": "Compare your quotes"
+      },
+      "benchmark": {
+        "title": "Fair price range",
+        "body": "When there is enough data, see what similar paid orders cost on AMClub, so you know whether a quote is in line.",
+        "example": "“Most businesses paid ₹6,500–₹9,000 for this.”",
+        "try": "See price ranges"
+      },
+      "decline_message": {
+        "title": "A polite “no thanks”",
+        "body": "When you choose one quote, it drafts a short, courteous note for the providers you did not pick. You send it.",
+        "example": "“Thank you for your quote. We have gone with another provider this time.”",
+        "try": "Decline a quote"
+      },
+      "support": {
+        "title": "Help with any order",
+        "body": "Ask “where is my order?” or “what happens next?” and get the answer from your own orders, or reach a person from our team.",
+        "example": "“Your provider delivered yesterday. Accept it or ask for a change within 72 hours.”",
+        "try": "Ask about an order"
+      },
+      "procurement": {
+        "title": "A buying assistant you can chat with",
+        "body": "Tell it what you need, here or on WhatsApp. It posts the requirement, follows up on quotes and brings you the best ones. You choose and pay with your own tap.",
+        "example": "“Find me an accountant for monthly GST filing in Vijayawada.”",
+        "try": "Chat with your assistant"
+      },
+      "pools": {
+        "title": "Group requests",
+        "body": "When other businesses near you need the same service, join a group and get a volume price. No payment until you accept your quote.",
+        "example": "“12 businesses in your state need trademark filing: join for a lower price.”",
+        "try": "See group requests"
+      },
+      "munshi": {
+        "title": "Digital Munshi",
+        "body": "Your clerk. It watches new requirements, drafts quotes from your own price list and reminds you of deadlines. Nothing is sent until you approve.",
+        "example": "“New GST filing request in Guntur: draft quote ₹4,500 from your price list. Send?”",
+        "try": "Open your Munshi"
+      },
+      "quote_extract": {
+        "title": "Quote by typing or talking",
+        "body": "Type or say your price, timeline and what is included in your own words. It fills the quote form; you check it and send.",
+        "example": "“7,500 plus GST, five days, includes one revision.”",
+        "try": "Quote a new request"
+      },
+      "onboarding": {
+        "title": "Set up your profile on WhatsApp",
+        "body": "Answer a few questions on WhatsApp. It drafts your profile and packages, and you confirm them in the app.",
+        "example": "“What services do you offer, and in which cities?”",
+        "try": "Set up on WhatsApp"
+      },
+      "content_translate": {
+        "title": "Your listing in more languages",
+        "body": "It drafts Hindi, Telugu and Tamil versions of your listing. You approve each language before buyers see it.",
+        "example": "Your package title and “Choose this if…” in हिन्दी, ready to approve.",
+        "try": "Translate a listing"
+      },
+      "provider_support": {
+        "title": "Help with any order",
+        "body": "Ask about an order, a payout or a buyer's request and get the answer from your own data, or reach a person from our team.",
+        "example": "“The buyer accepted on Monday; your payout is being checked.”",
+        "try": "Ask about an order"
+      },
+      "provider_pools": {
+        "title": "Group requests",
+        "body": "When several businesses need the same service, offer a volume price. The more who join, the lower your price per business.",
+        "example": "“8 buyers want trademark filing: offer ₹3,000 each for 5 or more.”",
+        "try": "See group requests"
+      }
+    },
+    "section_asks": "It always asks you first",
+    "section_asks_sub": "Each of these needs your “Yes” every time, however it was started.",
+    "asks": {
+      "send_requirement": "Sending a requirement to providers",
+      "accept_or_pay": "Accepting a quote or paying",
+      "decline": "Declining a quote",
+      "message": "Messaging a provider or answering their question",
+      "dispute": "Reporting a problem with an order",
+      "nudge": "Reminding someone who has not replied",
+      "send_quote": "Sending a quote to a buyer",
+      "revise_quote": "Changing a quote you sent",
+      "confirm_profile": "Saving the profile it drafted for you"
+    },
+    "section_never": "It never",
+    "section_never_sub": "These are built into the product, not settings.",
+    "never": {
+      "pay_alone": "Pays, accepts a quote or changes an order by itself",
+      "send_alone": "Sends a quote or a message to a buyer by itself",
+      "share_contact": "Gives your phone number or email to the other side",
+      "bargain": "Haggles or makes counter-offers on your behalf",
+      "see_others": "Sees other businesses' requests, quotes or orders",
+      "after_off": "Keeps working on your account after you turn it off"
+    },
+    "section_settings": "Settings",
+    "launcher_pref_title": "Assistant button on every page",
+    "launcher_pref_body": "A small button in the bottom corner opens the assistant from anywhere. This setting is saved on this device.",
+    "section_faq": "Questions",
+    "faq": {
+      "what_on_means": {
+        "q": "What does “Allow” let it do?",
+        "a": "It can read your own requirements, quotes and orders and suggest the next step. Anything that sends, spends money or changes an order still needs your tap each time."
+      },
+      "undo": {
+        "q": "What if it gets something wrong?",
+        "a": "Nothing it drafts leaves AMClub until you confirm it, so you can edit or discard a draft. Once you send something, it works exactly as if you had typed it yourself."
+      },
+      "why_soon": {
+        "q": "Why do some features say “Coming to your account”?",
+        "a": "We switch features on for accounts in stages, so each one can be checked with real use first. They appear here as “On” when they reach you."
+      },
+      "languages": {
+        "q": "Which languages does it understand?",
+        "a": "You can speak your requirement in Telugu, Tamil, Hindi or English, and use the app in English, हिन्दी, తెలుగు or தமிழ்."
+      },
+      "data": {
+        "q": "What can it see?",
+        "a": "Only what you can see in your own account. It works under your login, never another person's, and it cannot see other businesses' requests or quotes."
+      }
+    },
+    "tool": {
+      "search_catalog": "Search services for you",
+      "draft_rfq": "Turn your words or voice into a requirement",
+      "clarify_rfq": "Ask one question when something is unclear",
+      "extract_document": "Read a photo, PDF or drawing you share",
+      "create_rfq": "Send a requirement to providers",
+      "compare_quotes": "Compare quotes side by side",
+      "accept_quote": "Accept a quote",
+      "place_order": "Start a payment",
+      "track_order": "Check where your order is",
+      "draft_dispute": "Report a problem with an order",
+      "decline_quote": "Decline a quote politely",
+      "answer_clarification": "Answer a provider's question",
+      "check_rfq_quality": "Check a requirement for missing details",
+      "complete_rfq": "Add missing details and send",
+      "choose_quote": "Take you to pay for the quote you chose",
+      "message_provider": "Message a provider",
+      "support_lookup": "Look up your orders and requests to answer questions",
+      "nudge_counterparty": "Remind someone who has not replied",
+      "extract_requirements": "Read new requirements matched to you",
+      "draft_quote": "Draft a quote from your price list",
+      "extract_quote": "Fill a quote from what you type or say",
+      "submit_quote": "Send a quote to the buyer",
+      "reply_thread": "Reply to a buyer",
+      "ask_clarification": "Ask the buyer a question",
+      "revise_quote": "Change a quote you sent",
+      "confirm_onboarding_draft": "Save the profile it drafted for you",
+      "list_deadlines": "List your upcoming deadlines",
+      "read_price_book": "Read your own price list",
+      "read_own_score": "Read your own AMC Score"
+    },
+    "launcher": {
+      "label": "Assistant",
+      "title": "AMClub assistant",
+      "open": "Open the assistant",
+      "minimise": "Minimise the assistant",
+      "greeting_buyer": "What do you need today?",
+      "greeting_provider": "What can I help you with?",
+      "action_describe": "Speak or type what you need",
+      "action_describe_sub": "We turn it into a requirement for providers.",
+      "action_buying_chat": "Chat with your buying assistant",
+      "action_buying_chat_sub": "Here or on WhatsApp: the same conversation.",
+      "action_order_help": "Ask about an order",
+      "action_order_help_sub": "Where it is, what happens next.",
+      "action_munshi": "Open your Munshi",
+      "action_munshi_sub": "Drafts from your price list, waiting for you.",
+      "action_new_requests": "See new requests",
+      "action_new_requests_sub": "Quote by typing or talking.",
+      "not_allowed": "To let the assistant suggest next steps from your account, allow it on the assistant page.",
+      "learn": "What can the assistant do?",
+      "hide": "Hide this button"
+    },
+    "profile_link_title": "AI assistant",
+    "profile_link_body": "What it does in plain words, and what it may do on your account."
+  },
+  "home_snapshot": {
+    "title": "Your numbers",
+    "requirements_label": "Open requirements",
+    "requirements_sub": "{quotes, plural, =0 {no quotes yet} one {# quote received} other {# quotes received}}",
+    "in_progress_label": "Orders in progress",
+    "in_progress_sub": "paid, work under way",
+    "held_label": "Held for you",
+    "held_sub": "paid to providers only when you accept",
+    "completed_label": "Completed",
+    "completed_sub": "orders finished"
+  },
+  "why_amclub": {
+    "title": "Why AMClub",
+    "tab_buyers": "For buyers",
+    "tab_providers": "For providers",
+    "lead_buyers": "Get business services and supplies done without the phone calls and the guesswork.",
+    "lead_providers": "Serious buyers, clear requests and guaranteed payment, without cold calls.",
+    "ai_chip": "AI",
+    "ai_note": "AI features reach accounts in stages.",
+    "show_all": "Show all {count}",
+    "cta_buyers": "Post a requirement",
+    "cta_providers": "Become a provider",
+    "buyers": {
+      "no_spam": {
+        "title": "No spam calls",
+        "body": "Providers reach you inside AMClub. Phone numbers and emails in messages are hidden, so your number isn't passed around."
+      },
+      "voice": {
+        "title": "Speak, don't type",
+        "body": "Say what you need in Telugu, Tamil, Hindi or English. We fill in the form; you check it and send."
+      },
+      "prefill": {
+        "title": "Say it once, we write it up",
+        "body": "Your words become a clear requirement, with the category, location and details filled in."
+      },
+      "seven_quotes": {
+        "title": "Up to 7 quotes, no chasing",
+        "body": "One request reaches verified providers in your category and state, and stays open for quotes for 72 hours."
+      },
+      "compare": {
+        "title": "Compare like for like",
+        "body": "Quotes side by side with GST added, and gaps flagged: GST, transport, validity, advance."
+      },
+      "escrow": {
+        "title": "Your money is held safely",
+        "body": "The provider is paid only after you accept the work, or 72 hours after delivery if you don't respond."
+      },
+      "verified": {
+        "title": "Every provider checked",
+        "body": "Our team reviews each provider before they are listed, including their GSTIN and any licence the service needs."
+      },
+      "gst_invoice": {
+        "title": "GST invoice every time",
+        "body": "Each completed order comes with a GST invoice carrying your GSTIN, ready for your records."
+      },
+      "fixed_prices": {
+        "title": "Clear prices, GST shown upfront",
+        "body": "Fixed package prices with GST shown before you pay. No surprises at checkout."
+      },
+      "disputes": {
+        "title": "Help if something goes wrong",
+        "body": "Report a problem any time before completion and up to 7 days after. A person from our team resolves it."
+      },
+      "languages": {
+        "title": "In your language",
+        "body": "Use AMClub in English, हिन्दी, తెలుగు or தமிழ்."
+      },
+      "mart": {
+        "title": "Supplies too, on AMC Mart",
+        "body": "Order a sample first, buy together with other businesses for a better price, and reorder in one tap."
+      }
+    },
+    "providers": {
+      "real_buyers": {
+        "title": "Requests from real businesses",
+        "body": "Get requirements only for your categories, from buyers in your state."
+      },
+      "few_competitors": {
+        "title": "At most 7 quotes per request",
+        "body": "You compete with a handful of providers, not a crowd."
+      },
+      "no_fee": {
+        "title": "No listing fee, no subscription",
+        "body": "You pay a commission only on completed orders, and we cover the payment gateway fee."
+      },
+      "paid_upfront": {
+        "title": "The buyer pays before you start",
+        "body": "Payment is collected when the order is placed. You're paid to your verified bank account after the buyer accepts the work and our team checks it."
+      },
+      "auto_accept": {
+        "title": "No waiting on silent buyers",
+        "body": "If the buyer doesn't respond, your delivery is accepted automatically 72 hours later."
+      },
+      "clear_briefs": {
+        "title": "Clear briefs, questions welcome",
+        "body": "Requests arrive with the category, location and details, and you can ask the buyer questions before you quote."
+      },
+      "no_cold_calls": {
+        "title": "No cold calling",
+        "body": "Buyers come to you with a written requirement. Everything happens inside AMClub."
+      },
+      "munshi": {
+        "title": "Digital Munshi",
+        "body": "An AI clerk that drafts quotes from your price list and reminds you of deadlines. Nothing is sent until you approve."
+      },
+      "quote_by_voice": {
+        "title": "Quote by typing or talking",
+        "body": "Say your price and terms in your own words; the quote form fills itself."
+      },
+      "translate": {
+        "title": "Your listing in more languages",
+        "body": "Drafts Hindi, Telugu and Tamil versions of your listing; you approve each one."
+      },
+      "reputation": {
+        "title": "Reviews that count",
+        "body": "Ratings come only from buyers who completed an order, shown with your verification badges."
+      },
+      "paperwork": {
+        "title": "Paperwork handled",
+        "body": "Invoices and payout records for every completed order, in one place."
+      },
+      "sell_goods": {
+        "title": "Sell goods on AMC Mart",
+        "body": "With a verified GSTIN, list products, take bulk orders and join group buys."
+      }
+    },
+    "strip_label": "What you get with AMClub"
+  },
+  "rail_card": {
+    "title": "Need something done?",
+    "body": "Speak or type it once. Verified providers in your state send quotes.",
+    "cta": "Post a requirement"
   }
 }

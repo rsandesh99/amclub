@@ -7,6 +7,8 @@ import {
   DISPUTABLE_STATUSES,
   isValidPayoutTransition,
   isValidRfqTransition,
+  RFQ_LIVE_STATUSES,
+  RFQ_TRANSITIONS,
 } from '../state-machines'
 
 describe('order state machine (§3.7)', () => {
@@ -98,5 +100,13 @@ describe('rfq state machine', () => {
     expect(isValidRfqTransition('accepted', 'open')).toBe(false)
     expect(isValidRfqTransition('expired', 'open')).toBe(false)
     expect(isValidRfqTransition('cancelled', 'quoted')).toBe(false)
+  })
+})
+
+describe('RFQ_LIVE_STATUSES (E18 home snapshot)', () => {
+  it('holds exactly the statuses that can still move towards an accepted quote', () => {
+    for (const s of RFQ_LIVE_STATUSES) expect(RFQ_TRANSITIONS[s].length).toBeGreaterThan(0)
+    const terminal = (Object.keys(RFQ_TRANSITIONS) as (keyof typeof RFQ_TRANSITIONS)[]).filter((s) => RFQ_TRANSITIONS[s].length === 0)
+    for (const s of terminal) expect(RFQ_LIVE_STATUSES).not.toContain(s)
   })
 })

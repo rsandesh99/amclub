@@ -697,7 +697,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
               </p>
 
               {error && <p className="text-sm text-danger">{error}</p>}
-              <div className="sticky bottom-[calc(var(--tabbar-h,0px)+env(safe-area-inset-bottom,0px))] z-20 -mx-4 border-t border-border bg-surface px-4 py-3 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0">
+              <div data-bottom-bar className="sticky bottom-[calc(var(--tabbar-h,0px)+env(safe-area-inset-bottom,0px))] z-20 -mx-4 border-t border-border bg-surface px-4 py-3 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0">
                 <Button onClick={submit} loading={loading} className="w-full" size="lg" data-testid="rfq-submit">{loading ? t('submitting') : t3('send')}</Button>
               </div>
             </>
