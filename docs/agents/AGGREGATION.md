@@ -4,7 +4,7 @@
 > - `AGENT_ENABLED=true` on the web app;
 > - `agents_enabled.demand_aggregation`;
 > - the person in `cohort_user_ids`;
-> - migration **0071** applied.
+> - migration **0071** applied (done on production, 2026-09-24).
 >
 > With any lock closed, the pages and routes 404, the cron records a no-op heartbeat, and nothing reads a 0071 table.
 > **Enablement waits for the V1.5→V2 gate** (`ARCHITECTURE.md` §11, S3) and its own §8.1 note. Decision record: ADR 024.
@@ -67,7 +67,7 @@ These are registry keys, editable at `/admin/agents`:
 
 ## Enabling (founder, in order)
 
-1. **Apply migration 0071 to production.** It is an agent migration and is not staged. It is additive, with no client grants, and widens the `ai_decisions` CHECK. Then verify:
+1. **Migration 0071 is on production** (applied 2026-09-24; its five tables exist with RLS on). It is an agent migration and is not staged. It is additive, with no client grants, and widens the `ai_decisions` CHECK. Re-verify before enabling:
    ```bash
    MART_MIGRATIONS_EXPECTED=false pnpm --filter @amclub/web exec tsx scripts/verify-migrations.ts
    ```

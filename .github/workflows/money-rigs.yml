@@ -2,9 +2,11 @@
 # against a DISPOSABLE Supabase stack started on the runner (`supabase start`),
 # built from this commit's schema (db:bootstrap = every migration + RLS) plus the
 # seed, with the app in simulate-payment mode (no Razorpay keys). Nothing here
-# ever touches production. The CI database is a superset of production (it
-# carries the staged Mart migrations); staged-column leaks are caught offline by
-# `mart:static` in the main CI job.
+# ever touches production. The CI database carries the staged Mart migrations
+# (production has them too since the 2026-09-24 launch); staged-column leaks are
+# still caught offline by `mart:static` in the main CI job. Mart itself is proven
+# on the production-flags server (:3001, agents + Mart on); its kill switch on
+# the flag-off server (:3000).
 name: Money rigs
 
 # Minutes economy: once per PR when it is ready for review (drafts run nothing),
@@ -194,14 +196,16 @@ jobs:
         working-directory: apps/web
         run: pnpm exec tsx scripts/verify-experience.ts
 
-      # S3.4 (ADR 024) — agent surfaces exist only with AGENT_ENABLED=true. A second server runs the SAME build with
-      # it on (:3001), so every rig above keeps proving the production default on :3000.
-      - name: Start the agent-on app (port 3001)
+      # Agent surfaces (S3.4, ADR 024) exist only with AGENT_ENABLED=true, and Mart only with MART_ENABLED=true. A
+      # second server runs the SAME build with both on (:3001), as production does since 2026-09-24. Both switches are
+      # read at runtime. Every rig above keeps proving the code default (both off) on :3000.
+      - name: Start the production-flags app (port 3001 — agents + Mart on)
         id: agentapp
         if: ${{ !cancelled() && steps.app.outcome == 'success' }}
         working-directory: apps/web
         env:
           AGENT_ENABLED: "true"
+          MART_ENABLED: "true"
         run: |
           nohup pnpm start -p 3001 > "$RUNNER_TEMP/next-agent.log" 2>&1 &
           for i in $(seq 1 60); do
@@ -241,6 +245,23 @@ jobs:
           A11Y_REPORT: ${{ github.workspace }}/apps/web/e2e-artifacts/a11y-report.json
         run: pnpm exec tsx scripts/a11y-scan.ts
 
+      # Mart is live on production (MART_ENABLED=true since 2026-09-24), so its money path is proven on every PR
+      # like the services one: M0 catalog → goods order → dispatch / delivery photos → release gate → payout,
+      # returns and refund replay, M2 goods RFQ → quote → ordinary goods checkout, E16 storefront (attributes,
+      # promises, ITC, samples, reorder), then the 0022–0025 / 0069 DB kill-tests. These run last: each suite removes
+      # its own rows, and nothing here can then disturb the services journeys or the axe scan.
+      - name: Mart acceptance (M0 goods lifecycle, M2 goods RFQ, E16 storefront, DB kill-tests — Mart on)
+        if: ${{ !cancelled() && steps.agentapp.outcome == 'success' }}
+        working-directory: apps/web
+        env:
+          BASE_URL: http://localhost:3001
+        run: pnpm exec tsx scripts/mart-acceptance.ts
+
+      - name: Mart kill switch (flag off on :3000 — no Mart surface exists)
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/mart-acceptance.ts --inert
+
       - name: Screenshots and a11y report (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
@@ -254,5 +275,5 @@ jobs:
         if: failure()
         run: |
           tail -300 "$RUNNER_TEMP/next.log" || true
-          echo "── agent-on app (:3001) ──"
+          echo "── production-flags app (:3001) ──"
           tail -150 "$RUNNER_TEMP/next-agent.log" || true

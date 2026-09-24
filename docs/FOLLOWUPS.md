@@ -1349,8 +1349,9 @@ partner-dashboard suggested listings, admin "Onboarding interview" section, cron
 Built behind `AGENT_ENABLED` + `agents_enabled.demand_aggregation` + the cohort (ADR 024; runbook
 `docs/agents/AGGREGATION.md`). Left for later, deliberately:
 
-- **Migration 0071 on production.** Not applied yet (it is an agent migration: apply it before enabling). Every
-  reader and writer is behind the switch, so the flag-off deployment never reads a 0071 table.
+- **Migration 0071 on production:** applied 2026-09-24, after #54's rigs passed. The five tables exist with RLS on
+  and no client grant. Every reader and writer is behind the switch, so the flag-off deployment still never reads a
+  0071 table.
 - **Mobile screens.** The group card on `rfq/[id]`, the group page and the provider offer form. The API is ready
   (`GET /api/v1/rfq/[id]/pool`, `/api/v1/pools/*`, `/api/v1/partner/pools`).
 - **WhatsApp template** for the invitation and the "your group price is in" message (Meta approval). In-app only today.
@@ -1360,4 +1361,19 @@ Built behind `AGENT_ENABLED` + `agents_enabled.demand_aggregation` + the cohort 
   strings are en + hi only (outside the buying path).
 - **Service grouping key.** Only v3 requests with a chosen service (`details.service_slug`) are grouped. Requests
   without one, and requests with must-haves, are never proposed.
+
+## Browser journeys — what the error capture found (2026-09-24)
+
+The journeys (`apps/web/e2e/journeys.ts`) now print every `pageerror` and `console.error` they see. On #54's run:
+
+- **No React hydration error on any page.** The order page's second next-step bar, which broke Playwright's strict
+  mode, is a hidden copy inside the streamed segment `div#S:1`. The copy people see is the one in the page. React
+  19.2 batches the reveal of streamed Suspense boundaries, so the hidden segment can still be in the DOM when the
+  test looks. The journey acts on the visible bar. axe finds nothing there, so nothing is left to fix.
+- **Two CI-only errors on the package page:** `net::ERR_SSL_PROTOCOL_ERROR` on one resource, then "Failed to fetch
+  RSC payload … Falling back to browser navigation". The CSP carries `upgrade-insecure-requests`
+  (`apps/web/next.config.ts`), and CI serves the app over plain `http://localhost`. Production is HTTPS-only, so
+  this cannot happen there. Keep the directive.
+- **Open:** the journeys only print these errors today. Once a few runs show the list is stable, make an
+  unexpected `pageerror` fail the step, with an allow-list for the two CI-only lines above.
 
