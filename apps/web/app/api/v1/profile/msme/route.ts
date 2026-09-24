@@ -29,11 +29,11 @@ export async function POST(request: NextRequest) {
   // public.users row (new email/Google user completing their first profile).
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   // Audit M8 — no agent tool wraps this write: a delegated token is refused.
   const delegated = await requireNotDelegated('POST /profile/msme')
   if (delegated) return delegated
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
   const { data: { user: authUser } } = await supabase.auth.getUser()
 
   const json = await request.json().catch(() => null)

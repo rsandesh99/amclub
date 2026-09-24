@@ -26,11 +26,11 @@ const bodySchema = z.object({
 export async function PATCH(request: NextRequest) {
   const { userId } = await getAuthedSupabase()
   if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   // Audit M8 — no agent tool wraps this write: a delegated token is refused.
   const delegated = await requireNotDelegated('PATCH /profile/provider/settings')
   if (delegated) return delegated
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
 
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
