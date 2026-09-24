@@ -461,7 +461,7 @@ const MANIFEST: Entry[] = [
   },
   {
     file: '0077_listing_pool_integrity.sql',
-    note: 'Audit M16 / M4 / M44 / L9: pools.gst_rate_bps + hsn_code (tax snapshot at open; backfilled for live pools); rfqs.goods_spec not client-readable (column grant from the catalogue); quotes.pool_member_id (unique group-quote marker, no client grant; backfilled from service_pool_members.quote_id); service_pools.close_lease_until (per-pool close lease); Mart parts no-op without the staged tables',
+    note: 'Audit M16 / M44 / L9 (additive; M4 part 2 is 0083): pools.gst_rate_bps + hsn_code (tax snapshot at open; backfilled for live pools); quotes.pool_member_id (unique group-quote marker, no client grant; backfilled from service_pool_members.quote_id); service_pools.close_lease_until (per-pool close lease); Mart parts no-op without the staged tables',
   },
   {
     file: '0078_payment_truth.sql',
@@ -483,6 +483,10 @@ const MANIFEST: Entry[] = [
     file: '0082_kyc_ownership.sql',
     tables: ['udyam_verifications', 'bank_account_verifications'],
     note: 'Audit M12 / ADR 028: udyam_verifications.outcome + released_at, one active verified claim per Udyam number (unique partial index on upper(udyam_number); earlier duplicates moved to udyam_already_claimed first); bank_account_verifications.outcome; review indexes; udyam_verifications SELECT for authenticated only',
+  },
+  {
+    file: '0083_rfqs_goods_spec_private.sql',
+    note: 'Audit M4 part 2 (split from 0077): rfqs.goods_spec (buyer contact) not client-readable; column grant built from the catalogue; applied after the 0077 build is live',
   },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },

@@ -10,12 +10,8 @@
 --    except rationale, 0076; rls/policies.sql builds the same list).
 --    Backfill: pools already open / closed_met take the listing's current values
 --    (the seller route now refuses material edits while such a pool is live).
--- 2. M4 part 2 — a matched seller could read rfqs.goods_spec (the buyer's contact
---    name, phone and street address) straight through PostgREST. Clients keep SELECT
---    on every other rfqs column; goods_spec is read only by the /api/v1 routes on the
---    service role (buyer: full; matched seller: shared goodsSpecForSeller). The column
---    list is built from the catalogue; a column added to rfqs later must be granted in
---    its own migration if a session client needs it.
+-- 2. M4 part 2 (the rfqs.goods_spec column grant) is migration 0083: it narrows a
+--    read the previous build still uses, so it is applied after this build is live.
 -- 3. M44 / L9 — a group quote names its member: quotes.pool_member_id (unique, set by
 --    the close in the same INSERT). The close uses it to tell its own quote from a
 --    direct one on a unique-violation replay, and the quote PATCH refuses group quotes.
@@ -25,10 +21,11 @@
 --    compare-and-set before any claim, so two closes never run one pool at once.
 --    No client grant (service_pools has none, 0071).
 --
+-- Additive only: the previous build ignores every column added here, so this is applied
+-- before the build that uses them.
 -- Rollback: DROP the added columns / constraints / index (ALTER TABLE … DROP COLUMN IF
--- EXISTS …), and on rfqs `REVOKE SELECT ON rfqs FROM anon, authenticated; GRANT SELECT
--- ON rfqs TO anon, authenticated;` (reopens M4). The app then fails closed on pool
--- close (the lease update errors) until the code is rolled back too.
+-- EXISTS …). The app then fails closed on pool close (the lease update errors) until the
+-- code is rolled back too.
 
 -- ─── 1. pools: tax snapshot at open (M16) ────────────────────────────────────
 DO $pool_snapshot$
@@ -53,26 +50,6 @@ BEGIN
   EXECUTE 'GRANT SELECT (gst_rate_bps, hsn_code) ON pools TO anon, authenticated';
 END
 $pool_snapshot$;
---> statement-breakpoint
-
--- ─── 2. rfqs.goods_spec is not client-readable (M4) ──────────────────────────
-DO $rfq_cols$
-DECLARE
-  cols text;
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-     WHERE table_schema = 'public' AND table_name = 'rfqs' AND column_name = 'goods_spec'
-  ) THEN
-    RETURN;
-  END IF;
-  SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position) INTO cols
-    FROM information_schema.columns
-   WHERE table_schema = 'public' AND table_name = 'rfqs' AND column_name <> 'goods_spec';
-  EXECUTE 'REVOKE SELECT ON rfqs FROM anon, authenticated';
-  EXECUTE format('GRANT SELECT (%s) ON rfqs TO anon, authenticated', cols);
-END
-$rfq_cols$;
 --> statement-breakpoint
 
 -- ─── 3. quotes.pool_member_id (M44 / L9) ─────────────────────────────────────
