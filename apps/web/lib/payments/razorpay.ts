@@ -1,5 +1,6 @@
 import Razorpay from 'razorpay'
 import type { PaymentGateway, GatewayOrder, GatewayPayment, GatewayRefund, GatewayTransfer } from './types'
+import { OUTBOUND_TIMEOUT_MS } from '@/lib/outbound'
 
 /**
  * Real Razorpay gateway — TEST MODE only (rzp_test_ keys). Requires
@@ -8,6 +9,12 @@ import type { PaymentGateway, GatewayOrder, GatewayPayment, GatewayRefund, Gatew
  */
 export function makeRazorpayGateway(keyId: string, keySecret: string): PaymentGateway {
   const rzp = new Razorpay({ key_id: keyId, key_secret: keySecret })
+  // Audit M37 — a deadline on every Razorpay call. The SDK takes no timeout option; it
+  // sends through one axios instance (`api.rq`, untyped), whose defaults apply per request.
+  // A timed-out call rejects without a statusCode, so the payout path reads it as
+  // "outcome unknown" (unconfirmed, looked up before any retry), never as a refusal.
+  const http = (rzp.api as unknown as { rq?: { defaults?: { timeout?: number } } }).rq
+  if (http?.defaults) http.defaults.timeout = OUTBOUND_TIMEOUT_MS.payments
 
   return {
     isReal: true,

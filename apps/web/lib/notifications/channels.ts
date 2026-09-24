@@ -1,5 +1,6 @@
 import 'server-only'
 import { createWhatsAppProvider, templateFor, WA_ALWAYS_ALLOWED_KINDS, whatsappConfigFromEnv, whatsappIsLive } from '@amclub/agent-core'
+import { OUTBOUND_TIMEOUT_MS, fetchWithTimeout } from '@/lib/outbound'
 
 /**
  * Notification CHANNELS registry (§5.5 / §5.9 `notification.dispatch`).
@@ -68,6 +69,7 @@ const emailHandler: ChannelHandler = async (msg) => {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from, to: [msg.email], subject: msg.title, html }),
+      signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS.notify),
     })
     if (!res.ok) {
       const t = await res.text().catch(() => '')
@@ -101,7 +103,8 @@ const whatsappHandler: ChannelHandler = async (msg) => {
   if (!WA_ALWAYS_ALLOWED_KINDS.has(msg.kind) && !msg.whatsappOptIn) return { channel: 'whatsapp', ok: true, detail: 'skipped:no-opt-in' }
   const cfg = whatsappConfigFromEnv()
   if (!whatsappIsLive(cfg)) return stub('whatsapp', msg)
-  const provider = createWhatsAppProvider(cfg)
+  // The drivers catch their own fetch errors, so a timed-out send comes back as { ok: false }.
+  const provider = createWhatsAppProvider(cfg, fetchWithTimeout(OUTBOUND_TIMEOUT_MS.notify))
   const to = msg.phone.replace(/\D/g, '')
   const r = await provider.sendTemplate(to, tpl.name, msg.locale, tpl.spec.params({ title: msg.title, body: msg.body, link: absoluteLink(msg.link) }))
   return { channel: 'whatsapp', ok: r.ok, detail: r.detail }

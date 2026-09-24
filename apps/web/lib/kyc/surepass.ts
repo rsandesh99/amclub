@@ -10,6 +10,7 @@
  *   Udyam:       POST https://kyc-api.surepass.io/api/v1/corporate/udyam
  */
 import type { KycClient, GstinVerifyResult, BankVerifyResult, UdyamVerifyResult } from './types'
+import { OUTBOUND_TIMEOUT_MS } from '@/lib/outbound'
 
 const BASE = 'https://kyc-api.surepass.io/api/v1'
 
@@ -21,6 +22,8 @@ async function post(path: string, body: object, token: string) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
+    // Audit M37: a slow registry never holds the request; the callers' catch turns it into "try again".
+    signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS.kyc),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)

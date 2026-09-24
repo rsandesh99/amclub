@@ -1,5 +1,6 @@
 import 'server-only'
 import { VendorHttpError } from './types'
+import { OUTBOUND_TIMEOUT_MS } from '@/lib/outbound'
 
 /**
  * S1.8 — text → speech for the ONE clarifying question (task class
@@ -35,6 +36,7 @@ class SarvamSynthesizer implements Synthesizer {
       method: 'POST',
       headers: { 'api-subscription-key': this.apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text.slice(0, 500), target_language_code: languageCode, speaker: SPEAKER, model: MODEL, speech_sample_rate: 16000 }),
+      signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS.tts), // audit M37; the caller logs it and sends the question as text
     })
     if (!res.ok) {
       const body = await res.text().catch(() => '')

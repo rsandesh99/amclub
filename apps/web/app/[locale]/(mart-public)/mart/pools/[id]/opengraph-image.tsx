@@ -5,6 +5,7 @@ import sharp from 'sharp'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getPool, poolProgressFor } from '@/lib/mart/pools'
 import { MART_ENABLED } from '@/lib/flags'
+import { OUTBOUND_TIMEOUT_MS } from '@/lib/outbound'
 
 export const runtime = 'nodejs'
 export const alt = 'AMC Mart group buy'
@@ -33,7 +34,7 @@ function fonts() {
 async function photoDataUri(url: string | null): Promise<string | null> {
   if (!url) return null
   try {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS.image) }) // audit M37: a slow host renders the card without the photo
     if (!res.ok) return null
     const png = await sharp(Buffer.from(await res.arrayBuffer())).resize(300, 300, { fit: 'cover' }).png().toBuffer()
     return `data:image/png;base64,${png.toString('base64')}`
