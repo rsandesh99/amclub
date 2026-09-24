@@ -134,7 +134,8 @@
     "err_razorpay_load_failed": "The payment window could not load. Check your connection and try again — you have not been charged.",
     "err_network": "No connection. Check your internet and try again.",
     "err_rate_limited": "Too many attempts. Please wait a minute and try again.",
-    "err_addon_changed": "An add-on changed since you chose it. Go back to the package to see the new total."
+    "err_addon_changed": "An add-on changed since you chose it. Go back to the package to see the new total.",
+    "err_payments_unavailable": "Payments are not available right now. Please try again later — you have not been charged."
   },
   "orders": {
     "nudge_button": "Send a reminder",

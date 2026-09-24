@@ -48,9 +48,9 @@ export function SearchBox({ defaultValue = '', category }: { defaultValue?: stri
         aria-controls={listId}
         aria-expanded={open}
         autoComplete="off"
-        className="field-control flex-1 border-brass/60 bg-ivory text-body"
+        className="field-control min-w-0 flex-1 border-brass/60 bg-ivory text-body"
       />
-      <button type="submit" className="h-11 rounded-button bg-emerald px-5 text-sm font-semibold text-ivory hover:bg-emerald-ink">
+      <button type="submit" className="h-11 shrink-0 rounded-button bg-emerald px-5 text-sm font-semibold text-ivory hover:bg-emerald-ink">
         {t('search_btn')}
       </button>
       {open && sugg.length > 0 && (

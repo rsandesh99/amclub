@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { getPaymentGateway } from '@/lib/payments'
+import { paymentsAvailable, PAYMENTS_UNAVAILABLE } from '@/lib/payments/simulation'
 import { materializeFromCapture } from '@/lib/payments/materialize'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { accountSuspendedResponse } from '@/lib/auth/suspension'
@@ -14,12 +15,16 @@ const bodySchema = z.object({ checkoutSessionId: z.string().uuid() })
  * SIMULATION ONLY. When real Razorpay keys are absent, this stands in for the
  * captured-payment webhook so Buy Now completes end-to-end in test/dev. It calls
  * the SAME idempotent materialize path the webhook uses. Refuses once a real
- * gateway is configured — production uses the actual Razorpay webhook.
+ * gateway is configured — production uses the actual Razorpay webhook — and
+ * always on the production deployment (ADR 023: it would be a free paid order).
  */
 export async function POST(request: NextRequest) {
   const gateway = getPaymentGateway()
   if (gateway.isReal) {
     return NextResponse.json({ error: 'Simulation disabled — real Razorpay webhook is in use.' }, { status: 400 })
+  }
+  if (!paymentsAvailable(gateway.isReal)) {
+    return NextResponse.json({ error: 'Payments are not available right now', code: PAYMENTS_UNAVAILABLE }, { status: 503 })
   }
 
   const { userId } = await getAuthedSupabase()

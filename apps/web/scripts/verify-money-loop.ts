@@ -17,6 +17,7 @@ import { randomUUID } from 'crypto'
 config({ path: path.resolve(__dirname, '../.env.local') })
 
 import { createClient } from '@supabase/supabase-js'
+import { paymentsAvailable } from '../lib/payments/simulation'
 import { bundlePlan, computeOrderAmounts, packageCharge, type BundleMilestoneRow, type PackageAddonRow } from '@amclub/shared'
 
 const URL = process.env['NEXT_PUBLIC_SUPABASE_URL']!
@@ -111,6 +112,14 @@ async function transition(orderId: string, action: string, token: string) {
 
 async function main() {
   console.log(`\nMoney-loop verification → ${BASE}\n`)
+
+  // ── ADR 023: the simulation gateway never takes a payment on the production deployment ──
+  console.log('ADR 023 — simulated payments are refused on production:')
+  check('no real keys on production → payments unavailable (no free paid order)', paymentsAvailable(false, 'production') === false)
+  check('real keys on production → payments available', paymentsAvailable(true, 'production') === true)
+  check('no real keys on a preview → simulation allowed', paymentsAvailable(false, 'preview') === true)
+  check('no real keys off Vercel (CI, the rigs, local) → simulation allowed', paymentsAvailable(false, undefined) === true)
+
   const { commissionBps, providerToken, buyerToken } = await setup()
 
   // ── DC 4 + 7: lifecycle with an illegal transition in the middle ──
