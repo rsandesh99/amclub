@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { Badge } from '@/components/ui/badge'
 import { ProviderProfileForm, type ProviderProfileInitial } from '@/components/profile/ProviderProfileForm'
-import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
+import { AssistantProfileLink } from '@/components/assistant/AssistantProfileLink'
 import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { PROVIDER_LANGUAGES, type ProviderLanguage } from '@amclub/shared'
@@ -86,7 +86,7 @@ export default async function ProviderProfilePage() {
 
       {trustInitial && <ProviderTrustSettings initial={trustInitial} />}
 
-      {AGENT_ENABLED && <AgentGrantsSection persona="provider" />}
+      {AGENT_ENABLED && <AssistantProfileLink href="/partner/ai" />}
       {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}
     </div>
   )

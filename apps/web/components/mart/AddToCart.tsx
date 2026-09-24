@@ -38,7 +38,7 @@ export function AddToCart({
   }
 
   return (
-    <div className="sticky bottom-0 z-20 -mx-4 border-t border-brass/40 bg-ivory/95 px-4 py-3 backdrop-blur">
+    <div data-bottom-bar className="sticky bottom-0 z-20 -mx-4 border-t border-brass/40 bg-ivory/95 px-4 py-3 backdrop-blur">
       <div className="mx-auto flex max-w-3xl items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-emerald-ink">
           <span className="sr-only">{t('qty')}</span>

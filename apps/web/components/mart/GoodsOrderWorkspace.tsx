@@ -286,7 +286,7 @@ export function GoodsOrderWorkspace({
 
       {/* Sticky thumb-zone action bar — one primary action per screen (FRONTEND.md §5) */}
       {actions.length > 0 && !panel && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-brass/40 bg-ivory/95 px-4 py-3 backdrop-blur">
+        <div data-bottom-bar className="fixed inset-x-0 bottom-0 z-20 border-t border-brass/40 bg-ivory/95 px-4 py-3 backdrop-blur">
           <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2">
             {actions.map((a, i) => (
               <Button

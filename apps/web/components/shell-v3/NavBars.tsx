@@ -8,17 +8,18 @@ import { useAnalytics } from '@/components/providers/posthog'
 import { useMeActions } from './ActionsProvider'
 import { buyerNav, isActive, providerNav, type NavItem } from './nav-items'
 
-function useItems(role: 'buyer' | 'provider', martEnabled: boolean): NavItem[] {
-  return role === 'buyer' ? buyerNav(martEnabled) : providerNav()
+function useItems(role: 'buyer' | 'provider', martEnabled: boolean, agentEnabled: boolean): NavItem[] {
+  return role === 'buyer' ? buyerNav(martEnabled, agentEnabled) : providerNav(agentEnabled)
 }
 
 /** v3 SideRail (desktop ≥ lg): every item, badges from N2, current page marked. */
-export function SideRail({ role, martEnabled = false }: { role: 'buyer' | 'provider'; martEnabled?: boolean }) {
+export function SideRail({ role, martEnabled = false, agentEnabled = false, guide = false }: { role: 'buyer' | 'provider'; martEnabled?: boolean; agentEnabled?: boolean; guide?: boolean }) {
   const t = useTranslations('nav_v3')
+  const tCard = useTranslations('rail_card')
   const pathname = usePathname()
   const { actions } = useMeActions()
   const analytics = useAnalytics()
-  const items = useItems(role, martEnabled)
+  const items = useItems(role, martEnabled, agentEnabled)
   return (
     <nav aria-label={t('aria_main')} className="hidden w-56 shrink-0 lg:block">
       <ul className="sticky top-16 flex flex-col gap-0.5 py-4 pr-3">
@@ -44,6 +45,20 @@ export function SideRail({ role, martEnabled = false }: { role: 'buyer' | 'provi
             </li>
           )
         })}
+        {/* E18 (flag `guide`): the rail's empty space under the menu holds the buyer's main action. */}
+        {guide && role === 'buyer' && (
+          <li className="mt-4 rounded-card border border-border bg-surface p-3 shadow-card" data-testid="rail-card">
+            <p className="text-[13px] font-semibold text-foreground">{tCard('title')}</p>
+            <p className="mt-1 text-xs text-foreground-secondary">{tCard('body')}</p>
+            <Link
+              href="/app/rfq/new?entry=rail"
+              onClick={() => analytics.capture('post_requirement_clicked', { surface: 'rail' })}
+              className="mt-2.5 inline-flex h-9 w-full items-center justify-center rounded-button bg-primary text-[13px] font-semibold text-primary-foreground hover:bg-primary-strong"
+            >
+              {tCard('cta')}
+            </Link>
+          </li>
+        )}
       </ul>
     </nav>
   )
@@ -55,10 +70,11 @@ export function TabBar({ role, martEnabled = false }: { role: 'buyer' | 'provide
   const pathname = usePathname()
   const { actions } = useMeActions()
   const analytics = useAnalytics()
-  const items = useItems(role, martEnabled).filter((i) => !i.railOnly).slice(0, 5)
+  const items = useItems(role, martEnabled, false).filter((i) => !i.railOnly).slice(0, 5)
   return (
     <nav
       aria-label={t('aria_main')}
+      data-bottom-bar
       className="material hairline-t fixed inset-x-0 bottom-0 z-30 lg:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >

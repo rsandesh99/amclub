@@ -1,3 +1,4 @@
+import { TrustStrip } from '@/components/usp/TrustStrip'
 import { getTranslations } from 'next-intl/server'
 import { SearchBar } from '@/components/catalog/SearchBar'
 import { ListingControls } from '@/components/catalog/ListingControls'
@@ -39,6 +40,8 @@ export default async function AppSearchPage({
           {/* E16 N39 — Services | Goods, only with the Mart flag on. */}
           {MART_ENABLED && <div className="mb-3"><ModeSwitch mode="services" query={sp['query']} servicesPath="/app/search" /></div>}
           <SearchBar defaultValue={sp['query'] ?? ''} action="/app/search" voice={v3 && (await isVoiceSearchOn())} />
+          {/* E18 (flag `guide`): the four buyer promises, before the first click. */}
+          {isOnFor('guide', user?.id) && <TrustStrip className="mt-3" />}
         </div>
         {searching && v3 ? (
           <SearchResultsV3 search={search} basePath="/app/search" youSaid={sp['voice'] === '1' ? search.query : undefined} />

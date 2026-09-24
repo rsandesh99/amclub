@@ -12,6 +12,9 @@
  *      accepts & pays → paid order from the quote.
  *   C  The top-bar search is typed into in place (signed in and public), its
  *      results open right under it, and a sheet on a wide screen is centred.
+ *   D  (AGENT_BASE_URL, the agent-on server) The corner assistant opens, leads
+ *      to its home, hides and comes back from the setting, and on a phone it
+ *      sits above the tab bar.
  *
  * Sessions are Supabase SSR cookies minted server-side (the login UI is phone
  * OTP only), exactly as scripts/a11y-scan.ts does. Every fixture is created
@@ -409,6 +412,53 @@ async function journeyC(): Promise<void> {
   }
 }
 
+// ── Journey D: the assistant, minimised in the corner (agent-on server) ────────
+async function journeyD(): Promise<void> {
+  const AGENT = process.env['AGENT_BASE_URL']
+  if (!AGENT) { console.log('\nD — skipped (AGENT_BASE_URL is not set: the corner assistant needs AGENT_ENABLED)'); return }
+  console.log('\nD — the corner assistant opens, explains itself, hides and comes back (browser, agent-on server)')
+  const buyer = await mkBuyer('buyerD')
+  const b = await pageFor(buyer)
+  const phone = await pageFor(buyer, { width: 390, height: 844 })
+  const all = [b.page, phone.page]
+  try {
+    await step('D', 'the assistant sits minimised in the corner of the buyer home', all, async () => {
+      await b.page.goto(`${AGENT}/app`)
+      await b.page.getByTestId('assistant-launcher-button').waitFor()
+    })
+    await step('D', 'opening it offers what it can do now, in plain words', all, async () => {
+      await b.page.getByTestId('assistant-launcher-button').click()
+      const panel = b.page.getByRole('dialog', { name: 'AMClub assistant' })
+      await panel.waitFor()
+      await panel.getByRole('link', { name: /Speak or type what you need/ }).waitFor()
+    })
+    await step('D', '"What can the assistant do?" opens the assistant home', all, async () => {
+      await b.page.getByRole('link', { name: /What can the assistant do/ }).click()
+      await b.page.waitForURL(/\/app\/ai$/)
+      await b.page.getByTestId('assistant-home').waitFor()
+    })
+    await step('D', 'its setting hides the corner button, and brings it back', all, async () => {
+      const sw = b.page.getByTestId('launcher-pref')
+      await sw.click()
+      await until('the corner button hidden', async () => await b.page.getByTestId('assistant-launcher-button').count(), (n) => n === 0, 5000)
+      await sw.click()
+      await b.page.getByTestId('assistant-launcher-button').waitFor()
+    })
+    await step('D', 'on a phone it sits above the tab bar', all, async () => {
+      await phone.page.goto(`${AGENT}/app`)
+      const btn = phone.page.getByTestId('assistant-launcher-button')
+      await btn.waitFor()
+      await until('the corner button above the tab bar', async () => ({ bb: await btn.boundingBox(), tb: await phone.page.locator('nav[data-bottom-bar]').boundingBox() }),
+        ({ bb, tb }) => !!bb && !!tb && bb.y + bb.height <= tb.y, 5000)
+    })
+  } catch (e) {
+    if (!(e instanceof JourneyStop)) throw e
+    console.log('  … journey D stopped (later steps depend on the failed one)')
+  } finally {
+    await b.ctx.close(); await phone.ctx.close()
+  }
+}
+
 // ── cleanup (always) ───────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n🧹 cleanup…')
@@ -459,6 +509,7 @@ async function main(): Promise<void> {
     await journeyA()
     await journeyB()
     await journeyC()
+    await journeyD()
   } finally {
     await browser.close().catch(() => {})
     await cleanup()

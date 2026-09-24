@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield, Search, Rows3 } from 'lucide-react'
+import { User, LogOut, Briefcase, Home, LifeBuoy, ChevronDown, Shield, Search, Rows3, Sparkles } from 'lucide-react'
 import { useRouter } from '@/i18n/navigation'
 import { useAnalytics } from '@/components/providers/posthog'
 import { Link } from '@/i18n/navigation'
@@ -20,11 +20,13 @@ interface AccountMenuProps {
   isAdmin: boolean
   /** N33 — shown only in the v3 shell; toggles Comfortable ⇄ Compact. */
   density?: 'comfortable' | 'compact'
+  /** The assistant home for this context (AGENT_ENABLED), or null. */
+  assistantHref?: string | null
 }
 
 /** Avatar dropdown: profile, role switch / become-provider, help, sign out.
  *  Shared across every logged-in surface (and the public header when logged in). */
-export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin, density }: AccountMenuProps) {
+export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin, density, assistantHref = null }: AccountMenuProps) {
   const t = useTranslations('shell')
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
@@ -115,6 +117,9 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin, dens
 
           {context !== 'admin' && (
             <MenuLink href={profileHref} icon={User} label={t('profile')} onClick={() => setOpen(false)} />
+          )}
+          {assistantHref && (
+            <MenuLink href={assistantHref} icon={Sparkles} label={t('assistant_menu')} onClick={() => setOpen(false)} />
           )}
           {/* E0 / U6 — /app/search was unreachable from the logged-in shell (interim until the E1 nav). */}
           {context === 'msme' && (

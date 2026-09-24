@@ -1,3 +1,5 @@
+import { isOnForEveryone } from '@/lib/experiments'
+import { WhyAmclub } from '@/components/usp/WhyAmclub'
 import { getTranslations, getLocale } from 'next-intl/server'
 import { countAttributeFacets, parseAttributeFilters, pickLocale, type MartAttributeDef } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
@@ -105,6 +107,9 @@ export async function MartBrowse({ params, base }: { params: BrowseParams; base:
   const barParams = { ...chipParams, ...attrChips }
   const facets = countAttributeFacets(defs, facetRows)
   const rfqHref = makeToOrderHref(params.query, params.category)
+  // E18 (flag `guide`): "Why AMClub" beside the listings on the unfiltered front page.
+  const front = !params.category && !params.query && !params.brand && !params.band && !params.seller && !filters.attrs
+  const guide = front && isOnForEveryone('guide')
 
   return (
     <div className="mart-enter">
@@ -147,6 +152,8 @@ export async function MartBrowse({ params, base }: { params: BrowseParams; base:
           ))}
         </nav>
 
+        <div className={guide ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-6' : undefined}>
+        <div className="min-w-0">
         {openPools.length > 0 && (
           <section className="mt-5" aria-labelledby="pools-strip">
             <div className="flex items-baseline justify-between">
@@ -212,6 +219,13 @@ export async function MartBrowse({ params, base }: { params: BrowseParams; base:
             )}
           </>
         )}
+        </div>
+        {guide && (
+          <aside className="mt-8 lg:sticky lg:top-20 lg:mt-5" aria-label={t('why_label')}>
+            <WhyAmclub surface="mart" martEnabled tone="mart" collapsedCount={5} />
+          </aside>
+        )}
+        </div>
       </div>
     </div>
   )

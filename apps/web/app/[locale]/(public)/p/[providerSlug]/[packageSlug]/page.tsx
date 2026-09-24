@@ -343,7 +343,7 @@ export default async function PackageDetailPage({
               keeps the price and Buy now in reach. Hidden from lg up, where the
               sticky aside does the job. */}
           <div
-            className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 pt-3 shadow-card lg:hidden"
+            data-bottom-bar className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 pt-3 shadow-card lg:hidden"
             style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
           >
             <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">

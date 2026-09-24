@@ -39,7 +39,7 @@ export function AnalyticsConsentNotice() {
     void fetch('/api/v1/me/analytics-consent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice }) }).catch(() => {})
   }
   return (
-    <div role="region" aria-label={t('aria')} className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface px-4 py-3 shadow-card" data-testid="analytics-consent" data-cookie={ANALYTICS_CONSENT_COOKIE}>
+    <div role="region" aria-label={t('aria')} data-bottom-bar className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface px-4 py-3 shadow-card" data-testid="analytics-consent" data-cookie={ANALYTICS_CONSENT_COOKIE}>
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
         <p className="text-sm">
           {t('notice')} <Link href="/privacy" className="font-medium text-primary hover:underline">{t('learn_more')}</Link>

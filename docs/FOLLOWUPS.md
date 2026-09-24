@@ -1377,3 +1377,32 @@ The journeys (`apps/web/e2e/journeys.ts`) now print every `pageerror` and `conso
 - **Open:** the journeys only print these errors today. Once a few runs show the list is stable, make an
   unexpected `pageerror` fail the step, with an allow-list for the two CI-only lines above.
 
+## E18 — explain and assist (2026-09-24)
+
+**Found while fact-checking the "Why AMClub" copy against the code. Each one needs a decision before anyone relies on it:**
+- **The provider payout leaves out the GST the buyer paid.** `providerEarningPaise = taxable − commission`, and the platform keeps the GST (`packages/shared/src/money.ts`, marked "provisional, TEST MODE, needs CA sign-off"). Nothing deducts the 18 % GST shown on the commission invoice either.
+  - This is the §9.1 CA question.
+  - It must be settled before real payments start.
+  - The invoice PDF footer ("Provisional GST structure … TEST MODE", `lib/invoices/generate.ts`) goes at the same time.
+- **Mart sends the buyer's delivery phone to the seller.** `GET /api/v1/orders/[id]` returns `select('*')`, which includes `delivery_snapshot.contact_phone`. The seller screen doesn't show it. Decide whether sellers need it for delivery. If they don't, project it out.
+- **Requirement text is not masked.** `redactContactInfo` covers messages, questions, answers and statements, but not an RFQ's title or details. A buyer who types a phone number into the requirement shows it to every matched provider.
+  - Proposal: run `redactContactInfo` on the title and free-text details at `POST /api/v1/rfq`, with a hint in the form.
+  - Until then, "No spam calls" is worded as "in messages".
+- **Two claims that depend on production config:**
+  - voice requirements need `SARVAM_API_KEY` (the recorder otherwise returns a stub);
+  - "WhatsApp updates" is not claimed while `WHATSAPP_DRIVER` is `stub`.
+- **A buyer-side "scope of work" generator does not exist.** The founder's USP list named one. Today the voice parse pre-fills the requirement and providers write the scope in their quotes. It's a candidate feature: draft a scope from the requirement for the buyer to edit. It needs its own §8.1 note.
+
+**Left for later:**
+- **te / ta** for `assistant_home`, `why_amclub`, `home_snapshot` and `rail_card`: en + hi only; te / ta fall back to English. The buying-path keys (`catalog.why_label`, `nav_v3.assistant`, `shell.assistant_menu`) have reviewed-pending drafts.
+- **Mobile:** the assistant home, the corner assistant and "Why AMClub" are web only. `GET /api/v1/agent/assistant` is ready for the app.
+- **More information density, proposed (not built):**
+  - category cards: provider count, "from ₹X" and median delivery days;
+  - the requirement list: "3 / 7 quotes · lowest ₹X · closes in 20 h" per row;
+  - the orders list: a status summary header and days left per row;
+  - the order workspace: who is waiting on whom, and the money held;
+  - invoices: totals per financial year, and ITC claimable;
+  - provider Today: response time against the category median;
+  - `/services`: "popular this week".
+  - Each needs a server read, and the prices go through `priceDisplay`.
+

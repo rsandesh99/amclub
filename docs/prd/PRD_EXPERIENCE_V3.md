@@ -20,7 +20,7 @@
 3. Design language v3: "Precision"
 4. Information architecture and navigation
 5. The pairing matrix: every UX gap paired with a feature, or a new feature created
-6. Epics E0–E17 (requirements, wireframes, data, events, acceptance, RICE)
+6. Epics E0–E18 (requirements, wireframes, data, events, acceptance, RICE)
 7. Cross-cutting requirements
 8. Release plan and what it displaces
 9. Risks
@@ -2592,6 +2592,106 @@ Nothing in this epic is user-visible.
   - Server-side operational events keep flowing, pending counsel's confirmation that they aren't analytics.
 - **If counsel says consent isn't needed:** leave the flag off and add the privacy-policy paragraph. No code changes.
 - **Tests.** Shared unit tests (cookie / record versioning, consent rate) and rig `e17` (off: route 404, no notice; on: store / read / 422).
+
+### E18: Explain and assist (founder request, 2026-09-24)
+
+**The request (founder, 2026-09-24):**
+- Searching opened a misaligned dialog instead of letting you type in the top field.
+- The AI assistant was buried at the bottom of the profile page, and described by tool names such as `accept_quote`.
+- The founder asked for four things:
+  - a home page for the assistant, where people can read about it and configure it;
+  - the assistant, minimised in a corner, on every page;
+  - the product's main promises beside the buyer home, `/services` and `/mart`, in two tabs (buyers | providers);
+  - more information on every page.
+
+**Scope as built.** The search fix shipped first in #56: the field is typed into in place, and every v3 sheet was off-centre on desktop.
+- **Assistant home.**
+  - Routes: `/app/ai` (buyer) and `/partner/ai` (provider), each in its own route group gated on `AGENT_ENABLED`.
+  - What it covers:
+    - what the assistant is, in plain words, with a status summary;
+    - "Try it now";
+    - each capability, with an example and whether it is **On** for this person (read through `agentAvailability`: the switch + the cohort + the runtime, the same rule as `isAgentEnabledForUser`);
+    - "It always asks you first" (the confirm gate);
+    - "It never";
+    - settings: the web permission, now written in plain words and split into "on its own" / "only after you tap"; WhatsApp; the corner button;
+    - an FAQ.
+  - The profile page now links here instead of listing tool names.
+  - The consent text version is `v2`.
+- **Corner assistant.**
+  - `AssistantLauncher`: minimised in the bottom-right corner of every buyer and provider page (not in a focused task such as checkout).
+  - It offers what is on for this person, read from `GET /api/v1/agent/assistant` on first open.
+  - It lifts itself above any `[data-bottom-bar]` (the tab bar, sticky actions, the compare tray).
+  - It can be hidden per device, and brought back from the assistant home.
+  - "Assistant" is also on the side rail and in the account menu.
+- **Why AMClub** (flag `guide`, `EXP_V3_GUIDE`, default off).
+  - `WhyAmclub` has two tabs, For buyers | For providers. The provider tab lists every provider item.
+  - Where it appears:
+    - the right rail of the buyer home;
+    - the provider Today page (opening on the providers tab);
+    - beside the `/services` categories;
+    - beside the unfiltered `/mart` front page.
+- **Information density** (same flag).
+  - The buyer home rail's "Your numbers" (`HomeSnapshot`): open requirements and quotes received, orders in progress, the money held for them, orders completed. Summed on the server.
+  - A trust strip under the `/services` and `/app/search` search bars.
+  - A "Post a requirement" card in the empty space under the buyer side rail.
+
+**Every promise matches the code (re-check this table when a rule behind an item changes).**
+
+| Item | What the code does |
+|---|---|
+| No spam calls | `redactContactInfo` on messages, questions, answers and statements; `order_safe_view` gives providers no buyer phone (ADR-022); no call or pre-order chat feature (§8.3). The wording says "in messages", because request text is not masked. |
+| Speak, don't type | `VoiceRfqRecorder` on the requirement form (no flag), Telugu / Tamil / Hindi / English, 30 s. Needs `SARVAM_API_KEY` in production. |
+| Say it once, we write it up | The voice parse pre-fills category, place and details; it never submits. There is **no** buyer scope-of-work generator, so none is claimed. |
+| Up to 7 quotes, 72 hours | `RFQ_MAX_QUOTES_LEGACY = 7` (settable 3–7), `RFQ_TTL_MS` = 72 h. |
+| Compare like for like | Shared `compareQuotes`: GST-normalised totals and gap flags. |
+| Money held safely | `PAYOUT_RELEASE_STATUSES`; auto-accept 72 h after delivery (`ORDER_AUTO_ACCEPT_HOURS`). |
+| Every provider checked | Admin approval to `active` before `public_providers`; GSTIN and required credential documents. Not "KYC-verified" while `KYC_API_KEY` is unset. |
+| GST invoice every time | `generateInvoices` on completion (the PDF still says provisional / TEST MODE until the CA signs off). |
+| Clear prices, GST shown upfront | `priceDisplay`: price + GST shown before checkout (prices are **not** GST-inclusive). |
+| Help if something goes wrong | Disputes from `accepted` on, and 7 days after completion (`dispute_window_days`). |
+| No listing fee, commission only on completed orders | Category `commission_bps`; no provider subscription; ADR-004 (AMClub absorbs the gateway fee). No percentage is quoted, because it is config. |
+| Paid to your bank after acceptance and our check | Payouts from completion, held for admin release (`PAYOUT_AUTO_RELEASE` off). T+2 is not promised. |
+| Auto-accept | 72 h after delivery. |
+| Quote by typing or talking | `quote_extract` works from typed or spoken **text**, not a photo, so no photo is claimed. |
+| Munshi / translations | Marked **AI**, "reach accounts in stages" (switch + cohort). |
+| Mart items | Only with `MART_ENABLED`. |
+
+**Left out on purpose:**
+- WhatsApp order updates (the driver defaults to `stub`);
+- voice search (off by default);
+- the fair price range as a promise (data gates);
+- "quote from a photo" (it doesn't exist for providers);
+- a GST-inclusive price claim.
+
+**Events (Appendix A):**
+- `assistant_home_viewed`
+- `assistant_launcher_opened`
+- `assistant_launcher_action`
+- `assistant_launcher_hidden`
+- `assistant_launcher_pref_changed`
+- `assistant_permission_changed`
+- `why_amclub_tab_switched`
+- `why_amclub_cta_clicked`
+- `post_requirement_clicked { surface: 'rail' }`
+
+**Tests.**
+- Rig `e18`:
+  - off: no panel; `/app/ai` and the launcher API 404 with `AGENT_ENABLED` off;
+  - on: the `/services` panel with both tabs, 11 buyer items, the trust strip, and a search keeping the strip without the panel;
+  - the agent-on server (`--only=e18` against :3001):
+    - `/app/ai` shows 9 capabilities, only the always-on one "On" outside the cohort, plain-language permission, no tool names;
+    - the launcher API;
+    - the profile link;
+    - `/partner/ai` shows 6 capabilities.
+- `e9` checks the home rail's numbers on its fixtures (2 open · 2 quotes · 3 in progress · ₹3,540 held · 1 completed) and the rail card.
+- Journey D clicks the corner assistant:
+  - it opens;
+  - it leads to its home;
+  - it hides and comes back;
+  - on a phone it sits above the tab bar.
+- The signed-in axe scan adds `/app/ai`, `/partner/ai` and the home with the corner assistant.
+
+**RICE:** R 1.0 · I 1 · C 0.8 · E 1.5 → **0.53**.
 
 ---
 

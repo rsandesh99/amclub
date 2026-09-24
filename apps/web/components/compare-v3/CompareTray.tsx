@@ -11,7 +11,7 @@ export function CompareTray() {
   const items = useCompare()
   if (items.length === 0) return null
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 lg:bottom-6" data-testid="compare-tray">
+    <div data-bottom-bar className="pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 lg:bottom-6" data-testid="compare-tray">
       <div className="material pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-card border border-border px-4 py-3 shadow-card">
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{t('tray', { n: items.length })}</span>
         <button type="button" aria-label={t('clear')} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-sunken" onClick={clearCompare}>

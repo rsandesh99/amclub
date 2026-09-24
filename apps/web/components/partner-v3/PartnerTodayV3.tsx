@@ -1,4 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server'
+import { isOnFor } from '@/lib/experiments'
+import { MART_ENABLED } from '@/lib/flags'
+import { WhyAmclub } from '@/components/usp/WhyAmclub'
 import { HOME_ACTION_MAX, type FunnelRange } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { createAdminClient } from '@/lib/supabase/server'
@@ -32,8 +35,11 @@ export async function PartnerTodayV3({ userId, providerId, range, banners }: { u
   const items = actions.provider?.items ?? []
   const nextAvailable = (prof?.next_available_on as string | null) ?? null
 
+  // E18 (flag `guide`): "Why AMClub" as a right rail, opening on the providers tab.
+  const guide = isOnFor('guide', userId)
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-6" data-testid="partner-today">
+    <div className={guide ? 'mx-auto max-w-6xl px-4 py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8' : 'mx-auto max-w-3xl px-4 py-6'}>
+    <div className="min-w-0 space-y-6" data-testid="partner-today">
       <PartnerHomeViewed actions={items.length} />
       {banners}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -77,6 +83,12 @@ export async function PartnerTodayV3({ userId, providerId, range, banners }: { u
           </GroupedSection>
         </div>
       </div>
+    </div>
+    {guide && (
+      <aside className="mt-8 lg:sticky lg:top-20 lg:mt-0" aria-label={t('why_label')} data-testid="partner-rail">
+        <WhyAmclub surface="home" martEnabled={MART_ENABLED} defaultTab="providers" />
+      </aside>
+    )}
     </div>
   )
 }

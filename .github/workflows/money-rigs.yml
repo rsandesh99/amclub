@@ -70,6 +70,7 @@ jobs:
       EXP_V3_COMPARE: "on"
       EXP_V3_ORDERS: "on"
       EXP_V3_MOBILE: "on"
+      EXP_V3_GUIDE: "on"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -223,6 +224,13 @@ jobs:
           FLAG_OFF_BASE_URL: http://localhost:3000
         run: pnpm exec tsx scripts/verify-pools.ts
 
+      - name: Assistant home (E18 — agent on; /app/ai, /partner/ai, the launcher API)
+        if: ${{ !cancelled() && steps.agentapp.outcome == 'success' }}
+        working-directory: apps/web
+        env:
+          AGENT_BASE_URL: http://localhost:3001
+        run: pnpm exec tsx scripts/verify-experience.ts --only=e18
+
       # The rigs above prove the server; these prove the screens. A real
       # Chromium clicks through package → paid order → delivery → payout and
       # requirement → quote → paid order (e2e/journeys.ts), then axe scans the
@@ -235,6 +243,9 @@ jobs:
       - name: Browser journeys (click-through, e2e/journeys.ts)
         if: ${{ !cancelled() && steps.chromium.outcome == 'success' }}
         working-directory: apps/web
+        env:
+          # Journey D (the corner assistant) needs the agent-on server; the rest run on :3000.
+          AGENT_BASE_URL: ${{ steps.agentapp.outcome == 'success' && 'http://localhost:3001' || '' }}
         run: pnpm exec tsx e2e/journeys.ts
 
       - name: Accessibility (axe — every surface, signed in)
@@ -242,6 +253,7 @@ jobs:
         working-directory: apps/web
         env:
           A11Y_ENFORCE: "1"
+          A11Y_AGENT_BASE_URL: ${{ steps.agentapp.outcome == 'success' && 'http://localhost:3001' || '' }}
           A11Y_REPORT: ${{ github.workspace }}/apps/web/e2e-artifacts/a11y-report.json
         run: pnpm exec tsx scripts/a11y-scan.ts
 

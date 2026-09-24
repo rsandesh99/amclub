@@ -7,10 +7,11 @@ import { AccountMenu, type ShellContext } from './AccountMenu'
 import { LegalGate } from '@/components/legal/LegalGate'
 import { isOnFor } from '@/lib/experiments'
 import { getUiDensity } from '@/lib/auth/session'
-import { MART_ENABLED } from '@/lib/flags'
+import { AGENT_ENABLED, MART_ENABLED } from '@/lib/flags'
 import { ActionsProvider } from '@/components/shell-v3/ActionsProvider'
 import { ShellTopBar } from '@/components/shell-v3/ShellTopBar'
 import { SideRail, TabBar } from '@/components/shell-v3/NavBars'
+import { AssistantLauncher } from '@/components/assistant/AssistantLauncher'
 
 /**
  * Shared chrome for every logged-in surface (MSME / provider / admin). One
@@ -76,15 +77,25 @@ export async function AppShell({
                 {context === 'msme' && <JurisdictionSelector className="hidden xl:inline-flex" />}
                 <LanguageSwitcher />
                 {context !== 'admin' && <NotificationBell href={notificationsHref} />}
-                <AccountMenu name={name} context={context} hasMsme={hasMsme} hasProvider={hasProvider} isAdmin={isAdmin} density={density} />
+                <AccountMenu
+                  name={name}
+                  context={context}
+                  hasMsme={hasMsme}
+                  hasProvider={hasProvider}
+                  isAdmin={isAdmin}
+                  density={density}
+                  assistantHref={AGENT_ENABLED ? (context === 'msme' ? '/app/ai' : context === 'provider' && hasProvider ? '/partner/ai' : null) : null}
+                />
               </>
             }
           />
           <div className="mx-auto flex w-full max-w-[1280px] flex-1 lg:px-6">
-            {role && <SideRail role={role} martEnabled={MART_ENABLED} />}
+            {role && <SideRail role={role} martEnabled={MART_ENABLED} agentEnabled={AGENT_ENABLED} guide={isOnFor('guide', userId)} />}
             <main className={role ? 'min-w-0 flex-1 pb-24 lg:pb-10' : 'min-w-0 flex-1'}>{children}</main>
           </div>
           {role && <TabBar role={role} martEnabled={MART_ENABLED} />}
+          {/* The assistant, minimised in the corner of every buyer / provider page (not in a focused task like checkout). */}
+          {role && AGENT_ENABLED && <AssistantLauncher persona={role} />}
         </ActionsProvider>
         <LegalGate />
       </div>

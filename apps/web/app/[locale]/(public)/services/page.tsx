@@ -13,6 +13,8 @@ import { SearchResultsV3 } from '@/components/search-v3/SearchResultsV3'
 import { isVoiceSearchOn } from '@/lib/voice/search'
 import { MART_ENABLED } from '@/lib/flags'
 import { ModeSwitch } from '@/components/mart/ModeSwitch'
+import { WhyAmclub } from '@/components/usp/WhyAmclub'
+import { TrustStrip } from '@/components/usp/TrustStrip'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('catalog')
@@ -46,6 +48,8 @@ export default async function ServicesPage({
         {/* E16 N39 — Services | Goods, only with the Mart flag on. */}
         {MART_ENABLED && <div className="mb-3"><ModeSwitch mode="services" query={sp['query']} /></div>}
         <SearchBar defaultValue={sp['query'] ?? ''} voice={v3 && (await isVoiceSearchOn())} />
+        {/* E18 (flag `guide`): the four buyer promises, before the first click. */}
+        {isOnForEveryone('guide') && <TrustStrip className="mt-3" />}
       </div>
 
       {searching && v3 ? (
@@ -58,6 +62,14 @@ export default async function ServicesPage({
             basePath="/services"
             searchParams={sp}
           />
+        </div>
+      ) : isOnForEveryone('guide') ? (
+        // E18 (flag `guide`): "Why AMClub" beside the categories on the front page.
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8">
+          <CategoryGrid categories={categories} />
+          <aside className="mt-8 lg:sticky lg:top-20 lg:mt-0" aria-label={t('why_label')}>
+            <WhyAmclub surface="services" martEnabled={MART_ENABLED} />
+          </aside>
         </div>
       ) : (
         <CategoryGrid categories={categories} />

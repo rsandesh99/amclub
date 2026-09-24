@@ -20,6 +20,7 @@ export const EXPERIENCE_FLAGS = [
   'partner',
   'mobile',
   'locales',
+  'guide',
 ] as const
 export type ExperienceFlag = (typeof EXPERIENCE_FLAGS)[number]
 

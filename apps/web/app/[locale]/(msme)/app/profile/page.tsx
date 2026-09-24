@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { MsmeProfileForm, type MsmeProfileInitial } from '@/components/profile/MsmeProfileForm'
-import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
+import { AssistantProfileLink } from '@/components/assistant/AssistantProfileLink'
 import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { CorpusConsentSection } from '@/components/profile/CorpusConsentSection'
@@ -74,7 +74,7 @@ export default async function MsmeProfilePage() {
       {/* E17 (gated D-UX2) — "Privacy choices": the analytics choice, changeable any time. */}
       {ANALYTICS_CONSENT_REQUIRED && <PrivacyChoices />}
 
-      {AGENT_ENABLED && <AgentGrantsSection persona="buyer" />}
+      {AGENT_ENABLED && <AssistantProfileLink href="/app/ai" />}
       {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}
     </div>
   )

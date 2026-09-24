@@ -943,6 +943,8 @@ Fair price ranges (S3.2): `benchmark_shown { role: buyer|provider, scope: state|
 
 Group requests (S3.4, dark, server): `pool_invited { pool_id }` · `pool_joined` / `pool_left` / `pool_dismissed { pool_id }` · `pool_committed` / `pool_uncommitted { pool_id }` · `pool_offer_submitted { pool_id, tiers }` · `pool_offer_closed { pool_id, count }`.
 
+Explain and assist (E18): `assistant_home_viewed { persona, capabilities_on }` · `assistant_launcher_opened { persona, path }` · `assistant_launcher_action { persona, action }` · `assistant_launcher_hidden { persona }` · `assistant_launcher_pref_changed { persona, shown }` · `assistant_permission_changed { persona, allowed }` · `why_amclub_tab_switched { surface, tab }` · `why_amclub_cta_clicked { surface, tab }` · `post_requirement_clicked { surface: 'rail' }` (client). Search (#56): `command_search_opened { via: field|button|keyboard }`.
+
 AMC Score (S2.4): `score_card_viewed { computed, gated, has_note }` (server) · `compare_ordering { rfq_id, mode: price|reliability, quote_count, reordered }` (server) · `compare_sort_changed { from, to }` (client) · `munshi_growth_sent { kind: profile_field|category_demand|score_tip|score_rise, whatsapp, in_app }` (runtime).
 
 Support agent (S2.3): `support_turn { channel: web|mobile|whatsapp, intent, escalated, reply_key, role, ticket_open? }` (server + runtime) · `nudge_sent { subject_kind: order|rfq, via: web|mobile|whatsapp|agent, recipients? }` (server; spine, flag-independent) · `support_nudge_decided { outcome: sent|capped|declined }` (runtime) · `support_ticket_opened { channel, role, reason, has_summary }` · `support_ticket_resolved { ticket_id, channel, minutes_open }` (server).

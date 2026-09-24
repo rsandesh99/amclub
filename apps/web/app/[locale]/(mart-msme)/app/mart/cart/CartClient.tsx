@@ -165,7 +165,7 @@ export function CartClient() {
 
       {/* Sticky checkout for the first seller group — thumb zone, 48dp (§5). Total is the server's paise. */}
       {first && firstOk && (
-        <div className="sticky bottom-0 z-20 -mx-4 border-t border-brass/40 bg-ivory/95 px-4 py-3 backdrop-blur">
+        <div data-bottom-bar className="sticky bottom-0 z-20 -mx-4 border-t border-brass/40 bg-ivory/95 px-4 py-3 backdrop-blur">
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs text-foreground-secondary">{t('total')} · {first.sellerName}</p>
