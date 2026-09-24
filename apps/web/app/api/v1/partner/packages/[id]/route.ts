@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { packageSchema, isSpecializationOf } from '@amclub/shared'
 import { toPackageRow } from '@/lib/partner/packageRow'
@@ -70,15 +70,15 @@ export async function PATCH(
     .maybeSingle()
   if (!category) return NextResponse.json({ error: 'Invalid category' }, { status: 422 })
 
-  const { error } = await supabase
+  // ownPackage proved ownership on the session client; the write is the service
+  // role (ADR 025: no client write grant on packages).
+  const admin = await createAdminClient()
+  // toPackageRow forces status from the draft|active union; paused is set here.
+  const row = toPackageRow({ ...d, status: d.status === 'paused' ? 'active' : d.status }, category.id)
+  const { error } = await admin
     .from('packages')
-    .update(toPackageRow({ ...d, status: d.status === 'paused' ? 'active' : d.status }, category.id))
+    .update({ ...row, status: d.status })
     .eq('id', id)
-
-  // toPackageRow forces status from the draft|active union; set paused explicitly.
-  if (!error && d.status === 'paused') {
-    await supabase.from('packages').update({ status: 'paused' }).eq('id', id)
-  }
 
   if (error) return serverError('[partner/packages PATCH]', error)
   revalidateCatalog({
@@ -97,8 +97,8 @@ const statusPatchSchema = z.object({ status: z.enum(['active', 'paused', 'draft'
 
 /**
  * Lightweight status toggle (pause/activate) without a full edit payload.
- * Web (cookie) and mobile (Bearer, E13 Listings) — the session client either
- * way, so the provider crud-own RLS policy still decides.
+ * Web (cookie) and mobile (Bearer, E13 Listings). Ownership is read on the
+ * session client (RLS), the write is the service role (ADR 025).
  */
 export async function POST(
   request: NextRequest,
@@ -116,7 +116,7 @@ export async function POST(
   if (!own.ok) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
-  const { error } = await supabase.from('packages').update({ status: parsed.data.status }).eq('id', id)
+  const { error } = await (await createAdminClient()).from('packages').update({ status: parsed.data.status }).eq('id', id)
   if (error) return serverError('[partner/packages POST status]', error)
   revalidateCatalog({
     ...(own.categorySlug ? { categorySlug: own.categorySlug } : {}),
@@ -140,7 +140,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
   // Soft delete (§2.5 rule 4) — never hard-delete provider content.
-  const { error } = await supabase
+  const { error } = await (await createAdminClient())
     .from('packages')
     .update({ status: 'removed', deleted_at: new Date().toISOString() })
     .eq('id', id)

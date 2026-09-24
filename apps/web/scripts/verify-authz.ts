@@ -647,6 +647,74 @@ async function main() {
       eq('order A unchanged after the view write attempt', JSON.stringify(ordAfter), JSON.stringify(ordBefore))
     }
 
+    // ── 7a6. ADR 025 (0072 / 0073) — provider + catalog rows are server-written only ──
+    console.log('provider + catalog writes (ADR 025, direct PostgREST):')
+    {
+      // A missing grant fails when the statement is planned, so the denial must be
+      // an ERROR here: zero rows could just mean the filter matched nothing.
+      const privDenied = (name: string, r: { error: { message: string } | null }) => {
+        const ok = Boolean(r.error)
+        console.log(`  ${ok ? '✓' : '✗ LEAK'} ${name} → ${r.error ? 'error: ' + r.error.message.slice(0, 60) : 'accepted'}`)
+        ok ? pass++ : fail++
+      }
+      const anonClient = createClient(URL_, ANON, { auth: { persistSession: false } })
+      const uProv = asUser(provA.token)
+      const profCols = 'status, display_name, avg_rating, top_rated, deleted_at'
+      const pkgCols = 'price_paise, discount_bps, member_extra_discount_bps, status, deleted_at'
+      const { data: profBefore } = await admin.from('provider_profiles').select(profCols).eq('id', provAId).single()
+      const { data: pkgBefore } = await admin.from('packages').select(pkgCols).eq('id', pkgA!.id).single()
+
+      eq('anon reads provA through public_providers → 1 row (control)', ((await anonClient.from('public_providers').select('id').eq('id', provAId)).data ?? []).length, 1)
+      privDenied('anon renames an active provider through public_providers', await anonClient.from('public_providers').update({ display_name: 'hijacked', avg_rating: '5.0', top_rated: true }).eq('id', provAId).select('id'))
+      privDenied('anon DELETEs a provider through public_providers', await anonClient.from('public_providers').delete().eq('id', crypto.randomUUID()).select('id'))
+      privDenied('buyerB writes through public_providers', await bClient.from('public_providers').update({ display_name: 'hijacked' }).eq('id', provAId).select('id'))
+
+      eq('provA reads OWN provider_profile → 1 row (control)', ((await uProv.from('provider_profiles').select('id').eq('id', provAId)).data ?? []).length, 1)
+      privDenied('provA self-sets rating / top_rated on OWN profile', await uProv.from('provider_profiles').update({ avg_rating: '5.0', top_rated: true }).eq('id', provAId).select('id'))
+      privDenied('provA soft-deletes OWN profile directly', await uProv.from('provider_profiles').update({ deleted_at: new Date().toISOString() }).eq('id', provAId).select('id'))
+      privDenied('provA hard-DELETEs a provider profile', await uProv.from('provider_profiles').delete().eq('id', crypto.randomUUID()).select('id'))
+      privDenied('outsider self-registers an ACTIVE provider profile', await asUser(outsider.token).from('provider_profiles').insert({ user_id: outsider.uid, legal_name: 'forged', display_name: 'forged', slug: `${tag}-forged`.replace(/_/g, '-'), state: 'KA', status: 'active', languages: ['en'] }).select('id'))
+      const forged = ((await admin.from('provider_profiles').select('id').eq('user_id', outsider.uid)).data ?? []) as { id: string }[]
+      eq('outsider has no provider profile after the attempt', forged.length, 0)
+      for (const f of forged) created.providerIds.push(f.id)
+
+      privDenied('provB joins a category directly', await asUser(provB.token).from('provider_categories').insert({ provider_id: provBId, category_id: cat!.id }).select('provider_id'))
+      privDenied('provA leaves a category directly', await uProv.from('provider_categories').delete().eq('provider_id', provAId).select('provider_id'))
+
+      eq('provA reads OWN package (control)', ((await uProv.from('packages').select('id').eq('id', pkgA!.id)).data ?? []).length, 1)
+      privDenied('provA re-prices OWN package directly (member discount, below the schema floor)', await uProv.from('packages').update({ price_paise: 1, member_extra_discount_bps: 9000 }).eq('id', pkgA!.id).select('id'))
+      privDenied('provA hard-DELETEs a package', await uProv.from('packages').delete().eq('id', crypto.randomUUID()).select('id'))
+      privDenied('provA INSERTs a package directly', await uProv.from('packages').insert({ provider_id: provAId, category_id: cat!.id, slug: `${tag}-direct`.replace(/_/g, '-'), title_i18n: { en: 'direct' }, price_paise: 1, delivery_days: 1, scope_included: ['x'], deliverables: ['y'], status: 'active' }).select('id'))
+
+      // The owner's own write path (service role after the ownership check) still works.
+      const toggle = (token: string, status: string) => api(token, `/api/v1/partner/packages/${pkgA!.id}`, { status })
+      denied('provB pauses A’s package through the route', (await toggle(provB.token, 'paused')).status)
+      const paused = await toggle(provA.token, 'paused')
+      const { data: pRow } = await admin.from('packages').select('status').eq('id', pkgA!.id).single()
+      eq('provA pauses OWN package through the route (control)', paused.status === 200 && pRow?.status === 'paused', true)
+      await toggle(provA.token, 'active')
+
+      const { data: profAfter } = await admin.from('provider_profiles').select(profCols).eq('id', provAId).single()
+      const { data: pkgAfter } = await admin.from('packages').select(pkgCols).eq('id', pkgA!.id).single()
+      eq('provA profile unchanged after the write attempts', JSON.stringify(profAfter), JSON.stringify(profBefore))
+      eq('package A unchanged after the write attempts', JSON.stringify(pkgAfter), JSON.stringify(pkgBefore))
+      eq('provA still in its category', ((await admin.from('provider_categories').select('provider_id').eq('provider_id', provAId)).data ?? []).length, 1)
+      // A failed run must not leave the fixtures broken for the sections below.
+      if (JSON.stringify(profAfter) !== JSON.stringify(profBefore)) await admin.from('provider_profiles').update(profBefore!).eq('id', provAId)
+      if (JSON.stringify(pkgAfter) !== JSON.stringify(pkgBefore)) await admin.from('packages').update(pkgBefore!).eq('id', pkgA!.id)
+
+      // Mart (staged 0022/0023): sellers read their own listings, never write them directly.
+      if (!(await admin.from('products').select('id').limit(1)).error) {
+        privDenied('provA INSERTs a product directly', await uProv.from('products').insert({ seller_id: provAId, category_slug: 'x', name: 'direct', hsn_code: '0000', gst_rate_bps: 1800, status: 'active' }).select('id'))
+        privDenied('provA activates a product directly', await uProv.from('products').update({ status: 'active' }).eq('seller_id', provAId).select('id'))
+        privDenied('provA DELETEs a product directly', await uProv.from('products').delete().eq('id', crypto.randomUUID()).select('id'))
+        privDenied('provA re-prices a tier directly', await uProv.from('price_tiers').update({ unit_price_paise: 1 }).eq('id', crypto.randomUUID()).select('id'))
+        privDenied('buyerA reads buyer_pool_discipline_v1 (every buyer’s pool record)', await asUser(buyerA.token).from('buyer_pool_discipline_v1').select('msme_id'))
+      } else {
+        console.log('  (skipped Mart checks — staged Mart tables absent)')
+      }
+    }
+
     // ── 7b. users privilege guard (0042) — no self-promotion, no self-delete ──
     console.log('users privilege guard (0042, direct PostgREST):')
     eq('buyerB direct-reads OWN users row → 1 row', ((await bClient.from('users').select('id').eq('id', buyerB.uid)).data ?? []).length, 1)

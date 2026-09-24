@@ -70,7 +70,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'invalid_service' }, { status: 422 })
   }
 
-  // RLS session client — the provider crud-own policy enforces ownership.
+  // Reads on the RLS session client (the provider sees only their own profile);
+  // the write is the service role (ADR 025: no client write grant on packages).
   const supabase = await createClient()
 
   const { data: provider } = await supabase
@@ -93,7 +94,8 @@ export async function POST(request: NextRequest) {
 
   const slug = `${slugify(d.title)}-${Math.random().toString(36).slice(2, 7)}`
 
-  const { data: pkg, error } = await supabase
+  const admin = await createAdminClient()
+  const { data: pkg, error } = await admin
     .from('packages')
     .insert({
       provider_id: provider.id,

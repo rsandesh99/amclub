@@ -568,6 +568,28 @@ async function e2b(fx: { word: string; A: string; B: string; C: string; D: strin
   if (gid) created.packageIds.push(gid)
   const { data: gRow } = await admin.from('packages').select('service_slug').eq('id', gid ?? '').maybeSingle()
   check('FR-2.3: the wizard route stores the service', good.ok && gRow?.service_slug === 'audit', `status ${good.status}`)
+  // ADR 025 (0073): no client write grant on packages, so edit / pause / delete
+  // write with the service role after the ownership check. They still work.
+  if (gid) {
+    const toPkg = (id: string, method: string, body?: unknown) => fetch(`${BASE}/api/v1/partner/packages/${id}`, { method, headers: { 'Content-Type': 'application/json', cookie: prov.cookie }, ...(body ? { body: JSON.stringify(body) } : {}) })
+    const edit = await toPkg(gid, 'PATCH', { ...pkgBody, service_slug: 'audit', price_paise: 4200_00, status: 'paused' })
+    const { data: eRow } = await admin.from('packages').select('price_paise, status').eq('id', gid).single()
+    check('ADR 025: the owner edits and pauses through the route', edit.ok && Number(eRow?.price_paise) === 4200_00 && eRow?.status === 'paused', `status ${edit.status}`)
+    const back = await toPkg(gid, 'PATCH', { ...pkgBody, service_slug: 'audit', status: 'active' })
+    const { data: bRow } = await admin.from('packages').select('price_paise, status').eq('id', gid).single()
+    check('ADR 025: … and restores it', back.ok && Number(bRow?.price_paise) === 4000_00 && bRow?.status === 'active', `status ${back.status}`)
+    const other = await mkUser('e2bother', ['provider'])
+    check('ADR 025: another provider cannot edit it (404)', (await fetch(`${BASE}/api/v1/partner/packages/${gid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', cookie: other.cookie }, body: JSON.stringify({ ...pkgBody, price_paise: 1_00 }) })).status === 404)
+    const tmp = ((await (await asProv({ ...pkgBody, title: `${word} throwaway`, status: 'draft' })).json()) as { id?: string }).id
+    if (tmp) {
+      created.packageIds.push(tmp)
+      const del = await toPkg(tmp, 'DELETE')
+      const { data: dRow } = await admin.from('packages').select('status, deleted_at').eq('id', tmp).single()
+      check('ADR 025: the owner deletes through the route (soft delete)', del.ok && dRow?.status === 'removed' && dRow?.deleted_at !== null, `status ${del.status}`)
+    } else {
+      check('ADR 025: the owner creates a draft through the route', false)
+    }
+  }
 
   const svc = visible(await (await fetch(`${BASE}/services/tax-accounting/gst-filing`)).text())
   check('FR-2.3: service page renders hero + provider table for that service', svc.includes('data-testid="service-hero"') && svc.includes('data-testid="service-provider-table"') && svc.includes('e2p1') && svc.includes('e2p2'))
