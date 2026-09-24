@@ -2,6 +2,9 @@
 
 **Status:** Accepted (temporary), 2026-08-23. Touches money (§8.4).
 **Kill condition:** retires automatically at Razorpay live cutover.
+**Amended 2026-09-24 by [ADR 023](023-no-simulated-payments-on-production.md).**
+- **Replaced:** simulated checkout on production. Production no longer simulates a payment: without a real gateway, every checkout entry point returns 503 `payments_unavailable`.
+- **Unchanged:** previews, CI and local runs still simulate. The **cutover procedure and checklist below still apply** unchanged, and are the only way production starts taking payments.
 
 ## Context
 
