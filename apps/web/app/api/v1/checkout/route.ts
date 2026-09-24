@@ -478,11 +478,14 @@ export async function POST(request: NextRequest) {
   // racing double-submit, or a retry after the gateway call below failed).
   // Re-read it so the SAME frozen session is bound — never a second one.
   let bound = (session as { id: string; total_paise: number; expires_at: string | null } | null) ?? null
-  const reRead = !bound
+  // The coupon the bound session carries (a re-read session's own, which the claim is about).
+  let boundCoupon: string | null = bound ? appliedCouponCode : null
   if (!bound && !insErr) {
-    const { data: again } = await supabase.from('checkout_sessions').select(SESSION_COLS).eq('idempotency_key', idempotencyKey).maybeSingle()
-    if (again?.razorpay_order_id) return resumeResponse(again as SessionRow)
-    bound = again ? { id: again.id as string, total_paise: Number(again.total_paise), expires_at: (again.expires_at as string | null) ?? null } : null
+    const { data } = await supabase.from('checkout_sessions').select(SESSION_COLS + ', coupon_code').eq('idempotency_key', idempotencyKey).maybeSingle()
+    const again = data as unknown as (SessionRow & { coupon_code: string | null }) | null
+    if (again?.razorpay_order_id) return resumeResponse(again)
+    bound = again ? { id: again.id, total_paise: Number(again.total_paise), expires_at: again.expires_at ?? null } : null
+    boundCoupon = again?.coupon_code ?? null
   }
   if (insErr || !bound) {
     console.error('[checkout] session insert', insErr)
@@ -492,7 +495,7 @@ export async function POST(request: NextRequest) {
   // BEFORE any payment opens: claim_coupon_for_session decides under the coupon's
   // row lock, so two buyers at the last use get one claim and one 409. A re-read
   // session (a racing double-submit) is claimed too: the claim is idempotent.
-  if (appliedCouponCode || reRead) {
+  if (boundCoupon) {
     const claim = await claimCouponForSession(writer, bound.id)
     if (!claim || !(couponClaimHeld(claim) || claim === 'no_coupon')) {
       return fail(409, 'coupon_unavailable', 'This coupon can no longer be used on this order', { couponError: couponClaimRefusalKey(claim) })
