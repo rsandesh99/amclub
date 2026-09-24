@@ -20,7 +20,7 @@ const admin = createClient(URL, SERVICE, { auth: { persistSession: false } })
 let pass = 0, fail = 0
 const check = (n: string, ok: boolean, extra = '') => { console.log(`  ${ok ? '✓' : '✗'} ${n}${extra ? ' — ' + extra : ''}`); ok ? pass++ : fail++ }
 const tag = `p7_${Date.now()}`
-const created = { users: [] as string[], providerIds: [] as string[], msmeIds: [] as string[], packageIds: [] as string[], orderIds: [] as string[], categoryIds: [] as string[] }
+const created = { users: [] as string[], providerIds: [] as string[], msmeIds: [] as string[], packageIds: [] as string[], orderIds: [] as string[], categoryIds: [] as string[], bannerIds: [] as string[], couponIds: [] as string[] }
 
 async function mkUser(label: string, roles: string[] = ['msme']): Promise<{ uid: string; token: string }> {
   const email = `${tag}_${label}@killtest.amclub`
@@ -248,6 +248,61 @@ async function main() {
   check('6. requireAdmin blocks non-admin (Bearer 403) + unauth (401)',
     nonAdmin.status === 403 && noAuth.status === 401, `nonAdmin=${nonAdmin.status} noAuth=${noAuth.status}`)
 
+  // ── Criterion 7 (audit M11): KYC decisions, coupons and CMS banners leave an audit_logs row ──
+  {
+    const auditRow = async (action: string, entityId: string) =>
+      (await admin.from('audit_logs').select('before, after').eq('actor_id', adminUser.uid).eq('action', action).eq('entity_id', entityId).maybeSingle()).data as { before: Record<string, unknown> | null; after: Record<string, unknown> | null } | null
+    const mkApplicant = async (label: string, status: string) => {
+      const u = await mkUser(label, ['provider'])
+      const { data } = await admin.from('provider_profiles').insert({ user_id: u.uid, legal_name: `P7 ${label}`, display_name: `P7 ${label}`, slug: `${tag}-${label}`, state: 'KA', status, languages: ['en'] }).select('id').single()
+      created.providerIds.push(data!.id)
+      return data!.id as string
+    }
+    const appA = await mkApplicant('appa', 'under_review')
+    const appB = await mkApplicant('appb', 'pending_kyc')
+    const suspended = await mkApplicant('susp', 'suspended')
+    const approve = await api(adminUser.token, `/api/v1/admin/verifications/${appA}`, { action: 'approve' })
+    const reject = await api(adminUser.token, `/api/v1/admin/verifications/${appB}`, { action: 'reject', reason: 'p7 kill-test: documents unreadable' })
+    const aApprove = await auditRow('provider_verification_approve', appA)
+    const aReject = await auditRow('provider_verification_reject', appB)
+    check('7a. verification approve / reject → audit rows with the status left and taken',
+      approve.ok && reject.ok && aApprove?.before?.['status'] === 'under_review' && aApprove?.after?.['status'] === 'active' &&
+        aReject?.before?.['status'] === 'pending_kyc' && aReject?.after?.['status'] === 'rejected' && aReject?.after?.['reason'] === 'p7 kill-test: documents unreadable',
+      `approve=${approve.status} reject=${reject.status} approveRow=${JSON.stringify(aApprove)} rejectRow=${JSON.stringify(aReject)}`)
+
+    // The queue decides pending applications only: a suspended provider is reactivated
+    // through the audited reactivate action, a decided one is not re-decided, a missing one is 404.
+    const viaQueue = await api(adminUser.token, `/api/v1/admin/verifications/${suspended}`, { action: 'approve' })
+    const viaQueueD = await viaQueue.json().catch(() => ({}))
+    const { data: stillSusp } = await admin.from('provider_profiles').select('status').eq('id', suspended).single()
+    const again = await api(adminUser.token, `/api/v1/admin/verifications/${appB}`, { action: 'approve' })
+    const { data: stillRejected } = await admin.from('provider_profiles').select('status').eq('id', appB).single()
+    const missing = await api(adminUser.token, `/api/v1/admin/verifications/${crypto.randomUUID()}`, { action: 'approve' })
+    check('7b. the queue refuses a suspended or decided provider (409 not_pending, unchanged) and 404s a missing one',
+      viaQueue.status === 409 && viaQueueD.code === 'not_pending' && stillSusp?.status === 'suspended' && again.status === 409 && stillRejected?.status === 'rejected' && missing.status === 404,
+      `suspended=${viaQueue.status}:${viaQueueD.code}→${stillSusp?.status} decided=${again.status}→${stillRejected?.status} missing=${missing.status}`)
+
+    const banner = (await (await api(adminUser.token, '/api/v1/admin/cms', { slot: `${tag}-m11`, imageUrl: 'https://example.com/m11.png' })).json().catch(() => ({}))) as { banner?: { id: string } }
+    const bannerId = banner.banner?.id
+    if (bannerId) created.bannerIds.push(bannerId)
+    const bannerOff = bannerId ? await api(adminUser.token, '/api/v1/admin/cms', { id: bannerId, isActive: false }, 'PATCH') : null
+    const aBannerNew = bannerId ? await auditRow('cms_banner_create', bannerId) : null
+    const aBannerOff = bannerId ? await auditRow('cms_banner_update', bannerId) : null
+    check('7c. CMS banner create + deactivate → audit rows (create with the row, update with is_active before / after)',
+      !!bannerId && aBannerNew?.after?.['slot'] === `${tag}-m11` && bannerOff?.ok === true && aBannerOff?.before?.['is_active'] === true && aBannerOff?.after?.['is_active'] === false,
+      `banner=${bannerId ?? 'none'} create=${JSON.stringify(aBannerNew?.after ?? null)} update=${bannerOff?.status}:${JSON.stringify(aBannerOff)}`)
+
+    const couponRes = await api(adminUser.token, '/api/v1/admin/coupons', { code: `${tag}-M11`.toUpperCase(), kind: 'percent', value: 5, validFrom: new Date(Date.now() - 1000).toISOString(), validTo: new Date(Date.now() + 86400000).toISOString(), usageLimit: 3 })
+    if (couponRes.status === 404) {
+      console.log('  ⏭ 7d coupon audit SKIPPED here (COUPONS_ENABLED off on this server; verify-coupons proves it on the production-flags server)')
+    } else {
+      const couponId = ((await couponRes.json().catch(() => ({}))) as { coupon?: { id: string } }).coupon?.id
+      if (couponId) created.couponIds.push(couponId)
+      const aCoupon = couponId ? await auditRow('coupon_create', couponId) : null
+      check('7d. coupon create → audit row with the created coupon', couponRes.ok && aCoupon?.after?.['usage_limit'] === 3 && aCoupon?.after?.['value_bps'] === 500, `http=${couponRes.status} row=${JSON.stringify(aCoupon?.after ?? null)}`)
+    }
+  }
+
   } finally {
   // ── cleanup — ALWAYS runs (even on a thrown assertion) so no residue is left ──
   console.log('\n🧹 cleanup…')
@@ -257,6 +312,8 @@ async function main() {
     const r = (await Promise.resolve(p).catch((e) => ({ error: e }))) as { error?: { message?: string } | null }
     if (r && r.error) console.error('  cleanup:', r.error.message ?? String(r.error))
   }
+  for (const id of created.bannerIds) await t(admin.from('cms_banners').delete().eq('id', id))
+  for (const id of created.couponIds) await t(admin.from('coupons').delete().eq('id', id))
   for (const mid of created.msmeIds) await t(admin.from('checkout_sessions').delete().eq('msme_id', mid))
   for (const oid of created.orderIds.filter(Boolean)) {
     await t(admin.from('checkout_sessions').delete().eq('order_id', oid))

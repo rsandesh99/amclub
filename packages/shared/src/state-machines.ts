@@ -253,6 +253,17 @@ export function isValidCaptureExceptionTransition(from: CaptureExceptionStatus, 
   return (CAPTURE_EXCEPTION_TRANSITIONS[from] as readonly string[]).includes(to)
 }
 
+// ── Provider verification ─────────────────────────────────────────────────────
+// provider_profiles.status. The verification queue decides pending applications
+// (approve → active, reject → rejected); an active or suspended provider changes
+// only through the audited admin suspend / reactivate actions (audit M11).
+
+export const PROVIDER_STATUSES = ['pending_kyc', 'under_review', 'active', 'suspended', 'rejected'] as const
+export type ProviderStatus = (typeof PROVIDER_STATUSES)[number]
+
+/** Audit M11 — the statuses the verification queue may approve or reject; anything else is 409 `not_pending`. */
+export const PROVIDER_REVIEWABLE_STATUSES: readonly ProviderStatus[] = ['pending_kyc', 'under_review']
+
 // ── Procurement session (S3.1) ────────────────────────────────────────────────
 // One buyer need followed by the procurement agent. drafting → awaiting_create
 // (the create_rfq proposal is out) → quality (S1.5 held for answers) | live

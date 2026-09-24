@@ -37,6 +37,8 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
       })
       const d = await res.json().catch(() => ({}))
       if (!res.ok) {
+        // Audit M11 — a provider that is no longer pending (decided, suspended) is changed from its provider page.
+        if (d.code === 'not_pending') throw new Error(t('verification_not_pending'))
         throw new Error(typeof d.error === 'string' ? d.error : t('action_failed'))
       }
       // Phase 3b (ii): approval goes through, but the approver hears — right
