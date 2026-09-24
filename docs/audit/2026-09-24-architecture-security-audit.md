@@ -53,7 +53,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | **2 — money path (done, PR #60: H5–H9, M19, M39)** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
 | **3 — authorisation and abuse (done, PR #61: M3, M7–M9, M10 part 1, M13, M17)** | M7 / M8 delegated tokens refused unless a route opts in; M13 suspension enforced in `resolveActor`; M9 review flags go to a queue; M10 coupons: no public read, atomic redemption, per-buyer limit; M12 ownership checks on Udyam and penny-drop; M22 self-dealing guard; M17 clarification provider id hidden; M5 / L2 attachment and certificate paths pinned; M3 no token renewal from a delegated token | M12 touches KYC, so an ADR is needed |
 | **4 — Mart, pools and agents (done, PR #62: M4 part 1, M5, M15, M40, L2; 0076 live)** | M14 return window; M15 rationale off the public API; M16 re-review on material edits; M44 / M45 / L9 pool quote and offer sealing; M41–M43 WhatsApp binding, Munshi "yes" routing, trusted-part hygiene; M23 / M24 residency and budget; L3 runtime service-role scope | Several are dark features; fix before their cohort widens |
-| **5 — operations and architecture (5a done, PR #63, 0080 live: M25, M26, M31 part 1, M35–M37, L7, L8; 5b in review)** | M32–M38 (queue creation, stuck-inbound alert, media caps, failing heartbeats, Upstash fail-open for reads, timeouts, re-drive); M28 / M29 / M30 (state-machine enforcement, one money-formula home, one masking rule set); M31 (a CI job with production flags, web unit tests); M26 (pin actions, OIDC for Fly); L4–L8; the performance advisor (119 unindexed foreign keys, the `notifications` index) | |
+| **5 — operations and architecture (5a done, PR #63, 0080 live: M25, M26, M31 part 1, M35–M37, L7, L8; 5b done, PR #64, 0078 + 0081 live: M2, M10 parts 2–3, M11, M20, M21, M22, M38, M39 part 2, L1; 5c in review)** | M32–M38 (queue creation, stuck-inbound alert, media caps, failing heartbeats, Upstash fail-open for reads, timeouts, re-drive); M28 / M29 / M30 (state-machine enforcement, one money-formula home, one masking rule set); M31 (a CI job with production flags, web unit tests); M26 (pin actions, OIDC for Fly); L4–L8; the performance advisor (119 unindexed foreign keys, the `notifications` index) | |
 
 ## How the audit ran
 
@@ -92,7 +92,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | H9 | Payout transfer is not idempotent: a timeout after Razorpay creates the transfer marks it failed, and a retry pays again | Fixed (wave 2, PR #60, ADR 026) |
 | H10 | sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes | Fixed (wave 1, PR #59) |
 | M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Fixed on production (0074) |
-| M2 | Refunds, payouts and reconcile still go through the simulation gateway on production | Fixed in code (wave 5b, ADR 027) |
+| M2 | Refunds, payouts and reconcile still go through the simulation gateway on production | Fixed (wave 5b, PR #64, ADR 027) |
 | M3 | The agent token endpoint accepts delegated tokens: renewal forever, wider scopes, any run id | Fixed (wave 3, PR #61) |
 | M4 | A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order | Fixed in code (waves 4 + 5c); migration 0083 |
 | M5 | RFQ attachment URLs are client-supplied and re-signed with the service role (IDOR on the private bucket) | Fixed (wave 4, PR #62) |
@@ -100,8 +100,8 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M7 | Admin mutation routes accept delegated agent tokens by default | Fixed (wave 3, PR #61) |
 | M8 | Delegated tokens are allowed by default on buyer, provider and pool write routes; the transition scope covers every action | Fixed (wave 3, PR #61) |
 | M9 | Any signed-in user can instantly hide any published review | Fixed (wave 3, PR #61) |
-| M10 | Coupons: every active code is publicly listable, usage limits are not atomic, no per-buyer limit | Fixed in code (waves 3 + 5b, ADR 029); migration 0081 |
-| M11 | Key admin decisions are not audit-logged (provider approve / reject, coupon creation, CMS banners) | Fixed in code (wave 5b) |
+| M10 | Coupons: every active code is publicly listable, usage limits are not atomic, no per-buyer limit | Fixed (waves 3 + 5b, PR #64, ADR 029); migration 0081 (applied 2026-09-24) |
+| M11 | Key admin decisions are not audit-logged (provider approve / reject, coupon creation, CMS banners) | Fixed (wave 5b, PR #64) |
 | M12 | Verification flags prove existence, not ownership (Udyam number, penny-drop name match) | Fixed in code (wave 5c), ADR 028; migration 0082 |
 | M13 | Suspended providers keep their powers: quote, get paid, accept and deliver, read matched RFQs | Fixed (wave 3, PR #61) |
 | M14 | A goods return can be opened from `completed` with no time limit | Fixed in code (wave 5c) |
@@ -110,9 +110,9 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M17 | `rfq_clarifications.provider_id` is readable by every matched competitor | Fixed (wave 3, PR #61); migration 0075 |
 | M18 | `buyer_pool_discipline_v1` let every buyer read every buyer's pool record | Fixed |
 | M19 | Services payout release never re-checks the order status or an open dispute | Fixed (wave 2, PR #60, ADR 026) |
-| M20 | Only `payment.captured` is consumed; refund, transfer and chargeback outcomes are never reconciled | Fixed in code (wave 5b, ADR 027) |
-| M21 | Checkout sessions never expire at payment time (withdrawn quotes, lapsed pools, expired coupons honoured) | Fixed in code (wave 5b, ADR 027); migration 0078 |
-| M22 | No self-dealing guard: one person can buy from, quote to, review and settle with their own provider profile | Fixed in code (wave 5b, ADR 029); shared-account flagging open |
+| M20 | Only `payment.captured` is consumed; refund, transfer and chargeback outcomes are never reconciled | Fixed (wave 5b, PR #64, ADR 027) |
+| M21 | Checkout sessions never expire at payment time (withdrawn quotes, lapsed pools, expired coupons honoured) | Fixed (wave 5b, PR #64, ADR 027); migration 0078 (applied 2026-09-24) |
+| M22 | No self-dealing guard: one person can buy from, quote to, review and settle with their own provider profile | Fixed (wave 5b, PR #64, ADR 029); shared-account flagging open |
 | M23 | The model-provider residency and retention guard is off by default | Open |
 | M24 | The platform AI budget can be drained from outside the cohort; the Mart catalog agent and speech-to-text bypass it | Open |
 | M25 | next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j) | Fixed (wave 5a, PR #63): next-intl 4.14.7 |
@@ -128,15 +128,15 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M35 | Cron heartbeats only prove the job ran; failed runs stay green and handled errors never reach Sentry | Fixed (wave 5a, PR #63) |
 | M36 | An Upstash error makes every rate-limited route return 500, and a slow Upstash adds 5 s per request | Fixed (wave 5a, PR #63) |
 | M37 | Outbound calls (Resend, Surepass, MSG91, WhatsApp, Razorpay) have no timeouts and run inline in money paths | Partly fixed (wave 5a, PR #63): timeouts; outbox open |
-| M38 | Crons write the new status first and are never re-driven when the side effects fail; money crons set no maxDuration | Fixed in code (wave 5b, ADR 029) |
-| M39 | Reconciliation reads only the first 100 Razorpay payments and never flags a second capture | Fixed in code (waves 2 + 5b) |
+| M38 | Crons write the new status first and are never re-driven when the side effects fail; money crons set no maxDuration | Fixed (wave 5b, PR #64, ADR 029) |
+| M39 | Reconciliation reads only the first 100 Razorpay payments and never flags a second capture | Fixed (waves 2 + 5b, PR #64) |
 | M40 | Quote and group-offer scope / message text reaches buyers without contact masking | Fixed (wave 4, PR #62) |
 | M41 | A WhatsApp conversation stays bound to a user after a phone change | Open |
 | M42 | A typed or spoken "yes" is captured by Munshi before procurement and approves the wrong proposal | Open |
 | M43 | The payout dossier puts party-authored order titles in TRUSTED prompt parts | Open |
 | M44 | A group (pool) quote can be re-priced, or its GST mode flipped, after close via the ordinary quote PATCH | Fixed in code (wave 5c) |
 | M45 | A provider can read competitors' sealed pool offers by joining the pool through their own buyer profile | Fixed in code (wave 5c) |
-| L1 | Admin `manual_refund` does not hold the payout, so a refund and a full payout can both go out | Fixed in code (wave 5b, ADR 027) |
+| L1 | Admin `manual_refund` does not hold the payout, so a refund and a full payout can both go out | Fixed (wave 5b, PR #64, ADR 027) |
 | L2 | `buyer_licences.certificate_path` is client-writable, and the certificate routes sign whatever path the row holds | Fixed (wave 4, PR #62) |
 | L3 | The agent runtime holds the full service-role key and DATABASE_URL in the process that parses public webhooks | Open |
 | L4 | The pool "Pay ₹X to confirm" amount is computed on the client before GST (web and mobile) | Fixed in code (wave 5c) |
@@ -292,7 +292,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M2. Refunds, payouts and reconcile still go through the simulation gateway on production
 
-- **Status:** Fixed in code (wave 5b, ADR 027). One rule, `moneyMovementBlock` (`lib/payments/simulation.ts`): no money moves when the mock gateway is on production, or when a real gateway meets a simulated payment (`pay_sim_…` / `webhook_payload.simulated`). runPayouts, settleUnconfirmedPayouts, reconcile, the refund sweeper and processRefund do nothing then; the admin money actions and a money-moving dispute resolution answer 503 `payments_unavailable` / 409 `payment_simulated`; /admin/payouts tags simulated rows. Voiding simulation-era rows is an ADR 027 cutover step
+- **Status:** Fixed (wave 5b, PR #64, ADR 027). One rule, `moneyMovementBlock` (`lib/payments/simulation.ts`): no money moves when the mock gateway is on production, or when a real gateway meets a simulated payment (`pay_sim_…` / `webhook_payload.simulated`). runPayouts, settleUnconfirmedPayouts, reconcile, the refund sweeper and processRefund do nothing then; the admin money actions and a money-moving dispute resolution answer 503 `payments_unavailable` / 409 `payment_simulated`; /admin/payouts tags simulated rows. Voiding simulation-era rows is an ADR 027 cutover step
 - **Where:** `apps/web/lib/payments/payout.ts:64`, `apps/web/lib/payments/index.ts:16`
 - **Raised by:** 2 findings from 2 audit teams (Architecture and code health; Payments and money integrity)
 - **Impact:** Today: false 'paid' payout records and false provider notifications. At cutover: real money paid out for unpaid orders. The only safeguard is operator memory.
@@ -356,7 +356,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M10. Coupons: every active code is publicly listable, usage limits are not atomic, no per-buyer limit
 
-- **Status:** Fixed in code (waves 3 + 5b, ADR 029). No client read (0075); checkout claims a coupon use under the coupon row lock before any payment opens (`claim_coupon_for_session`, 0081): two buyers at the last use get one claim and one 409; optional `coupons.per_buyer_limit`
+- **Status:** Fixed (waves 3 + 5b, PR #64, ADR 029). No client read (0075); checkout claims a coupon use under the coupon row lock before any payment opens (`claim_coupon_for_session`, 0081): two buyers at the last use get one claim and one 409; optional `coupons.per_buyer_limit`
 - **Where:** `packages/db/src/rls/policies.sql:993`, `apps/web/lib/coupons/apply.ts:39`, `packages/db/src/rls/policies.sql:992`, `apps/web/app/api/v1/checkout/route.ts:236`
 - **Raised by:** 5 findings from 4 audit teams (AuthZ: admin, cron and misc routes; AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); Database: RLS, grants, functions, views, storage; Payments and money integrity)
 - **Impact:** Private or targeted discount codes leak and can be redeemed by anyone. With per-code usage_limit the only cap (there is no per-user limit), a leaked code can be burned by strangers. The per-user brute-force limiter becomes pointless. Money impact is bounded by the discounts ops has created.
@@ -364,7 +364,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M11. Key admin decisions are not audit-logged (provider approve / reject, coupon creation, CMS banners)
 
-- **Status:** Fixed in code (wave 5b). Verifications, coupons and CMS POST / PATCH write `audit_logs` with before / after, carry the adminMutation limit and `requireNotDelegated`; verifications decide only `pending_kyc` / `under_review` (409 `not_pending`, CAS); `reactivate` lifts only a suspension (409 `not_suspended`)
+- **Status:** Fixed (wave 5b, PR #64). Verifications, coupons and CMS POST / PATCH write `audit_logs` with before / after, carry the adminMutation limit and `requireNotDelegated`; verifications decide only `pending_kyc` / `under_review` (409 `not_pending`, CAS); `reactivate` lifts only a suspension (409 `not_suspended`)
 - **Where:** `apps/web/app/api/v1/admin/verifications/[id]/route.ts:49`
 - **Raised by:** 1 finding from 1 audit team (AuthZ: admin, cron and misc routes)
 - **Impact:** The Phase 7 'audit log' guarantee and the lib/audit/log.ts contract ('§7 — every admin mutation is audit-logged') are violated for the highest-impact non-money decisions: KYC approval, which gates who can receive money, and coupons, which move money. The suspended→active path through verifications also sidesteps the audited `reactivate` action.
@@ -443,7 +443,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M20. Only `payment.captured` is consumed; refund, transfer and chargeback outcomes are never reconciled
 
-- **Status:** Fixed in code (wave 5b, ADR 027). The webhook settles `refund.processed / failed`, `transfer.processed / failed / reversed` and `payment.dispute.created / lost / won / closed`; every handler writes only from the state it expects and records its event once per gateway id (replays change nothing); a failed or reversed transfer is never reused; an open chargeback holds the payout and blocks every release until Razorpay decides. A "re-send failed refund" admin action and a stuck-refund alert are open
+- **Status:** Fixed (wave 5b, PR #64, ADR 027). The webhook settles `refund.processed / failed`, `transfer.processed / failed / reversed` and `payment.dispute.created / lost / won / closed`; every handler writes only from the state it expects and records its event once per gateway id (replays change nothing); a failed or reversed transfer is never reused; an open chargeback holds the payout and blocks every release until Razorpay decides. A "re-send failed refund" admin action and a stuck-refund alert are open
 - **Where:** `apps/web/app/api/v1/webhooks/razorpay/route.ts:44`
 - **Raised by:** 1 finding from 1 audit team (Payments and money integrity)
 - **Impact:** Refund, payout and chargeback state drifts from Razorpay, against rule 2 that webhooks are the only payment truth. Buyers can be left unrefunded and chargeback losses go unnoticed.
@@ -451,7 +451,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M21. Checkout sessions never expire at payment time (withdrawn quotes, lapsed pools, expired coupons honoured)
 
-- **Status:** Fixed in code (wave 5b, ADR 027). `capture_payment()` (0078) locks the session: a capture more than 15 minutes past `expires_at` records a `capture_exceptions` row and no order, refunded in full (immediately, then retried by the auto-cancel cron, receipt looked up first). Checkout never resumes an expired session (409 `checkout_expired`) and passes Razorpay a matching `timeout`; finalize accepts only an `open` / `quoted` RFQ
+- **Status:** Fixed (wave 5b, PR #64, ADR 027). `capture_payment()` (0078) locks the session: a capture more than 15 minutes past `expires_at` records a `capture_exceptions` row and no order, refunded in full (immediately, then retried by the auto-cancel cron, receipt looked up first). Checkout never resumes an expired session (409 `checkout_expired`) and passes Razorpay a matching `timeout`; finalize accepts only an `open` / `quoted` RFQ
 - **Where:** `packages/db/src/migrations/0003_materialize_order.sql:39`
 - **Raised by:** 1 finding from 1 audit team (Payments and money integrity)
 - **Impact:** Frozen prices and coupons are honoured indefinitely. Providers are bound to quotes they withdrew. The RFQ state machine is violated (cancelled/expired → accepted), and pools produce orphan goods orders.
@@ -459,7 +459,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M22. No self-dealing guard: one person can buy from, quote to, review and settle with their own provider profile
 
-- **Status:** Fixed in code (wave 5b, ADR 029). 409 `self_dealing` on services and Mart checkout, group-buy join and checkout, a quote on your own request, order actions where one person owns both sides, and a review of your own provider; both fan-outs skip the buyer's own provider profile. Flagging shared bank accounts or phones across users is open
+- **Status:** Fixed (wave 5b, PR #64, ADR 029). 409 `self_dealing` on services and Mart checkout, group-buy join and checkout, a quote on your own request, order actions where one person owns both sides, and a review of your own provider; both fan-outs skip the buyer's own provider profile. Flagging shared bank accounts or phones across users is open
 - **Where:** `apps/web/app/api/v1/checkout/route.ts:207`, `apps/web/app/api/v1/orders/[id]/review/route.ts:80`
 - **Raised by:** 2 findings from 2 audit teams (AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); Payments and money integrity)
 - **Impact:** Fraud and chargeback exposure, and corrupted metrics built on paid orders. The payout approval gate is the only control.
@@ -587,7 +587,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M38. Crons write the new status first and are never re-driven when the side effects fail; money crons set no maxDuration
 
-- **Status:** Fixed in code (wave 5b, ADR 029). `sweepMissingPayouts` (reconcile + daily) schedules the payout a completed order in the last 30 days never got (held while PAYOUT_AUTO_RELEASE is off); resolved orders are counted as `stalledResolutions`, never swept (their amount is the settlement). Money crons have `maxDuration = 300` and work in bounded batches inside a time budget
+- **Status:** Fixed (wave 5b, PR #64, ADR 029). `sweepMissingPayouts` (reconcile + daily) schedules the payout a completed order in the last 30 days never got (held while PAYOUT_AUTO_RELEASE is off); resolved orders are counted as `stalledResolutions`, never swept (their amount is the settlement). Money crons have `maxDuration = 300` and work in bounded batches inside a time budget
 - **Where:** `apps/web/lib/orders/transitions.ts:407`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** The provider is silently never paid, because no payout row exists for ops to release. Tax invoices and notifications are also missing.
@@ -595,7 +595,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M39. Reconciliation reads only the first 100 Razorpay payments and never flags a second capture
 
-- **Status:** Fixed in code (waves 2 + 5b). The captured-payment scan pages the whole window (wave 2); a second capture on a paid session is a `duplicate_capture` exception refunded in full, and reconcile counts only orders it created (wave 5b)
+- **Status:** Fixed (waves 2 + 5b, PR #64). The captured-payment scan pages the whole window (wave 2); a second capture on a paid session is a `duplicate_capture` exception refunded in full, and reconcile counts only orders it created (wave 5b)
 - **Where:** `apps/web/lib/payments/razorpay.ts:257`
 - **Raised by:** 1 finding from 1 audit team (Reliability, scalability and operability)
 - **Impact:** Once volume grows past very low levels, buyers are charged with no order created. Double charges are never refunded, and the 'recovered' metric is misleading.
@@ -651,7 +651,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### L1. Admin `manual_refund` does not hold the payout, so a refund and a full payout can both go out
 
-- **Status:** Fixed in code (wave 5b, ADR 027). `manual_refund` follows the ADR-014 planner: 409 `payout_in_flight` / `provider_already_paid`, otherwise the payout is cut to the provider's share and held before the refund; `payoutRunBlockers` refuses a full payout beside a refund on a `completed` order. Refunding after the provider was paid needs an explicit `platformAbsorbs: true` behind a confirm dialog
+- **Status:** Fixed (wave 5b, PR #64, ADR 027). `manual_refund` follows the ADR-014 planner: 409 `payout_in_flight` / `provider_already_paid`, otherwise the payout is cut to the provider's share and held before the refund; `payoutRunBlockers` refuses a full payout beside a refund on a `completed` order. Refunding after the provider was paid needs an explicit `platformAbsorbs: true` behind a confirm dialog
 - **Where:** `apps/web/app/api/v1/admin/orders/[id]/route.ts:82`
 - **Raised by:** 1 finding from 1 audit team (AuthZ: admin, cron and misc routes)
 - **Impact:** The platform funds the difference out of its own balance. ADR-014 made planDisputeSettlement the one rule that keeps refund and payout rows coherent, and manual_refund is a second money path outside that rule. Only admin or ops can trigger it, so this is an integrity or mistake risk, not an external exploit.
