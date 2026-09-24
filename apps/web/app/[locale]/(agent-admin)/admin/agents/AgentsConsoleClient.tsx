@@ -15,7 +15,7 @@ interface Spend { today: SpendBucket; month: SpendBucket }
 interface DossierStats { pending: number; decided: number; approve_rate_pct: number | null; median_completed_to_decision_min: number | null }
 interface TriageStats { pending: number; decided: number; agreement_rate_pct: number | null; needs_more_info_pct: number | null }
 
-const NUMBER_KEYS: AgentSettingKey[] = ['budget_run_paise', 'budget_user_day_paise', 'budget_month_paise', 'rfq_max_quotes', 'quote_window_hours']
+const NUMBER_KEYS: AgentSettingKey[] = ['budget_run_paise', 'budget_user_day_paise', 'budget_month_paise', 'rfq_max_quotes', 'quote_window_hours', 'pool_min_members', 'pool_max_members', 'pool_form_hours', 'pool_open_hours', 'pool_pay_buffer_hours']
 const TEXT_KEYS: AgentSettingKey[] = ['whatsapp_opt_in_text_version', 'evidence_required_from']
 // everything else that is not agents_enabled edits as JSON (cohort_user_ids).
 

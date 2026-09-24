@@ -132,7 +132,8 @@ export async function closePool(admin: SupabaseClient, poolId: string): Promise<
 
   // 3. One ordinary quote per claimed member, at the persisted price.
   let quotes = 0
-  const perOffer = new Map<string, number>()
+  const perOffer = new Map<string, number>() // every group quote per offer (this run and earlier ones)
+  const newThisRun = new Map<string, number>() // only the quotes written now: a resumed close never re-notifies
   for (const m of claimed) {
     const o = offers.get(m.claim_offer_id!)
     if (!o || !o.achieved_price_paise) continue
@@ -183,6 +184,7 @@ export async function closePool(admin: SupabaseClient, poolId: string): Promise<
     })
     quotes++
     perOffer.set(o.id, (perOffer.get(o.id) ?? 0) + 1)
+    newThisRun.set(o.id, (newThisRun.get(o.id) ?? 0) + 1)
     const total = quoteChargeAmounts({ pricePaise: Number(o.achieved_price_paise), gstIncluded: o.gst_included, commissionBps: 0 }).totalPaise
     await notifyBuyer(admin, m.msme_id, {
       kind: 'pool_quote',
@@ -193,8 +195,9 @@ export async function closePool(admin: SupabaseClient, poolId: string): Promise<
     })
   }
 
-  // Providers hear their count and price.
+  // Providers hear their count and price, once: only when this run wrote their quotes.
   for (const [offerId, n] of perOffer) {
+    if (!newThisRun.get(offerId)) continue
     const o = offers.get(offerId)!
     const u = providers.get(o.provider_id)
     if (!u || !o.achieved_price_paise) continue
