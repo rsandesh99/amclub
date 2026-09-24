@@ -578,7 +578,7 @@ async function e2b(fx: { word: string; A: string; B: string; C: string; D: strin
     const back = await toPkg(gid, 'PATCH', { ...pkgBody, service_slug: 'audit', status: 'active' })
     const { data: bRow } = await admin.from('packages').select('price_paise, status').eq('id', gid).single()
     check('ADR 025: … and restores it', back.ok && Number(bRow?.price_paise) === 4000_00 && bRow?.status === 'active', `status ${back.status}`)
-    const other = await mkUser('e2bother', ['provider'])
+    const other = await mkUser('e2bpkgother', ['provider'])
     check('ADR 025: another provider cannot edit it (404)', (await fetch(`${BASE}/api/v1/partner/packages/${gid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', cookie: other.cookie }, body: JSON.stringify({ ...pkgBody, price_paise: 1_00 }) })).status === 404)
     const tmp = ((await (await asProv({ ...pkgBody, title: `${word} throwaway`, status: 'draft' })).json()) as { id?: string }).id
     if (tmp) {
