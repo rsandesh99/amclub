@@ -171,7 +171,7 @@ discloses this, and the programme holds itself to these terms before any cohort 
   |---|---|---|
   | `enforced` | `AGENT_RESIDENCY_ENFORCE=true` + `AGENT_IN_RESIDENCY_HOSTS` | `'in'` classes go only to the listed hosts |
   | `waived` | `AGENT_RESIDENCY_WAIVER=<reason>` (≥ 12 chars: why, the DPA reference, a review date) | calls allowed; the reason is logged at boot and shown on `/admin/agents` (runtime `/health` shows the mode) |
-  | `unconfigured` | production + agents on + neither | **every `'in'` model call is refused** (`ResidencyUnconfiguredError`, code `residency_unconfigured`) before a byte leaves; features fall back (templates, rule-only reports, stub drafts) |
+  | `unconfigured` | production + agents on + neither | with `AGENT_RESIDENCY_FAIL_CLOSED=true`: **every `'in'` model call is refused** (`ResidencyUnconfiguredError`, code `residency_unconfigured`) before a byte leaves; features fall back (templates, rule-only reports, stub drafts). Without it (the founder's 2026-09-24 decision: held until the residency decision is recorded): calls go, logged once a minute with the count, runtime `/health` → `residency_undecided`, an amber banner on `/admin/agents` |
   | `opt_in` | not production, or agents off | unchanged: enforcement only when `AGENT_RESIDENCY_ENFORCE=true` |
 
   `unconfigured` is loud: one error line at boot, one per minute while calls are refused (with the count),
@@ -182,8 +182,9 @@ discloses this, and the programme holds itself to these terms before any cohort 
   (`AGENT_LLM_BASE_URL_<TIER>`), or (b) `AGENT_RESIDENCY_WAIVER` recording the decision, e.g.
   `AGENT_RESIDENCY_WAIVER="OpenRouter ZDR + no-training confirmed, DPA ref <x>, review 2026-12-31"`. Record the
   same in the table below.
-- **Retention preferences on every request (audit M23).** Every chat / embedding request to OpenRouter
-  carries `provider: { data_collection: 'deny', zdr: true }` (`OPENROUTER_PROVIDER_PREFS`), so only endpoints
+- **Retention preferences on every request (audit M23).** Once a residency decision is recorded (or fail-closed is
+  on), every chat / embedding request to OpenRouter carries `provider: { data_collection: 'deny', zdr: true }`
+  (`AGENT_OPENROUTER_ZDR=false` opts a deployment out, `true` forces it on) (`OPENROUTER_PROVIDER_PREFS`), so only endpoints
   that neither collect nor retain prompts serve it — whatever the account setting says. A model with no such
   endpoint answers 404; the gateway reports `provider_policy_unmatched` (logged, no retry: a 4xx is final) and
   the fix is a ZDR-capable model for that tier (`AGENT_MODEL_<TIER>`).

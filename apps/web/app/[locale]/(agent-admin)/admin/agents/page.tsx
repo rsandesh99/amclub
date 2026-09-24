@@ -15,5 +15,5 @@ export default function AdminAgentsPage() {
   // `unconfigured` = production with agents on and no decision → every model call with user data is refused.
   const residency = residencyPosture()
   // Runtime agents read as off until the runtime is configured (shared agentRunnable); say so here.
-  return <AgentsConsoleClient runtimeReady={agentRuntimeReady()} runtimeAgents={RUNTIME_AGENTS} residency={{ mode: residency.mode, waiver: residency.waiver }} />
+  return <AgentsConsoleClient runtimeReady={agentRuntimeReady()} runtimeAgents={RUNTIME_AGENTS} residency={{ mode: residency.mode, waiver: residency.waiver, refuses: residency.refuses }} />
 }

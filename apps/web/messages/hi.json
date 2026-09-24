@@ -2821,6 +2821,8 @@
     "runtime_missing_body": "जब तक Vercel में AGENT_RUNTIME_URL, AGENT_RUNTIME_SECRET और SUPABASE_JWT_SECRET सेट नहीं होते और रनटाइम डिप्लॉय नहीं होता, ये एजेंट बंद रहेंगे: {agents}। नीचे के स्विच वैसे ही रहेंगे; रनटाइम तैयार होते ही ये अपने-आप चालू हो जाएँगे।",
     "residency_unconfigured_title": "यूज़र डेटा वाली AI कॉल बंद हैं: डेटा-रेज़िडेंसी का कोई निर्णय नहीं",
     "residency_unconfigured_body": "प्रोडक्शन में एजेंट चालू हैं, पर न रेज़िडेंसी गार्ड चालू है न कोई दर्ज छूट। यूज़र डेटा वाली हर मॉडल कॉल रोकी जा रही है और फ़ीचर अपने टेम्पलेट पर चल रहे हैं। ठीक करने के लिए Vercel और रनटाइम पर AGENT_RESIDENCY_ENFORCE=true और AGENT_IN_RESIDENCY_HOSTS (भारत के एंडपॉइंट) सेट करें, या AGENT_RESIDENCY_WAIVER में कारण (DPA संदर्भ और समीक्षा तिथि के साथ) दर्ज करें। देखें docs/agents/SECURITY.md।",
+    "residency_undecided_title": "AI कॉल के लिए डेटा-रेज़िडेंसी का कोई निर्णय दर्ज नहीं",
+    "residency_undecided_body": "प्रोडक्शन पर एजेंट चालू हैं, पर न रेज़िडेंसी गार्ड लगा है न कोई दर्ज छूट, इसलिए यूज़र डेटा वाली मॉडल कॉल भारत से बाहर जा सकती हैं। अभी कुछ रोका नहीं जाता (संस्थापक का निर्णय)। ऑडिट M23 बंद करने के लिए Vercel और रनटाइम पर AGENT_RESIDENCY_ENFORCE=true के साथ AGENT_IN_RESIDENCY_HOSTS लगाएँ, या AGENT_RESIDENCY_WAIVER (कारण, DPA संदर्भ, समीक्षा तिथि) दर्ज करें; फिर AGENT_RESIDENCY_FAIL_CLOSED=true करें। देखें docs/agents/SECURITY.md।",
     "residency_waived_title": "डेटा-रेज़िडेंसी गार्ड में छूट",
     "residency_waived_body": "इस दर्ज छूट के तहत मॉडल कॉल भारत से बाहर जा सकती हैं: {reason}"
   },

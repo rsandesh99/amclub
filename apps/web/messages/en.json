@@ -1605,6 +1605,8 @@
     "runtime_missing_body": "These agents are off until AGENT_RUNTIME_URL, AGENT_RUNTIME_SECRET and SUPABASE_JWT_SECRET are set in Vercel and the runtime is deployed: {agents}. Their switches below are kept, and they turn on by themselves once the runtime is ready.",
     "residency_unconfigured_title": "AI calls with user data are blocked: no data-residency decision",
     "residency_unconfigured_body": "Production has agents on but neither the residency guard nor a recorded waiver. Every model call that carries user data is refused, and features fall back to their templates. To fix, set AGENT_RESIDENCY_ENFORCE=true and AGENT_IN_RESIDENCY_HOSTS (in-India endpoints), or record AGENT_RESIDENCY_WAIVER (the reason, with the DPA reference and a review date), on Vercel and the runtime. See docs/agents/SECURITY.md.",
+    "residency_undecided_title": "No data-residency decision recorded for AI calls",
+    "residency_undecided_body": "Production has agents on, but neither the residency guard nor a recorded waiver is set, so model calls that carry user data may leave India. Nothing is refused yet (founder decision). To close audit M23: set AGENT_RESIDENCY_ENFORCE=true with AGENT_IN_RESIDENCY_HOSTS, or record AGENT_RESIDENCY_WAIVER (reason, DPA reference, review date), on Vercel and the runtime; then set AGENT_RESIDENCY_FAIL_CLOSED=true. See docs/agents/SECURITY.md.",
     "residency_waived_title": "Data-residency guard waived",
     "residency_waived_body": "Model calls may leave India under this recorded waiver: {reason}"
   },

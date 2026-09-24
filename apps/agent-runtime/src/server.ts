@@ -48,7 +48,7 @@ app.get('/health', (c) => {
   if (RUNTIME_ENV.AGENT_ENABLED && worker.state !== 'running') degraded.push(`worker_${worker.state}`)
   if (worker.lastSweep && (worker.lastSweep.requeued > 0 || worker.lastSweep.stale > 0)) degraded.push('inbound_unprocessed')
   if (worker.lastSweep?.error) degraded.push('inbound_sweep_failed')
-  if (residency.mode === 'unconfigured') degraded.push('residency_unconfigured')
+  if (residency.mode === 'unconfigured') degraded.push(residency.refuses ? 'residency_unconfigured' : 'residency_undecided')
   const down = RUNTIME_ENV.AGENT_ENABLED && worker.state !== 'running'
   // public endpoint: states and counts only — error text, the waiver reason and hosts stay in the logs
   const body = {
@@ -57,7 +57,7 @@ app.get('/health', (c) => {
     missing: missingRuntimeConfig(),
     degraded,
     worker: { state: worker.state, databaseUrl: worker.databaseUrl, since: worker.since, queues: worker.queues, lastErrorAt: worker.lastError?.at ?? null, lastSweep: worker.lastSweep },
-    residency: { mode: residency.mode, required: residency.required },
+    residency: { mode: residency.mode, required: residency.required, refuses: residency.refuses },
     ts: Date.now(),
   }
   return c.json(body, down ? 503 : 200)

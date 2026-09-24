@@ -186,6 +186,18 @@ describe('gateway — residency posture fails closed in production (audit M23)',
     expect(w.mode).toBe('waived')
     expect(w.waiver).toContain('DPA signed')
   })
+  it('an undecided production posture refuses only with AGENT_RESIDENCY_FAIL_CLOSED=true (held until the decision is recorded)', () => {
+    expect(residencyPosture(prod)).toMatchObject({ mode: 'unconfigured', refuses: false })
+    expect(residencyPosture({ ...prod, AGENT_RESIDENCY_FAIL_CLOSED: 'true' })).toMatchObject({ mode: 'unconfigured', refuses: true })
+    expect(residencyPosture({ ...prod, AGENT_RESIDENCY_FAIL_CLOSED: 'true', AGENT_RESIDENCY_WAIVER: 'DPA signed 2026-09-24; review 2026-12-31' })).toMatchObject({ mode: 'waived', refuses: false })
+  })
+  it("undecided and not fail-closed: an 'in' class is sent (logged), without the ZDR preference", async () => {
+    const t = transport('{"ok":true}')
+    const gw = createGateway(cfg(t.fetchImpl, { residencyMode: 'unconfigured', residencyRefuses: false, openRouterZdr: false }))
+    const r = await gw.chatJson({ taskClass: 'quote_extract', prompt, schema })
+    expect(r.data).toEqual({ ok: true })
+    expect(t.calls).toHaveLength(1)
+  })
   it('outside production, or with agents off, the guard stays opt-in', () => {
     expect(residencyPosture({ NODE_ENV: 'development', AGENT_ENABLED: 'true' }).mode).toBe('opt_in')
     expect(residencyPosture({ NODE_ENV: 'production' }).mode).toBe('opt_in')

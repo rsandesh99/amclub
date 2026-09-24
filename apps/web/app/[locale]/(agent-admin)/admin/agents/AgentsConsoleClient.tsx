@@ -30,7 +30,7 @@ interface MunshiStats {
   cost_per_approved_paise: number | null
 }
 
-export function AgentsConsoleClient({ runtimeReady = true, runtimeAgents = [], residency = null }: { runtimeReady?: boolean; runtimeAgents?: readonly string[]; residency?: { mode: 'enforced' | 'waived' | 'unconfigured' | 'opt_in'; waiver: string | null } | null }) {
+export function AgentsConsoleClient({ runtimeReady = true, runtimeAgents = [], residency = null }: { runtimeReady?: boolean; runtimeAgents?: readonly string[]; residency?: { mode: 'enforced' | 'waived' | 'unconfigured' | 'opt_in'; waiver: string | null; refuses?: boolean } | null }) {
   const t = useTranslations('admin_agents')
   const tScore = useTranslations('admin_score')
   const tBench = useTranslations('admin_benchmarks')
@@ -140,7 +140,13 @@ export function AgentsConsoleClient({ runtimeReady = true, runtimeAgents = [], r
         </div>
       )}
 
-      {residency?.mode === 'unconfigured' && (
+      {residency?.mode === 'unconfigured' && residency.refuses === false && (
+        <div role="status" className="rounded-card border border-warning/40 bg-warning/10 p-4 text-sm" data-testid="residency-undecided">
+          <p className="font-semibold">{t('residency_undecided_title')}</p>
+          <p className="mt-1 text-foreground-secondary">{t('residency_undecided_body')}</p>
+        </div>
+      )}
+      {residency?.mode === 'unconfigured' && residency.refuses !== false && (
         <div role="alert" className="rounded-card border border-danger/40 bg-danger/10 p-4 text-sm" data-testid="residency-unconfigured">
           <p className="font-semibold">{t('residency_unconfigured_title')}</p>
           <p className="mt-1 text-foreground-secondary">{t('residency_unconfigured_body')}</p>

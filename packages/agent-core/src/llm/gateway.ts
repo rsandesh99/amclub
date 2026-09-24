@@ -29,9 +29,13 @@ import type { PromptRef } from '../prompts/registry'
  *
  * Audit M23: the guard FAILS CLOSED in production with AGENT_ENABLED=true — with
  * neither enforcement (+ hosts) nor a recorded AGENT_RESIDENCY_WAIVER=<reason>,
- * every 'in' class is refused (ResidencyUnconfiguredError, logged; callers fall
- * back). Every request to OpenRouter carries provider { data_collection: 'deny',
- * zdr: true }. residencyPosture() is what /health and /admin/agents show.
+ * the posture is `unconfigured`: logged and shown loudly, and every 'in' class is
+ * refused (ResidencyUnconfiguredError; callers fall back) once the operator sets
+ * AGENT_RESIDENCY_FAIL_CLOSED=true (founder decision 2026-09-24: held until the
+ * residency decision is recorded). Once a decision is recorded (or fail-closed is
+ * on), every request to OpenRouter carries provider { data_collection: 'deny',
+ * zdr: true } (AGENT_OPENROUTER_ZDR=false opts a deployment out).
+ * residencyPosture() is what /health and /admin/agents show.
  */
 
 /** Conservative per-tier output caps (tokens). Env override AGENT_MAX_TOKENS_<TIER>. */
@@ -122,6 +126,8 @@ export interface ResidencyPosture {
   hosts: string[]
   /** The recorded waiver reason (AGENT_RESIDENCY_WAIVER), when one applies. */
   waiver: string | null
+  /** `unconfigured` refuses 'in' classes only with AGENT_RESIDENCY_FAIL_CLOSED=true (held until the decision is recorded). */
+  refuses: boolean
   /** One operator-facing line: what is true and which env var changes it. */
   detail: string
 }
@@ -142,13 +148,16 @@ export function residencyPosture(env: Record<string, string | undefined> = proce
   const enforce = env['AGENT_RESIDENCY_ENFORCE'] === 'true'
   const waiverRaw = (env['AGENT_RESIDENCY_WAIVER'] ?? '').trim()
   const waiver = waiverRaw.length >= RESIDENCY_WAIVER_MIN_CHARS ? waiverRaw.slice(0, 300) : null
+  const failClosed = env['AGENT_RESIDENCY_FAIL_CLOSED'] === 'true'
   if (enforce && (hosts.length > 0 || !required)) {
-    return { mode: 'enforced', required, hosts, waiver: null, detail: hosts.length ? `'in' task classes go only to ${hosts.join(', ')}` : "AGENT_RESIDENCY_ENFORCE=true with no AGENT_IN_RESIDENCY_HOSTS: every 'in' task class is refused" }
+    return { mode: 'enforced', required, hosts, waiver: null, refuses: false, detail: hosts.length ? `'in' task classes go only to ${hosts.join(', ')}` : "AGENT_RESIDENCY_ENFORCE=true with no AGENT_IN_RESIDENCY_HOSTS: every 'in' task class is refused" }
   }
-  if (!required) return { mode: 'opt_in', required, hosts, waiver, detail: 'not production with agents on: the residency guard is opt-in' }
-  if (waiver) return { mode: 'waived', required, hosts, waiver, detail: `residency guard WAIVED: ${waiver}` }
+  if (!required) return { mode: 'opt_in', required, hosts, waiver, refuses: false, detail: 'not production with agents on: the residency guard is opt-in' }
+  if (waiver) return { mode: 'waived', required, hosts, waiver, refuses: false, detail: `residency guard WAIVED: ${waiver}` }
   const why = enforce ? 'AGENT_RESIDENCY_ENFORCE=true but AGENT_IN_RESIDENCY_HOSTS is empty' : waiverRaw ? `AGENT_RESIDENCY_WAIVER is too short to be a recorded reason (< ${RESIDENCY_WAIVER_MIN_CHARS} chars)` : 'neither AGENT_RESIDENCY_ENFORCE + AGENT_IN_RESIDENCY_HOSTS nor AGENT_RESIDENCY_WAIVER is set'
-  return { mode: 'unconfigured', required, hosts, waiver: null, detail: `model calls carrying user data are REFUSED: ${why}` }
+  return failClosed
+    ? { mode: 'unconfigured', required, hosts, waiver: null, refuses: true, detail: `model calls carrying user data are REFUSED: ${why}` }
+    : { mode: 'unconfigured', required, hosts, waiver: null, refuses: false, detail: `no residency decision recorded (calls are not refused until AGENT_RESIDENCY_FAIL_CLOSED=true): ${why}` }
 }
 
 // ── OpenRouter data policy (audit M23) ───────────────────────────────────────
@@ -253,6 +262,10 @@ export interface GatewayConfig {
    * behaviour of `residencyEnforce` alone.
    */
   residencyMode?: ResidencyMode
+  /** With `unconfigured`: false = log, do not refuse (AGENT_RESIDENCY_FAIL_CLOSED unset). Absent = refuse. */
+  residencyRefuses?: boolean
+  /** Send OPENROUTER_PROVIDER_PREFS to OpenRouter. Absent = send. */
+  openRouterZdr?: boolean
   apiKey: string | null
   embedBaseUrl: string
   timeoutMs: number
@@ -287,6 +300,10 @@ export function gatewayConfigFromEnv(): GatewayConfig {
     residencyEnforce: process.env['AGENT_RESIDENCY_ENFORCE'] === 'true',
     inResidencyHosts: posture.hosts,
     residencyMode: posture.mode,
+    residencyRefuses: posture.refuses,
+    // ZDR can make a model with no zero-retention endpoint fail (provider_policy_unmatched), so it starts
+    // with the recorded residency decision (or fail-closed); AGENT_OPENROUTER_ZDR=false opts out.
+    openRouterZdr: process.env['AGENT_OPENROUTER_ZDR'] === 'true' || (process.env['AGENT_OPENROUTER_ZDR'] !== 'false' && (posture.mode !== 'unconfigured' || posture.refuses)),
     apiKey,
     embedBaseUrl: process.env['AGENT_EMBED_BASE_URL'] || baseUrl,
     timeoutMs: Number(process.env['AGENT_LLM_TIMEOUT_MS'] ?? '30000'),
@@ -362,6 +379,14 @@ export function assertResidency(config: GatewayConfig, taskClass: AgentTaskClass
     if (residencyFor(taskClass) !== 'in') return
     unconfiguredSinceLog++
     const now = Date.now()
+    if (config.residencyRefuses === false) {
+      if (now - lastUnconfiguredLog >= 60_000) {
+        console.warn(`[agent-core gateway] RESIDENCY UNDECIDED — ${unconfiguredSinceLog} model call(s) carrying user data sent with no residency decision (latest: ${taskClass}). Record AGENT_RESIDENCY_WAIVER=<reason> or AGENT_RESIDENCY_ENFORCE=true + AGENT_IN_RESIDENCY_HOSTS, then AGENT_RESIDENCY_FAIL_CLOSED=true. See docs/agents/SECURITY.md.`)
+        lastUnconfiguredLog = now
+        unconfiguredSinceLog = 0
+      }
+      return
+    }
     if (now - lastUnconfiguredLog >= 60_000) {
       console.error(`[agent-core gateway] RESIDENCY UNCONFIGURED — refused ${unconfiguredSinceLog} model call(s) carrying user data (latest: ${taskClass}). Set AGENT_RESIDENCY_ENFORCE=true + AGENT_IN_RESIDENCY_HOSTS, or AGENT_RESIDENCY_WAIVER=<reason>. See docs/agents/SECURITY.md.`)
       lastUnconfiguredLog = now
@@ -390,7 +415,8 @@ let postureLogged = false
 function logPostureOnce(config: GatewayConfig): void {
   if (postureLogged || !config.residencyMode || config.residencyMode === 'opt_in') return
   postureLogged = true
-  if (config.residencyMode === 'unconfigured') console.error("[agent-core gateway] RESIDENCY UNCONFIGURED at boot — model calls carrying user data ('in' task classes) are REFUSED. Fix: AGENT_RESIDENCY_ENFORCE=true + AGENT_IN_RESIDENCY_HOSTS, or AGENT_RESIDENCY_WAIVER=<reason> (docs/agents/SECURITY.md).")
+  if (config.residencyMode === 'unconfigured' && config.residencyRefuses === false) console.warn("[agent-core gateway] RESIDENCY UNDECIDED at boot — model calls carrying user data are sent with no recorded residency decision. Record AGENT_RESIDENCY_WAIVER=<reason> or AGENT_RESIDENCY_ENFORCE=true + AGENT_IN_RESIDENCY_HOSTS, then set AGENT_RESIDENCY_FAIL_CLOSED=true (docs/agents/SECURITY.md).")
+  else if (config.residencyMode === 'unconfigured') console.error("[agent-core gateway] RESIDENCY UNCONFIGURED at boot — model calls carrying user data ('in' task classes) are REFUSED. Fix: AGENT_RESIDENCY_ENFORCE=true + AGENT_IN_RESIDENCY_HOSTS, or AGENT_RESIDENCY_WAIVER=<reason> (docs/agents/SECURITY.md).")
   else if (config.residencyMode === 'waived') console.warn(`[agent-core gateway] residency guard WAIVED by AGENT_RESIDENCY_WAIVER: ${residencyPosture().waiver ?? '(see env)'}`)
   else console.log(`[agent-core gateway] residency enforced; in-residency hosts: ${(config.inResidencyHosts ?? []).join(', ') || 'none'}`)
 }
@@ -469,7 +495,7 @@ export function createGateway(config: GatewayConfig = gatewayConfigFromEnv()): G
       max_tokens: maxTokens,
       usage: { include: true },
       // audit M23: the retention guard travels with every request to OpenRouter (not only the account setting)
-      ...(isOpenRouterUrl(url) ? { provider: OPENROUTER_PROVIDER_PREFS } : {}),
+      ...(isOpenRouterUrl(url) && config.openRouterZdr !== false ? { provider: OPENROUTER_PROVIDER_PREFS } : {}),
     }
     const json = await postJson(url, body, params.signal)
     // From here on the call is billed: every failure carries the usage.
@@ -500,7 +526,7 @@ export function createGateway(config: GatewayConfig = gatewayConfigFromEnv()): G
     }
     const url = `${config.embedBaseUrl}/embeddings`
     assertResidency(config, 'embedding', url)
-    const json = await postJson(url, { model, input: texts, ...(isOpenRouterUrl(url) ? { provider: OPENROUTER_PROVIDER_PREFS } : {}) })
+    const json = await postJson(url, { model, input: texts, ...(isOpenRouterUrl(url) && config.openRouterZdr !== false ? { provider: OPENROUTER_PROVIDER_PREFS } : {}) })
     const rows = json['data'] as Array<{ embedding?: number[] }> | undefined
     const vectors = (rows ?? []).map((r) => r.embedding ?? [])
     return { vectors, usage: usageFrom(json['usage']), model, latencyMs: Date.now() - started, stub: false }
