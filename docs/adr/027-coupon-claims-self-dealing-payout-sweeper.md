@@ -71,7 +71,7 @@ Flagging shared bank accounts or phones between two users is still open. Unlike 
 ## Consequences
 
 - One buyer with a per-buyer limit of 1 who opens a second checkout while the first is unpaid is refused for up to 30 minutes (the session's life). The message says so (`coupon_in_checkout`).
-- A session paid after it expired still materialises (the gateway took the money), so its use can land after another buyer took the "last" one. Refusing late payments is ADR 026's and M21's business, not this ADR's.
+- A session paid after it expired still materialises (the gateway took the money), so its use can land after another buyer took the "last" one. Refusing a late payment belongs to the expired-session fix (audit M21), not to this ADR.
 - **Deploy order:** apply 0081 before the code. Without it, the claim fails closed, and coupon checkouts answer 409 until the migration lands.
 - **Proof:**
   - `verify-coupons` runs on the production-flags server (coupons on). Two checkouts at the last use give one 200 and one 409, and the winner's order carries the discount with one redemption. A per-buyer limit of 1 refuses a parallel second checkout and a second order, but not another buyer. An unknown code leaves no coupon on the session. The functions are not callable by a buyer.
