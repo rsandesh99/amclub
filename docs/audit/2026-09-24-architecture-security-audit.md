@@ -94,7 +94,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Fixed on production (0074) |
 | M2 | Refunds, payouts and reconcile still go through the simulation gateway on production | Fixed in code (wave 5b, ADR 027) |
 | M3 | The agent token endpoint accepts delegated tokens: renewal forever, wider scopes, any run id | Fixed (wave 3, PR #61) |
-| M4 | A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order | Partly fixed (wave 4, PR #62): API views stripped; direct table read open |
+| M4 | A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order | Fixed in code (waves 4 + 5c); migration 0083 |
 | M5 | RFQ attachment URLs are client-supplied and re-signed with the service role (IDOR on the private bucket) | Fixed (wave 4, PR #62) |
 | M6 | `safeNext` open redirect via tab / CR / LF in `next` | Fixed (wave 1, PR #59) |
 | M7 | Admin mutation routes accept delegated agent tokens by default | Fixed (wave 3, PR #61) |
@@ -102,11 +102,11 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M9 | Any signed-in user can instantly hide any published review | Fixed (wave 3, PR #61) |
 | M10 | Coupons: every active code is publicly listable, usage limits are not atomic, no per-buyer limit | Fixed in code (waves 3 + 5b, ADR 029); migration 0081 |
 | M11 | Key admin decisions are not audit-logged (provider approve / reject, coupon creation, CMS banners) | Fixed in code (wave 5b) |
-| M12 | Verification flags prove existence, not ownership (Udyam number, penny-drop name match) | Open |
+| M12 | Verification flags prove existence, not ownership (Udyam number, penny-drop name match) | Fixed in code (wave 5c), ADR 028; migration 0082 |
 | M13 | Suspended providers keep their powers: quote, get paid, accept and deliver, read matched RFQs | Fixed (wave 3, PR #61) |
-| M14 | A goods return can be opened from `completed` with no time limit | Open |
+| M14 | A goods return can be opened from `completed` with no time limit | Fixed in code (wave 5c) |
 | M15 | The public pool API leaks agent rationale (order ids, seller 30-day volume, buyer counts) | Fixed (wave 4, PR #62); migration 0076 |
-| M16 | Edits to approved Mart listings go live without re-review (category / commission, GST rate, images) | Open |
+| M16 | Edits to approved Mart listings go live without re-review (category / commission, GST rate, images) | Fixed in code (wave 5c); migration 0077 |
 | M17 | `rfq_clarifications.provider_id` is readable by every matched competitor | Fixed (wave 3, PR #61); migration 0075 |
 | M18 | `buyer_pool_discipline_v1` let every buyer read every buyer's pool record | Fixed |
 | M19 | Services payout release never re-checks the order status or an open dispute | Fixed (wave 2, PR #60, ADR 026) |
@@ -120,7 +120,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M27 | next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories) | Fixed (wave 1, PR #59) |
 | M28 | The state-machine rule is not enforced by the DB, the types or lint; status literals are spread through the apps | Open |
 | M29 | Tax and money formulas are duplicated outside shared, on different bases | Open |
-| M30 | Three different contact-masking rule sets; the weakest one guards pre-payment human messages | Open |
+| M30 | Three different contact-masking rule sets; the weakest one guards pre-payment human messages | Fixed in code (wave 5c) |
 | M31 | CI does not exercise the production configuration, and apps/web has no unit tests | Partly fixed (wave 5a, PR #63): mart:static in CI; web unit tests open |
 | M32 | The pg-boss queue `agent.munshi.growth` is never created, so the weekly job is silently dropped | Open |
 | M33 | Inbound WhatsApp messages can be stored but never processed, invisibly to the health check | Open |
@@ -134,17 +134,17 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M41 | A WhatsApp conversation stays bound to a user after a phone change | Open |
 | M42 | A typed or spoken "yes" is captured by Munshi before procurement and approves the wrong proposal | Open |
 | M43 | The payout dossier puts party-authored order titles in TRUSTED prompt parts | Open |
-| M44 | A group (pool) quote can be re-priced, or its GST mode flipped, after close via the ordinary quote PATCH | Open |
-| M45 | A provider can read competitors' sealed pool offers by joining the pool through their own buyer profile | Open |
+| M44 | A group (pool) quote can be re-priced, or its GST mode flipped, after close via the ordinary quote PATCH | Fixed in code (wave 5c) |
+| M45 | A provider can read competitors' sealed pool offers by joining the pool through their own buyer profile | Fixed in code (wave 5c) |
 | L1 | Admin `manual_refund` does not hold the payout, so a refund and a full payout can both go out | Fixed in code (wave 5b, ADR 027) |
 | L2 | `buyer_licences.certificate_path` is client-writable, and the certificate routes sign whatever path the row holds | Fixed (wave 4, PR #62) |
 | L3 | The agent runtime holds the full service-role key and DATABASE_URL in the process that parses public webhooks | Open |
-| L4 | The pool "Pay ₹X to confirm" amount is computed on the client before GST (web and mobile) | Open |
+| L4 | The pool "Pay ₹X to confirm" amount is computed on the client before GST (web and mobile) | Fixed in code (wave 5c) |
 | L5 | Money and policy switches live in the agent registry, whose only editor sits behind AGENT_ENABLED | Open |
 | L6 | Docs drift: seven sampled CLAUDE.md claims are false or contradictory | Partly fixed: CLAUDE.md corrected; flag inventory from code open |
 | L7 | Hot, growing tables lack indexes (`notifications` has none and is polled every 30 s per tab) | Fixed (wave 5a, PR #63); migration 0080 |
 | L8 | The goods order page sends the seller's payout (amount, status, schedule) to the buyer | Fixed (wave 5a, PR #63) |
-| L9 | Two concurrent (or resumed) pool closes can release the quote slot the pool's own quote holds | Open |
+| L9 | Two concurrent (or resumed) pool closes can release the quote slot the pool's own quote holds | Fixed in code (wave 5c); migration 0077 |
 
 ## Supabase advisors (production, after 0072)
 
@@ -308,7 +308,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M4. A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order
 
-- **Status:** Partly fixed (wave 4, PR #62). A matched seller's view of a goods request drops the buyer's contact name, phone and street address (shared `goodsSpecForSeller` keeps city, state, pincode and pickup); the contact reaches the seller on the paid order's delivery snapshot. A matched seller can still read `rfqs.goods_spec` straight through PostgREST; closing that needs the contact moved out of `goods_spec` (data-model change, open)
+- **Status:** Fixed in code (waves 4 + 5c). API views strip the buyer's contact for sellers (wave 4); migration 0083 withdraws `rfqs.goods_spec` from client roles (column grant built from the catalogue) and the one session-client read (checkout quote branch) now uses the service role after the ownership check
 - **Where:** `apps/web/lib/rfq/queries.ts:540`
 - **Raised by:** 1 finding from 1 audit team (Server-rendered pages: service-role data serialized into client components, and public ISR pages)
 - **Impact:** Buyer PII goes to every matched seller, not only the one who is later paid, and it enables off-platform deals that skip the escrow/commission path (the §8.3 stance against pre-order chat). This differs from the known finding (GET /orders/[id] exposes the phone to the one paid seller after the order): here it happens pre-order, to all matched sellers, through the RFQ endpoint.
@@ -372,7 +372,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M12. Verification flags prove existence, not ownership (Udyam number, penny-drop name match)
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5c, ADR 028). Shared `kycOwnership` grants the Udyam chip or penny drop only on a vendor GSTIN / PAN that is the claimant's own, or a vendor name matching a GST-locked legal / trade name (normalised; strict token overlap with a non-generic word). A mismatch records `name_mismatch` for the new admin review section; one active verified claim per Udyam number (0082 unique partial index; 409 `udyam_already_claimed`); the stub never earns a chip. A buyer's self-typed GSTIN and pre-0082 claims are recorded limits in the ADR
 - **Where:** `apps/web/app/api/v1/kyc/verify-udyam/route.ts:60`, `apps/web/lib/kyc/surepass.ts:84`
 - **Raised by:** 2 findings from 2 audit teams (AuthZ: admin, cron and misc routes; AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks))
 - **Impact:** The verified-identity trust signal can be borrowed from any real enterprise, which misleads buyers comparing quotes and marks buyer accounts as 'verified' to providers. This is latent while KYC runs in stub mode (the stub never earns the chip), and live as soon as the vendor key lands.
@@ -388,7 +388,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M14. A goods return can be opened from `completed` with no time limit
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5c; ADR-014 addendum). From `completed`, a return opens only before the earlier of the category return window and `dispute_window_days` from `completed_at` (shared `canOpenGoodsReturn` / `goodsReturnDeadline`; 409 `return_window_closed` with `endsAt`); the server sends `returnDeadline` and the web workspace hides the action after it
 - **Where:** `apps/web/lib/mart/goods-transitions.ts:52`
 - **Raised by:** 1 finding from 1 audit team (AuthZ: provider (partner) and Mart routes)
 - **Impact:** This breaks the canonical invariant 'completed → disputed only within dispute_window_days' (CLAUDE.md §3.7 / ADR-014 §6) and the per-category return-window policy sellers are promised. A buyer can freeze a seller's payout or open a refund claim on any past goods order indefinitely, and ops load and seller cash-flow risk are unbounded.
@@ -409,7 +409,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M16. Edits to approved Mart listings go live without re-review (category / commission, GST rate, images)
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5c; ADR-006 addendum). A material edit sends an approved listing back to `pending_approval` (always for a category change); admin approval must name `reviewed_updated_at` (409 `listing_changed`); material edits are refused while a pool is live (409 `pool_live`); pools freeze GST / HSN / unit at open (0077) and member checkout charges the frozen values
 - **Where:** `apps/web/app/api/v1/mart/seller/products/[id]/route.ts:82`
 - **Raised by:** 1 finding from 1 audit team (AuthZ: provider (partner) and Mart routes)
 - **Impact:** The 'admin approves the first N listings' control is cosmetic, because content can be swapped after approval. A category switch changes platform commission on future orders and buyer return rights ('Not returnable'). Pool buyers can be charged a different GST than they committed to. The impact is limited by the audit trail in product_events and by the admin's ability to suspend.
@@ -523,7 +523,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M30. Three different contact-masking rule sets; the weakest one guards pre-payment human messages
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5c). One masker in `packages/shared/src/contact-mask.ts` (Indic / Urdu / fullwidth / zero-width digits folded, spelled and spaced digits in five languages, +91 / 0091 / STD / 1800 numbers, emails incl. "at … dot", UPI ids, links, wa.me / t.me, handles) behind `redactContactInfo` and `stripContactInfo`; one fixture table drives the shared and agent-core tests; the three old rule sets run as a no-regression corpus
 - **Where:** `packages/shared/src/rfq.ts:49`
 - **Raised by:** 1 finding from 1 audit team (Architecture and code health)
 - **Impact:** Off-platform deals and payments bypass escrow, dispute protection and commission. Agent-written text is held to a stricter rule than human-written text. This is distinct from the known unmasked RFQ title/details.
@@ -635,7 +635,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M44. A group (pool) quote can be re-priced, or its GST mode flipped, after close via the ordinary quote PATCH
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5c). The quote PATCH refuses a group quote (409 `pool_quote_fixed`); `verify-pools` proves the price stays at the achieved tier
 - **Where:** `apps/web/app/api/v1/rfq/[id]/quote/route.ts:332`
 - **Raised by:** 1 finding from 1 audit team (S3.4 services demand pools: detection, tier pricing and the close path that writes quotes)
 - **Impact:** The group-price guarantee, the basis of ADR 024's argument that pools are not the negotiation or auction that §8.3/ADR-013 forbid, is not enforced. It allows bait-and-switch: a provider wins commitments with a deep volume tier, then re-prices after competitors' pool offers have been shut out. No money moves without consent, because the buyer pays only if they accept the revised quote at checkout, and the rest of the buyer's request is unaffected.
@@ -643,7 +643,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M45. A provider can read competitors' sealed pool offers by joining the pool through their own buyer profile
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5c). A user who also owns a provider profile is left out of group detection, cannot join or choose an offer (403 `dual_role`) and sees no offers; the check fails closed
 - **Where:** `apps/web/lib/pools/queries.ts:75`
 - **Raised by:** 1 finding from 1 audit team (S3.4 services demand pools: detection, tier pricing and the close path that writes quotes)
 - **Impact:** Competitors' confidential price schedules and live commit counts leak to a rival provider. Pools can then be run as sequential undercut bidding, which is the bidding-war dynamic on the §8.3 NOT-NOW list that sealing was meant to prevent. The fake request also fans out to real providers as noise. Precondition: a cohort user with a buyer profile, which every provider can create for themselves.
@@ -675,7 +675,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### L4. The pool "Pay ₹X to confirm" amount is computed on the client before GST (web and mobile)
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5c). The pool API returns `member.amounts` and `pool.unitDisplay` computed like checkout; web PoolJoin, My pools and the mobile pool screen render only those (client-money baseline −2)
 - **Where:** `apps/web/components/mart/PoolJoin.tsx:110`
 - **Raised by:** 1 finding from 1 audit team (Architecture and code health)
 - **Impact:** The displayed price differs from the amount charged on a live Mart surface. This breaks the E4/N16 'render only the server display' rule and total-price disclosure expectations.
@@ -715,7 +715,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### L9. Two concurrent (or resumed) pool closes can release the quote slot the pool's own quote holds
 
-- **Status:** Open
+- **Status:** Fixed in code (wave 5c). A per-pool close lease (`close_lease_until`, compare-and-set, 10 min) and `quotes.pool_member_id` written at insert (0077): on a unique violation the close links its own quote and keeps the slot
 - **Where:** `apps/web/lib/pools/close.ts:162`
 - **Raised by:** 1 finding from 1 audit team (S3.4 services demand pools: detection, tier pricing and the close path that writes quotes)
 - **Impact:** quote_count under-counts by one per affected member, so each affected request can receive more than the 7-quote cap (a Phase-5 done criterion). Member state becomes inconsistent (skipped but carrying a quote_id). B's run may send "Your group has ended" to a buyer who does have a group quote, and closing counts and events are wrong. No money moves.
