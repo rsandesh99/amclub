@@ -116,11 +116,22 @@ async function mkBuyer(label: string): Promise<Actor & { msmeId: string }> {
 // ── browser helpers ────────────────────────────────────────────────────────────
 let browser: Browser | null = null
 
+/** Every error the browser itself raised during the journeys (uncaught exceptions + console.error), deduplicated. */
+const browserErrors = new Map<string, number>()
+function recordBrowserError(kind: string, page: Page, text: string): void {
+  let where = ''
+  try { where = new URL(page.url()).pathname.replace(/[0-9a-f-]{36}/g, ':id') } catch { /* about:blank */ }
+  const key = `${kind} ${where} ${text.split('\n')[0]!.slice(0, 400)}`
+  browserErrors.set(key, (browserErrors.get(key) ?? 0) + 1)
+}
+
 async function pageFor(a: Actor, viewport = { width: 1280, height: 900 }): Promise<{ ctx: BrowserContext; page: Page }> {
   const ctx = await browser!.newContext({ viewport, reducedMotion: 'reduce', locale: 'en-IN' })
   await ctx.addCookies(a.cookies.map((c) => ({ ...c, url: BASE })))
   const page = await ctx.newPage()
   page.setDefaultTimeout(STEP_TIMEOUT)
+  page.on('pageerror', (e) => recordBrowserError('pageerror', page, e.message))
+  page.on('console', (m) => { if (m.type() === 'error') recordBrowserError('console', page, m.text()) })
   return { ctx, page }
 }
 
@@ -394,6 +405,10 @@ async function main(): Promise<void> {
   } finally {
     await browser.close().catch(() => {})
     await cleanup()
+  }
+  if (browserErrors.size) {
+    console.log(`\nBrowser errors seen during the journeys (${browserErrors.size} distinct):`)
+    for (const [k, n] of browserErrors) console.log(`  ! ${k}${n > 1 ? ` (×${n})` : ''}`)
   }
   console.log(`\n${fail === 0 ? '✅ BROWSER JOURNEYS PASSED' : '❌ BROWSER JOURNEYS FAILED'} — ${pass} passed, ${fail} failed (screenshots of failures: e2e-artifacts/)\n`)
   process.exit(fail === 0 ? 0 : 1)

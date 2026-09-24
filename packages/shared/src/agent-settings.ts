@@ -33,6 +33,7 @@ export const AGENT_NAMES = [
   'benchmark',      // S3.2
   'review_summary', // Experience v3 E3 (FR-3.9) — cited summary of verified reviews; dark slot, built when the agent programme resumes
   'content_translate', // Experience v3 E14 (FR-14.3, N32b) — provider content translation drafts; the provider approves each language
+  'demand_aggregation', // S3.4 (ADR 024) — group requests for services: proposes pools (code, no model); buyers opt in, providers state volume tiers
 ] as const
 export type AgentName = (typeof AGENT_NAMES)[number]
 
@@ -389,6 +390,32 @@ export const AGENT_SETTING_DEFS = {
     schema: z.boolean(),
     default: false,
     hint: 'S1.8 synthesise the clarifying question as audio (Sarvam TTS, paid). false = text only.',
+  },
+  // ── S3.4 demand aggregation (ADR 024) ─────────────────────────────────────
+  pool_min_members: {
+    schema: z.number().int().min(2).max(20),
+    default: 3,
+    hint: 'S3.4 distinct buyers needed to propose a group, and joined buyers needed to open it to providers.',
+  },
+  pool_max_members: {
+    schema: z.number().int().min(2).max(50),
+    default: 20,
+    hint: 'S3.4 most requests in one group; also the highest tier threshold a provider may set.',
+  },
+  pool_form_hours: {
+    schema: z.number().int().min(1).max(48),
+    default: 12,
+    hint: 'S3.4 hours a proposed group waits for enough buyers to join before it lapses (their requests carry on as normal).',
+  },
+  pool_open_hours: {
+    schema: z.number().int().min(6).max(72),
+    default: 24,
+    hint: 'S3.4 hours an open group takes provider offers and buyer choices before it closes (earlier if a member request would expire).',
+  },
+  pool_pay_buffer_hours: {
+    schema: z.number().int().min(1).max(48),
+    default: 12,
+    hint: "S3.4 hours between a group's close and the earliest member request's expiry, so every group price can still be paid.",
   },
 } as const satisfies Record<string, AgentSettingDef>
 

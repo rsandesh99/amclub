@@ -18,6 +18,7 @@
     { "path": "/api/v1/cron/agent-munshi-followup", "schedule": "5 * * * *" },
     { "path": "/api/v1/cron/agent-munshi-growth", "schedule": "0 5 * * 1" },
     { "path": "/api/v1/cron/agent-procurement-watch", "schedule": "*/15 * * * *" },
+    { "path": "/api/v1/cron/agent-demand-pools", "schedule": "35 * * * *" },
     { "path": "/api/v1/cron/data-foundations", "schedule": "40 21 * * *" }
   ]
 }

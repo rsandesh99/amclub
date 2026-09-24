@@ -199,3 +199,95 @@ export const quoteOptions = pgTable('quote_options', {
   unique('quote_options_quote_id_revision_label_key').on(table.quoteId, table.revision, table.label),
   index('quote_options_quote_idx').on(table.quoteId, table.revision),
 ])
+
+// S3.4 / ADR 024 (0071) — demand aggregation for services. Group requests of buyers' own open RFQs, a provider's
+// volume-tier offer (immutable tiers), and the close's per-member claim → ordinary quote. All service role only;
+// FK → ai_decisions (members.decision_id) is in SQL.
+export const servicePools = pgTable('service_pools', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  categoryId: uuid('category_id').references(() => categories.id).notNull(),
+  serviceSlug: text('service_slug').notNull(),
+  state: text('state').notNull(),
+  status: text('status').default('forming').notNull(), // SERVICE_POOL_STATUSES (CHECK)
+  minMembers: integer('min_members').notNull(),
+  maxMembers: integer('max_members').notNull(),
+  formBy: timestamp('form_by', { withTimezone: true }).notNull(),
+  openedAt: timestamp('opened_at', { withTimezone: true }),
+  closesAt: timestamp('closes_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  cancelledReason: text('cancelled_reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('service_pools_live_key_uq').on(table.categoryId, table.serviceSlug, table.state).where(sql`status IN ('forming', 'open', 'closing')`),
+  index('service_pools_status_idx').on(table.status, table.closesAt),
+])
+
+export const servicePoolOffers = pgTable('service_pool_offers', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  poolId: uuid('pool_id').references(() => servicePools.id, { onDelete: 'cascade' }).notNull(),
+  providerId: uuid('provider_id').references(() => providerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  status: text('status').default('active').notNull(), // active | withdrawn
+  deliveryDays: integer('delivery_days').notNull(),
+  scope: text('scope').notNull(),
+  message: text('message'),
+  gstIncluded: boolean('gst_included').notNull(),
+  transportIncluded: boolean('transport_included'),
+  validUntil: date('valid_until').notNull(),
+  advancePercent: integer('advance_percent'),
+  achievedCount: integer('achieved_count'),
+  achievedMinMembers: integer('achieved_min_members'),
+  achievedPricePaise: bigint('achieved_price_paise', { mode: 'number' }),
+  withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('service_pool_offers_one_active_uq').on(table.poolId, table.providerId).where(sql`status = 'active'`),
+  index('service_pool_offers_provider_idx').on(table.providerId, table.createdAt),
+])
+
+export const servicePoolOfferTiers = pgTable('service_pool_offer_tiers', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  offerId: uuid('offer_id').references(() => servicePoolOffers.id, { onDelete: 'cascade' }).notNull(),
+  minMembers: integer('min_members').notNull(),
+  pricePaise: bigint('price_paise', { mode: 'number' }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique('service_pool_offer_tiers_offer_id_min_members_key').on(table.offerId, table.minMembers),
+])
+
+export const servicePoolMembers = pgTable('service_pool_members', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  poolId: uuid('pool_id').references(() => servicePools.id, { onDelete: 'cascade' }).notNull(),
+  rfqId: uuid('rfq_id').references(() => rfqs.id, { onDelete: 'cascade' }).notNull(),
+  msmeId: uuid('msme_id').references(() => msmeProfiles.id, { onDelete: 'cascade' }).notNull(),
+  status: text('status').default('invited').notNull(), // POOL_MEMBER_STATUSES (CHECK)
+  joinedAt: timestamp('joined_at', { withTimezone: true }),
+  decisionId: uuid('decision_id'),
+  committedOfferId: uuid('committed_offer_id').references(() => servicePoolOffers.id, { onDelete: 'set null' }),
+  committedAt: timestamp('committed_at', { withTimezone: true }),
+  claimState: text('claim_state'), // claimed | skipped
+  claimOfferId: uuid('claim_offer_id').references(() => servicePoolOffers.id, { onDelete: 'set null' }),
+  skipReason: text('skip_reason'),
+  quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique('service_pool_members_pool_id_rfq_id_key').on(table.poolId, table.rfqId),
+  unique('service_pool_members_pool_id_msme_id_key').on(table.poolId, table.msmeId),
+  uniqueIndex('service_pool_members_live_rfq_uq').on(table.rfqId).where(sql`status IN ('invited', 'joined')`),
+  index('service_pool_members_msme_idx').on(table.msmeId, table.createdAt),
+])
+
+export const servicePoolEvents = pgTable('service_pool_events', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  poolId: uuid('pool_id').references(() => servicePools.id, { onDelete: 'cascade' }).notNull(),
+  kind: text('kind').notNull(), // POOL_EVENT_KINDS (CHECK)
+  actorUserId: uuid('actor_user_id'),
+  payload: jsonb('payload').default(sql`'{}'::jsonb`).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('service_pool_events_pool_idx').on(table.poolId, table.createdAt),
+])

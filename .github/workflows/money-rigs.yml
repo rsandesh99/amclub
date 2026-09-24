@@ -194,6 +194,31 @@ jobs:
         working-directory: apps/web
         run: pnpm exec tsx scripts/verify-experience.ts
 
+      # S3.4 (ADR 024) — agent surfaces exist only with AGENT_ENABLED=true. A second server runs the SAME build with
+      # it on (:3001), so every rig above keeps proving the production default on :3000.
+      - name: Start the agent-on app (port 3001)
+        id: agentapp
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        env:
+          AGENT_ENABLED: "true"
+        run: |
+          nohup pnpm start -p 3001 > "$RUNNER_TEMP/next-agent.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://localhost:3001/en; then echo "agent app up"; exit 0; fi
+            sleep 2
+          done
+          tail -100 "$RUNNER_TEMP/next-agent.log"
+          exit 1
+
+      - name: Demand pools (S3.4 / ADR 024 — agent on; flag-off inert)
+        if: ${{ !cancelled() && steps.agentapp.outcome == 'success' }}
+        working-directory: apps/web
+        env:
+          BASE_URL: http://localhost:3001
+          FLAG_OFF_BASE_URL: http://localhost:3000
+        run: pnpm exec tsx scripts/verify-pools.ts
+
       # The rigs above prove the server; these prove the screens. A real
       # Chromium clicks through package → paid order → delivery → payout and
       # requirement → quote → paid order (e2e/journeys.ts), then axe scans the
@@ -227,4 +252,7 @@ jobs:
 
       - name: App log (on failure)
         if: failure()
-        run: tail -300 "$RUNNER_TEMP/next.log" || true
+        run: |
+          tail -300 "$RUNNER_TEMP/next.log" || true
+          echo "── agent-on app (:3001) ──"
+          tail -150 "$RUNNER_TEMP/next-agent.log" || true

@@ -1,0 +1,30 @@
+# Phase 8 §2(a) search load test, re-runnable by hand (never on a push or PR: Actions minutes are metered).
+# Read-only (catalog search), so it may target production. Checkout / RFQ load needs a PREVIEW and the prep /
+# cleanup scripts (docs/qa/QA_CHECKLIST.md §10); production refuses simulated checkout (ADR 023).
+name: Load test (search)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Deployment to load (read-only search)'
+        required: true
+        default: 'https://amclub-web.vercel.app'
+
+jobs:
+  search:
+    name: k6 · search p95 < 800 ms
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          curl -fsSL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xz
+          sudo mv k6-v0.54.0-linux-amd64/k6 /usr/local/bin/k6
+          k6 version
+
+      - name: 500 concurrent searches (ramp 30 s, hold 60 s)
+        run: k6 run --summary-trend-stats "avg,med,p(90),p(95),p(99),max" -e BASE_URL="${{ inputs.base_url }}" loadtest/k6-search.js

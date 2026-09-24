@@ -20,6 +20,10 @@ import { verifyChooseDecision } from '@/lib/agent/procurement'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { getBenchmarkFor } from '@/lib/benchmarks/view'
 import { isOnFor } from '@/lib/experiments'
+import { poolsOnFor } from '@/lib/pools/core'
+import { poolForRfq } from '@/lib/pools/queries'
+import { istShort, stateLabel } from '@/lib/pools/labels'
+import { PoolInviteCard } from '@/components/pools/PoolInviteCard'
 
 const VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   open: 'info', quoted: 'warning', accepted: 'success', expired: 'default', cancelled: 'default',
@@ -53,6 +57,23 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
   const benchmark = await getBenchmarkFor(admin, { rfqId: rfq.id, kind: rfq.kind, categorySlug: rfq.categorySlug, viewerUserId: user.id, locale })
   const pointerOutcome = pointersEnabled
     ? await getComparePointers(admin, { rfqId: rfq.id, kind: rfq.kind, quotes: rfq.quotes, results: compare, userId: user.id, locale: toPointerLocale(locale), allowModel: false })
+    : null
+
+  // S3.4 (ADR 024, dark) — the group request card: only with AGENT_ENABLED + demand_aggregation + this buyer in the
+  // cohort (poolsOnFor checks all three before any 0071 table is read). Services requests only.
+  const poolCard = rfq.kind !== 'goods' && AGENT_ENABLED && (await poolsOnFor(admin, user.id))
+    ? await (async () => {
+        const { data: m } = await admin.from('msme_profiles').select('id').eq('user_id', user.id).maybeSingle()
+        return m ? poolForRfq(admin, rfq.id, m.id as string) : null
+      })()
+    : null
+  const poolLabels = poolCard
+    ? await (async () => {
+        const { data: pool } = await admin.from('service_pools').select('service_slug, state').eq('id', poolCard.poolId).maybeSingle()
+        const tSvc = await getTranslations('services')
+        const slug = (pool?.service_slug as string | undefined) ?? ''
+        return { service: slug && tSvc.has(slug as 'gst-filing') ? tSvc(slug as 'gst-filing') : slug, state: stateLabel((pool?.state as string | undefined) ?? '') }
+      })()
     : null
 
   // E7 — compare v3 (grouped table, scope on desktop); the page widens so the table has room.
@@ -127,6 +148,10 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
           </div>
         )}
       </div>
+
+      {poolCard && poolLabels && (
+        <PoolInviteCard card={poolCard} serviceLabel={poolLabels.service} stateLabel={poolLabels.state} formByLabel={istShort(poolCard.formBy) ?? ''} closesAtLabel={istShort(poolCard.closesAt)} />
+      )}
 
       {rfq.kind === 'goods' && rfq.goodsSpec && (
         <GoodsSpecCard spec={rfq.goodsSpec as unknown as GoodsSpecView} categoryName={goodsCat ? pickLocale(goodsCat.name_i18n, locale) : null} showPhone />

@@ -1343,3 +1343,21 @@ partner-dashboard suggested listings, admin "Onboarding interview" section, cron
 - **Wizard listing prefill URL** is `/partner/listings/new?onboarding_session=…&pkg=N` (the tree's route; the prompt said
   `/partner/packages/new`).
 - **Tamil/Telugu:** new keys only (28 each), English fallback for the rest; the interview copy itself is en/hi/te.
+
+## S3.4 — group requests for services, built dark (2026-09-24)
+
+Built behind `AGENT_ENABLED` + `agents_enabled.demand_aggregation` + the cohort (ADR 024; runbook
+`docs/agents/AGGREGATION.md`). Left for later, deliberately:
+
+- **Migration 0071 on production.** Not applied yet (it is an agent migration: apply it before enabling). Every
+  reader and writer is behind the switch, so the flag-off deployment never reads a 0071 table.
+- **Mobile screens.** The group card on `rfq/[id]`, the group page and the provider offer form. The API is ready
+  (`GET /api/v1/rfq/[id]/pool`, `/api/v1/pools/*`, `/api/v1/partner/pools`).
+- **WhatsApp template** for the invitation and the "your group price is in" message (Meta approval). In-app only today.
+- **Buyer discipline.** A member who commits and then never pays still counts towards the tier. `/admin/agents/pools`
+  shows committed → quoted → paid per group; a rule (like Mart's pool discipline) waits for real data.
+- **te / ta for the `pools` UI namespace.** Notification copy (`notify.pool_*`) has reviewed-pending drafts; the page
+  strings are en + hi only (outside the buying path).
+- **Service grouping key.** Only v3 requests with a chosen service (`details.service_slug`) are grouped. Requests
+  without one, and requests with must-haves, are never proposed.
+

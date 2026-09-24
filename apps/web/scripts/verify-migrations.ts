@@ -430,6 +430,13 @@ const MANIFEST: Entry[] = [
     views: ['order_safe_view'],
     note: 'ADR 022 security hotfix: order_safe_view security_invoker (the caller’s RLS applies; it ran as its BYPASSRLS owner), nothing for anon, SELECT only for authenticated',
   },
+  {
+    file: '0071_service_pools.sql',
+    tables: ['service_pools', 'service_pool_offers', 'service_pool_offer_tiers', 'service_pool_members', 'service_pool_events'],
+    functions: ['service_pool_claim'],
+    triggers: [['service_pool_offer_tiers', 'service_pool_offer_tiers_immutable'], ['service_pool_events', 'service_pool_events_no_update']],
+    note: 'S3.4 / ADR 024 (agent migration, NOT staged): services group requests — pools, members (one live pool per request), volume-tier offers (immutable tiers), append-only events; service_pool_claim claims the slot + marks the member in one transaction (service_role only); no client grants; ai_decisions feature demand_pool',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]
