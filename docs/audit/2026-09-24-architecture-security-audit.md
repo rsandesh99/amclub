@@ -49,8 +49,8 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | Wave | Items | Notes |
 |---|---|---|
 | **0 — done** | C1, C2, H1, H2, M18 | 0072 and 0073 live |
-| **1 — inbound and dependencies (in review)** | H3 SMS hook signature (Standard Webhooks, +91 only; closed once the secret is set); H4 WhatsApp webhook fails closed without a verified signature; M6 `safeNext` control characters; H10 sharp, M27 next, M25 next-intl upgrades; M1 revoke `generate_order_number` from clients; the advisor items (revoke EXECUTE on internal definer functions from anon, pin `search_path`) | H3 needs a `SEND_SMS_HOOK_SECRET` in Vercel and the Supabase hook config |
-| **2 — money path (in review: H5–H9, M19, M39)** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
+| **1 — inbound and dependencies (done, PR #59; 0074 live)** | H3 SMS hook signature (Standard Webhooks, +91 only; closed once the secret is set); H4 WhatsApp webhook fails closed without a verified signature; M6 `safeNext` control characters; H10 sharp, M27 next, M25 next-intl upgrades; M1 revoke `generate_order_number` from clients; the advisor items (revoke EXECUTE on internal definer functions from anon, pin `search_path`) | H3 needs a `SEND_SMS_HOOK_SECRET` in Vercel and the Supabase hook config |
+| **2 — money path (done, PR #60: H5–H9, M19, M39)** | H5 `retry_payout` goes through the one release gate; H6 compare-and-set on every order status write, with side effects only for the winner; H7 durable refund retry plus an admin "finish refund"; H9 transfer idempotency key plus a gateway lookup before retry; M19 release re-checks status and open disputes; H8 an Indic-capable invoice font; M20 / M39 reconciliation of refunds, transfers and all pages; M21 session expiry at capture; M2 no simulation gateway on production for refunds and payouts; L1 | Each item adds a money-rig criterion (CLAUDE.md H1 rule) |
 | **3 — authorisation and abuse (in review: M3, M7–M9, M10 part 1, M13, M17)** | M7 / M8 delegated tokens refused unless a route opts in; M13 suspension enforced in `resolveActor`; M9 review flags go to a queue; M10 coupons: no public read, atomic redemption, per-buyer limit; M12 ownership checks on Udyam and penny-drop; M22 self-dealing guard; M17 clarification provider id hidden; M5 / L2 attachment and certificate paths pinned; M3 no token renewal from a delegated token | M12 touches KYC, so an ADR is needed |
 | **4 — Mart, pools and agents** | M14 return window; M15 rationale off the public API; M16 re-review on material edits; M44 / M45 / L9 pool quote and offer sealing; M41–M43 WhatsApp binding, Munshi "yes" routing, trusted-part hygiene; M23 / M24 residency and budget; L3 runtime service-role scope | Several are dark features; fix before their cohort widens |
 | **5 — operations and architecture** | M32–M38 (queue creation, stuck-inbound alert, media caps, failing heartbeats, Upstash fail-open for reads, timeouts, re-drive); M28 / M29 / M30 (state-machine enforcement, one money-formula home, one masking rule set); M31 (a CI job with production flags, web unit tests); M26 (pin actions, OIDC for Fly); L4–L8; the performance advisor (119 unindexed foreign keys, the `notifications` index) | |
@@ -83,20 +83,20 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | C2 | Any signed-in user could create or rewrite a provider profile (self-activation, lifting a suspension, fake trust badges) | Fixed |
 | H1 | Sellers could write Mart `products` / `price_tiers` directly (self-approval, reversing a suspension, BIS-blocked items) | Fixed |
 | H2 | Providers could join any category directly, including credential-gated ones, and receive those RFQs | Fixed |
-| H3 | The Supabase "Send SMS" hook is unauthenticated: SMS pumping, SMS bombing, branded smishing | Fixed in code (wave 1); needs `SEND_SMS_HOOK_SECRET` |
-| H4 | The WhatsApp webhook accepts unsigned requests whenever the driver resolves to `stub` | Fixed in code (wave 1) |
-| H5 | Admin "Retry payout" releases held payouts past the dispute hold and the release gates | Fixed in code (wave 2, ADR 026) |
-| H6 | Order status writes are not compare-and-set, so crons can overwrite a dispute or revision and still run money side effects | Fixed in code (wave 2, ADR 026) |
-| H7 | A refund that fails after the status write is never retried, and ops cannot finish it from admin | Fixed in code (wave 2, ADR 026) |
+| H3 | The Supabase "Send SMS" hook is unauthenticated: SMS pumping, SMS bombing, branded smishing | Fixed (wave 1, PR #59); needs `SEND_SMS_HOOK_SECRET` |
+| H4 | The WhatsApp webhook accepts unsigned requests whenever the driver resolves to `stub` | Fixed (wave 1, PR #59) |
+| H5 | Admin "Retry payout" releases held payouts past the dispute hold and the release gates | Fixed (wave 2, PR #60, ADR 026) |
+| H6 | Order status writes are not compare-and-set, so crons can overwrite a dispute or revision and still run money side effects | Fixed (wave 2, PR #60, ADR 026) |
+| H7 | A refund that fails after the status write is never retried, and ops cannot finish it from admin | Fixed (wave 2, PR #60, ADR 026) |
 | H8 | Invoice PDF generation throws on Indic-script names, so no tax invoice is created and accept-delivery returns 500 | Mitigated (wave 2, ADR 026); Indic rendering open |
-| H9 | Payout transfer is not idempotent: a timeout after Razorpay creates the transfer marks it failed, and a retry pays again | Fixed in code (wave 2, ADR 026) |
-| H10 | sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes | Fixed in code (wave 1) |
-| M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Fixed in code (wave 1); migration 0074 |
+| H9 | Payout transfer is not idempotent: a timeout after Razorpay creates the transfer marks it failed, and a retry pays again | Fixed (wave 2, PR #60, ADR 026) |
+| H10 | sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes | Fixed (wave 1, PR #59) |
+| M1 | `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides | Fixed on production (0074) |
 | M2 | Refunds, payouts and reconcile still go through the simulation gateway on production | Open |
 | M3 | The agent token endpoint accepts delegated tokens: renewal forever, wider scopes, any run id | Fixed in code (wave 3) |
 | M4 | A goods RFQ sends the buyer's delivery contact (name, phone, address) to every matched seller before any order | Open |
 | M5 | RFQ attachment URLs are client-supplied and re-signed with the service role (IDOR on the private bucket) | Open |
-| M6 | `safeNext` open redirect via tab / CR / LF in `next` | Fixed in code (wave 1) |
+| M6 | `safeNext` open redirect via tab / CR / LF in `next` | Fixed (wave 1, PR #59) |
 | M7 | Admin mutation routes accept delegated agent tokens by default | Fixed in code (wave 3) |
 | M8 | Delegated tokens are allowed by default on buyer, provider and pool write routes; the transition scope covers every action | Fixed in code (wave 3) |
 | M9 | Any signed-in user can instantly hide any published review | Fixed in code (wave 3) |
@@ -109,7 +109,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M16 | Edits to approved Mart listings go live without re-review (category / commission, GST rate, images) | Open |
 | M17 | `rfq_clarifications.provider_id` is readable by every matched competitor | Fixed in code (wave 3); migration 0075 |
 | M18 | `buyer_pool_discipline_v1` let every buyer read every buyer's pool record | Fixed |
-| M19 | Services payout release never re-checks the order status or an open dispute | Fixed in code (wave 2, ADR 026) |
+| M19 | Services payout release never re-checks the order status or an open dispute | Fixed (wave 2, PR #60, ADR 026) |
 | M20 | Only `payment.captured` is consumed; refund, transfer and chargeback outcomes are never reconciled | Open |
 | M21 | Checkout sessions never expire at payment time (withdrawn quotes, lapsed pools, expired coupons honoured) | Open |
 | M22 | No self-dealing guard: one person can buy from, quote to, review and settle with their own provider profile | Open |
@@ -117,7 +117,7 @@ Each wave is one or more PRs, and each PR runs the money rigs. Nothing here chan
 | M24 | The platform AI budget can be drained from outside the cohort; the Mart catalog agent and speech-to-text bypass it | Open |
 | M25 | next-intl 3.26.5 middleware open redirect (GHSA-8f24-v5vv-gm5j) | Mitigated (wave 1 guard); v4 upgrade open |
 | M26 | The agent-runtime deploy workflow trusts a mutable action ref and `latest` flyctl next to FLY_API_TOKEN | Open |
-| M27 | next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories) | Fixed in code (wave 1) |
+| M27 | next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories) | Fixed (wave 1, PR #59) |
 | M28 | The state-machine rule is not enforced by the DB, the types or lint; status literals are spread through the apps | Open |
 | M29 | Tax and money formulas are duplicated outside shared, on different bases | Open |
 | M30 | Three different contact-masking rule sets; the weakest one guards pre-payment human messages | Open |
@@ -220,7 +220,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H3. The Supabase "Send SMS" hook is unauthenticated: SMS pumping, SMS bombing, branded smishing
 
-- **Status:** Fixed in code (wave 1); fully closed once `SEND_SMS_HOOK_SECRET` is set. With the secret, the hook refuses any call without a valid Standard Webhooks signature. Without it on production (transition only, so the deploy cannot stop phone login), every call logs an error and is held to a global cap of 120 an hour. Either way: +91 mobiles only, 5 per number per 15 minutes, an 8 s MSG91 timeout, and only the 6-digit code reaches the fixed DLT template. Set the secret in the Supabase "Send SMS" hook and in Vercel
+- **Status:** Fixed (wave 1, PR #59); fully closed once `SEND_SMS_HOOK_SECRET` is set. With the secret, the hook refuses any call without a valid Standard Webhooks signature. Without it on production (transition only, so the deploy cannot stop phone login), every call logs an error and is held to a global cap of 120 an hour. Either way: +91 mobiles only, 5 per number per 15 minutes, an 8 s MSG91 timeout, and only the 6-digit code reaches the fixed DLT template. Set the secret in the Supabase "Send SMS" hook and in Vercel
 - **Where:** `apps/web/app/api/v1/auth/sms-hook/route.ts:32`
 - **Raised by:** 3 findings from 3 audit teams (AuthZ: admin, cron and misc routes; Reliability, scalability and operability; Web application security)
 - **Impact:** SMS bill-drain and international toll-fraud (SMS pumping) at AMClub's cost. The attack defeats the OTP limiter the team added specifically for bill-drain. It enables SMS-bombing of any phone number, and branded phishing, e.g. 'AMClub code 123456, share it with our agent'. MSG91/DLT sender reputation could be suspended, which would break login for everyone. If MSG91_AUTH_KEY is not yet set in production, the hook returns 500 and this is latent. It becomes live the moment SMS goes live.
@@ -228,7 +228,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H4. The WhatsApp webhook accepts unsigned requests whenever the driver resolves to `stub`
 
-- **Status:** Fixed in code (wave 1). The stub driver answers 401 `webhook_not_configured` unless NODE_ENV is not production and `WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=true`; the server caps bodies at 256 KB
+- **Status:** Fixed (wave 1, PR #59). The stub driver answers 401 `webhook_not_configured` unless NODE_ENV is not production and `WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=true`; the server caps bodies at 256 KB
 - **Where:** `apps/agent-runtime/src/whatsapp/inbound.ts:71`
 - **Raised by:** 3 findings from 3 audit teams (AI agents and LLM security; Reliability, scalability and operability; Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** Unauthenticated impersonation of users' WhatsApp channel: forged consent records (DPDP), mass opt-out, and confirmations that bypass the confirm gate for quotes and requests, all recorded as the user's own decision. The spoofed traffic can also drain the platform AI budget and cause DB and queue growth.
@@ -236,7 +236,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H5. Admin "Retry payout" releases held payouts past the dispute hold and the release gates
 
-- **Status:** Fixed in code (wave 2, ADR 026). "Retry payout" reschedules `failed` payouts only (409 `payout_held_use_release` for a held one), and every payout run passes `payoutRunBlockers` after the claim
+- **Status:** Fixed (wave 2, PR #60, ADR 026). "Retry payout" reschedules `failed` payouts only (409 `payout_held_use_release` for a held one), and every payout run passes `payoutRunBlockers` after the claim
 - **Where:** `apps/web/app/api/v1/admin/orders/[id]/route.ts:65`, `apps/web/app/api/v1/admin/orders/[id]/route.ts:67`
 - **Raised by:** 4 findings from 4 audit teams (Architecture and code health; AuthZ: admin, cron and misc routes; Payments and money integrity; Reliability, scalability and operability)
 - **Impact:** Money leaves the platform in exactly the states the release gates exist to block: open dispute, open return, missing delivery evidence, return window running. This breaks the MART_DESIGN §4.3 'NEVER released' rule and the ADR-014 dispute protections. The buyer's refund is then blocked, or the platform pays twice. Any `ops` account (not only the founder) can do this with one click, and no dossier is required.
@@ -244,7 +244,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H6. Order status writes are not compare-and-set, so crons can overwrite a dispute or revision and still run money side effects
 
-- **Status:** Fixed in code (wave 2, ADR 026). Every order status write is compare-and-set: a party that loses gets 409 `order_changed` and runs no side effect, a cron that loses skips the order, and goods actions stop at a 0-row update
+- **Status:** Fixed (wave 2, PR #60, ADR 026). Every order status write is compare-and-set: a party that loses gets 409 `order_changed` and runs no side effect, a cron that loses skips the order, and goods actions stop at a 0-row update
 - **Where:** `apps/web/lib/orders/transitions.ts:404`, `apps/web/lib/orders/transitions.ts:304`
 - **Raised by:** 4 findings from 4 audit teams (Architecture and code health; AuthZ: buyer flows (rfq, orders, checkout, me, profile, pools, webhooks); Payments and money integrity; Reliability, scalability and operability)
 - **Impact:** The order ends 'completed' while a dispute is open. The dispute console's resolve CAS (`.eq('status','disputed')`) can then never match, so the dispute cannot be settled through ADR-014's single rule. A requested revision is silently dropped. A payout is scheduled on a contested order, and only the founder approval gate stops the transfer. Double submits also write duplicate events and notifications. This breaks hard rule 8: the API is supposed to reject illegal transitions.
@@ -252,7 +252,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H7. A refund that fails after the status write is never retried, and ops cannot finish it from admin
 
-- **Status:** Fixed in code (wave 2, ADR 026). A failed refund leaves a `refund_failed` event; the auto-cancel cron re-drives owed refunds through the key-guarded `processRefund` after 10 idle minutes, and admin has "Finish refund"
+- **Status:** Fixed (wave 2, PR #60, ADR 026). A failed refund leaves a `refund_failed` event; the auto-cancel cron re-drives owed refunds through the key-guarded `processRefund` after 10 idle minutes, and admin has "Finish refund"
 - **Where:** `apps/web/lib/orders/transitions.ts:390`
 - **Raised by:** 2 findings from 2 audit teams (Architecture and code health; Reliability, scalability and operability)
 - **Impact:** The buyer's captured money is never returned. Nothing alerts anyone, and ops have no supported way to finish the refund short of a manual database edit. Once live keys are on, any transient gateway error on a refund causes this.
@@ -268,7 +268,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H9. Payout transfer is not idempotent: a timeout after Razorpay creates the transfer marks it failed, and a retry pays again
 
-- **Status:** Fixed in code (wave 2, ADR 026). Transfers carry `notes.payout_id`; only a definite rejection marks a payout `failed`, anything ambiguous stays `processing` with `payout_unconfirmed`; a retry first asks the gateway for that payout's transfer, and the reconcile cron settles stuck payouts after 30 minutes
+- **Status:** Fixed (wave 2, PR #60, ADR 026). Transfers carry `notes.payout_id`; only a definite rejection marks a payout `failed`, anything ambiguous stays `processing` with `payout_unconfirmed`; a retry first asks the gateway for that payout's transfer, and the reconcile cron settles stuck payouts after 30 minutes
 - **Where:** `apps/web/lib/payments/payout.ts:69`, `apps/web/lib/payments/payout.ts:64`
 - **Raised by:** 2 findings from 2 audit teams (Payments and money integrity; Reliability, scalability and operability)
 - **Impact:** The provider's full earnings are transferred twice from the platform balance, which cannot be recovered without a Route reversal. Or a provider is silently never paid. FOLLOWUPS already lists the missing gateway key for a crash between the transfer and the 'paid' write. This is a different case: a transfer that throws but did execute, which the UI currently routes to a one-click retry.
@@ -276,7 +276,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### H10. sharp 0.34.5 (libheif / libvips advisories) decodes attacker-supplied bytes in upload routes
 
-- **Status:** Fixed in code (wave 1). sharp 0.35.4; every loader blocked except JPEG / PNG / WebP; uploads are magic-byte sniffed before decode and capped at 40 MP (`lib/images/untrusted.ts`)
+- **Status:** Fixed (wave 1, PR #59). sharp 0.35.4; every loader blocked except JPEG / PNG / WebP; uploads are magic-byte sniffed before decode and capped at 40 MP (`lib/images/untrusted.ts`)
 - **Where:** `apps/web/app/api/v1/profile/provider/logo/route.ts:44`
 - **Raised by:** 1 finding from 1 audit team (Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** The vulnerable libheif/libvips parsers are reachable by any signed-in user. At minimum this is a function crash or DoS. At worst it is code execution in a function that holds SUPABASE_SERVICE_ROLE_KEY, the Razorpay secrets, CRON_SECRET and COLUMN_ENCRYPTION_KEY, which would compromise the whole database. I could not verify a working exploit for these specific CVEs.
@@ -284,7 +284,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M1. `generate_order_number()` is callable by anon and burns the sequence; LPAD truncation later collides
 
-- **Status:** Fixed in code (wave 1): migration 0074 revokes EXECUTE from clients, revokes the sequence, and pads to at least 6 digits without truncation. Applies to production after approval
+- **Status:** Fixed on production (0074, applied 2026-09-24; PR #59): EXECUTE and the sequence are service-role only, and the number pads to at least 6 digits without truncation
 - **Where:** `packages/db/src/migrations/0000_robust_phalanx.sql:500`
 - **Raised by:** 1 finding from 1 audit team (Database: RLS, grants, functions, views, storage)
 - **Impact:** Unauthenticated denial of the order-materialisation money path once live Razorpay payments are enabled. It produces captured payments with no order and manual refunds. The gaps in invoice serials also cause GST record-keeping noise.
@@ -324,7 +324,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M6. `safeNext` open redirect via tab / CR / LF in `next`
 
-- **Status:** Fixed in code (wave 1). `safeNext` rejects control characters and backslashes and any value that resolves off-origin; the OAuth callback re-checks the origin
+- **Status:** Fixed (wave 1, PR #59). `safeNext` rejects control characters and backslashes and any value that resolves off-origin; the OAuth callback re-checks the origin
 - **Where:** `packages/shared/src/safe-next.ts:16`, `packages/shared/src/safe-next.ts:17`
 - **Raised by:** 2 findings from 2 audit teams (AuthZ: admin, cron and misc routes; Web application security)
 - **Impact:** A trusted AMClub login flow ends on an attacker page that can pose as AMClub, e.g. 'session expired, re-enter OTP' or a fake UPI payment page, right after a real login. Admins are not affected: their destination is fixed. Session tokens are not leaked by the redirect itself.
@@ -435,7 +435,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M19. Services payout release never re-checks the order status or an open dispute
 
-- **Status:** Fixed in code (wave 2, ADR 026). The release route answers 409 `order_not_releasable` outside the release statuses, and `runPayouts` holds any payout whose order is not releasable (reason `order_status:<s>`)
+- **Status:** Fixed (wave 2, PR #60, ADR 026). The release route answers 409 `order_not_releasable` outside the release statuses, and `runPayouts` holds any payout whose order is not releasable (reason `order_status:<s>`)
 - **Where:** `apps/web/app/api/v1/admin/payouts/[id]/route.ts:58`, `apps/web/app/api/v1/admin/payouts/[id]/route.ts:71`
 - **Raised by:** 2 findings from 2 audit teams (Payments and money integrity; Web-side agent libraries and the deferred-release RFQ lifecycle)
 - **Impact:** Breaks the invariant that payouts release ONLY from completed/resolved_release/resolved_partial. The provider is paid during an open dispute and the buyer's refund path is blocked.
@@ -499,7 +499,7 @@ Each issue lists every confirmed finding that raised it. Impact and fix are the 
 
 ### M27. next 15.5.19 is below the patched releases (image optimizer, SSRF, cache and DoS advisories)
 
-- **Status:** Fixed in code (wave 1). next and eslint-config-next 15.5.26
+- **Status:** Fixed (wave 1, PR #59). next and eslint-config-next 15.5.26
 - **Where:** `apps/web/package.json:55`
 - **Raised by:** 1 finding from 1 audit team (Supply chain, CI/CD, infra config, mobile app)
 - **Impact:** Current production exposure on Vercel is probably limited. But the deployed framework carries a critical RCE advisory whose preconditions (AVIF on, an attacker-reachable remote pattern) the app's own config meets, so any hosting change or self-hosted run is exposed. The cache-confusion advisories concern server-side fetch with request bodies, which the agent and LLM calls make.

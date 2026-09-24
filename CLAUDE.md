@@ -127,7 +127,7 @@ any → held               (dispute open, provider suspended, or bank verificati
   - The WhatsApp webhook refuses unsigned requests unless it is not production and `WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=true`.
   - **Decode an uploaded image only through `openUploadImage`** (`lib/images/untrusted.ts`: magic-byte sniff, JPEG / PNG / WebP loaders only, 40 MP cap).
   - Redirect targets go through shared `safeNext`; the middleware answers 400 for control characters and backslashes and never follows an off-origin next-intl redirect.
-  - 0074: `generate_order_number` and `order_number_seq` are service-role only; the advisor-flagged functions pin `search_path`. `verify-authz` §9 proves it.
+  - 0074 (applied to production 2026-09-24): `generate_order_number` and `order_number_seq` are service-role only; the advisor-flagged functions pin `search_path`. `verify-authz` §9 proves it.
 - **ADR-026 landed (money safety, audit wave 2; no migration):**
   - **One run-time release rule:** `payoutRunBlockers` (`lib/payments/release-gate.ts`) runs inside `runPayouts` after the claim; a payout moves only from `PAYOUT_RELEASE_STATUSES`, and a plain `completed` order must also clear the goods / services evidence gate. Blocked → `held` with the reasons. Never add a release path around `runPayouts`.
   - **Transfers are confirmed, never assumed:** `notes.payout_id` on every transfer; only a definite rejection marks `failed`; anything ambiguous stays `processing` with `payout_unconfirmed`; a retry calls `findTransfer` first; the reconcile cron settles stuck payouts (`settleUnconfirmedPayouts`).
