@@ -82,7 +82,8 @@ export default async function CategoryListingPage({
         </div>
       </div>
 
-      {/* Other categories quick nav */}
+      {/* Other categories quick nav — the same 32px centred chip as the service chips below (without
+          `inline-flex items-center` the global 44px link minimum left the label at the top of a taller pill). */}
       <div className="mb-6 flex flex-wrap gap-2">
         {allCategories
           .filter((c) => c.slug !== category)
@@ -91,7 +92,7 @@ export default async function CategoryListingPage({
             <Link
               key={c.slug}
               href={`/services/${c.slug}`}
-              className="rounded-chip border border-border bg-surface px-3 py-1 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
+              className="inline-flex min-h-[32px] items-center rounded-chip border border-border bg-surface px-3 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
             >
               {pickI18n(c.nameI18n, locale)}
             </Link>
