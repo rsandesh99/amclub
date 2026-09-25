@@ -1,5 +1,5 @@
 {
-  "$comment": "E14 FR-14.1 — the ONE list of user-facing namespaces for te / ta: the buying path, plus every other buyer, provider and public screen (buyer home, provider Today / listings / earnings, profile and signup, the assistant, group requests, Why AMClub, legal and help). Internal admin namespaces (admin, admin_*, trust_admin, the /admin/dev/ui gallery dev_ui) stay English and are not listed. `pnpm --filter @amclub/web i18n:coverage` fails when any key in these namespaces is missing in a locale below (live file or reviewed-pending draft); `--strict` counts drafts as missing (the launch gate). The drafts overlay (EXP_V3_LOCALES) reads the same list. Notification templates are the `notify` namespace (`lib/i18n/notify.ts`).",
+  "$comment": "E14 FR-14.1 — the ONE list of user-facing namespaces for te / ta: the buying path, plus every other buyer, provider and public screen (buyer home, provider Today / listings / earnings, profile and signup, the assistant, group requests, Why AMClub and help). The `legal` namespace (the Terms / Privacy / Refund / Provider Addendum texts) is deliberately NOT listed: its machine drafts stay unrendered until counsel and a native reviewer approve them, so te / ta readers see the English documents. Internal admin namespaces (admin, admin_*, trust_admin, the /admin/dev/ui gallery dev_ui) stay English and are not listed. `pnpm --filter @amclub/web i18n:coverage` fails when any key in these namespaces is missing in a locale below (live file or reviewed-pending draft); `--strict` counts drafts as missing (the launch gate). The drafts overlay (EXP_V3_LOCALES) reads the same list. Notification templates are the `notify` namespace (`lib/i18n/notify.ts`).",
   "locales": ["te", "ta"],
   "buyingPath": [
     "catalog", "services", "service_page", "search_v3", "filters_v3", "recent_v3", "trust", "packages_v3",
@@ -12,6 +12,6 @@
     "partner_home", "partner_v3", "partner_munshi", "score_card", "trust_settings",
     "listings", "addons", "bundles", "tier_editor", "content_translate", "quote_v3", "earnings",
     "pools", "mart", "profile", "msme_signup", "provider_signup", "onboarding_v3", "licences_v3", "plans",
-    "auth", "gateway", "landing", "help", "grievance", "legal", "legal_gate", "suspended", "coming_soon"
+    "auth", "gateway", "landing", "help", "grievance", "legal_gate", "suspended", "coming_soon"
   ]
 }

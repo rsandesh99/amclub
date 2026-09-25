@@ -69,3 +69,11 @@ category ≥ 85 %, current eval version — shared `voice-languages.ts`).
    A pass or a fail is recorded; a keyless (stub) STT is never recorded.
 3. Add the language to `voice_search_languages` at `/admin/agents`. A failing
    re-run switches it back off by itself.
+
+## Legal texts wait for counsel (2026-09-25)
+
+Machine drafts of the `legal` namespace (Terms, Privacy, Refund Policy, Provider Addendum) sit in
+`apps/web/messages/drafts/pending-counsel/{te,ta}.legal.json`. Nothing reads that folder: the namespace is
+deliberately left out of `apps/web/i18n/coverage.config.json`, so te / ta readers see the English documents
+until counsel and a native reviewer approve a translation. To publish one, copy the reviewed `legal` object into
+the live `messages/<locale>.json` (or into `messages/drafts/<locale>.json` and add `legal` to the coverage list).
