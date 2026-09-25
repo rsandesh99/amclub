@@ -30,6 +30,16 @@ export function estimateSttCostPaise(durationMs: number, stub: boolean): number 
   return Math.ceil((durationMs / 60_000) * perMin)
 }
 
+/** Audit M24 — the fallback rate when SARVAM_COST_PAISE_PER_MIN is unset (a conservative ₹0.50 / audio-minute). */
+export const STT_FALLBACK_PAISE_PER_MIN = 50
+
+/** What a speech-to-text call charges the AI budget: the estimate, else the fallback — never ₹0 for a live call. */
+export function sttBudgetChargePaise(durationMs: number, stub: boolean): number {
+  if (stub) return 0
+  const e = estimateSttCostPaise(durationMs, false)
+  return e ?? Math.max(1, Math.ceil((Math.max(0, durationMs) / 60_000) * STT_FALLBACK_PAISE_PER_MIN))
+}
+
 /**
  * OpenRouter usage (raw) -> paise. Stub -> 0. Vendor `cost` (USD) when present;
  * otherwise estimated from the raw token counts (never null for a live call).

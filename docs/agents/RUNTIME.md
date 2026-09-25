@@ -114,8 +114,52 @@ that run is refused because of the environment, delete that one line from the jo
 
 ## Health & smoke
 
-- `GET https://amc-agent-runtime.fly.dev/health` → `{ ok, missing: [...] }`
-  (`missing` lists any unset required config).
+- `GET https://amc-agent-runtime.fly.dev/health` → `{ ok, missing: [...], degraded: [...], worker, residency }`
+  (`missing` lists any unset required config). Audit M33 / M23:
+  - `worker` = `{ state: disabled | starting | running | failed | stopped, databaseUrl, since, queues,
+    lastErrorAt, lastSweep: { pending, requeued, stale, error, at } }` (the error text stays in the logs — the
+    endpoint is public). `requeued > 0` means inbound WhatsApp
+    messages were stored but never processed until the sweep re-drove them; `stale > 0` means some older than
+    6 h were never processed (look at the logs for that window).
+  - `residency` = `{ mode, required }`, the model gateway's posture (`enforced | waived | unconfigured | opt_in`,
+    see `docs/agents/SECURITY.md`); `unconfigured` means every model call carrying user data is refused. The
+    waiver reason is logged at boot and shown on `/admin/agents`, not here.
+  - HTTP **503** while `AGENT_ENABLED=true` and the worker is not `running` (the Fly check turns red).
+- The process **exits** when the worker cannot start (Fly restarts the machine) — it used to log and keep
+  serving while nothing processed the stored messages.
+
+## Queues (audit M32)
+
+Every pg-boss queue is declared once in `apps/agent-runtime/src/queues.ts` (`Q`) and created by `startWorker`
+before the first send; pg-boss v10 silently drops a send to a queue that was never created (that is how the
+weekly `agent.munshi.growth` job never ran). A send that inserts nothing throws `enqueue_dropped:<queue>` —
+`POST /internal/jobs/:name` answers 503 — unless it is a singleton collision (an overlapping cron tick), which
+answers `{ ok: true, jobId: null, deduped: true }`. The web crons record `enqueued: jobId != null` (+ `deduped`,
+`reason`) in their heartbeat (`cronEnqueueOutcome`). `pnpm --filter @amclub/agent-runtime test` proves it
+(`queues.test.ts`: every queue worked / scheduled / sent to was created, and a static check that every
+`send` / `work` / `schedule` names a registry entry).
+
+| queue | policy | fed by |
+|---|---|---|
+| `agent.run` | pg-boss default | `POST /internal/jobs/hello` |
+| `wa.inbound` | retry 2 × 30 s; job id = message id | the webhook, the sweep |
+| `wa.inbound.sweep` | no retry; pg-boss cron `* * * * *` | the runtime itself |
+| `agent.payout_dossier`, `agent.dispute_triage` | retry 2 × 300 s | web triggers |
+| `agent.onboarding` | retry 1 × 60 s | web start route, the inbound job, `onboarding.expire` |
+| `agent.munshi.scan` / `.followup` / `.growth` | no retry; singleton per tick | web crons |
+| `agent.munshi.decide` | retry 1 × 60 s | the inbound job |
+| `agent.support.reply` / `.decide` | retry 1 × 60 s | the inbound job |
+| `agent.procurement.turn` / `.decide` | retry 1 × 60 s | the inbound job, web composer / taps |
+| `agent.procurement.watch` | no retry; singleton per tick | web cron |
+
+**Module format.** The runtime package is CommonJS (no `"type": "module"`). Under ESM, Node could not see the
+named exports that the source packages (`@amclub/shared`, `@amclub/agent-core`, compiled by tsx as CommonJS)
+re-export with `export *`, so `node --import tsx src/main.ts` (the Dockerfile's CMD) died at the first import
+(`does not provide an export named 'agentSettingDefault'`) — reproduced on 2026-09-24 (Node 22, tsx 4.22) both in
+a checkout and in the `pnpm deploy` layout the image runs. As CommonJS it boots in both (`[server] agent-runtime
+listening`). The verify rigs never saw this: they `require()` the runtime modules from CommonJS scripts. The
+Dockerfile's `pnpm deploy --legacy` also failed the image build (pnpm 9.15, the `packageManager` pin, has no such
+flag); it is plain `pnpm deploy` now. So no image built from the Dockerfile before this fix could have served.
 - Internal endpoints (`/internal/runs/:id/resume`, `/internal/jobs/:name`)
   require a valid `AMC-Runtime` HMAC and are not publicly usable.
 
@@ -164,6 +208,16 @@ fly scale count 0 --app amc-agent-runtime     # rollback = scale to zero
 The web surfaces stay dark on their own flags, so scaling the runtime to zero
 never breaks the spine — bounded agent calls (run_id=null) run on Vercel
 regardless, and with `AGENT_ENABLED=false` even those 404.
+
+## Migration note (0079)
+
+`0079_whatsapp_inbound_binding.sql` is **NOT staged** — apply it before (or with) the runtime deploy: it adds
+`wa_messages.processed_at` (default `now()`, so history is never re-driven) + a partial index for the sweep, and
+the `users.phone` trigger that unbinds a number's conversations and revokes its WhatsApp grants when the phone
+changes. The runtime tolerates its absence (stores without the column, logs once; the sweep reports
+`sweep_read_failed`). Rollback: `DROP TRIGGER users_phone_change_wa_unbind ON users; DROP FUNCTION
+wa_unbind_on_phone_change(); DROP INDEX wa_messages_unprocessed_in_idx; ALTER TABLE wa_messages DROP COLUMN
+processed_at;` after reverting the runtime.
 
 ## Migration note (0027)
 

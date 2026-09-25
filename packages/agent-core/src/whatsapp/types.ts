@@ -6,6 +6,8 @@
  * calls sendTemplate. Transactional only (§5.5): no marketing path exists here.
  */
 
+import type { MediaLimits } from './media'
+
 export type WhatsAppDriverName = 'meta_cloud' | 'interakt' | 'stub'
 
 export type WaLocale = 'en' | 'hi' | 'te'
@@ -77,7 +79,12 @@ export interface WhatsAppProvider {
    */
   sendButtons(to: string, text: string, buttons: WaButton[], listLabel?: string): Promise<SendResult>
   sendMedia(to: string, media: { url?: string; bytes?: Uint8Array; mime: string; caption?: string }): Promise<SendResult>
-  downloadMedia(mediaRef: string): Promise<MediaDownload>
+  /**
+   * Audit M34: bounded — each fetch times out, the MIME must be on the allow-list
+   * and the body is read with a byte cap (DEFAULT_MEDIA_LIMITS when omitted).
+   * Refusals throw MediaRefusedError. Called by the wa.inbound job, never the webhook.
+   */
+  downloadMedia(mediaRef: string, limits?: MediaLimits): Promise<MediaDownload>
   /** Parse a raw webhook body into inbound messages + delivery statuses. */
   parseInbound(body: unknown): ParsedInbound
   /** Verify the webhook came from the vendor (HMAC / shared secret). */

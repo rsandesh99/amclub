@@ -5,18 +5,21 @@
  * the seller confirms every field, the confirmed listing + the proposal are
  * written to ai_decisions by the create route. The agent never writes a row.
  *
- * ONE temperature-0 chat call through the shared agent-core gateway (Track F:
- * no direct model-host fetch outside agent-core/src/llm — so max_tokens, the
- * residency guard and the per-tier base URL apply). Vision-capable small model
+ * ONE temperature-0 chat call through the bounded helper (audit M24: the budget
+ * caps + the ledger) over the shared agent-core gateway (Track F: no direct
+ * model-host fetch outside agent-core/src/llm — so max_tokens, the residency
+ * guard and the per-tier base URL apply). Vision-capable small model
  * (CATALOG_AGENT_MODEL, default flash-lite — passed as the explicit model, so the
  * document_extract tier default never applies here); images as URLs; strict
  * JSON, Zod-validated and vocabulary-clamped here — an out-of-vocabulary value
  * never reaches the seller. STUB when the gateway has no key (keyword heuristic,
- * uncertain=true). The draft route writes the ONE ai_invocations row (unchanged).
+ * uncertain=true). The bounded helper writes the ONE ai_invocations row.
  */
 import 'server-only'
 import { z } from 'zod'
-import { createGateway, envelope, GatewayValidationError, type ChatResult, type PromptRef } from '@amclub/agent-core'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { envelope, GatewayValidationError, type BoundedChatResult, type PromptRef } from '@amclub/agent-core'
+import { boundedChatJson, BudgetExceededError } from '@/lib/agent/bounded'
 import {
   catalogDraftSchema,
   GST_RATE_BPS_OPTIONS,
@@ -144,12 +147,20 @@ function catalogPrompt(categories: MartCategoryRow[]): PromptRef {
   return { id: 'mart_catalog_draft', version: 'v1', taskClass: 'document_extract', schemaRef: 'catalogDraftSchema', text: systemPrompt(categories), maxTokens: 900 }
 }
 
-export async function draftListing(input: CatalogDraftInput): Promise<CatalogDraftResult> {
+/**
+ * Audit M24: the call goes through the bounded helper — the budget caps (a seller outside the cohort spends from the
+ * open envelope) are checked BEFORE the gateway, and the helper writes the ONE ai_invocations row (feature
+ * `catalog_draft`, ok / stub / error, with the cost) — it used to call the gateway directly and skip the budget.
+ * A BudgetExceededError propagates (the route answers `quota`).
+ */
+export async function draftListing(admin: SupabaseClient, userId: string, input: CatalogDraftInput): Promise<CatalogDraftResult> {
   const model = process.env['CATALOG_AGENT_MODEL'] ?? DEFAULT_MODEL
   const description = input.description.trim()
-  let res: ChatResult<Record<string, unknown>>
+  let res: BoundedChatResult<Record<string, unknown>>
   try {
-    res = await createGateway().chatJson({
+    res = await boundedChatJson(admin, {
+      userId,
+      feature: 'catalog_draft',
       // Seller photos + description → structured facts: the document_extract class ('in' residency).
       taskClass: 'document_extract',
       prompt: catalogPrompt(input.categories),
@@ -167,8 +178,10 @@ export async function draftListing(input: CatalogDraftInput): Promise<CatalogDra
         console.warn('[catalog-agent] no LLM key — would draft with', model, '(stub heuristic used)')
         return {}
       },
+      meta: { step: 'parse', image_count: input.imageUrls.length, description_chars: description.length },
     })
   } catch (e) {
+    if (e instanceof BudgetExceededError) throw e
     // Same failure surface as before, so the route's classifyVendorFailure → 402 / 503 mapping is unchanged.
     if (e instanceof GatewayValidationError) throw new Error(`gateway: ${e.reason === 'schema' ? 'response failed schema validation' : 'non-JSON response'}`)
     const m = e instanceof Error ? /^gateway (\d{3})(?::\s*([\s\S]*))?$/.exec(e.message) : null
@@ -178,5 +191,5 @@ export async function draftListing(input: CatalogDraftInput): Promise<CatalogDra
   if (res.stub) return { draft: stubDraft(input), vendor: 'stub', stub: true, requestId: null }
   const draft = sanitize(res.data, input.categories)
   if (!draft) throw new Error('gateway: response failed schema validation')
-  return { draft, vendor: `gateway:${model}`, stub: false, requestId: null, usage: res.usage.raw ?? undefined }
+  return { draft, vendor: `gateway:${model}`, stub: false, requestId: null, usage: (res.invocationMeta['usage'] as Record<string, unknown> | undefined) ?? undefined }
 }

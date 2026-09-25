@@ -4,8 +4,11 @@ import {
   createGateway,
   DEFAULT_MAX_TOKENS_BY_TIER,
   gatewayConfigFromEnv,
+  GatewayHttpError,
   GatewayValidationError,
+  ResidencyUnconfiguredError,
   ResidencyViolationError,
+  residencyPosture,
   type GatewayConfig,
 } from './gateway'
 import type { PromptRef } from '../prompts/registry'
@@ -166,5 +169,80 @@ describe('gateway — data-residency guard (opt-in)', () => {
     const gw = createGateway(cfg(t.fetchImpl, { apiKey: null, residencyEnforce: true, inResidencyHosts: [] }))
     const r = await gw.chatJson({ taskClass: 'quote_extract', prompt, schema, stub: () => ({ ok: true }) })
     expect(r.stub).toBe(true)
+  })
+})
+
+describe('gateway — residency posture fails closed in production (audit M23)', () => {
+  const prod = { NODE_ENV: 'production', AGENT_ENABLED: 'true' }
+  it('production + agents on + no decision = unconfigured', () => {
+    expect(residencyPosture(prod).mode).toBe('unconfigured')
+    expect(residencyPosture({ ...prod, AGENT_RESIDENCY_ENFORCE: 'true' }).mode).toBe('unconfigured') // on, but no hosts
+    expect(residencyPosture({ ...prod, AGENT_RESIDENCY_WAIVER: 'short' }).mode).toBe('unconfigured') // not a recorded reason
+    expect(residencyPosture({ VERCEL_ENV: 'production', AGENT_ENABLED: 'true' }).mode).toBe('unconfigured')
+  })
+  it('enforcement with hosts, or a recorded waiver, is a decision', () => {
+    expect(residencyPosture({ ...prod, AGENT_RESIDENCY_ENFORCE: 'true', AGENT_IN_RESIDENCY_HOSTS: 'llm.in.example' })).toMatchObject({ mode: 'enforced', hosts: ['llm.in.example'] })
+    const w = residencyPosture({ ...prod, AGENT_RESIDENCY_WAIVER: 'DPA signed 2026-09-24 with OpenRouter; ZDR on; review 2026-12-31' })
+    expect(w.mode).toBe('waived')
+    expect(w.waiver).toContain('DPA signed')
+  })
+  it('an undecided production posture refuses only with AGENT_RESIDENCY_FAIL_CLOSED=true (held until the decision is recorded)', () => {
+    expect(residencyPosture(prod)).toMatchObject({ mode: 'unconfigured', refuses: false })
+    expect(residencyPosture({ ...prod, AGENT_RESIDENCY_FAIL_CLOSED: 'true' })).toMatchObject({ mode: 'unconfigured', refuses: true })
+    expect(residencyPosture({ ...prod, AGENT_RESIDENCY_FAIL_CLOSED: 'true', AGENT_RESIDENCY_WAIVER: 'DPA signed 2026-09-24; review 2026-12-31' })).toMatchObject({ mode: 'waived', refuses: false })
+  })
+  it("undecided and not fail-closed: an 'in' class is sent (logged), without the ZDR preference", async () => {
+    const t = transport('{"ok":true}')
+    const gw = createGateway(cfg(t.fetchImpl, { residencyMode: 'unconfigured', residencyRefuses: false, openRouterZdr: false }))
+    const r = await gw.chatJson({ taskClass: 'quote_extract', prompt, schema })
+    expect(r.data).toEqual({ ok: true })
+    expect(t.calls).toHaveLength(1)
+  })
+  it('outside production, or with agents off, the guard stays opt-in', () => {
+    expect(residencyPosture({ NODE_ENV: 'development', AGENT_ENABLED: 'true' }).mode).toBe('opt_in')
+    expect(residencyPosture({ NODE_ENV: 'production' }).mode).toBe('opt_in')
+  })
+  it("unconfigured refuses every 'in' class before any request, loudly; an 'any' class still goes", async () => {
+    const t = transport('{"ok":true}')
+    const gw = createGateway(cfg(t.fetchImpl, { residencyMode: 'unconfigured' }))
+    const err = await gw.chatJson({ taskClass: 'quote_extract', prompt, schema }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ResidencyUnconfiguredError)
+    expect((err as ResidencyUnconfiguredError).code).toBe('residency_unconfigured')
+    expect(t.calls).toHaveLength(0)
+    const ok = await gw.chatJson({ taskClass: 'translation', prompt, schema })
+    expect(ok.data.ok).toBe(true)
+    await expect(gw.embed(['x'])).rejects.toBeInstanceOf(ResidencyUnconfiguredError)
+  })
+  it('unconfigured stub mode still answers (nothing leaves the process)', async () => {
+    const t = transport('{"ok":true}')
+    const r = await createGateway(cfg(t.fetchImpl, { apiKey: null, residencyMode: 'unconfigured' })).chatJson({ taskClass: 'quote_extract', prompt, schema, stub: () => ({ ok: true }) })
+    expect(r.stub).toBe(true)
+  })
+  it('waived and enforced postures allow the call', async () => {
+    const t = transport('{"ok":true}')
+    expect((await createGateway(cfg(t.fetchImpl, { residencyMode: 'waived' })).chatJson({ taskClass: 'quote_extract', prompt, schema })).data.ok).toBe(true)
+  })
+})
+
+describe('gateway — OpenRouter retention preferences on every request (audit M23)', () => {
+  it('sends provider { data_collection: deny, zdr: true } to OpenRouter only', async () => {
+    const t = transport('{"ok":true}')
+    const gw = createGateway(cfg(t.fetchImpl, { baseUrlByTier: { frontier: 'https://llm.in.example/v1' } }))
+    await gw.chatJson({ taskClass: 'quote_extract', prompt, schema })
+    await gw.chatJson({ taskClass: 'dispute_triage', prompt, schema })
+    expect(t.calls[0]!.body['provider']).toEqual({ data_collection: 'deny', zdr: true })
+    expect(t.calls[1]!.body['provider']).toBeUndefined()
+  })
+  it('a 4xx is final (no retry) and a data-policy miss has its own code', async () => {
+    let n = 0
+    const f = (async () => {
+      n++
+      return new Response('{"error":{"message":"No endpoints found matching your data policy"}}', { status: 404 })
+    }) as unknown as typeof fetch
+    const err = await createGateway(cfg(f, { maxRetries: 3 })).chatJson({ taskClass: 'quote_extract', prompt, schema }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(GatewayHttpError)
+    expect((err as GatewayHttpError).code).toBe('provider_policy_unmatched')
+    expect((err as Error).message).toMatch(/^gateway 404: /)
+    expect(n).toBe(1)
   })
 })

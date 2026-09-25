@@ -23,7 +23,7 @@ export async function GET() {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
   const admin = await createAdminClient()
-  const proposals = await proposePools(admin)
+  const proposals = await proposePools(admin, { actorUserId: auth.userId })
   return NextResponse.json({ proposals }, { headers: { 'Cache-Control': 'private, no-store' } })
 }
 
@@ -35,7 +35,7 @@ export async function POST(_request: NextRequest) {
   const rl = await enforce(limiters.adminMutation, `admin:${auth.userId}`)
   if (!rl.ok) return tooManyRequests(rl.retryAfter)
   const admin = await createAdminClient()
-  const proposals = await proposePools(admin)
+  const proposals = await proposePools(admin, { actorUserId: auth.userId })
   const created = []
   for (const p of proposals) {
     const { id } = await createDraftPool(admin, p.draft, auth.userId, p.card_i18n)

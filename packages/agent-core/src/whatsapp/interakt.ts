@@ -9,6 +9,7 @@ import type {
   WhatsAppConfig,
   WhatsAppProvider,
 } from './types'
+import { DEFAULT_MEDIA_LIMITS, MediaRefusedError, baseMime, fetchWithTimeout, mimeAllowed, readCappedBody } from './media'
 
 /**
  * Interakt BSP driver. REST: POST https://api.interakt.ai/v1/public/message/
@@ -70,10 +71,26 @@ export function makeInteraktDriver(cfg: WhatsAppConfig, fetchImpl: typeof fetch 
       const type = media.mime.startsWith('image/') ? 'Image' : media.mime.startsWith('audio/') ? 'Audio' : 'Document'
       return send(to, { type, data: { message: media.caption ?? '', mediaUrl: media.url } })
     },
-    async downloadMedia(url): Promise<MediaDownload> {
-      const res = await fetchImpl(url)
-      if (!res.ok) throw new Error(`interakt media download failed (${res.status})`)
-      return { bytes: new Uint8Array(await res.arrayBuffer()), mime: res.headers.get('content-type') ?? 'application/octet-stream' }
+    async downloadMedia(url, limits = DEFAULT_MEDIA_LIMITS): Promise<MediaDownload> {
+      // The URL comes from the (secret-authenticated) webhook body: https only, never an internal scheme or host.
+      let parsed: URL
+      try {
+        parsed = new URL(url)
+      } catch {
+        throw new MediaRefusedError('bad_ref', 'media url')
+      }
+      if (parsed.protocol !== 'https:' || /^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(parsed.hostname) || parsed.hostname.endsWith('.internal')) throw new MediaRefusedError('bad_ref', 'media url host')
+      const res = await fetchWithTimeout(fetchImpl, parsed.toString(), { redirect: 'error' }, limits.timeoutMs)
+      if (!res.ok) {
+        await res.body?.cancel().catch(() => undefined)
+        throw new MediaRefusedError('http', `interakt media download failed (${res.status})`)
+      }
+      const mime = baseMime(res.headers.get('content-type'))
+      if (!mimeAllowed(mime, limits)) {
+        await res.body?.cancel().catch(() => undefined)
+        throw new MediaRefusedError('mime_not_allowed', mime || 'unknown')
+      }
+      return { bytes: await readCappedBody(res, limits.maxBytes), mime }
     },
     parseInbound(body): ParsedInbound {
       const messages: InboundMessage[] = []

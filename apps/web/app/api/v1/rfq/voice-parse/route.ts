@@ -6,7 +6,8 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { getTranscriber, getParser } from '@/lib/voice'
 import { VendorHttpError, classifyVendorFailure } from '@/lib/voice/types'
-import { BudgetExceededError } from '@/lib/agent/bounded'
+import { sttBudgetChargePaise } from '@amclub/agent-core'
+import { BudgetExceededError, assertBudget, boundedBudget } from '@/lib/agent/bounded'
 import { transcriberVendorTag } from '@/lib/voice/sarvam'
 import { estimateSttCostPaise, logAiInvocation } from '@/lib/voice/invocations'
 import { maybeClarify, requiredFieldsFor } from '@/lib/voice/clarify'
@@ -117,6 +118,18 @@ export async function POST(request: NextRequest) {
     sttStub = false
   } else {
     const clip = audio as File
+    // Audit M24: speech-to-text is paid, so it spends from the SAME AI budget as the model calls (the caps, and the open
+    // envelope for a user outside the cohort): checked before the vendor call, charged after it.
+    const { budget: sttBudget } = await boundedBudget(admin, userId)
+    try {
+      await assertBudget(sttBudget)
+    } catch (e) {
+      if (e instanceof BudgetExceededError) {
+        await logAiInvocation(admin, { userId, step: 'stt', vendor: transcriberVendorTag(), status: 'error', latencyMs: 0, costEstPaise: null, inputBytes: clip.size, error: `budget_${e.breach}`, meta: { budget_breach: e.breach } })
+        return NextResponse.json({ error: 'transcription_failed', cause: 'quota' }, { status: 502 })
+      }
+      throw e
+    }
     const sttStart = Date.now()
     try {
       const t = await getTranscriber().transcribeToEnglish({
@@ -125,6 +138,8 @@ export async function POST(request: NextRequest) {
         filename: clip.name || 'recording.webm',
       })
       ;({ transcript, languageCode, vendor: sttVendor, stub: sttStub } = t)
+      const sttCharge = sttBudgetChargePaise(durationMs, sttStub)
+      if (sttCharge > 0) await sttBudget.add(sttCharge).catch(() => undefined)
       await logAiInvocation(admin, {
         userId,
         step: 'stt',

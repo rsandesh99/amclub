@@ -18,7 +18,7 @@ publishes a profile). Every AMClub agent breaks at least one leg by construction
 | compare_pointers (S1.2) | the buyer's own quotes | none reaches the model (structured numbers only) | none | untrusted |
 | decline_message (S1.2) | none | the buyer's note, the RFQ title | none — a message the buyer sends | write |
 | rfq_quality (S1.5) | the buyer's own RFQ | RFQ text, transcript | none — the buyer answers / sends | write |
-| payout_dossier (S1.4) | order evidence under the ops token | milestone notes, photos | none — a card; the founder's click on the existing route | write |
+| payout_dossier (S1.4) | order evidence under the ops token | the order title, milestone notes, photos | none — a card; the founder's click on the existing route | write |
 | onboarding (S1.6) | the provider's own answers | WhatsApp answers | a LOCAL confirm gate the provider taps; the wizard writes | write (confirm) |
 | dispute_triage (S1.7) | evidence under the ops token | statements, thread, reason | none — the resolve route is the money path and refuses delegated tokens | write |
 | rfq_clarify / document_intake (S1.8) | the buyer's own clip / file | transcript, document text | none — the Create tap on the ordinary route | write |
@@ -159,12 +159,38 @@ discloses this, and the programme holds itself to these terms before any cohort 
   (`packages/agent-core/src/llm/model-hosts.static.test.ts`) fails if a model-host URL appears anywhere
   else in `apps/web/lib`, `apps/agent-runtime/src` or `packages/*/src` — so `max_tokens`, the cost ledger,
   the budget and the residency guard cannot be bypassed.
-- **Residency guard (opt-in).** Every task class carries a residency (`TASK_CLASS_RESIDENCY` in
-  `packages/shared/src/agent.ts`; `'in'` for anything with a user's documents, transcripts, onboarding
-  answers, drafts, quotes, dispute or support text). With `AGENT_RESIDENCY_ENFORCE=true` the gateway
-  refuses (`ResidencyViolationError`, code `residency_violation`, logged + an `error` ai_invocations row) to
-  send an `'in'` class to a host not in `AGENT_IN_RESIDENCY_HOSTS` (comma-separated hostnames). Default off,
-  so today's routing is unchanged; turn it on once an in-India endpoint serves the `'in'` tiers.
+- **Residency guard — fails closed in production (audit M23).** Every task class carries a residency
+  (`TASK_CLASS_RESIDENCY` in `packages/shared/src/agent.ts`; `'in'` for anything with a user's documents,
+  transcripts, onboarding answers, drafts, quotes, dispute or support text). With
+  `AGENT_RESIDENCY_ENFORCE=true` the gateway refuses (`ResidencyViolationError`, code `residency_violation`,
+  logged + an `error` ai_invocations row) to send an `'in'` class to a host not in `AGENT_IN_RESIDENCY_HOSTS`
+  (comma-separated hostnames). **In production with `AGENT_ENABLED=true` a decision is mandatory**
+  (`residencyPosture()` in `agent-core/src/llm/gateway.ts`):
+
+  | posture | when | effect |
+  |---|---|---|
+  | `enforced` | `AGENT_RESIDENCY_ENFORCE=true` + `AGENT_IN_RESIDENCY_HOSTS` | `'in'` classes go only to the listed hosts |
+  | `waived` | `AGENT_RESIDENCY_WAIVER=<reason>` (≥ 12 chars: why, the DPA reference, a review date) | calls allowed; the reason is logged at boot and shown on `/admin/agents` (runtime `/health` shows the mode) |
+  | `unconfigured` | production + agents on + neither | with `AGENT_RESIDENCY_FAIL_CLOSED=true`: **every `'in'` model call is refused** (`ResidencyUnconfiguredError`, code `residency_unconfigured`) before a byte leaves; features fall back (templates, rule-only reports, stub drafts). Without it (the founder's 2026-09-24 decision: held until the residency decision is recorded): calls go, logged once a minute with the count, runtime `/health` → `residency_undecided`, an amber banner on `/admin/agents` |
+  | `opt_in` | not production, or agents off | unchanged: enforcement only when `AGENT_RESIDENCY_ENFORCE=true` |
+
+  `unconfigured` is loud: one error line at boot, one per minute while calls are refused (with the count),
+  an `error` ai_invocations row per refused call, runtime `/health` → `degraded: ["residency_unconfigured"]`
+  and a red banner on `/admin/agents`. Stub mode (no key) is never refused — nothing leaves the process.
+  **Operator step (production has `AGENT_ENABLED=true`):** before this deploy, set on Vercel AND the runtime
+  either (a) `AGENT_RESIDENCY_ENFORCE=true` + `AGENT_IN_RESIDENCY_HOSTS` with the `'in'` tiers pointed there
+  (`AGENT_LLM_BASE_URL_<TIER>`), or (b) `AGENT_RESIDENCY_WAIVER` recording the decision, e.g.
+  `AGENT_RESIDENCY_WAIVER="OpenRouter ZDR + no-training confirmed, DPA ref <x>, review 2026-12-31"`. Record the
+  same in the table below.
+- **Retention preferences on every request (audit M23).** Once a residency decision is recorded (or fail-closed is
+  on), every chat / embedding request to OpenRouter carries `provider: { data_collection: 'deny', zdr: true }`
+  (`AGENT_OPENROUTER_ZDR=false` opts a deployment out, `true` forces it on) (`OPENROUTER_PROVIDER_PREFS`), so only endpoints
+  that neither collect nor retain prompts serve it — whatever the account setting says. A model with no such
+  endpoint answers 404; the gateway reports `provider_policy_unmatched` (logged, no retry: a 4xx is final) and
+  the fix is a ZDR-capable model for that tier (`AGENT_MODEL_<TIER>`).
+- **Support prompts are masked (audit M23).** `buildSupportIntentParts` / `buildTicketSummaryParts` run
+  `redactContactInfo` on the live message, the previous one and every user transcript turn before they are
+  enveloped; the stored copies already were.
 
 | Provider / endpoint | Tiers | No-training + ZDR confirmed | DPA signed (date, ref) | Owner |
 |---|---|---|---|---|
@@ -174,3 +200,38 @@ discloses this, and the programme holds itself to these terms before any cohort 
 
 A signed DPA with no-training terms for every provider in this table is a **blocker for enabling any agent
 cohort** (`docs/COMPLIANCE.md`).
+
+| Residency decision (audit M23) | Env | Recorded by / date | Review by |
+|---|---|---|---|
+| FOUNDER_FILL: enforced (hosts) or waived (reason) | `AGENT_RESIDENCY_ENFORCE` + `AGENT_IN_RESIDENCY_HOSTS`, or `AGENT_RESIDENCY_WAIVER` | FOUNDER_FILL | FOUNDER_FILL |
+
+## The AI budget cannot be bypassed — and outside traffic cannot drain it (audit M24)
+
+Every paid AI call spends from the same three caps (run / user-day / month, `agent_settings`):
+
+- **Model calls** go through the runner (runtime) or the bounded helper (`apps/web/lib/agent/bounded.ts` over
+  agent-core `runBoundedChatJson`): budget checked before, one `ai_invocations` row after, cost added. The Mart
+  Catalog Agent (`lib/mart/catalog-agent.ts`) and the Group-Buy pitch (`lib/mart/group-buy-agent.ts`, charged to
+  the admin, audience ops) used to call the gateway directly and skipped the budget; they now use the helper
+  (the helper accepts an in-code `PromptRef` for their per-call system text).
+- **Speech-to-text** (`/api/v1/rfq/voice-parse`, which the runtime also uses for voice notes) checks the same
+  budget before the Sarvam call and charges `sttBudgetChargePaise` after it (the estimate from
+  `SARVAM_COST_PAISE_PER_MIN`, else a conservative ₹0.50 / audio-minute — never ₹0 for a live call). A breach
+  answers `transcription_failed` with `cause: 'quota'`.
+- **The open envelope.** A user outside `cohort_user_ids` also spends from `budget_month_open_paise` (registry
+  default ₹2,000, never above the month cap; env `AGENT_BUDGET_MONTH_OPEN_PAISE`), counted on its own month
+  counter; a breach is `month_open_cap`. The rest of `budget_month_paise` is held for the cohort and ops, so the
+  ungated paid endpoints (voice parser, STT, catalog drafts) can no longer starve every agent. Edit it on
+  `/admin/agents`.
+- **Catalog drafts** are for a verified goods seller only (active provider with `sells_goods`, which needs a
+  verified GSTIN): 403 `not_a_seller` otherwise.
+
+## Trusted parts carry facts only (audit M43)
+
+The payout dossier's photo review put the order title — party-authored (the buyer's RFQ title or the
+provider's package title) — in a TRUSTED line. Its parts now come from agent-core
+`buildPhotoPlausibilityParts` (`src/dossier/parts.ts`): the title is an Envelope (`order_title`, cap 300), the
+milestone notes stay Envelopes, and every trusted value is reduced to a fact alphabet (slugs, ids, enums,
+timestamps). `parts.test.ts` asserts no party string reaches `trusted`, like the triage, support and Munshi
+builders; the eval harness (`photo_plausibility` and the `injection` photo cases) drives the same builder with
+the attack text in BOTH party slots.

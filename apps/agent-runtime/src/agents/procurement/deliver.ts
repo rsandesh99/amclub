@@ -10,6 +10,7 @@ import {
   type ProcurementLocale,
 } from '@amclub/shared'
 import { nowOf, recordTurn, type ProcurementRuntimeDeps, type SessionRow } from './store'
+import { boundConversationFor, conversationServesUser } from '../../whatsapp/binding'
 
 /**
  * S3.1 — delivery. Every reply is a template rendered by code (the model never writes a sentence the buyer reads).
@@ -20,13 +21,17 @@ import { nowOf, recordTurn, type ProcurementRuntimeDeps, type SessionRow } from 
 
 interface ConversationRow { id: string; phone_e164: string; window_open_until: string | null }
 
+/**
+ * Audit M41: the session's conversation only while it is still bound to the buyer AND is their current phone; else the
+ * conversation of the buyer's current phone. Never "the most recent inbound" (an old number is never a target).
+ */
 async function conversationFor(admin: SupabaseClient, row: SessionRow): Promise<ConversationRow | null> {
   if (row.conversation_id) {
-    const { data } = await admin.from('wa_conversations').select('id, phone_e164, window_open_until').eq('id', row.conversation_id).maybeSingle()
-    if (data) return data as ConversationRow
+    const { data } = await admin.from('wa_conversations').select('id, phone_e164, window_open_until, user_id').eq('id', row.conversation_id).maybeSingle()
+    const conv = data as (ConversationRow & { user_id: string | null }) | null
+    if (conv && (await conversationServesUser(admin, conv, row.user_id))) return { id: conv.id, phone_e164: conv.phone_e164, window_open_until: conv.window_open_until }
   }
-  const { data } = await admin.from('wa_conversations').select('id, phone_e164, window_open_until, last_inbound_at').eq('user_id', row.user_id).order('last_inbound_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle()
-  return (data as ConversationRow | null) ?? null
+  return boundConversationFor(admin, row.user_id)
 }
 
 export function renderReply(r: ProcurementReply, locale: ProcurementLocale): string {

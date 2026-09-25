@@ -248,8 +248,10 @@ async function http() {
     const deps: import('../../agent-runtime/src/agents/munshi/index').MunshiRuntimeDeps = {
       core, admin, whatsapp, apiUrl: BASE, agentEnabled: true, tokenFor: async ({ userId }) => tokens.get(userId) ?? '', mediaBucket: BUCKET, runtimeSecret: '', capture: () => undefined,
     }
-    const queue: Array<{ runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance' }> = []
-    const hooks = { enqueueMunshiDecide: async (j: { runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance' }) => { queue.push(j); return 'queued' } }
+    // audit M42: the dispatcher also enqueues `reask` (a buttons re-send) and sets textApproval on a bound utterance
+    type DecideJob = Omit<import('../../agent-runtime/src/agents/munshi/index').MunshiDecideJob, 'kind'>
+    const queue: DecideJob[] = []
+    const hooks = { enqueueMunshiDecide: async (j: DecideJob) => { queue.push(j); return 'queued' } }
     const drain = async () => { const out: any[] = []; while (queue.length) { const j = queue.shift()!; out.push(await rt.runMunshiDecide(deps, { kind: 'decide', ...j })) } return out }
     const scan = () => rt.runMunshiScan(deps)
     const followup = () => rt.runMunshiFollowup(deps)

@@ -13,8 +13,9 @@
  *                 MOQ when there is no history — the schedule case)
  *   min qty     = the tier's min_qty (the quantity that unlocks the price)
  *   closes_at   = +7 days
- * The optional model call (the shared agent-core gateway, temperature 0 —
- * Track F: no direct model-host fetch outside agent-core/src/llm) only polishes
+ * The optional model call (the bounded helper over the shared agent-core
+ * gateway, temperature 0 — audit M24: the budget caps + the ledger; Track F: no
+ * direct model-host fetch outside agent-core/src/llm) only polishes
  * the title and writes the pitch in en/hi/te; without a gateway key the stub
  * templates are used and the draft is marked stub. Task class 'translation'
  * (routine tier, 'any' residency: the input is public catalogue copy only); the
@@ -23,7 +24,8 @@
  */
 import 'server-only'
 import { z } from 'zod'
-import { createGateway, envelope, type PromptRef } from '@amclub/agent-core'
+import { envelope, type PromptRef } from '@amclub/agent-core'
+import { boundedChatJson } from '@/lib/agent/bounded'
 import { resolveTier, poolSaving, type PoolDraft } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { getPoolCategories, listPools } from './pools'
@@ -134,7 +136,11 @@ function stubCard(title: string, savingPct: number): { en: string; hi: string; t
   }
 }
 
-async function polish(title: string, savingPct: number, unit: string): Promise<{ title: string; card: { en: string; hi: string; te: string }; stub: boolean; vendor: string }> {
+/**
+ * Audit M24: the pitch call goes through the bounded helper (the budget caps + the ONE ai_invocations row, feature
+ * `pool_pitch`), charged to the admin who asked (audience ops). A budget breach or any failure → the stub templates.
+ */
+async function polish(admin: Admin, actorUserId: string, title: string, savingPct: number, unit: string): Promise<{ title: string; card: { en: string; hi: string; te: string }; stub: boolean; vendor: string }> {
   const model = process.env['GROUP_BUY_AGENT_MODEL'] ?? process.env['CATALOG_AGENT_MODEL'] ?? DEFAULT_MODEL
   const prompt: PromptRef = {
     id: 'mart_pool_pitch',
@@ -145,7 +151,10 @@ async function polish(title: string, savingPct: number, unit: string): Promise<{
     text: `You write one-line WhatsApp pitches for an Indian MSME group-buy of industrial consumables. Return ONLY JSON: {"title": string, "en": string, "hi": string, "te": string}. title ≤ 60 chars, product-first. Each pitch ≤ 110 chars, plain, no emoji, no prices (numbers are added separately), mention the saving "${savingPct}%" if > 0. hi = Hindi in Devanagari, te = Telugu script. The product name is given inside the untrusted block.`,
   }
   try {
-    const res = await createGateway().chatJson({
+    const res = await boundedChatJson(admin, {
+      userId: actorUserId,
+      feature: 'pool_pitch',
+      audience: 'ops',
       taskClass: 'translation',
       prompt,
       schema: z.record(z.unknown()),
@@ -172,7 +181,7 @@ async function polish(title: string, savingPct: number, unit: string): Promise<{
 }
 
 /** Propose pools (not persisted). One per product; skips products that already have a live pool. */
-export async function proposePools(admin: Admin, opts: { limit?: number } = {}): Promise<PoolProposal[]> {
+export async function proposePools(admin: Admin, opts: { limit?: number; actorUserId: string }): Promise<PoolProposal[]> {
   const categories = await getPoolCategories(admin)
   if (categories.length === 0) return []
   const live = await listPools(admin, { statuses: ['draft', 'open', 'closed_met'], limit: 500 })
@@ -193,7 +202,7 @@ export async function proposePools(admin: Admin, opts: { limit?: number } = {}):
     const listPrice = Number(p.list_price_paise ?? list.unit_price_paise)
     if (tier.unit_price_paise >= listPrice) continue
     const saving = poolSaving(tier.unit_price_paise, listPrice)
-    const polished = await polish(p.name, saving.pct, p.unit)
+    const polished = await polish(admin, opts.actorUserId, p.name, saving.pct, p.unit)
     const seller = Array.isArray(p.seller) ? p.seller[0] : p.seller
     out.push({
       draft: {

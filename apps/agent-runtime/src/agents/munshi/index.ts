@@ -41,6 +41,7 @@ import {
   type ThreadReplyDraft,
 } from '@amclub/shared'
 import { readAgentSettings } from '../../settings'
+import { boundConversationFor, currentWhatsAppGrants, phoneDigits } from '../../whatsapp/binding'
 import { GROWTH_INTERVAL_DAYS, PROVIDER_COMPONENTS, SCORE_VERSION, growthNudgeLine, pickGrowthNudge, pickLocale, weakestComponents, type ComponentResult, type GrowthFacts, type GrowthNudge, type GrowthProfileField, type ProviderComponent } from '@amclub/shared'
 import { transcribeVoiceNote } from '../onboarding/stt'
 import { buttonPayloadOf } from '../onboarding/index'
@@ -92,7 +93,13 @@ export interface MunshiRuntimeDeps {
 
 export interface MunshiScanJob { kind: 'scan'; jobId?: string | null }
 export interface MunshiFollowupJob { kind: 'followup'; jobId?: string | null }
-export interface MunshiDecideJob { kind: 'decide'; runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance'; jobId?: string | null }
+/**
+ * A Munshi decision job. `utterance` = typed / spoken text; it may approve / edit / skip ONLY with `textApproval: true`,
+ * which the dispatcher sets when the text is bound to exactly this draft (audit M42 — `bindTextConfirmation`); otherwise
+ * (absent = a job from an older runtime) the buttons are re-sent and nothing is decided. `reask` = re-send this draft's
+ * buttons without reading the message (the "which one?" answer when several proposals are open).
+ */
+export interface MunshiDecideJob { kind: 'decide'; runId: string; messageId: string; action: 'approve' | 'edit' | 'skip' | 'utterance' | 'reask'; textApproval?: boolean; jobId?: string | null }
 /** S2.4 — the weekly growth nudge. */
 export interface MunshiGrowthJob { kind: 'growth'; jobId?: string | null }
 export type MunshiJob = MunshiScanJob | MunshiFollowupJob | MunshiDecideJob | MunshiGrowthJob
@@ -146,15 +153,24 @@ async function enabledProviders(deps: MunshiRuntimeDeps, s: MunshiSettings): Pro
   const now = (deps.now ?? (() => new Date()))()
   const [{ data: states }, { data: grants }] = await Promise.all([
     deps.admin.from('munshi_provider_state').select('provider_id, user_id, locale, paused_until, drafts_today, drafts_today_date, last_scan_at, munshi_reminders'),
-    deps.admin.from('agent_grants').select('user_id, scopes, channel').eq('persona', 'provider').is('revoked_at', null),
+    deps.admin.from('agent_grants').select('user_id, scopes, channel, channel_identity').eq('persona', 'provider').is('revoked_at', null),
   ])
+  const grantRows = (grants as { user_id: string; scopes: string[] | null; channel: string; channel_identity: string | null }[] | null) ?? []
+  // audit M41: a WhatsApp grant counts only for the phone it was given from = the user's CURRENT phone
+  const waUserIds = [...new Set(grantRows.filter((g) => g.channel === 'whatsapp').map((g) => g.user_id))]
+  const phoneByUser = new Map<string, string>()
+  for (let i = 0; i < waUserIds.length; i += 200) {
+    const { data: users } = await deps.admin.from('users').select('id, phone').in('id', waUserIds.slice(i, i + 200))
+    for (const u of (users as { id: string; phone: string | null }[] | null) ?? []) phoneByUser.set(u.id, phoneDigits(u.phone))
+  }
   const scopesByUser = new Map<string, Set<string>>()
   const waByUser = new Set<string>()
-  for (const g of (grants as { user_id: string; scopes: string[] | null; channel: string }[] | null) ?? []) {
+  for (const g of grantRows) {
     const set = scopesByUser.get(g.user_id) ?? new Set<string>()
     for (const sc of g.scopes ?? []) set.add(sc)
     scopesByUser.set(g.user_id, set)
-    if (g.channel === 'whatsapp' && hasMunshiScopes(g.scopes)) waByUser.add(g.user_id)
+    const phone = phoneByUser.get(g.user_id)
+    if (g.channel === 'whatsapp' && hasMunshiScopes(g.scopes) && !!phone && phoneDigits(g.channel_identity) === phone) waByUser.add(g.user_id)
   }
   const out: ProviderState[] = []
   for (const st of (states as any[]) ?? []) {
@@ -220,9 +236,9 @@ interface ConversationRow {
   window_open_until: string | null
 }
 
+/** Audit M41: the conversation of the user's CURRENT phone (bound to them) — never "the most recent inbound". */
 async function conversationFor(admin: SupabaseClient, userId: string): Promise<ConversationRow | null> {
-  const { data } = await admin.from('wa_conversations').select('id, phone_e164, window_open_until, last_inbound_at').eq('user_id', userId).order('last_inbound_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle()
-  return (data as ConversationRow | null) ?? null
+  return boundConversationFor(admin, userId)
 }
 
 async function recordOutbound(deps: MunshiRuntimeDeps, conv: ConversationRow, kind: 'text' | 'button' | 'template', body: string | null, r: { ok: boolean; vendorMessageId: string | null; detail: string }, extra: Record<string, unknown>): Promise<string | null> {
@@ -473,11 +489,12 @@ async function draftByRun(admin: SupabaseClient, runId: string): Promise<DraftRo
 }
 
 async function providerStateFor(deps: MunshiRuntimeDeps, providerId: string, userId: string): Promise<Pick<ProviderState, 'user_id' | 'locale' | 'whatsapp'>> {
-  const [{ data: st }, { data: g }] = await Promise.all([
+  const [{ data: st }, grants] = await Promise.all([
     deps.admin.from('munshi_provider_state').select('locale').eq('provider_id', providerId).maybeSingle(),
-    deps.admin.from('agent_grants').select('scopes').eq('user_id', userId).eq('persona', 'provider').eq('channel', 'whatsapp').is('revoked_at', null).limit(1).maybeSingle(),
+    // audit M41: only a grant given from the user's current phone
+    currentWhatsAppGrants(deps.admin, userId, 'provider'),
   ])
-  return { user_id: userId, locale: toMunshiLocale((st as { locale?: string } | null)?.locale), whatsapp: hasMunshiScopes((g as { scopes?: string[] } | null)?.scopes) }
+  return { user_id: userId, locale: toMunshiLocale((st as { locale?: string } | null)?.locale), whatsapp: grants.some((g) => hasMunshiScopes(g.scopes)) }
 }
 
 function toolFor(kind: MunshiDraftKind): 'submit_quote' | 'ask_clarification' | 'reply_thread' {
@@ -610,8 +627,11 @@ export async function runMunshiDecide(deps: MunshiRuntimeDeps, job: MunshiDecide
   const inputRefs: Record<string, string> = { munshi_draft_id: d.id, wa_message_id: job.messageId }
   let via: 'whatsapp_button' | 'voice_yes' | 'whatsapp_text' = 'whatsapp_button'
   let editInstructions: string | null = null
+  // audit M42: text decides only when the dispatcher bound it to THIS draft; otherwise the buttons come back (reask)
+  const textBound = job.action === 'utterance' && job.textApproval === true
+  if (job.action === 'utterance' && !textBound) deps.capture?.(d.user_id, 'munshi_text_not_bound', { kind: d.kind })
 
-  if (job.action === 'utterance') {
+  if (textBound) {
     let text: string | null = null
     const m = msg as { kind: string; body: string | null; media_ref: string | null; mime: string | null }
     if (m.kind === 'audio' && m.media_ref && d.run_id) {
@@ -646,9 +666,12 @@ export async function runMunshiDecide(deps: MunshiRuntimeDeps, job: MunshiDecide
   }
 
   if (action === 'reask') {
-    const text = munshiCopy('reask', st.locale)
-    if (d.run_id) await sendButtons(deps, st, d.run_id, text, { kind: 'munshi_draft', params: [rfqTitle.slice(0, 60), '—'] }, { munshi_draft_id: d.id, reask: true })
-    return { status: 'ok', detail: { outcome: 'reask' } }
+    // re-send THIS draft's card (its text + buttons, so the provider can tell several open cards apart); run_id on the
+    // outbound row lets a quoted reply bind to it
+    const draftText = d.kind === 'reply' ? renderMunshiReply(d.draft as ThreadReplyDraft, st.locale, rfqTitle) : renderMunshiDraft(d.draft as MunshiDraft, st.locale, rfqTitle)
+    const text = `${munshiCopy('reask', st.locale)}\n\n${draftText}`
+    if (d.run_id) await sendButtons(deps, st, d.run_id, text, { kind: 'munshi_draft', params: [rfqTitle.slice(0, 60), '—'] }, { munshi_draft_id: d.id, run_id: d.run_id, reask: true })
+    return { status: 'ok', detail: { outcome: 'reask', bound: textBound } }
   }
   if (action === 'skip') {
     const r = await postDecision(deps, d, { approve: false, reason: 'skipped', input_refs: inputRefs })
@@ -902,32 +925,18 @@ export interface MunshiInboundHooks {
 
 /**
  * True when the message was routed to Munshi: a button `approve|edit|skip:<runId>`
- * whose run belongs to this conversation's user, or any text / audio while the
- * user has a proposed draft delivered on WhatsApp in the last 24 h.
+ * whose run belongs to this conversation's user. Typed / spoken text is NOT taken
+ * here any more (audit M42): `whatsapp/confirmations.ts` binds free text to at most
+ * one open proposal across Munshi, procurement and support, and only a bound text
+ * reaches `munshi.decide` with `textApproval: true`.
  */
 export async function routeMunshiInbound(admin: SupabaseClient, args: { messageId: string; userId: string; row: { kind: string; body: string | null; payload: Record<string, unknown> | null } }, hooks: MunshiInboundHooks): Promise<boolean> {
   if (!hooks.enqueueMunshiDecide) return false
   const btn = parseMunshiButton(buttonPayloadOf(args.row))
-  if (btn) {
-    const { data } = await admin.from('munshi_drafts').select('id, user_id').eq('run_id', btn.runId).is('deleted_at', null).maybeSingle()
-    if (!data || (data as { user_id: string }).user_id !== args.userId) return false
-    await hooks.enqueueMunshiDecide({ runId: btn.runId, messageId: args.messageId, action: btn.action })
-    return true
-  }
-  if (args.row.kind !== 'text' && args.row.kind !== 'audio') return false
-  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-  const { data: latest } = await admin
-    .from('munshi_drafts')
-    .select('id, run_id, delivered, created_at')
-    .eq('user_id', args.userId)
-    .eq('status', 'proposed')
-    .gt('created_at', since)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(5)
-  const row = ((latest as { run_id: string | null; delivered: Record<string, unknown> | null }[] | null) ?? []).find((r) => r.run_id && r.delivered && r.delivered['whatsapp'])
-  if (!row?.run_id) return false
-  await hooks.enqueueMunshiDecide({ runId: row.run_id, messageId: args.messageId, action: 'utterance' })
+  if (!btn) return false
+  const { data } = await admin.from('munshi_drafts').select('id, user_id').eq('run_id', btn.runId).is('deleted_at', null).maybeSingle()
+  if (!data || (data as { user_id: string }).user_id !== args.userId) return false
+  await hooks.enqueueMunshiDecide({ runId: btn.runId, messageId: args.messageId, action: btn.action })
   return true
 }
 

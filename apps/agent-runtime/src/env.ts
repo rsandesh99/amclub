@@ -7,7 +7,9 @@
  * Read directly by agent-core (not listed here): UPSTASH_REDIS_REST_URL/TOKEN
  * (budget counters — without them model calls FAIL CLOSED when NODE_ENV is
  * production and AGENT_ENABLED=true), AGENT_LLM_BASE_URL[_<TIER>],
- * AGENT_RESIDENCY_ENFORCE + AGENT_IN_RESIDENCY_HOSTS (opt-in residency guard),
+ * AGENT_RESIDENCY_ENFORCE + AGENT_IN_RESIDENCY_HOSTS or AGENT_RESIDENCY_WAIVER (the
+ * residency guard — REQUIRED in production with AGENT_ENABLED=true, audit M23; /health
+ * reports the posture), WA_MEDIA_MAX_BYTES / WA_MEDIA_TIMEOUT_MS (inbound media caps, M34),
  * AGENT_MODEL_RATES (cost estimate when the vendor reports none),
  * AGENT_MAX_TOKENS_<TIER> (output caps).
  */

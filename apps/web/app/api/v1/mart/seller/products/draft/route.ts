@@ -8,7 +8,7 @@ import { getSellerCtx } from '@/lib/mart/seller'
 import { listMartCategories } from '@/lib/mart/config'
 import { draftListing } from '@/lib/mart/catalog-agent'
 import { publicAssetUrl } from '@/lib/mart/assets'
-import { logAiInvocation, estimateParseCostPaise } from '@/lib/voice/invocations'
+import { BudgetExceededError } from '@/lib/agent/bounded'
 import { classifyVendorFailure } from '@/lib/voice/types'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 
@@ -20,7 +20,8 @@ const bodySchema = z.object({
 
 /**
  * Catalog Agent v1 — returns a DRAFT the seller confirms field by field. Paid
- * model call → voice-parse rate limits; every call logged to ai_invocations.
+ * model call → voice-parse rate limits, a verified goods seller only, and the
+ * AI budget (the bounded helper, audit M24); every call logged to ai_invocations.
  */
 export async function POST(request: NextRequest) {
   const gate = martApiGate()
@@ -42,27 +43,21 @@ export async function POST(request: NextRequest) {
   const admin = await createAdminClient()
   const seller = await getSellerCtx(admin, userId)
   if (!seller) return NextResponse.json({ error: 'No provider profile' }, { status: 404 })
+  // Audit M24: a paid model call only for a verified goods seller (active provider, sells_goods — which itself needs a
+  // verified GSTIN), so any signed-in account can no longer spend the AI budget here.
+  if (seller.status !== 'active' || !seller.sellsGoods) return NextResponse.json({ error: 'not_a_seller' }, { status: 403 })
   const prefix = `mart/${seller.id}/`
   if (parsed.data.imageKeys.some((k) => !k.startsWith(prefix))) {
     return NextResponse.json({ error: 'Image not owned by this seller' }, { status: 403 })
   }
 
   const categories = await listMartCategories()
-  const started = Date.now()
   try {
-    const r = await draftListing({ description: parsed.data.description, imageUrls: parsed.data.imageKeys.map(publicAssetUrl), categories })
-    await logAiInvocation(admin, {
-      userId, feature: 'catalog_draft', step: 'parse', vendor: r.vendor, status: r.stub ? 'stub' : 'ok',
-      latencyMs: Date.now() - started, costEstPaise: estimateParseCostPaise(r.usage, r.stub),
-      inputBytes: parsed.data.description.length, requestId: r.requestId, meta: r.usage,
-    })
+    // The bounded helper checks the budget first and writes the ONE ai_invocations row (feature catalog_draft).
+    const r = await draftListing(admin, userId, { description: parsed.data.description, imageUrls: parsed.data.imageKeys.map(publicAssetUrl), categories })
     return NextResponse.json({ draft: r.draft, stub: r.stub, vendor: r.vendor, inputRefs: { image_keys: parsed.data.imageKeys, description_chars: parsed.data.description.length } })
   } catch (e) {
-    const cause = classifyVendorFailure(e)
-    await logAiInvocation(admin, {
-      userId, feature: 'catalog_draft', step: 'parse', vendor: 'openrouter', status: 'error',
-      latencyMs: Date.now() - started, costEstPaise: null, error: e instanceof Error ? e.message.slice(0, 300) : String(e),
-    })
+    const cause = e instanceof BudgetExceededError ? 'quota' : classifyVendorFailure(e)
     return NextResponse.json({ error: 'draft_failed', cause }, { status: cause === 'quota' ? 402 : 503 })
   }
 }

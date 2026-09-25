@@ -74,9 +74,13 @@ The vision model (task class `photo_plausibility`, frontier tier, prompt
 a `confidence` 0..1. **Findings are findings, never a decision.** A finding
 *passes* only when `looks_like_work && matches_stage &&
 !is_screenshot_or_document && confidence >= 0.6`. Milestone notes written by
-the provider reach the model only inside `<untrusted>` envelopes; the prompt
-states they are data. A photo the model did not return a finding for counts as
-failing.
+the provider **and the order title** (party-authored: the buyer's request title
+or the provider's package title — audit M43) reach the model only inside
+`<untrusted>` envelopes; the prompt states they are data. The parts come from
+agent-core `buildPhotoPlausibilityParts` (`src/dossier/parts.ts`): trusted lines
+carry only the category slug, order kind, timestamps and per-image facts, each
+reduced to a fact alphabet, and a unit test asserts no party string reaches them.
+A photo the model did not return a finding for counts as failing.
 
 ## The recommendation rule (`recommendDossier`, `@amclub/shared`)
 

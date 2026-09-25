@@ -15,7 +15,7 @@ interface Spend { today: SpendBucket; month: SpendBucket }
 interface DossierStats { pending: number; decided: number; approve_rate_pct: number | null; median_completed_to_decision_min: number | null }
 interface TriageStats { pending: number; decided: number; agreement_rate_pct: number | null; needs_more_info_pct: number | null }
 
-const NUMBER_KEYS: AgentSettingKey[] = ['budget_run_paise', 'budget_user_day_paise', 'budget_month_paise', 'rfq_max_quotes', 'quote_window_hours', 'pool_min_members', 'pool_max_members', 'pool_form_hours', 'pool_open_hours', 'pool_pay_buffer_hours']
+const NUMBER_KEYS: AgentSettingKey[] = ['budget_run_paise', 'budget_user_day_paise', 'budget_month_paise', 'budget_month_open_paise', 'rfq_max_quotes', 'quote_window_hours', 'pool_min_members', 'pool_max_members', 'pool_form_hours', 'pool_open_hours', 'pool_pay_buffer_hours']
 const TEXT_KEYS: AgentSettingKey[] = ['whatsapp_opt_in_text_version', 'evidence_required_from']
 // everything else that is not agents_enabled edits as JSON (cohort_user_ids).
 
@@ -30,7 +30,7 @@ interface MunshiStats {
   cost_per_approved_paise: number | null
 }
 
-export function AgentsConsoleClient({ runtimeReady = true, runtimeAgents = [] }: { runtimeReady?: boolean; runtimeAgents?: readonly string[] }) {
+export function AgentsConsoleClient({ runtimeReady = true, runtimeAgents = [], residency = null }: { runtimeReady?: boolean; runtimeAgents?: readonly string[]; residency?: { mode: 'enforced' | 'waived' | 'unconfigured' | 'opt_in'; waiver: string | null; refuses?: boolean } | null }) {
   const t = useTranslations('admin_agents')
   const tScore = useTranslations('admin_score')
   const tBench = useTranslations('admin_benchmarks')
@@ -137,6 +137,25 @@ export function AgentsConsoleClient({ runtimeReady = true, runtimeAgents = [] }:
         <div role="status" className="rounded-card border border-warning/40 bg-warning/10 p-4 text-sm" data-testid="runtime-missing">
           <p className="font-semibold">{t('runtime_missing_title')}</p>
           <p className="mt-1 text-foreground-secondary">{t('runtime_missing_body', { agents: runtimeAgents.join(', ') })}</p>
+        </div>
+      )}
+
+      {residency?.mode === 'unconfigured' && residency.refuses === false && (
+        <div role="status" className="rounded-card border border-warning/40 bg-warning/10 p-4 text-sm" data-testid="residency-undecided">
+          <p className="font-semibold">{t('residency_undecided_title')}</p>
+          <p className="mt-1 text-foreground-secondary">{t('residency_undecided_body')}</p>
+        </div>
+      )}
+      {residency?.mode === 'unconfigured' && residency.refuses !== false && (
+        <div role="alert" className="rounded-card border border-danger/40 bg-danger/10 p-4 text-sm" data-testid="residency-unconfigured">
+          <p className="font-semibold">{t('residency_unconfigured_title')}</p>
+          <p className="mt-1 text-foreground-secondary">{t('residency_unconfigured_body')}</p>
+        </div>
+      )}
+      {residency?.mode === 'waived' && (
+        <div role="status" className="rounded-card border border-warning/40 bg-warning/10 p-4 text-sm" data-testid="residency-waived">
+          <p className="font-semibold">{t('residency_waived_title')}</p>
+          <p className="mt-1 text-foreground-secondary">{t('residency_waived_body', { reason: residency.waiver ?? '' })}</p>
         </div>
       )}
 

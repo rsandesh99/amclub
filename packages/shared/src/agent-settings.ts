@@ -96,6 +96,11 @@ export const AGENT_SETTING_DEFS = {
     default: 500_000,
     hint: 'Max estimated AI spend (paise) per calendar month, platform-wide. ₹5,000 at launch.',
   },
+  budget_month_open_paise: {
+    schema: z.number().int().min(0).max(1_000_000_000),
+    default: 200_000,
+    hint: 'Audit M24: the part of budget_month_paise that users OUTSIDE cohort_user_ids may spend per month on the open paid endpoints (voice parser, speech-to-text, Mart catalog drafts), on its own counter. The rest is held for the cohort and ops. ₹2,000 at launch; never more than the month cap.',
+  },
   cohort_user_ids: {
     schema: z.array(z.string().uuid()).max(500),
     default: [] as string[],

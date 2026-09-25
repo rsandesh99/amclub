@@ -8,44 +8,20 @@ import { runMunshiDecide, runMunshiFollowup, runMunshiGrowth, runMunshiScan, typ
 import { runSupportDecide, runSupportReply, type SupportDecideJob, type SupportReplyJob } from './agents/support/index'
 import { decideProcurement, runProcurementTurn, runProcurementWatch, type ProcurementDecideJob, type ProcurementTurnJob } from './agents/procurement/index'
 import { admin, buildDeps, buildMunshiDeps, buildOnboardingDeps, buildProcurementDeps, buildSupportDeps } from './deps'
-import { handleWaInbound } from './whatsapp/inbound'
+import { handleWaInbound, sweepUnprocessedInbound, type SweepResult } from './whatsapp/inbound'
 import { RUNTIME_ENV } from './env'
+import { ALL_QUEUES, Q, createAllQueues, explainNullSend, type WorkerBoss } from './queues'
 
 /**
- * The persistent job worker ADR-001 deferred (ADR-009 §1). One pg-boss queue,
- * `agent.run`, dispatches to a registered agent by name. Scheduled/proactive
- * agents enqueue here; S0.1 ships the `hello` smoke agent, S1.4 adds the
- * Payout-Evidence agent on its own queue (its retry policy must never touch
- * other agents).
+ * The persistent job worker ADR-001 deferred (ADR-009 §1). Every queue lives in
+ * the registry (`queues.ts`, audit M32) and is created before the first send;
+ * S0.1 ships the `hello` smoke agent on `agent.run`, and each later agent has its
+ * own queue so its retry policy never touches another agent's.
+ *
+ * Audit M33: the process exits when the worker cannot start (Fly restarts the
+ * machine), /health reports the worker state, and `wa.inbound.sweep` re-enqueues
+ * inbound messages that were stored but never processed.
  */
-
-const QUEUE = 'agent.run'
-/** S0.5 — inbound WhatsApp messages, one job per stored wa_messages row. */
-const WA_QUEUE = 'wa.inbound'
-/** S1.4 — payout dossiers: retryLimit 2, retryDelay 300 s (no retry storms). */
-const DOSSIER_QUEUE = 'agent.payout_dossier'
-const DOSSIER_RETRY = { retryLimit: 2, retryDelay: 300 } as const
-/** S1.7 — dispute triages: the dossier's retry policy (retryLimit 2, retryDelay 300 s). */
-const TRIAGE_QUEUE = 'agent.dispute_triage'
-/** S1.6 — onboarding interview turns: one retry after 60 s (a turn is idempotent through guarded state updates). */
-const ONBOARDING_QUEUE = 'agent.onboarding'
-const ONBOARDING_RETRY = { retryLimit: 1, retryDelay: 60 } as const
-/** S2.2 — Digital Munshi: the scan and the follow-up never retry (the next cron tick is the retry); a decide retries once. */
-const MUNSHI_SCAN_QUEUE = 'agent.munshi.scan'
-const MUNSHI_DECIDE_QUEUE = 'agent.munshi.decide'
-const MUNSHI_FOLLOWUP_QUEUE = 'agent.munshi.followup'
-/** S2.4 — the weekly growth nudge (one per provider per week; informational). */
-const MUNSHI_GROWTH_QUEUE = 'agent.munshi.growth'
-const MUNSHI_DECIDE_RETRY = { retryLimit: 1, retryDelay: 60 } as const
-/** S2.3 — support turns: one retry after 60 s (a turn is idempotent through the stored message + the guarded ticket). */
-const SUPPORT_REPLY_QUEUE = 'agent.support.reply'
-const SUPPORT_DECIDE_QUEUE = 'agent.support.decide'
-const SUPPORT_RETRY = { retryLimit: 1, retryDelay: 60 } as const
-/** S3.1 — procurement: a turn and a decision retry once after 60 s (idempotent: guarded session updates, the decision route's 409); the watch never retries (the next 15-min tick is the retry). */
-const PROCUREMENT_TURN_QUEUE = 'agent.procurement.turn'
-const PROCUREMENT_WATCH_QUEUE = 'agent.procurement.watch'
-const PROCUREMENT_DECIDE_QUEUE = 'agent.procurement.decide'
-const PROCUREMENT_RETRY = { retryLimit: 1, retryDelay: 60 } as const
 
 /**
  * Run failures that retrying cannot fix: the web flag is off, the user has no
@@ -60,32 +36,69 @@ interface RunJob {
   input: unknown
 }
 
-let boss: PgBoss | null = null
+/** What /health reports about the worker (audit M33). */
+export interface WorkerHealth {
+  state: 'disabled' | 'starting' | 'running' | 'failed' | 'stopped'
+  databaseUrl: boolean
+  since: string
+  queues: number
+  lastError: { at: string; message: string } | null
+  lastSweep: (SweepResult & { at: string }) | null
+}
 
-export async function startWorker(): Promise<void> {
-  if (!RUNTIME_ENV.DATABASE_URL) {
-    console.warn('[worker] DATABASE_URL unset — job worker disabled (health check still serves)')
+let boss: WorkerBoss | null = null
+const health: WorkerHealth = { state: 'disabled', databaseUrl: !!RUNTIME_ENV.DATABASE_URL, since: new Date().toISOString(), queues: 0, lastError: null, lastSweep: null }
+
+export function workerHealth(): WorkerHealth {
+  return { ...health, lastError: health.lastError ? { ...health.lastError } : null, lastSweep: health.lastSweep ? { ...health.lastSweep } : null }
+}
+
+function setState(state: WorkerHealth['state']): void {
+  health.state = state
+  health.since = new Date().toISOString()
+}
+
+/** Every minute (pg-boss cron): the sweep of inbound messages stored but never processed. */
+const SWEEP_CRON = '* * * * *'
+
+export interface StartWorkerOptions {
+  /** Tests inject a fake pg-boss; production builds one from DATABASE_URL. */
+  boss?: WorkerBoss
+}
+
+export async function startWorker(opts: StartWorkerOptions = {}): Promise<void> {
+  if (!opts.boss && !RUNTIME_ENV.DATABASE_URL) {
+    console.warn('[worker] DATABASE_URL unset — job worker disabled (/health reports worker.state = disabled)')
+    setState('disabled')
     return
   }
-  boss = new PgBoss({ connectionString: RUNTIME_ENV.DATABASE_URL, schema: 'pgboss' })
-  boss.on('error', (e: Error) => console.error('[worker] pg-boss error', e))
-  await boss.start()
-  await boss.createQueue(QUEUE)
-  await boss.createQueue(WA_QUEUE)
-  await boss.createQueue(DOSSIER_QUEUE, { name: DOSSIER_QUEUE, ...DOSSIER_RETRY })
-  await boss.createQueue(ONBOARDING_QUEUE, { name: ONBOARDING_QUEUE, ...ONBOARDING_RETRY })
-  await boss.createQueue(TRIAGE_QUEUE, { name: TRIAGE_QUEUE, ...DOSSIER_RETRY })
-  await boss.createQueue(MUNSHI_SCAN_QUEUE, { name: MUNSHI_SCAN_QUEUE, retryLimit: 0 })
-  await boss.createQueue(MUNSHI_FOLLOWUP_QUEUE, { name: MUNSHI_FOLLOWUP_QUEUE, retryLimit: 0 })
-  await boss.createQueue(MUNSHI_DECIDE_QUEUE, { name: MUNSHI_DECIDE_QUEUE, ...MUNSHI_DECIDE_RETRY })
-  await boss.createQueue(SUPPORT_REPLY_QUEUE, { name: SUPPORT_REPLY_QUEUE, ...SUPPORT_RETRY })
-  await boss.createQueue(SUPPORT_DECIDE_QUEUE, { name: SUPPORT_DECIDE_QUEUE, ...SUPPORT_RETRY })
-  await boss.createQueue(PROCUREMENT_TURN_QUEUE, { name: PROCUREMENT_TURN_QUEUE, ...PROCUREMENT_RETRY })
-  await boss.createQueue(PROCUREMENT_DECIDE_QUEUE, { name: PROCUREMENT_DECIDE_QUEUE, ...PROCUREMENT_RETRY })
-  await boss.createQueue(PROCUREMENT_WATCH_QUEUE, { name: PROCUREMENT_WATCH_QUEUE, retryLimit: 0 })
+  setState('starting')
+  const b: WorkerBoss = opts.boss ?? (new PgBoss({ connectionString: RUNTIME_ENV.DATABASE_URL, schema: 'pgboss' }) as unknown as WorkerBoss)
+  b.on('error', (e: Error) => {
+    health.lastError = { at: new Date().toISOString(), message: e.message.slice(0, 300) }
+    console.error('[worker] pg-boss error', e)
+  })
+  try {
+    await b.start()
+    await createAllQueues(b)
+    health.queues = ALL_QUEUES.length
+    boss = b
+    await registerHandlers(b)
+    await b.schedule(Q.waSweep.name, SWEEP_CRON, {}, { tz: 'UTC' })
+  } catch (e) {
+    setState('failed')
+    health.lastError = { at: new Date().toISOString(), message: (e as Error).message.slice(0, 300) }
+    boss = null
+    throw e
+  }
+  setState('running')
+  console.log(`[worker] pg-boss started; queues: ${ALL_QUEUES.map((q) => q.name).join(', ')}`)
+}
+
+async function registerHandlers(b: WorkerBoss): Promise<void> {
   const deps = buildDeps()
 
-  await boss.work<RunJob>(QUEUE, async (jobs) => {
+  await b.work<RunJob>(Q.run.name, async (jobs) => {
     for (const job of jobs) {
       const { agent, open, input } = job.data
       if (agent === 'hello') {
@@ -95,7 +108,7 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<RunJob>(DOSSIER_QUEUE, async (jobs) => {
+  await b.work<RunJob>(Q.dossier.name, async (jobs) => {
     for (const job of jobs) {
       const { open, input } = job.data
       const r = await runAgent(payoutDossierAgent, deps, { ...open, jobId: job.id }, input as PayoutDossierInput)
@@ -108,7 +121,7 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<RunJob>(TRIAGE_QUEUE, async (jobs) => {
+  await b.work<RunJob>(Q.triage.name, async (jobs) => {
     for (const job of jobs) {
       const { open, input } = job.data
       const r = await runAgent(disputeTriageAgent, deps, { ...open, jobId: job.id }, input as DisputeTriageInput)
@@ -121,7 +134,7 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<OnboardingTurn>(ONBOARDING_QUEUE, async (jobs) => {
+  await b.work<OnboardingTurn>(Q.onboarding.name, async (jobs) => {
     for (const job of jobs) {
       const r = await runOnboardingTurn(await buildOnboardingDeps(), { ...job.data, jobId: job.id })
       if (r.status === 'failed') {
@@ -133,22 +146,22 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<{ kind: 'scan' }>(MUNSHI_SCAN_QUEUE, async () => {
+  await b.work<{ kind: 'scan' }>(Q.munshiScan.name, async () => {
     const r = await runMunshiScan(buildMunshiDeps())
     if (r.status === 'failed') console.warn(`[worker] munshi.scan: ${r.error}`)
     else console.log('[worker] munshi.scan', JSON.stringify(r.detail))
   })
-  await boss.work<{ kind: 'followup' }>(MUNSHI_FOLLOWUP_QUEUE, async () => {
+  await b.work<{ kind: 'followup' }>(Q.munshiFollowup.name, async () => {
     const r = await runMunshiFollowup(buildMunshiDeps())
     if (r.status === 'failed') console.warn(`[worker] munshi.followup: ${r.error}`)
     else console.log('[worker] munshi.followup', JSON.stringify(r.detail))
   })
-  await boss.work<{ kind: 'growth' }>(MUNSHI_GROWTH_QUEUE, async () => {
+  await b.work<{ kind: 'growth' }>(Q.munshiGrowth.name, async () => {
     const r = await runMunshiGrowth(buildMunshiDeps())
     if (r.status === 'failed') console.warn(`[worker] munshi.growth: ${r.error}`)
     else console.log('[worker] munshi.growth', JSON.stringify(r.detail))
   })
-  await boss.work<MunshiDecideJob>(MUNSHI_DECIDE_QUEUE, async (jobs) => {
+  await b.work<MunshiDecideJob>(Q.munshiDecide.name, async (jobs) => {
     for (const job of jobs) {
       const r = await runMunshiDecide(buildMunshiDeps(), { ...job.data, jobId: job.id })
       if (r.status === 'failed') {
@@ -160,7 +173,7 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<SupportReplyJob>(SUPPORT_REPLY_QUEUE, async (jobs) => {
+  await b.work<SupportReplyJob>(Q.supportReply.name, async (jobs) => {
     for (const job of jobs) {
       const r = await runSupportReply(buildSupportDeps(), { ...job.data, jobId: job.id })
       if (r.status === 'failed') {
@@ -172,7 +185,7 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<SupportDecideJob>(SUPPORT_DECIDE_QUEUE, async (jobs) => {
+  await b.work<SupportDecideJob>(Q.supportDecide.name, async (jobs) => {
     for (const job of jobs) {
       const r = await runSupportDecide(buildSupportDeps(), { ...job.data, jobId: job.id })
       if (r.status === 'failed') {
@@ -184,7 +197,7 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<ProcurementTurnJob>(PROCUREMENT_TURN_QUEUE, async (jobs) => {
+  await b.work<ProcurementTurnJob>(Q.procurementTurn.name, async (jobs) => {
     for (const job of jobs) {
       const r = await runProcurementTurn(buildProcurementDeps(), { ...job.data, jobId: job.id })
       if (r.status === 'failed') {
@@ -196,7 +209,7 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<ProcurementDecideJob>(PROCUREMENT_DECIDE_QUEUE, async (jobs) => {
+  await b.work<ProcurementDecideJob>(Q.procurementDecide.name, async (jobs) => {
     for (const job of jobs) {
       const r = await decideProcurement(buildProcurementDeps(), { ...job.data, jobId: job.id })
       if (r.status === 'failed') {
@@ -208,98 +221,139 @@ export async function startWorker(): Promise<void> {
       }
     }
   })
-  await boss.work<{ kind: 'watch' }>(PROCUREMENT_WATCH_QUEUE, async () => {
+  await b.work<{ kind: 'watch' }>(Q.procurementWatch.name, async () => {
     const r = await runProcurementWatch(buildProcurementDeps())
     if (r.status === 'failed') console.warn(`[worker] procurement.watch: ${r.error}`)
     else console.log('[worker] procurement.watch', JSON.stringify(r.detail))
   })
-  await boss.work<{ messageId: string }>(WA_QUEUE, async (jobs) => {
-    for (const job of jobs) await handleWaInbound(job.data.messageId, { enqueueOnboarding: enqueueOnboardingJob, enqueueMunshiDecide: enqueueMunshiDecideJob, enqueueSupportReply: enqueueSupportReplyJob, enqueueSupportDecide: enqueueSupportDecideJob, enqueueProcurementTurn: enqueueProcurementTurnJob, enqueueProcurementDecide: enqueueProcurementDecideJob })
+  await b.work<{ messageId: string }>(Q.waInbound.name, async (jobs) => {
+    for (const job of jobs) await handleWaInbound(job.data.messageId, inboundHooks)
   })
-  console.log(`[worker] pg-boss started on queues ${QUEUE}, ${DOSSIER_QUEUE}, ${TRIAGE_QUEUE}, ${ONBOARDING_QUEUE}, ${MUNSHI_SCAN_QUEUE}, ${MUNSHI_DECIDE_QUEUE}, ${MUNSHI_FOLLOWUP_QUEUE}, ${SUPPORT_REPLY_QUEUE}, ${SUPPORT_DECIDE_QUEUE}, ${WA_QUEUE}`)
+  await b.work<Record<string, never>>(Q.waSweep.name, async () => {
+    const r = await sweepUnprocessedInbound(admin(), enqueueWaInbound)
+    health.lastSweep = { ...r, at: new Date().toISOString() }
+    if (r.error) console.error('[worker] wa.inbound.sweep', r.error)
+    else if (r.requeued > 0 || r.stale > 0) console.warn('[worker] wa.inbound.sweep', JSON.stringify(r))
+  })
+}
+
+/** The hooks the wa.inbound job hands to the dispatcher (no import cycle). */
+const inboundHooks = {
+  enqueueOnboarding: (turn: { kind: 'start' | 'message'; sessionId: string; messageId?: string }) => enqueueOnboardingJob(turn),
+  enqueueMunshiDecide: (job: Omit<MunshiDecideJob, 'kind'>) => enqueueMunshiDecideJob(job),
+  enqueueSupportReply: (job: { conversationId: string; messageId: string }) => enqueueSupportReplyJob(job),
+  enqueueSupportDecide: (job: { runId: string; messageId: string; action: 'yes' | 'no' }) => enqueueSupportDecideJob(job),
+  enqueueProcurementTurn: (job: Omit<ProcurementTurnJob, 'kind'>) => enqueueProcurementTurnJob(job),
+  enqueueProcurementDecide: (job: Omit<ProcurementDecideJob, 'kind'>) => enqueueProcurementDecideJob(job),
+}
+
+/**
+ * A send that must produce a job. pg-boss returns null when no job was inserted:
+ * with singleton options that is a collision (expected — `deduped`); otherwise,
+ * or when the queue row is missing, the job was DROPPED — thrown, never silent (audit M32).
+ */
+async function sendOrThrow(name: string, data: object, options: Record<string, unknown>, singleton = false): Promise<{ jobId: string | null; deduped: boolean }> {
+  if (!boss) throw new Error('worker_not_started')
+  const jobId = await boss.send(name, data, options) // queue-registry: forwarded (every caller passes Q.<key>.name)
+  if (jobId) return { jobId, deduped: false }
+  if (singleton && (await explainNullSend(boss, name)) === 'collision') return { jobId: null, deduped: true }
+  throw new Error(`enqueue_dropped:${name}`)
 }
 
 /** S1.6 — one onboarding turn (start | message | expire) on its own queue. */
 export async function enqueueOnboardingJob(turn: OnboardingTurn): Promise<string | null> {
   if (!boss) return null
-  return boss.send(ONBOARDING_QUEUE, turn, { ...ONBOARDING_RETRY })
+  return (await sendOrThrow(Q.onboarding.name, turn, { ...Q.onboarding.policy })).jobId
 }
 
 /** S2.3 — one support turn (an inbound message) / one nudge decision. */
 export async function enqueueSupportReplyJob(job: { conversationId: string; messageId: string }): Promise<string | null> {
   if (!boss) return null
-  return boss.send(SUPPORT_REPLY_QUEUE, { kind: 'reply', ...job }, { ...SUPPORT_RETRY })
+  return (await sendOrThrow(Q.supportReply.name, { kind: 'reply', ...job }, { ...Q.supportReply.policy })).jobId
 }
 export async function enqueueSupportDecideJob(job: { runId: string; messageId: string; action: 'yes' | 'no' }): Promise<string | null> {
   if (!boss) return null
-  return boss.send(SUPPORT_DECIDE_QUEUE, { kind: 'decide', ...job }, { ...SUPPORT_RETRY })
+  return (await sendOrThrow(Q.supportDecide.name, { kind: 'decide', ...job }, { ...Q.supportDecide.policy })).jobId
 }
 
 /** S3.1 — one procurement turn / one procurement decision. */
 export async function enqueueProcurementTurnJob(job: Omit<ProcurementTurnJob, 'kind'>): Promise<string | null> {
   if (!boss) return null
-  return boss.send(PROCUREMENT_TURN_QUEUE, { kind: 'turn', ...job }, { ...PROCUREMENT_RETRY })
+  return (await sendOrThrow(Q.procurementTurn.name, { kind: 'turn', ...job }, { ...Q.procurementTurn.policy })).jobId
 }
 export async function enqueueProcurementDecideJob(job: Omit<ProcurementDecideJob, 'kind'>): Promise<string | null> {
   if (!boss) return null
-  return boss.send(PROCUREMENT_DECIDE_QUEUE, { kind: 'decide', ...job }, { ...PROCUREMENT_RETRY })
+  return (await sendOrThrow(Q.procurementDecide.name, { kind: 'decide', ...job }, { ...Q.procurementDecide.policy })).jobId
 }
 
-/** S2.2 — one Munshi decision (a button tap or an utterance) on its own queue. */
+/** S2.2 — one Munshi decision (a button tap, an utterance, or a buttons re-send) on its own queue. */
 export async function enqueueMunshiDecideJob(job: Omit<MunshiDecideJob, 'kind'>): Promise<string | null> {
   if (!boss) return null
-  return boss.send(MUNSHI_DECIDE_QUEUE, { kind: 'decide', ...job }, { ...MUNSHI_DECIDE_RETRY })
+  return (await sendOrThrow(Q.munshiDecide.name, { kind: 'decide', ...job }, { ...Q.munshiDecide.policy })).jobId
 }
 
-/** Enqueue a run for an agent by name (called by POST /internal/jobs/:name). */
-export async function enqueueJob(agent: string, data: unknown): Promise<string | null> {
-  if (!boss) throw new Error('worker not started (DATABASE_URL unset)')
-  // S2.2 — the web crons: one scan / one follow-up per tick (singletonKey collapses overlapping ticks).
-  if (agent === 'munshi.scan') return boss.send(MUNSHI_SCAN_QUEUE, { kind: 'scan' }, { retryLimit: 0, singletonKey: 'munshi.scan', singletonSeconds: 600 })
-  if (agent === 'munshi.followup') return boss.send(MUNSHI_FOLLOWUP_QUEUE, { kind: 'followup' }, { retryLimit: 0, singletonKey: 'munshi.followup', singletonSeconds: 1800 })
-  if (agent === 'munshi.growth') return boss.send(MUNSHI_GROWTH_QUEUE, { kind: 'growth' }, { retryLimit: 0, singletonKey: 'munshi.growth', singletonSeconds: 3600 })
+/** POST /internal/jobs/:name → { jobId, deduped }: deduped = an overlapping cron tick collapsed onto an existing job. */
+export interface EnqueueOutcome {
+  jobId: string | null
+  deduped: boolean
+}
+
+/** Enqueue a run for an agent by name (called by POST /internal/jobs/:name). Throws when nothing was enqueued. */
+export async function enqueueJob(agent: string, data: unknown): Promise<EnqueueOutcome> {
+  if (!boss) throw new Error('worker_not_started')
+  // S2.2 / S2.4 / S3.1 — the web crons: one job per tick (singletonKey collapses overlapping ticks).
+  if (agent === 'munshi.scan') return sendOrThrow(Q.munshiScan.name, { kind: 'scan' }, { ...Q.munshiScan.policy, singletonKey: 'munshi.scan', singletonSeconds: 600 }, true)
+  if (agent === 'munshi.followup') return sendOrThrow(Q.munshiFollowup.name, { kind: 'followup' }, { ...Q.munshiFollowup.policy, singletonKey: 'munshi.followup', singletonSeconds: 1800 }, true)
+  if (agent === 'munshi.growth') return sendOrThrow(Q.munshiGrowth.name, { kind: 'growth' }, { ...Q.munshiGrowth.policy, singletonKey: 'munshi.growth', singletonSeconds: 3600 }, true)
   // S3.1 — the watcher (web cron, every 15 min; overlapping ticks collapse) and a web / mobile composer turn (the web
   // stored the buyer's turn; the runtime runs the SAME turn engine as WhatsApp). Validated shapes only.
-  if (agent === 'procurement.watch') return boss.send(PROCUREMENT_WATCH_QUEUE, { kind: 'watch' }, { retryLimit: 0, singletonKey: 'procurement.watch', singletonSeconds: 600 })
+  if (agent === 'procurement.watch') return sendOrThrow(Q.procurementWatch.name, { kind: 'watch' }, { ...Q.procurementWatch.policy, singletonKey: 'procurement.watch', singletonSeconds: 600 }, true)
   if (agent === 'procurement.turn') {
     const t = data as Partial<ProcurementTurnJob>
     const uuid = /^[0-9a-f-]{36}$/i
     if (typeof t.userId !== 'string' || !uuid.test(t.userId) || typeof t.turnId !== 'string' || !uuid.test(t.turnId) || (t.sessionId !== null && t.sessionId !== undefined && !uuid.test(String(t.sessionId))) || (t.surface !== 'web' && t.surface !== 'mobile')) throw new Error('bad_procurement_turn')
     const forced = t.forced && typeof t.forced === 'object' ? { ...(typeof t.forced.label === 'string' && /^[A-G]$/.test(t.forced.label) ? { label: t.forced.label } : {}), ...(t.forced.sessionChoice === 'new' || t.forced.sessionChoice === 'current' ? { sessionChoice: t.forced.sessionChoice } : {}) } : null
-    return enqueueProcurementTurnJob({ userId: t.userId, surface: t.surface, sessionId: t.sessionId ?? null, turnId: t.turnId, ...(forced && Object.keys(forced).length ? { forced } : {}) })
+    return { jobId: await enqueueProcurementTurnJob({ userId: t.userId, surface: t.surface, sessionId: t.sessionId ?? null, turnId: t.turnId, ...(forced && Object.keys(forced).length ? { forced } : {}) }), deduped: false }
   }
   if (agent === 'procurement.decide') {
     // the web / mobile tap (the web route verified the run is the open proposal of the buyer's own session)
     const d = data as Partial<ProcurementDecideJob>
     const uuid = /^[0-9a-f-]{36}$/i
     if (typeof d.runId !== 'string' || !uuid.test(d.runId) || typeof d.userId !== 'string' || !uuid.test(d.userId) || (d.action !== 'ok' && d.action !== 'edit' && d.action !== 'no')) throw new Error('bad_procurement_decide')
-    return enqueueProcurementDecideJob({ runId: d.runId, userId: d.userId, action: d.action, via: 'web' })
+    return { jobId: await enqueueProcurementDecideJob({ runId: d.runId, userId: d.userId, action: d.action, via: 'web' }), deduped: false }
   }
   if (agent === 'onboarding') {
     // The web start route: { kind:'start', sessionId }. Validated shape only.
     const t = data as Partial<OnboardingTurn>
     if ((t.kind !== 'start' && t.kind !== 'message' && t.kind !== 'expire') || typeof t.sessionId !== 'string') throw new Error('bad_onboarding_turn')
-    return enqueueOnboardingJob({ kind: t.kind, sessionId: t.sessionId, ...(t.messageId ? { messageId: t.messageId } : {}) })
+    return { jobId: await enqueueOnboardingJob({ kind: t.kind, sessionId: t.sessionId, ...(t.messageId ? { messageId: t.messageId } : {}) }), deduped: false }
   }
   if (agent === 'onboarding.expire') {
     // The web cron: enumerate sessions past expires_at and enqueue one expire turn each.
     const ids = await listExpiredOnboardingSessions(admin())
     for (const id of ids) await enqueueOnboardingJob({ kind: 'expire', sessionId: id })
-    return `expire:${ids.length}`
+    return { jobId: `expire:${ids.length}`, deduped: false }
   }
   const payload = { agent, ...(data as object) } as RunJob
-  if (agent === 'payout_dossier') return boss.send(DOSSIER_QUEUE, payload, { ...DOSSIER_RETRY })
-  if (agent === 'dispute_triage') return boss.send(TRIAGE_QUEUE, payload, { ...DOSSIER_RETRY })
-  return boss.send(QUEUE, payload)
+  if (agent === 'payout_dossier') return sendOrThrow(Q.dossier.name, payload, { ...Q.dossier.policy })
+  if (agent === 'dispute_triage') return sendOrThrow(Q.triage.name, payload, { ...Q.triage.policy })
+  return sendOrThrow(Q.run.name, payload, {})
 }
 
-/** Enqueue an inbound WhatsApp message for the wa.inbound job (called by the webhook). */
+/**
+ * Enqueue an inbound WhatsApp message for the wa.inbound job (the webhook and the
+ * sweep). The job id IS the message id, so a message has at most one job while
+ * pg-boss keeps it (≥ 12 h): a replayed webhook or the sweep never double-process.
+ * Returns the job id when a job was created, null when one already exists or the
+ * worker is not running (the message is stored; the sweep picks it up).
+ */
 export async function enqueueWaInbound(messageId: string): Promise<string | null> {
-  if (!boss) return null // worker disabled (no DATABASE_URL): the message is stored; nothing replies
-  return boss.send(WA_QUEUE, { messageId })
+  if (!boss) return null
+  return boss.send(Q.waInbound.name, { messageId }, { id: messageId, ...Q.waInbound.policy })
 }
 
 export async function stopWorker(): Promise<void> {
   if (boss) await boss.stop()
   boss = null
+  setState('stopped')
 }

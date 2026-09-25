@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { parseProcurementButton, procurementSessionIsActive } from '@amclub/shared'
+import { parseProcurementButton } from '@amclub/shared'
 import { buttonPayloadOf } from '../onboarding/index'
-import { isAgentEnabledForUser } from '../../settings'
 import type { ProcurementTurnJob } from './turn'
 import type { ProcurementDecideJob } from './decide'
 
@@ -14,11 +13,11 @@ export { type ProcurementRuntimeDeps } from './store'
  * S3.1 — the dispatcher branch (called from whatsapp/inbound.ts). Placed with Munshi's — after the active onboarding
  * session, BEFORE the S0.5 opt-in keywords — because "yes" / "ok" / "hi" are opt-in keywords: after them a buyer's
  * typed yes to a draft would never reach the session (and would re-run the opt-in). STOP (first in the dispatcher)
- * still always wins. Routed here:
- *   - a `pr:` button whose run / session belongs to this user (decision · label pick · session choice / start offer);
- *   - any text / audio / image / document while the conversation's procurement session is active and procurement is
- *     enabled for the user (the halt of an open support ticket is applied inside the turn).
- * Everything else falls through (the S2.3 support branch offers new_need → the "Shall I start a request?" button).
+ * still always wins. Routed here: a `pr:` button whose run / session belongs to this user (decision · label pick ·
+ * session choice / start offer). Text / audio / image / document while the conversation's session is active is routed
+ * by `whatsapp/confirmations.ts` (audit M42) with `textApproval` set only when a typed yes is bound to this session's
+ * proposal (the halt of an open support ticket is applied inside the turn). Everything else falls through (the S2.3
+ * support branch offers new_need → the "Shall I start a request?" button).
  */
 
 export interface ProcurementInboundHooks {
@@ -52,11 +51,7 @@ export async function routeProcurementInbound(
     await hooks.enqueueProcurementTurn({ userId: args.userId, surface: 'whatsapp', sessionId: args.procurementSessionId, conversationId: args.conversationId, messageId: btn.messageId, forced: { sessionChoice: btn.choice } })
     return true
   }
-  if (!args.procurementSessionId) return false
-  if (!['text', 'audio', 'image', 'document'].includes(args.row.kind)) return false
-  const { data: s } = await admin.from('procurement_sessions').select('id, user_id, state').eq('id', args.procurementSessionId).is('deleted_at', null).maybeSingle()
-  if (!s || (s as { user_id: string }).user_id !== args.userId || !procurementSessionIsActive((s as { state: string }).state)) return false
-  if (!(await isAgentEnabledForUser(admin, 'procurement', args.userId))) return false
-  await hooks.enqueueProcurementTurn({ userId: args.userId, surface: 'whatsapp', sessionId: args.procurementSessionId, conversationId: args.conversationId, messageId: args.messageId })
-  return true
+  // Audit M42: a message while the session is active is routed by whatsapp/confirmations.ts, which binds a typed /
+  // spoken yes to at most one open proposal across Munshi, procurement and support before this session may take it.
+  return false
 }

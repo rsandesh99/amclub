@@ -1,4 +1,4 @@
-import type { SupportIntent, SupportLocale } from '@amclub/shared'
+import { redactContactInfo, type SupportIntent, type SupportLocale } from '@amclub/shared'
 import { envelope } from '../untrusted/envelope'
 import type { ChatParts } from '../llm/gateway'
 
@@ -39,8 +39,10 @@ export function buildSupportIntentParts(input: SupportIntentPartsInput): ChatPar
     `order_numbers: ${input.orders.length ? input.orders.slice(0, 10).map((o) => line(o.number, 40)).join(' | ') : 'none'}`,
     `request_titles: ${input.rfqs.length ? input.rfqs.slice(0, 10).map((r) => `"${line(r.title, 60)}"`).join(' | ') : 'none'}`,
   ]
-  const untrusted = [envelope(input.text, { kind: input.channel, id: input.messageId })]
-  if (input.previousText && input.previousText.trim()) untrusted.push(envelope(input.previousText, { kind: `${input.channel}_previous`, id: input.previousMessageId ?? `${input.messageId}-prev` }))
+  // audit M23: the live message (and the previous one) is contact-masked BEFORE it reaches the prompt — the stored copy
+  // already was (support_messages, the ticket transcript); a phone number or email never needs to leave for a classifier
+  const untrusted = [envelope(redactContactInfo(input.text).text, { kind: input.channel, id: input.messageId })]
+  if (input.previousText && input.previousText.trim()) untrusted.push(envelope(redactContactInfo(input.previousText).text, { kind: `${input.channel}_previous`, id: input.previousMessageId ?? `${input.messageId}-prev` }))
   return { trusted, untrusted }
 }
 
@@ -66,6 +68,7 @@ export function buildTicketSummaryParts(input: TicketSummaryPartsInput): ChatPar
     input.order ? `order: number=${line(input.order.order_number, 40)} status=${line(input.order.status, 40)} amount=${line(input.order.amount, 20)}` : 'order: none',
     input.rfq ? `request: title="${line(input.rfq.title, 60)}" status=${line(input.rfq.status, 40)} quotes=${input.rfq.quote_count}` : 'request: none',
   ]
-  const untrusted = input.transcript.slice(-6).map((t) => envelope(t.text, { kind: t.role === 'user' ? 'support_transcript_user' : 'support_transcript_assistant', id: t.id }))
+  // audit M23: a user turn may arrive unmasked (the runtime posts WhatsApp bodies) — masked here, before the prompt
+  const untrusted = input.transcript.slice(-6).map((t) => envelope(t.role === 'user' ? redactContactInfo(t.text).text : t.text, { kind: t.role === 'user' ? 'support_transcript_user' : 'support_transcript_assistant', id: t.id }))
   return { trusted, untrusted }
 }

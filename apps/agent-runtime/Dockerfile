@@ -31,5 +31,7 @@ EXPOSE 8080
 # Never run as root (audit M26): the official image ships the unprivileged `node`
 # user. The app only reads /app; tsx's compile cache goes to the OS temp dir.
 USER node
-# tsx runs the source packages directly (they ship TS, not compiled JS).
+# tsx runs the source packages directly (they ship TS, not compiled JS). The runtime package is
+# CommonJS on purpose: as ESM, Node cannot see the named exports the CommonJS-compiled source
+# packages re-export (`export *`), and this CMD died at the first import (docs/agents/RUNTIME.md).
 CMD ["node", "--import", "tsx", "src/main.ts"]

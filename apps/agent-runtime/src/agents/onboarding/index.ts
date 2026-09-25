@@ -29,6 +29,7 @@ import {
 } from '@amclub/shared'
 import { businessNameOf, promptFor, reviewButtons, stepMachine, type MachineInbound, type MachineSession, type OutboundMsg } from './machine'
 import { transcribeVoiceNote } from './stt'
+import { conversationServesUser, currentWhatsAppGrants } from '../../whatsapp/binding'
 
 /**
  * Onboarding agent (BUILD_PROMPTS S1.6). Persona provider. A SCRIPTED
@@ -201,14 +202,17 @@ function onboardingAgent(deps: OnboardingRuntimeDeps, session: SessionRow): Agen
   const locale = toOnboardingLocale(session.locale)
   const link = onboardingLink(deps.apiUrl, session.id)
 
+  /** Audit M41: the session's conversation only while it is still bound to the provider and is their current phone. */
   async function conversation(): Promise<ConversationRow | null> {
     if (!session.conversation_id) return null
-    const { data } = await admin.from('wa_conversations').select('id, phone_e164, window_open_until').eq('id', session.conversation_id).maybeSingle()
-    return (data as ConversationRow | null) ?? null
+    const { data } = await admin.from('wa_conversations').select('id, phone_e164, window_open_until, user_id').eq('id', session.conversation_id).maybeSingle()
+    const conv = data as (ConversationRow & { user_id: string | null }) | null
+    if (!conv || !(await conversationServesUser(admin, conv, session.user_id))) return null
+    return { id: conv.id, phone_e164: conv.phone_e164, window_open_until: conv.window_open_until }
   }
+  /** A WhatsApp grant given from the provider's current phone. */
   async function hasWhatsAppGrant(): Promise<boolean> {
-    const { data } = await admin.from('agent_grants').select('id').eq('user_id', session.user_id).eq('channel', 'whatsapp').is('revoked_at', null).limit(1)
-    return Array.isArray(data) && data.length > 0
+    return (await currentWhatsAppGrants(admin, session.user_id)).length > 0
   }
   async function recordOutbound(conv: ConversationRow, kind: 'text' | 'button' | 'template', body: string | null, r: { ok: boolean; vendorMessageId: string | null; detail: string }, extra: Record<string, unknown> = {}) {
     await admin.from('wa_messages').insert({

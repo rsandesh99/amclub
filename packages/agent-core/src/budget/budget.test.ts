@@ -93,4 +93,37 @@ describe('resolveCaps', () => {
     const caps = resolveCaps({ budget_run_paise: 1234 })
     expect(caps.runPaise).toBe(1234)
   })
+
+  it('audit M24: the open envelope defaults from the registry and never exceeds the month cap', () => {
+    expect(resolveCaps().monthOpenPaise).toBe(200_000)
+    expect(resolveCaps({ budget_month_paise: 100_000 }).monthOpenPaise).toBe(100_000)
+    expect(resolveCaps({ budget_month_open_paise: 50_000 }).monthOpenPaise).toBe(50_000)
+  })
+})
+
+describe('audit M24 — the open envelope keeps headroom for the cohort and ops', () => {
+  const caps = { runPaise: 1_000_000, userDayPaise: 1_000_000, monthPaise: 10_000, monthOpenPaise: 4_000 }
+  it('outside traffic stops at the envelope while the cohort keeps spending up to the month cap', async () => {
+    const redis = fakeRedis()
+    // many different outside users, one small call each
+    for (let i = 0; i < 4; i++) {
+      const b = createRedisBudget({ redis, caps, runId: `open-${i}`, userId: `stranger-${i}`, audience: 'open' })
+      expect((await b.check()).ok).toBe(true)
+      await b.add(1_000)
+    }
+    const fifth = await createRedisBudget({ redis, caps, runId: 'open-5', userId: 'stranger-5', audience: 'open' }).check()
+    expect(fifth).toMatchObject({ ok: false, breach: 'month_open_cap' })
+    const cohort = createRedisBudget({ redis, caps, runId: 'c1', userId: 'member', audience: 'cohort' })
+    expect((await cohort.check()).ok).toBe(true)
+    await cohort.add(5_000)
+    expect((await createRedisBudget({ redis, caps, runId: 'ops', userId: 'founder', audience: 'ops' }).check()).ok).toBe(true)
+    // the month cap still binds everyone
+    await cohort.add(1_000)
+    expect(await createRedisBudget({ redis, caps, runId: 'c2', userId: 'member', audience: 'cohort' }).check()).toMatchObject({ ok: false, breach: 'month_cap' })
+  })
+  it('cohort / ops spend never touches the open counter', async () => {
+    const redis = fakeRedis()
+    await createRedisBudget({ redis, caps, runId: 'c1', userId: 'm', audience: 'cohort' }).add(3_000)
+    expect([...redis.store.keys()].some((k) => k.includes('month_open'))).toBe(false)
+  })
 })
