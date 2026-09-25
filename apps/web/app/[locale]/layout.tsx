@@ -104,9 +104,13 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: 'common' })
 
   return {
+    // `absolute`, not `default`: a default is itself run through the root
+    // layout's '%s | AMClub' template, so every untitled page read
+    // "AMClub | AMClub". Pages and section layouts set their own title, and
+    // this template adds the brand once.
     title: {
       template: `%s | ${t('app_name')}`,
-      default: t('app_name'),
+      absolute: t('app_name'),
     },
     description: t('tagline'),
   }

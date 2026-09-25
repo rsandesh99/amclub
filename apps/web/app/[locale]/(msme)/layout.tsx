@@ -3,6 +3,10 @@ import { getSessionUser, getMsmeProfile, getProviderProfile } from '@/lib/auth/s
 import { AppShell } from '@/components/shell/AppShell'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getMsmeSuspension } from '@/lib/auth/suspension'
+import { sectionTitle } from '@/lib/i18n/section-title'
+
+/** The buyer home's tab title ("Home | AMClub"); each /app section's layout names its own. */
+export const generateMetadata = sectionTitle('nav_v3', 'home')
 
 export default async function MsmeLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
