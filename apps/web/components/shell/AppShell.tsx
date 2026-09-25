@@ -69,20 +69,24 @@ export async function AppShell({
     // Bottom room so the last content can scroll clear of what is pinned to the
     // bottom: the phone tab bar (3.5rem), and the corner assistant above it
     // (1rem + 3rem) when it shows. From lg (no tab bar) only the assistant.
+    // lg:[&>.mx-auto]:ml-0 — beside the rail every page starts at the same left
+    // edge (pages centre their own max-width box; a narrow one such as the
+    // profile otherwise sat further right than the rest).
     const mainClass = !role
       ? 'min-w-0 flex-1'
-      : `min-w-0 flex-1 ${launcher ? 'pb-32 lg:pb-24' : 'pb-24 lg:pb-10'}`
+      : `min-w-0 flex-1 lg:[&>.mx-auto]:ml-0 ${launcher ? 'pb-32 lg:pb-24' : 'pb-24 lg:pb-10'}`
     return (
       // --tabbar-h: sticky action bars (requirement form, …) sit above the phone tab bar.
-      <div data-ui="v3" data-density={density} className={role ? 'flex min-h-screen flex-col bg-background text-foreground [--tabbar-h:3.5rem] lg:[--tabbar-h:0px]' : 'flex min-h-screen flex-col bg-background text-foreground'}>
+      <div data-app-shell data-ui="v3" data-density={density} className={role ? 'flex min-h-screen flex-col bg-background text-foreground [--tabbar-h:3.5rem] lg:[--tabbar-h:0px]' : 'flex min-h-screen flex-col bg-background text-foreground'}>
         <ActionsProvider>
           <ShellTopBar
             // A buyer's full results page; provider / admin shells use the public catalog.
             fullResultsPath={context === 'msme' ? '/app/search' : '/services'}
             brand={
               // Phones: the wordmark alone, a little smaller (the " Partner" / " Admin" suffix
-              // joins from sm up; the tab bar already says which surface this is).
-              <Link href={homeHref as '/app'} prefetch={false} className="shrink-0 text-[20px] font-bold leading-none tracking-tight text-primary sm:text-[22px]">
+              // joins from sm up; the tab bar already says which surface this is). flex + items-center:
+              // the 44 px minimum tap height otherwise leaves the one-line wordmark at the top of its box.
+              <Link href={homeHref as '/app'} prefetch={false} className="flex shrink-0 items-center text-[20px] font-bold leading-none tracking-tight text-primary sm:text-[22px]">
                 AMClub<span className="hidden font-medium text-foreground-secondary sm:inline">{suffix}</span>
               </Link>
             }
@@ -119,7 +123,7 @@ export async function AppShell({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div data-app-shell className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-2 px-4 sm:gap-4">
           <Link
