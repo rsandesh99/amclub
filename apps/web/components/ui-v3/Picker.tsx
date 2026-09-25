@@ -41,6 +41,8 @@ export function Picker({
   clearLabel,
   recentKey,
   id,
+  invalid = false,
+  describedBy,
   className,
 }: {
   label: string
@@ -54,6 +56,9 @@ export function Picker({
   /** Remember recent picks on this device under this key. */
   recentKey?: string
   id?: string
+  /** Draws the field invalid (form validation); pair with `describedBy` = the error message's id (a button takes no aria-invalid). */
+  invalid?: boolean
+  describedBy?: string | undefined
   className?: string
 }) {
   const t = useTranslations('ui')
@@ -111,9 +116,11 @@ export function Picker({
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-label={`${label}: ${selected?.label ?? placeholder ?? ''}`}
+        aria-describedby={describedBy}
         className={cn(
           'flex h-11 w-full items-center justify-between gap-2 rounded-input border border-border bg-surface px-3 text-left text-sm',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          invalid && 'border-danger',
           className,
         )}
       >

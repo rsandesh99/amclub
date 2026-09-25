@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
+import { invalidateUnreadNotifications } from './useUnreadNotifications'
 
 /** Stored copy: en always; hi / te / ta only where the event carries them. */
 type NotifText = { en: string; hi?: string; te?: string; ta?: string }
@@ -57,6 +58,8 @@ export function NotificationCenter() {
       body: JSON.stringify(id ? { id } : { all: true }),
     })
     setItems((prev) => prev.map((n) => (!id || n.id === id ? { ...n, read_at: new Date().toISOString() } : n)))
+    // The bell's badge reads the shared count: update it now, not at the next poll.
+    invalidateUnreadNotifications()
   }
 
   async function open(n: Notif) {

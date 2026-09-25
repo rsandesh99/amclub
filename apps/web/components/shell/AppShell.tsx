@@ -1,9 +1,11 @@
+import { Suspense } from 'react'
 import { Link } from '@/i18n/navigation'
 import { resolveDensity } from '@amclub/shared'
 import { LanguageSwitcher } from '@/components/catalog/LanguageSwitcher'
 import { JurisdictionSelector } from '@/components/catalog/JurisdictionSelector'
 import { NotificationBell } from './NotificationBell'
 import { AccountMenu, type ShellContext } from './AccountMenu'
+import { AccessNotice } from './AccessNotice'
 import { LegalGate } from '@/components/legal/LegalGate'
 import { isOnFor } from '@/lib/experiments'
 import { getUiDensity } from '@/lib/auth/session'
@@ -25,6 +27,8 @@ import { AssistantLauncher } from '@/components/assistant/AssistantLauncher'
 export async function AppShell({
   context,
   name,
+  email = null,
+  phone = null,
   roles,
   userId,
   hasMsmeProfile,
@@ -34,6 +38,9 @@ export async function AppShell({
 }: {
   context: ShellContext
   name: string | null
+  /** The account menu says who is signed in (and the avatar letter) when there is no name. */
+  email?: string | null
+  phone?: string | null
   roles: string[]
   /** Needed for the v3 flag bucket and the density preference. */
   userId?: string
@@ -60,16 +67,29 @@ export async function AppShell({
     // Rail + tab bar only where the role's surfaces exist (a buyer mid-onboarding
     // in the provider group sees the plain shell).
     const role = focused ? null : context === 'msme' ? 'buyer' : context === 'provider' && hasProvider ? 'provider' : null
+    const launcher = Boolean(role && AGENT_ENABLED)
+    // Bottom room so the last content can scroll clear of what is pinned to the
+    // bottom: the phone tab bar (3.5rem), and the corner assistant above it
+    // (1rem + 3rem) when it shows. From lg (no tab bar) only the assistant.
+    // lg:[&>.mx-auto]:ml-0 — beside the rail every page starts at the same left
+    // edge (pages centre their own max-width box; a narrow one such as the
+    // profile otherwise sat further right than the rest).
+    const mainClass = !role
+      ? 'min-w-0 flex-1'
+      : `min-w-0 flex-1 lg:[&>.mx-auto]:ml-0 ${launcher ? 'pb-32 lg:pb-24' : 'pb-24 lg:pb-10'}`
     return (
       // --tabbar-h: sticky action bars (requirement form, …) sit above the phone tab bar.
-      <div data-ui="v3" data-density={density} className={role ? 'flex min-h-screen flex-col bg-background text-foreground [--tabbar-h:3.5rem] lg:[--tabbar-h:0px]' : 'flex min-h-screen flex-col bg-background text-foreground'}>
+      <div data-app-shell data-ui="v3" data-density={density} className={role ? 'flex min-h-screen flex-col bg-background text-foreground [--tabbar-h:3.5rem] lg:[--tabbar-h:0px]' : 'flex min-h-screen flex-col bg-background text-foreground'}>
         <ActionsProvider>
           <ShellTopBar
             // A buyer's full results page; provider / admin shells use the public catalog.
             fullResultsPath={context === 'msme' ? '/app/search' : '/services'}
             brand={
-              <Link href={homeHref as '/app'} className="shrink-0 text-[22px] font-bold leading-none tracking-tight text-primary">
-                AMClub<span className="font-medium text-foreground-secondary">{suffix}</span>
+              // Phones: the wordmark alone, a little smaller (the " Partner" / " Admin" suffix
+              // joins from sm up; the tab bar already says which surface this is). flex + items-center:
+              // the 44 px minimum tap height otherwise leaves the one-line wordmark at the top of its box.
+              <Link href={homeHref as '/app'} prefetch={false} className="flex shrink-0 items-center text-[20px] font-bold leading-none tracking-tight text-primary sm:text-[22px]">
+                AMClub<span className="hidden font-medium text-foreground-secondary sm:inline">{suffix}</span>
               </Link>
             }
             trailing={
@@ -79,6 +99,8 @@ export async function AppShell({
                 {context !== 'admin' && <NotificationBell href={notificationsHref} />}
                 <AccountMenu
                   name={name}
+                  email={email}
+                  phone={phone}
                   context={context}
                   hasMsme={hasMsme}
                   hasProvider={hasProvider}
@@ -91,11 +113,15 @@ export async function AppShell({
           />
           <div className="mx-auto flex w-full max-w-[1280px] flex-1 lg:px-6">
             {role && <SideRail role={role} martEnabled={MART_ENABLED} agentEnabled={AGENT_ENABLED} guide={isOnFor('guide', userId)} />}
-            <main className={role ? 'min-w-0 flex-1 pb-24 lg:pb-10' : 'min-w-0 flex-1'}>{children}</main>
+            <main className={mainClass}>
+              {/* After a redirect for lack of access (the admin layout's ?denied=admin). */}
+              <Suspense fallback={null}><AccessNotice /></Suspense>
+              {children}
+            </main>
           </div>
           {role && <TabBar role={role} martEnabled={MART_ENABLED} />}
           {/* The assistant, minimised in the corner of every buyer / provider page (not in a focused task like checkout). */}
-          {role && AGENT_ENABLED && <AssistantLauncher persona={role} />}
+          {role && launcher && <AssistantLauncher persona={role} />}
         </ActionsProvider>
         <LegalGate />
       </div>
@@ -103,27 +129,31 @@ export async function AppShell({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div data-app-shell className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-2 px-4 sm:gap-4">
           <Link
             href={homeHref as '/app'}
-            className="font-display text-[26px] font-bold leading-none tracking-tight text-primary"
+            prefetch={false}
+            className="shrink-0 font-display text-[22px] font-bold leading-none tracking-tight text-primary sm:text-[26px]"
           >
-            AMClub<span className="text-foreground-secondary">{suffix}</span>
+            AMClub<span className="hidden text-foreground-secondary sm:inline">{suffix}</span>
           </Link>
-          <div className="flex h-10 items-center gap-2">
+          <div className="flex h-10 min-w-0 items-center gap-1 sm:gap-2">
             {/* Jurisdiction is a buyer-discovery control — shown in the MSME shell. */}
             {context === 'msme' && <JurisdictionSelector className="hidden md:inline-flex" />}
             <LanguageSwitcher />
             {/* The bell links into the msme/provider notification centres — an
                 admin clicking it would be dropped out of the admin shell. */}
             {context !== 'admin' && <NotificationBell href={notificationsHref} />}
-            <AccountMenu name={name} context={context} hasMsme={hasMsme} hasProvider={hasProvider} isAdmin={isAdmin} />
+            <AccountMenu name={name} email={email} phone={phone} context={context} hasMsme={hasMsme} hasProvider={hasProvider} isAdmin={isAdmin} />
           </div>
         </div>
       </header>
-      <main className="flex-1">{children}</main>
+      <main className="flex-1">
+        <Suspense fallback={null}><AccessNotice /></Suspense>
+        {children}
+      </main>
       {/* Phase 2b — blocks the shell until current-version legal docs are accepted. */}
       <LegalGate />
     </div>

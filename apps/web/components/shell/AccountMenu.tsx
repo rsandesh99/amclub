@@ -12,6 +12,9 @@ export type ShellContext = 'msme' | 'provider' | 'admin' | 'public'
 
 interface AccountMenuProps {
   name: string | null
+  /** Who is signed in when there is no name (the email, else the phone). */
+  email?: string | null
+  phone?: string | null
   context: ShellContext
   /** PROFILE existence, not role flags — every provider signup also gets the
    *  'msme' role, so roles overstate which surfaces actually exist. */
@@ -24,9 +27,17 @@ interface AccountMenuProps {
   assistantHref?: string | null
 }
 
+/** The avatar letter: the name's initial, else the email's first letter, else
+ *  null (the avatar then shows a person icon, never "?"). */
+export function avatarInitials(name: string | null, email?: string | null): string | null {
+  const source = name?.trim() || (email ?? '').trim().split('@')[0] || ''
+  const letter = Array.from(source).find((c) => /[\p{L}\p{N}]/u.test(c))
+  return letter ? letter.toUpperCase() : null
+}
+
 /** Avatar dropdown: profile, role switch / become-provider, help, sign out.
  *  Shared across every logged-in surface (and the public header when logged in). */
-export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin, density, assistantHref = null }: AccountMenuProps) {
+export function AccountMenu({ name, email = null, phone = null, context, hasMsme, hasProvider, isAdmin, density, assistantHref = null }: AccountMenuProps) {
   const t = useTranslations('shell')
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
@@ -81,7 +92,9 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin, dens
     window.location.href = '/'
   }
 
-  const initial = (name ?? '?').charAt(0).toUpperCase()
+  const initials = avatarInitials(name, email)
+  // The menu says who is signed in: the name, and the email (else the phone) under it.
+  const identity = email || phone || null
   // Providers without a buyer profile must never be sent into /app/* — the
   // MSME pages bounce them through /signup?complete=1 (a confusing two-hop).
   const profileHref =
@@ -96,12 +109,18 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin, dens
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-surface pl-1 pr-2 hover:border-primary/40"
+        // Phones: the avatar alone (the chevron joins from sm up, where the header has room).
+        className="flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface pl-1 pr-1 hover:border-primary/40 sm:pr-2"
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-          {initial}
+          {initials ?? (
+            <>
+              <User className="h-4 w-4" aria-hidden />
+              <span className="sr-only">{t('profile')}</span>
+            </>
+          )}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 text-foreground-secondary" />
+        <ChevronDown className="hidden h-3.5 w-3.5 text-foreground-secondary sm:block" aria-hidden />
       </button>
 
       {open && (
@@ -109,9 +128,10 @@ export function AccountMenu({ name, context, hasMsme, hasProvider, isAdmin, dens
           role="menu"
           className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-card border border-border bg-surface py-1 shadow-card"
         >
-          {name && (
-            <div className="border-b border-border px-3 py-2">
-              <p className="truncate text-sm font-medium">{name}</p>
+          {(name || identity) && (
+            <div className="border-b border-border px-3 py-2" data-testid="account-identity">
+              {name && <p className="truncate text-sm font-medium">{name}</p>}
+              {identity && <p className={cn('truncate', name ? 'text-xs text-foreground-secondary' : 'text-sm font-medium')}>{identity}</p>}
             </div>
           )}
 
@@ -189,6 +209,8 @@ function MenuLink({
   return (
     <Link
       href={href as '/app'}
+      // Signed-in, dynamic pages: opening the menu must not fire a burst of RSC prefetches (F10).
+      prefetch={false}
       role="menuitem"
       onClick={onClick}
       className={cn('flex items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-primary/5')}

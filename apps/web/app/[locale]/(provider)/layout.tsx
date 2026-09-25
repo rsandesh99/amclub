@@ -1,6 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getSessionUser, getMsmeProfile, getProviderProfile } from '@/lib/auth/session'
 import { AppShell } from '@/components/shell/AppShell'
+import { sectionTitle } from '@/lib/i18n/section-title'
+
+/** The provider home's tab title ("Today | AMClub"); each /partner section's layout names its own. */
+export const generateMetadata = sectionTitle('nav_v3', 'today')
 
 export default async function ProviderLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
@@ -22,6 +26,8 @@ export default async function ProviderLayout({ children }: { children: React.Rea
     <AppShell
       context="provider"
       name={user.fullName}
+      email={user.email}
+      phone={user.phone}
       roles={user.roles}
       userId={user.id}
       hasMsmeProfile={Boolean(msme)}

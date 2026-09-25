@@ -1,6 +1,6 @@
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { FileText } from 'lucide-react'
-import { INDIAN_STATES } from '@amclub/shared'
+import { indianStateName } from '@amclub/shared'
 import { TrackedLink } from '@/components/analytics/TrackedLink'
 
 /**
@@ -9,7 +9,7 @@ import { TrackedLink } from '@/components/analytics/TrackedLink'
  */
 export async function WeakResultsCard({ query, category, state, zero }: { query?: string | undefined; category?: string | undefined; state?: string | undefined; zero: boolean }) {
   const t = await getTranslations('filters_v3')
-  const stateName = state ? INDIAN_STATES.find((s) => s.value === state)?.label : undefined
+  const stateName = state ? indianStateName(state, await getLocale()) : undefined
   const qs = new URLSearchParams()
   if (query) qs.set('q', query)
   if (category) qs.set('category', category)

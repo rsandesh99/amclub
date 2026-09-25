@@ -170,6 +170,8 @@ export const SUPPORT_REPLY_KEYS = [
   'nudge.out_of_window',
   'new_need.offer',
   'greeting',
+  // "What can you help me with?" — chosen by the engine (a deterministic text match on an unclear turn), never by the model.
+  'capabilities',
   'unclear',
   'unclear_again',
   'escalated',

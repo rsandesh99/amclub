@@ -945,6 +945,8 @@ export interface MyListing {
   providerSlug: string | null
   title: string
   status: string
+  /** false while the provider awaits approval: an active listing is not yet visible to buyers. */
+  providerActive?: boolean
   /** The stored list price and discount (server paise) — shown as stored, never recomputed. */
   pricePaise: number
   discountBps: number

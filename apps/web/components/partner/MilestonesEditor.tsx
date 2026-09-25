@@ -52,7 +52,7 @@ export function MilestonesEditor({ packageId, initial }: { packageId: string; in
   const invalid = rows.length > 0 && (rows.length < MIN_BUNDLE_MILESTONES || problems.length > 0 || parsed.some((m) => !m.label_i18n.en || !(m.due_offset_days >= 1 && m.due_offset_days <= MAX_BUNDLE_DAYS) || !(m.share_bps >= 100)))
 
   return (
-    <section className="mt-10 rounded-card border border-border bg-surface p-5" data-testid="milestones-editor">
+    <section className="rounded-card border border-border bg-surface p-5" data-testid="milestones-editor">
       <h2 className="font-display text-lg font-semibold">{t('editor_title')}</h2>
       <p className="mt-1 text-sm text-foreground-secondary">{t('editor_body', { days: MAX_BUNDLE_DAYS })}</p>
       {rows.length > 0 && (

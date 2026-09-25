@@ -115,6 +115,12 @@ export type ProviderOnboardingInput = z.infer<typeof providerOnboardingSchema>
 
 export const packageStatusSchema = z.enum(['draft', 'active', 'paused', 'removed'])
 
+/** Listing bounds — the ONE rule the partner routes enforce and the listing wizard shows inline. */
+export const PACKAGE_MAX_DISCOUNT_BPS = 9000
+export const PACKAGE_MAX_MEMBER_DISCOUNT_BPS = 5000
+export const PACKAGE_MAX_DELIVERY_DAYS = 365
+export const PACKAGE_MAX_REVISIONS = 10
+
 export const packageSchema = z.object({
   category_slug: z.enum(CATEGORY_SLUGS),
   title: z.string().min(5).max(200),
@@ -124,10 +130,10 @@ export const packageSchema = z.object({
   /** Buyer-requirement prompts collected at checkout (free-text questions). */
   requirements: z.array(z.string().min(1)).max(15).optional(),
   price_paise: paiseSchema,
-  discount_bps: z.number().int().min(0).max(9000).default(0),
-  member_extra_discount_bps: z.number().int().min(0).max(5000).default(0),
-  delivery_days: z.number().int().positive().max(365),
-  revision_count: z.number().int().min(0).max(10).default(1),
+  discount_bps: z.number().int().min(0).max(PACKAGE_MAX_DISCOUNT_BPS).default(0),
+  member_extra_discount_bps: z.number().int().min(0).max(PACKAGE_MAX_MEMBER_DISCOUNT_BPS).default(0),
+  delivery_days: z.number().int().positive().max(PACKAGE_MAX_DELIVERY_DAYS),
+  revision_count: z.number().int().min(0).max(PACKAGE_MAX_REVISIONS).default(1),
   faqs: z
     .array(z.object({ question: z.string().min(1), answer: z.string().min(1) }))
     .max(10)

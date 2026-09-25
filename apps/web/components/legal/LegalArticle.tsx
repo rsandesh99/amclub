@@ -26,10 +26,13 @@ export async function LegalArticle({
 }) {
   const t = await getTranslations('legal')
   const locale = await getLocale()
+  // One Indian style on every legal page ("7 July 2026", the refund policy's own form): the locale's -IN
+  // variant, Latin digits, IST. A bare 'en' formatted US-style ("July 7, 2026").
+  const tag = `${['hi', 'te', 'ta'].includes(locale) ? locale : 'en'}-IN-u-nu-latn`
   const updated =
     doc === 'refund'
       ? t('refund_updated')
-      : new Intl.DateTimeFormat(locale, { dateStyle: 'long' }).format(new Date(`${LEGAL_VERSIONS[doc]}T00:00:00Z`))
+      : new Intl.DateTimeFormat(tag, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).format(new Date(`${LEGAL_VERSIONS[doc]}T00:00:00Z`))
 
   return (
     <article className="mx-auto max-w-3xl px-4 py-10">

@@ -110,11 +110,13 @@ export async function MartBrowse({ params, base }: { params: BrowseParams; base:
   // E18 (flag `guide`): "Why AMClub" beside the listings on the unfiltered front page.
   const front = !params.category && !params.query && !params.brand && !params.band && !params.seller && !filters.attrs
   const guide = front && isOnForEveryone('guide')
+  // A category page is headed by its category ("AMC Mart" stays on the front page and search).
+  const currentCategory = params.category ? categories.find((c) => c.slug === params.category) : undefined
 
   return (
     <div className="mart-enter">
       <JaaliHeader>
-        <h1 className="font-display text-3xl font-bold tracking-tight text-emerald-ink">{t('title')}</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-emerald-ink">{currentCategory ? pickLocale(currentCategory.name_i18n, locale) : t('title')}</h1>
         <p className="mt-1 max-w-2xl text-body text-emerald-ink/80">{t('subtitle')}</p>
         {/* E16 N39 — the same Services | Goods switch as the services search. */}
         <div className="mt-4"><ModeSwitch mode="goods" query={params.query} /></div>
@@ -124,7 +126,7 @@ export async function MartBrowse({ params, base }: { params: BrowseParams; base:
       </JaaliHeader>
 
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <nav aria-label={t('categories')} className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        <nav aria-label={t('categories')} className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Link
             href={`/mart${keepQs}` as '/services'}
             className={`chip-toggle h-10 shrink-0 text-meta ${!params.category ? 'border-emerald bg-emerald text-ivory' : 'border-brass/50 bg-ivory text-emerald-ink'}`}

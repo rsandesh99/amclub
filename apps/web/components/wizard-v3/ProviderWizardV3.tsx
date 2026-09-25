@@ -6,8 +6,11 @@ import {
   autofilledFields,
   CATEGORY_LIST,
   categoriesRequiringCredential,
+  indianStateName,
+  indianStateOptions,
   isValidGstin,
   ONBOARDING_V3_STEPS,
+  pickI18n,
   PROVIDER_LANGUAGES,
   PROVIDER_LEGAL_DOCS,
   statutoryOptionsForCategory,
@@ -17,7 +20,6 @@ import {
 import { useRouter } from '@/i18n/navigation'
 import { acceptLegalDocs } from '@/lib/legal/client'
 import { useAnalytics } from '@/components/providers/posthog'
-import { INDIAN_STATES } from '@/lib/constants/india'
 import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -256,7 +258,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
   const stepNames = [t('step_contact'), t('step_business'), t('step_credentials_bank'), t('step_review')]
   const idx = ONBOARDING_V3_STEPS.indexOf(view as OnboardingV3Step)
   const fromGst = <span className="t-caption text-foreground-secondary" data-testid="from-gst">{t('from_gst')}</span>
-  const stateLabel = (code: string) => INDIAN_STATES.find((s) => s.value === code)?.label ?? code
+  const stateLabel = (code: string) => indianStateName(code, locale)
 
   // ── Render ───────────────────────────────────────────────────────────────────
   if (view === 'needs') {
@@ -347,7 +349,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
                 {draft.autofill?.tradeName && draft.displayName === draft.autofill.tradeName ? fromGst : null}
               </div>
               <div className="space-y-1">
-                <Picker id="ob-state" label={tp('state_label')} value={draft.stateCode || null} options={INDIAN_STATES.map((s) => ({ value: s.value, label: s.label }))} onChange={(v) => update({ stateCode: v ?? '' })} />
+                <Picker id="ob-state" label={tp('state_label')} value={draft.stateCode || null} options={indianStateOptions(locale)} onChange={(v) => update({ stateCode: v ?? '' })} />
                 {draft.autofill?.state && draft.stateCode === draft.autofill.state ? fromGst : null}
               </div>
               {draft.autofill?.registrationDate && (
@@ -357,7 +359,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
                 <Label htmlFor="ob-city">{tp('city_label')}</Label>
                 <Input id="ob-city" value={draft.city} placeholder={tp('city_placeholder')} onChange={(e) => update({ city: e.target.value })} />
               </div>
-              <Picker id="ob-category" label={t('primary_category')} value={draft.primaryCategory || null} options={CATEGORY_LIST.map((c) => ({ value: c.slug, label: (locale === 'hi' && c.name_i18n.hi) ? c.name_i18n.hi : c.name_i18n.en }))} onChange={(v) => update({ primaryCategory: v ?? '', extraCategories: draft.extraCategories.filter((x) => x !== v) })} />
+              <Picker id="ob-category" label={t('primary_category')} value={draft.primaryCategory || null} options={CATEGORY_LIST.map((c) => ({ value: c.slug, label: pickI18n(c.name_i18n, locale) }))} onChange={(v) => update({ primaryCategory: v ?? '', extraCategories: draft.extraCategories.filter((x) => x !== v) })} />
               {draft.primaryCategory && (
                 <div className="space-y-1.5">
                   <p className="t-footnote text-foreground-secondary">{t('more_categories')}</p>
@@ -372,7 +374,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
                           onClick={() => update({ extraCategories: on ? draft.extraCategories.filter((x) => x !== c.slug) : draft.extraCategories.length < MAX_CATEGORIES - 1 ? [...draft.extraCategories, c.slug] : draft.extraCategories })}
                           className={`rounded-chip border px-3 py-1 text-sm ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border'}`}
                         >
-                          {(locale === 'hi' && c.name_i18n.hi) ? c.name_i18n.hi : c.name_i18n.en}
+                          {pickI18n(c.name_i18n, locale)}
                         </button>
                       )
                     })}
@@ -415,7 +417,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
             const opts = statutoryOptionsForCategory(slug)
             return (
               <div key={slug} className="space-y-2 rounded-card border border-border p-3" data-testid={`cred-${slug}`}>
-                <p className="text-sm font-medium">{cat ? ((locale === 'hi' && cat.name_i18n.hi) ? cat.name_i18n.hi : cat.name_i18n.en) : slug}</p>
+                <p className="text-sm font-medium">{cat ? pickI18n(cat.name_i18n, locale) : slug}</p>
                 <SegmentedControl ariaLabel={tp('credential_kind_label')} size="sm" value={draft.credentialKinds[slug] ?? null} onChange={(v) => update({ credentialKinds: { ...draft.credentialKinds, [slug]: v } })} options={opts.map((o) => ({ value: o, label: tGw(`cred_${o}` as 'cred_ca') }))} />
                 <div className="space-y-1">
                   <Label htmlFor={`ob-cred-${slug}`}>{tp('credential_number_label')}</Label>
@@ -462,7 +464,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
           <h2 className="t-title-3">{t('step_review')}</h2>
           {[
             { key: 'contact' as const, rows: [[t('name_label'), draft.fullName]] },
-            { key: 'business' as const, rows: [[tp('gstin_label'), draft.gstin], [tp('legal_name_label'), draft.legalName], [tp('display_name_label'), draft.displayName], [tp('state_label'), stateLabel(draft.stateCode)], [t('primary_category'), CATEGORY_LIST.find((c) => c.slug === draft.primaryCategory)?.name_i18n.en ?? '']] },
+            { key: 'business' as const, rows: [[tp('gstin_label'), draft.gstin], [tp('legal_name_label'), draft.legalName], [tp('display_name_label'), draft.displayName], [tp('state_label'), stateLabel(draft.stateCode)], [t('primary_category'), pickI18n(CATEGORY_LIST.find((c) => c.slug === draft.primaryCategory)?.name_i18n, locale)]] },
             { key: 'credentials_bank' as const, rows: [...credSlugs.map((s) => [tGw(`cred_${draft.credentialKinds[s] ?? 'ca'}` as 'cred_ca'), draft.credentialNumbers[s] ?? '']), [tp('bank_account_label'), draft.bankAccount ? `•••• ${draft.bankAccount.slice(-4)}` : ''], [tp('bank_ifsc_label'), draft.bankIfsc]] },
           ].map((sec) => (
             <div key={sec.key} className="rounded-card border border-border p-3">

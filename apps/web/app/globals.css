@@ -192,6 +192,15 @@
     overflow-x: clip;
   }
 
+  /* Signed-in shells (AppShell marks itself data-app-shell): keep the
+     scrollbar's gutter reserved, so the header and the side rail do not jump
+     sideways between a page that scrolls and one that does not. Public and
+     gateway pages keep full-bleed backgrounds. No effect with overlay
+     scrollbars (phones, macOS default). */
+  html:has([data-app-shell]) {
+    scrollbar-gutter: stable;
+  }
+
   /* Ensure minimum 44px tap targets on mobile §4.4 */
   button,
   [role="button"],

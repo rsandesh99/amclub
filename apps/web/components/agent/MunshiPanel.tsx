@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { CATEGORY_LIST, MUNSHI_CONSENT_TEXT_VERSION, formatRupees, type MunshiDraft, type ThreadReplyDraft } from '@amclub/shared'
+import { CATEGORY_LIST, MUNSHI_CONSENT_TEXT_VERSION, formatRupees, pickI18n, type MunshiDraft, type ThreadReplyDraft } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
@@ -139,7 +139,7 @@ export function MunshiPanel({ whatsappNumber }: { whatsappNumber: string | null 
   if (!state) return <p className="text-sm text-foreground-secondary">{t('unavailable')}</p>
   const catName = (slug: string) => {
     const c = CATEGORY_LIST.find((x) => x.slug === slug)
-    return c ? (locale === 'hi' ? c.name_i18n.hi : c.name_i18n.en) : slug
+    return c ? pickI18n(c.name_i18n, locale) : slug
   }
   const hoursLeft = (iso: string) => Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 3600000))
 
@@ -285,7 +285,7 @@ export function MunshiPanel({ whatsappNumber }: { whatsappNumber: string | null 
         <div className="mt-4 grid gap-2 sm:grid-cols-4">
           <select className="field" value={add.category_slug} onChange={(e) => setAdd({ ...add, category_slug: e.target.value })} aria-label={t('pb_category')}>
             {CATEGORY_LIST.map((c) => (
-              <option key={c.slug} value={c.slug}>{locale === 'hi' ? c.name_i18n.hi : c.name_i18n.en}</option>
+              <option key={c.slug} value={c.slug}>{pickI18n(c.name_i18n, locale)}</option>
             ))}
           </select>
           <input className="field" inputMode="decimal" placeholder={t('pb_price_placeholder')} value={add.price} onChange={(e) => setAdd({ ...add, price: e.target.value })} aria-label={t('pb_price')} />

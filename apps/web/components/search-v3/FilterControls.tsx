@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useLocale, useTranslations } from 'next-intl'
 import { BadgeCheck, Clock, IndianRupee, Star, Languages, SlidersHorizontal, LayoutGrid, List, Check } from 'lucide-react'
@@ -30,6 +30,7 @@ function SectionView({ section, variant, onSet }: { section: FilterSection; vari
     return (
       <Picker
         label={section.title}
+        placeholder={t('any')}
         value={section.value}
         allowClear
         clearLabel={t('any')}
@@ -78,6 +79,12 @@ function SectionView({ section, variant, onSet }: { section: FilterSection; vari
   }
   return (
     <div className="flex flex-wrap gap-2">
+      {/* Single-choice chips start with "Any" (clears the filter), like the segmented sections. */}
+      {section.kind === 'chips' && (
+        <button type="button" aria-pressed={section.value === null} onClick={() => onSet(null)} className={chipCls(section.value === null)}>
+          {t('any')}
+        </button>
+      )}
       {section.options.map((o) => {
         const on = section.value === o.value
         return (
@@ -97,6 +104,8 @@ function useSections(facets: SearchFacets | null, fixedCategory?: string, fixedS
   const nav = useSearchNav()
   const sections = filterSections((k, v) => t(k as never, v as never), locale, nav.current, facets, fixedCategory)
     .filter((sec) => !(fixedService && sec.key === 'service'))
+    // A section with nothing to choose (e.g. no provider here holds any credential) is not drawn.
+    .filter((sec) => sec.options.length > 0)
   return { nav, sections }
 }
 
@@ -108,6 +117,14 @@ export function FilterChipBar({ facets, fixedCategory, fixedService, className }
   const t = useTranslations('filters_v3')
   const { nav, sections } = useSections(facets, fixedCategory, fixedService)
   const [open, setOpen] = useState(false)
+  // The section a chip opened the sheet at (Price → price, Language → language; More → the top).
+  const [focus, setFocus] = useState<string | null>(null)
+  const openAt = (key: string | null) => { setFocus(key); setOpen(true) }
+  // Callback ref, stable: runs once when that section mounts in the sheet and scrolls the sheet body to it.
+  const scrollIntoSheet = useCallback((el: HTMLElement | null) => {
+    const box = el?.closest<HTMLElement>('.overflow-y-auto')
+    if (el && box) box.scrollTop += el.getBoundingClientRect().top - box.getBoundingClientRect().top
+  }, [])
   const s = nav.current
   const active = activeFilterCountV2(s)
   const total = facets?.total?.['all']
@@ -121,16 +138,16 @@ export function FilterChipBar({ facets, fixedCategory, fixedService, className }
         <button type="button" aria-pressed={s.deliveryMaxDays === 7} onClick={() => nav.setRaw('deliveryMaxDays', s.deliveryMaxDays === 7 ? null : '7')} className={chipCls(s.deliveryMaxDays === 7)}>
           <Clock className="h-4 w-4" aria-hidden /> {t('within_days', { n: 7 })}
         </button>
-        <button type="button" aria-pressed={!!s.price} onClick={() => setOpen(true)} className={chipCls(!!s.price)}>
+        <button type="button" aria-pressed={!!s.price} onClick={() => openAt('price')} className={chipCls(!!s.price)}>
           <IndianRupee className="h-4 w-4" aria-hidden /> {t('chip_price')}
         </button>
         <button type="button" aria-pressed={s.minRating === 4} onClick={() => nav.setRaw('minRating', s.minRating === 4 ? null : '4')} className={chipCls(s.minRating === 4)}>
           <Star className="h-4 w-4" aria-hidden /> {t('rating_plus', { n: 4 })}
         </button>
-        <button type="button" aria-pressed={!!s.language} onClick={() => setOpen(true)} className={chipCls(!!s.language)}>
+        <button type="button" aria-pressed={!!s.language} onClick={() => openAt('language')} className={chipCls(!!s.language)}>
           <Languages className="h-4 w-4" aria-hidden /> {t('chip_language')}
         </button>
-        <button type="button" onClick={() => setOpen(true)} className={chipCls(active > 0)} data-testid="filter-more">
+        <button type="button" onClick={() => openAt(null)} className={chipCls(active > 0)} data-testid="filter-more">
           <SlidersHorizontal className="h-4 w-4" aria-hidden /> {active > 0 ? t('more_count', { n: active }) : t('chip_more')}
         </button>
       </div>
@@ -151,8 +168,8 @@ export function FilterChipBar({ facets, fixedCategory, fixedService, className }
       >
         <div className="space-y-6">
           {sections.map((sec) => (
-            <section key={sec.key}>
-              {sec.kind !== 'picker' && <h3 className="t-subheadline mb-2 font-semibold">{sec.title}</h3>}
+            <section key={sec.key} ref={sec.key === focus ? scrollIntoSheet : undefined} data-filter-section={sec.key}>
+              <h3 className="t-subheadline mb-2 font-semibold">{sec.title}</h3>
               <SectionView section={sec} variant="sheet" onSet={(v) => nav.setRaw(sec.key, v)} />
             </section>
           ))}

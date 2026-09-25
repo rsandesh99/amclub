@@ -24,7 +24,8 @@
     "switch": "Switch language",
     "en": "English",
     "hi": "हिंदी",
-    "te": "తెలుగు"
+    "te": "తెలుగు",
+    "ta": "தமிழ்"
   },
   "hello": {
     "title": "Welcome to AMClub",
@@ -904,6 +905,7 @@
     "resume": "Resume",
     "discount": "{pct}% off",
     "status_active": "Live",
+    "status_awaiting_approval": "Waiting for approval",
     "status_paused": "Paused",
     "status_draft": "Draft"
   },

@@ -159,6 +159,25 @@ async function getProviderBadges(providerId: string): Promise<VerificationBadge[
   }
 }
 
+/**
+ * Is this provider page public (the same rule as getProviderBySlug: active, not deleted)? One indexed read,
+ * for the /p route layouts that answer a real 404 before any page streams (F29: a page-level notFound()
+ * under a loading boundary shipped the 404 UI with HTTP 200).
+ */
+export async function isProviderPublic(slug: string): Promise<boolean> {
+  const { data } = await createPublicClient().from('provider_profiles').select('id').eq('slug', slug).eq('status', 'active').is('deleted_at', null).maybeSingle()
+  return !!data
+}
+
+/** Is this package page public (the same rule as getPackageDetail: an active provider's active, non-deleted package)? */
+export async function isPackagePublic(providerSlug: string, packageSlug: string): Promise<boolean> {
+  const supabase = createPublicClient()
+  const { data: p } = await supabase.from('provider_profiles').select('id').eq('slug', providerSlug).eq('status', 'active').is('deleted_at', null).maybeSingle()
+  if (!p) return false
+  const { data: pk } = await supabase.from('packages').select('id').eq('provider_id', p.id).eq('slug', packageSlug).eq('status', 'active').is('deleted_at', null).maybeSingle()
+  return !!pk
+}
+
 export async function getProviderBySlug(slug: string): Promise<ProviderDetail | null> {
   const supabase = createPublicClient()
   // Explicit safe columns only — never gstin/pan even though the active-row

@@ -401,8 +401,18 @@ async function journeyC(): Promise<void> {
       const dialog = tab.page.getByRole('dialog')
       await dialog.waitFor()
       // The sheet animates in; wait for its box to settle on the centre (it sat with its corner there before the fix).
+      // "Centre" is the centre of the area fixed elements lay out in: signed-in shells reserve the scrollbar
+      // gutter (scrollbar-gutter: stable), so with a classic scrollbar that area is the window minus the gutter.
+      const mid = await tab.page.evaluate(() => {
+        const probe = document.createElement('div')
+        probe.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none'
+        document.body.appendChild(probe)
+        const r = probe.getBoundingClientRect()
+        probe.remove()
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+      })
       await until('the sheet centred in a 900×800 window', async () => await dialog.boundingBox(),
-        (bx) => !!bx && Math.abs(bx.x + bx.width / 2 - 450) <= 4 && Math.abs(bx.y + bx.height / 2 - 400) <= 4, 5000)
+        (bx) => !!bx && Math.abs(bx.x + bx.width / 2 - mid.x) <= 4 && Math.abs(bx.y + bx.height / 2 - mid.y) <= 4, 5000)
     })
   } catch (e) {
     if (!(e instanceof JourneyStop)) throw e

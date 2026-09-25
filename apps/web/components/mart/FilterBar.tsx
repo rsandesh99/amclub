@@ -36,7 +36,7 @@ export async function FilterBar({ base, current, brands }: { base: string; curre
     b.min === undefined ? t('under', { amount: formatINR(b.max!) }) : b.max === undefined ? t('over', { amount: formatINR(b.min) }) : `${formatINR(b.min)}–${formatINR(b.max)}`
   return (
     <div className="mt-3 space-y-2">
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4" aria-label={t('sort')}>
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={t('sort')}>
         {(['newest', 'price_asc', 'price_desc'] as const).map((s) => (
           <Link key={s} href={withParams(base, current, { sort: s === 'newest' ? undefined : s }) as '/services'} className={chip(sort === s)} aria-pressed={sort === s}>
             {t(`sort_${s}` as 'sort_newest')}
@@ -49,7 +49,7 @@ export async function FilterBar({ base, current, brands }: { base: string; curre
         ))}
       </div>
       {brands.length > 0 && (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4" aria-label={t('brand')}>
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={t('brand')}>
           <Link href={withParams(base, current, { brand: undefined }) as '/services'} className={chip(!current['brand'])} aria-pressed={!current['brand']}>{t('all_brands')}</Link>
           {brands.map((b) => (
             <Link key={b} href={withParams(base, current, { brand: b }) as '/services'} className={chip(current['brand'] === b)} aria-pressed={current['brand'] === b}>{b}</Link>

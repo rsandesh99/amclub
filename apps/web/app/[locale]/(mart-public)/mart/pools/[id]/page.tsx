@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
-import { INDIAN_STATES, poolSaving } from '@amclub/shared'
+import { indianStateOptions, poolSaving } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { martPageGate } from '@/lib/mart/gate'
 import { createAdminClient } from '@/lib/supabase/server'
@@ -89,7 +89,7 @@ export default async function MartPoolPage({ params }: { params: Promise<{ id: s
       </EmeraldCard>
 
       <div className="mt-4">
-        <PoolJoin poolId={pool.id} states={INDIAN_STATES.map((s) => ({ value: s.value, label: s.label }))} minOrderQty={1} />
+        <PoolJoin poolId={pool.id} states={indianStateOptions(locale)} minOrderQty={1} />
       </div>
 
       <PoolShare text={share} className="mt-4" />

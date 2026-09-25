@@ -38,6 +38,8 @@ export function AdminNav({ couponsEnabled = false, martEnabled = false, agentEna
           <Link
             key={it.href}
             href={it.href as '/admin/verifications'}
+            // Fifteen dynamic admin pages: no burst of RSC prefetches on every admin load (F10).
+            prefetch={false}
             className={`rounded-t-button px-3 py-2 text-sm font-medium ${
               active ? 'border-b-2 border-primary text-primary' : 'text-foreground-secondary hover:text-foreground'
             }`}

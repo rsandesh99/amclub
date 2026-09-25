@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { inboxQueryToString, RFQ_BUDGET_BAND_KEYS, type InboxQuery, type InboxSort } from '@amclub/shared'
 import { useRouter } from '@/i18n/navigation'
@@ -39,11 +39,19 @@ export function InboxFiltersV3({ query, categories, states, badgeOn }: { query: 
     </button>
   )
 
-  const controls = (
+  // QA F19 — the Picker renders only its button; each filter gets a visible label and shows "Any" when unset.
+  const field = (id: string, label: string, picker: ReactNode) => (
+    <div className="w-44">
+      <label htmlFor={id} className="t-footnote mb-1 block font-medium text-foreground-secondary">{label}</label>
+      {picker}
+    </div>
+  )
+  // Rendered twice (desktop row + phone disclosure), so every id carries a suffix.
+  const controls = (sfx: 'd' | 'm') => (
     <div className="flex flex-wrap items-end gap-3">
-      <div className="w-44"><Picker id="inbox-category" label={t('f_category')} value={query.category ?? null} options={categories} allowClear clearLabel={t('any')} onChange={(v) => go({ category: v ?? undefined }, 'category')} /></div>
-      <div className="w-44"><Picker id="inbox-state" label={t('f_state')} value={query.state ?? null} options={states} allowClear clearLabel={t('any')} onChange={(v) => go({ state: v ?? undefined }, 'state')} /></div>
-      <div className="w-44"><Picker id="inbox-budget" label={t('f_budget')} value={query.budget ?? null} options={RFQ_BUDGET_BAND_KEYS.map((b) => ({ value: b, label: tRfq(`budget_${b}` as 'budget_under2k') }))} allowClear clearLabel={t('any')} onChange={(v) => go({ budget: (v ?? undefined) as InboxQuery['budget'] }, 'budget')} /></div>
+      {field(`inbox-category-${sfx}`, t('f_category'), <Picker id={`inbox-category-${sfx}`} label={t('f_category')} placeholder={t('any')} value={query.category ?? null} options={categories} allowClear clearLabel={t('any')} onChange={(v) => go({ category: v ?? undefined }, 'category')} />)}
+      {field(`inbox-state-${sfx}`, t('f_state'), <Picker id={`inbox-state-${sfx}`} label={t('f_state')} placeholder={t('any')} value={query.state ?? null} options={states} allowClear clearLabel={t('any')} onChange={(v) => go({ state: v ?? undefined }, 'state')} />)}
+      {field(`inbox-budget-${sfx}`, t('f_budget'), <Picker id={`inbox-budget-${sfx}`} label={t('f_budget')} placeholder={t('any')} value={query.budget ?? null} options={RFQ_BUDGET_BAND_KEYS.map((b) => ({ value: b, label: tRfq(`budget_${b}` as 'budget_under2k') }))} allowClear clearLabel={t('any')} onChange={(v) => go({ budget: (v ?? undefined) as InboxQuery['budget'] }, 'budget')} />)}
       <div className="flex flex-wrap gap-2">
         {toggle('closing', t('f_closing'))}
         {badgeOn && toggle('verified', t('f_verified'))}
@@ -60,10 +68,10 @@ export function InboxFiltersV3({ query, categories, states, badgeOn }: { query: 
         </form>
         <SegmentedControl<InboxSort> ariaLabel={t('sort')} size="sm" value={query.sort} onChange={(v) => go({ sort: v }, v, 'inbox_sorted')} options={[{ value: 'newest', label: t('sort_newest') }, { value: 'closing', label: t('sort_closing') }, { value: 'budget_high', label: t('sort_budget') }]} />
       </div>
-      <div className="hidden md:block">{controls}</div>
+      <div className="hidden md:block">{controls('d')}</div>
       <details className="md:hidden">
         <summary className="t-footnote cursor-pointer font-medium text-primary">{t('filters')}</summary>
-        <div className="mt-3">{controls}</div>
+        <div className="mt-3">{controls('m')}</div>
       </details>
     </div>
   )

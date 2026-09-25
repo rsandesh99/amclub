@@ -70,9 +70,13 @@ export default function PartnerListingsScreen() {
                   <Text className="text-sm font-semibold text-foreground">{l.title}</Text>
                   {l.categoryName ? <Text className="text-xs text-foreground-secondary">{l.categoryName}</Text> : null}
                 </View>
-                <Text className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${l.status === 'active' ? 'bg-success/10 text-success' : 'bg-muted text-foreground-secondary'}`}>
-                  {t(`listings_v3.status_${l.status}`)}
-                </Text>
+                {l.status === 'active' && l.providerActive === false ? (
+                  <Text className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">{t('listings_v3.status_awaiting_approval')}</Text>
+                ) : (
+                  <Text className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${l.status === 'active' ? 'bg-success/10 text-success' : 'bg-muted text-foreground-secondary'}`}>
+                    {t(`listings_v3.status_${l.status}`)}
+                  </Text>
+                )}
               </View>
               <Text className="mt-2 text-base font-bold text-primary">
                 {formatINR(l.pricePaise)}

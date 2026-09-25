@@ -57,7 +57,8 @@ export default function PartnerReviewsPage() {
     <div className="mx-auto max-w-2xl px-4 py-6 space-y-4">
       <div className="flex items-end justify-between">
         <h1 className="font-display text-xl font-bold">{t('partner_title')}</h1>
-        <p className="text-sm text-foreground-secondary">★ {avg} · {count} {t('count_label')}</p>
+        {/* QA F33 — no "★ 0.0 · 0 reviews" line: with no reviews the empty state below says so. */}
+        {!loading && count > 0 && <p className="text-sm text-foreground-secondary">★ {avg} · {count} {t('count_label')}</p>}
       </div>
 
       {loading ? (

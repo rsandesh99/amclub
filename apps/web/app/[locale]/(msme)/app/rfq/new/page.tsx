@@ -9,7 +9,7 @@ import { AGENT_ENABLED } from '@/lib/flags'
 import { isAgentEnabledForUser } from '@/lib/agent/settings'
 import { Button } from '@/components/ui/button'
 import { RfqForm, type RfqCategoryOption, type RfqFormV3, type RfqPrefill } from '@/components/rfq/RfqForm'
-import { budgetBandOf, INDIAN_STATES, isEmptyMustHaves, parseRfqPrefill, rfqMustHavesSchema, SPECIALIZATIONS, type RfqEntryPoint } from '@amclub/shared'
+import { budgetBandOf, indianStateName, isEmptyMustHaves, parseRfqPrefill, pickI18n, rfqMustHavesSchema, SPECIALIZATIONS, type I18nText, type RfqEntryPoint } from '@amclub/shared'
 import { isOnFor } from '@/lib/experiments'
 import { getAgentSetting } from '@/lib/agent/settings'
 
@@ -64,10 +64,10 @@ export default async function NewRfqPage({
 
   const categories: RfqCategoryOption[] = (cats ?? []).map((c) => {
     const tpl = (c.rfq_template ?? { fields: [] }) as RfqTemplate
-    const name = (c.name_i18n as { en: string; hi?: string })
     return {
       slug: c.slug as string,
-      name: (locale === 'hi' && name.hi) ? name.hi : name.en,
+      // E14: the reader's own language (te / ta too), English for a missing slot.
+      name: pickI18n(c.name_i18n as I18nText, locale),
       fields: tpl.fields ?? [],
     }
   })
@@ -181,7 +181,7 @@ export default async function NewRfqPage({
       services: SPECIALIZATIONS,
       documents,
       sla,
-      stateName: INDIAN_STATES.find((st) => st.value === profile.state)?.label ?? profile.state,
+      stateName: indianStateName(profile.state, locale),
       entry,
     }
   }

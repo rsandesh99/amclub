@@ -3,7 +3,7 @@
 import {
   CATEGORY_LIST,
   DELIVERY_CHOICES,
-  INDIAN_STATES,
+  indianStateOptions,
   PRICE_BAND_KEYS,
   RATING_CHOICES,
   RESPONSE_CHOICES,
@@ -57,7 +57,7 @@ export function filterSections(t: T, locale: string, s: SearchV2, facets: Search
   sections.push(
     {
       key: 'state', title: t('filters_v3.sec_state'), kind: 'picker', value: s.state ?? null,
-      options: INDIAN_STATES.map((st) => ({ value: st.value, label: st.label, count: count('state', st.value) })),
+      options: indianStateOptions(locale).map((st) => ({ value: st.value, label: st.label, count: count('state', st.value) })),
     },
     {
       key: 'credential', title: t('filters_v3.sec_credential'), kind: 'chips', value: s.credential ?? null,

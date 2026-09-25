@@ -73,13 +73,16 @@ export default async function ProviderProfilePage() {
         </Badge>
       </div>
 
-      {isActive && (
+      {/* /p/<slug> resolves only for an active provider, so the link waits for approval. */}
+      {isActive ? (
         <Link
           href={`/p/${profile.slug}` as '/app'}
           className="inline-block text-sm font-medium text-primary hover:underline"
         >
           {t('view_public_page')} →
         </Link>
+      ) : (
+        <p className="text-sm text-foreground-secondary">{t('public_page_pending')}</p>
       )}
 
       <ProviderProfileForm initial={initial} />

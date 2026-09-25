@@ -27,17 +27,35 @@ export default async function PartnerInsightsPage({ searchParams }: { searchPara
   const [t, locale] = await Promise.all([getTranslations('partner_v3'), getLocale()])
   const ins = await getPartnerInsights(await createAdminClient(), profile.id, range)
   const max = Math.max(1, ...ins.weeks.map((w) => w.matched))
+  // QA F24 — the period switch drives "Why you lost" and "Listing performance" (each says so);
+  // the weekly funnel is always the last 8 weeks and its heading says that.
+  const period = range === '30d' ? t('last_30') : t('last_7')
+  const RANGES = [
+    { key: '7d', href: '/partner/insights', label: t('show_7') },
+    { key: '30d', href: '/partner/insights?range=30d', label: t('show_30') },
+  ] as const
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6" data-testid="partner-insights">
       <InsightsViewed range={range} />
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="t-large-title">{t('insights_title')}</h1>
-        <Link href={range === '30d' ? '/partner/insights' : '/partner/insights?range=30d'} className="t-footnote text-primary">{range === '30d' ? t('show_7') : t('show_30')}</Link>
+        <nav aria-label={t('period')} className="inline-flex rounded-button border border-border p-0.5">
+          {RANGES.map((r) => (
+            <Link
+              key={r.key}
+              href={r.href}
+              aria-current={r.key === range ? 'page' : undefined}
+              className={`t-footnote rounded-button px-3 py-1.5 ${r.key === range ? 'bg-primary/10 font-semibold text-primary' : 'text-foreground-secondary hover:text-foreground'}`}
+            >
+              {r.label}
+            </Link>
+          ))}
+        </nav>
       </div>
 
       <section className="rounded-card border border-border bg-surface p-4" aria-labelledby="weekly-h">
-        <h2 id="weekly-h" className="t-headline mb-3">{t('weekly')}</h2>
+        <h2 id="weekly-h" className="t-headline mb-3">{t('weekly_weeks', { weeks: ins.weeks.length })}</h2>
         <ol className="flex items-end gap-2" data-testid="weekly-bars">
           {ins.weeks.map((w) => (
             <li key={w.week} className="flex flex-1 flex-col items-center gap-1" data-week={w.week} data-counts={`${w.views}/${w.matched}/${w.quoted}/${w.won}`}>
@@ -51,11 +69,15 @@ export default async function PartnerInsightsPage({ searchParams }: { searchPara
             </li>
           ))}
         </ol>
-        <p className="t-caption mt-2 text-foreground-secondary">{t('legend')}</p>
+        <ul className="t-caption mt-2 flex flex-wrap gap-x-4 gap-y-1 text-foreground-secondary">
+          <li className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-foreground/15" aria-hidden />{t('legend_matched')}</li>
+          <li className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-primary/50" aria-hidden />{t('legend_quoted')}</li>
+          <li className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-primary" aria-hidden />{t('legend_won')}</li>
+        </ul>
       </section>
 
       <section className="rounded-card border border-border bg-surface p-4" aria-labelledby="lost-h" data-testid="why-lost">
-        <h2 id="lost-h" className="t-headline mb-2">{t('why_lost')}</h2>
+        <h2 id="lost-h" className="t-headline mb-2">{t('why_lost')} <span className="font-normal text-foreground-secondary">· {period}</span></h2>
         {ins.loss.price.of === 0 ? (
           <p className="text-sm text-foreground-secondary">{t('no_losses')}</p>
         ) : (
@@ -71,9 +93,9 @@ export default async function PartnerInsightsPage({ searchParams }: { searchPara
       </section>
 
       <section aria-labelledby="listings-h" data-testid="listing-performance">
-        <h2 id="listings-h" className="t-headline mb-2">{t('listings')}</h2>
+        <h2 id="listings-h" className="t-headline mb-2">{t('listings')} <span className="font-normal text-foreground-secondary">· {period}</span></h2>
         <DataTable
-          caption={t('listings')}
+          caption={t('listings_caption')}
           rows={ins.listings}
           rowKey={(r) => r.packageId}
           empty={<p className="px-4 py-6 text-sm text-foreground-secondary">{t('no_listings')}</p>}

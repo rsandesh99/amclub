@@ -10,12 +10,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
-import { INDIAN_STATES } from '@/lib/constants/india'
 import { loadBuyerDraft } from '@/components/gateway/draft'
 import { ConsentCheckbox } from '@/components/auth/ConsentCheckbox'
 import { acceptLegalDocs } from '@/lib/legal/client'
 import { useAnalytics } from '@/components/providers/posthog'
-import { BUYER_LEGAL_DOCS, SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
+import { BUYER_LEGAL_DOCS, indianStateOptions, SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
 import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 
 type Step = 'auth' | 'profile' | 'business'
@@ -263,7 +262,7 @@ export function MsmeWizard({ skipAuth, next = null }: MsmeWizardProps) {
                 onChange={(e) => update({ stateCode: e.target.value })}
                 placeholder="— Select state —"
               >
-                {INDIAN_STATES.map((s) => (
+                {indianStateOptions(locale).map((s) => (
                   <option key={s.value} value={s.value}>{s.label}</option>
                 ))}
               </Select>

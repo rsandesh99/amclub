@@ -58,7 +58,8 @@ export default async function EditListingPage({
     scopeExcluded: (pk.scope_excluded as string[]) ?? [],
     deliverables: (pk.deliverables as string[]) ?? [],
     requirements: reqFields.map((f) => f.label_en ?? '').filter(Boolean),
-    priceRupees: String(Math.round(Number(pk.price_paise) / 100)),
+    // Exact (₹4,999.50 stays 4999.5): rounding here would silently re-price the listing on save.
+    priceRupees: String(Number(pk.price_paise) / 100),
     discountPct: String((pk.discount_bps ?? 0) / 100),
     memberPct: String((pk.member_extra_discount_bps ?? 0) / 100),
     deliveryDays: String(pk.delivery_days),
@@ -86,9 +87,20 @@ export default async function EditListingPage({
         <ChevronLeft className="h-4 w-4" /> {t('back_to_listings')}
       </Link>
       <h1 className="mb-6 font-display text-2xl font-bold">{t('edit_listing')}</h1>
-      <PackageWizard mode="edit" initial={initial} allowedCategorySlugs={[]} offerServices={offerServices} />
-      {addons && <AddOnsEditor packageId={pk.id} initial={addons} />}
-      {milestones && <MilestonesEditor packageId={pk.id} initial={milestones} />}
+      <PackageWizard
+        mode="edit"
+        initial={initial}
+        allowedCategorySlugs={[]}
+        offerServices={offerServices}
+        pricingExtras={
+          addons || milestones ? (
+            <>
+              {addons && <AddOnsEditor packageId={pk.id} initial={addons} />}
+              {milestones && <MilestonesEditor packageId={pk.id} initial={milestones} />}
+            </>
+          ) : null
+        }
+      />
     </div>
   )
 }

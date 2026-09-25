@@ -17,7 +17,8 @@ export default async function PartnerPoolPage({ params }: { params: Promise<{ id
   const { data: p } = await admin.from('provider_profiles').select('id').eq('user_id', user.id).maybeSingle()
   if (!p) redirect('/partner/onboarding')
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound()
-  const view = await poolProviderView(admin, id, p.id as string, await getLocale())
+  const locale = await getLocale()
+  const view = await poolProviderView(admin, id, p.id as string, locale)
   if (!view) notFound()
   const tSvc = await getTranslations('services')
   const today = todayIst()
@@ -28,7 +29,7 @@ export default async function PartnerPoolPage({ params }: { params: Promise<{ id
         view={view}
         labels={{
           service: tSvc.has(view.serviceSlug as 'gst-filing') ? tSvc(view.serviceSlug as 'gst-filing') : view.categoryName,
-          state: stateLabel(view.state),
+          state: stateLabel(view.state, locale),
           closesAt: istShort(view.closesAt),
           minValidUntil: closeDay > today ? closeDay : today,
         }}

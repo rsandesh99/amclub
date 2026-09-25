@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getTranslations, getLocale } from 'next-intl/server'
 import { ClipboardList } from 'lucide-react'
-import { formatAttributeValue, pickLocale } from '@amclub/shared'
+import { formatAttributeValue, indianStateOptions, pickLocale } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { martPageGate } from '@/lib/mart/gate'
 import { getSessionUser } from '@/lib/auth/session'
@@ -10,7 +10,6 @@ import { listMartCategories } from '@/lib/mart/config'
 import { deliveryDefaults } from '@/lib/mart/delivery-defaults'
 import { getPublicProduct } from '@/lib/mart/queries'
 import { publicCategoryAttributes } from '@/lib/mart/attributes'
-import { INDIAN_STATES } from '@/lib/constants/india'
 import { Button } from '@/components/ui/button'
 import { GoodsRfqForm, type GoodsRfqPrefill } from '@/components/mart/GoodsRfqForm'
 import { AGENT_ENABLED } from '@/lib/flags'
@@ -73,7 +72,7 @@ export default async function NewGoodsRfqPage({ searchParams }: { searchParams: 
         <h1 className="font-display text-2xl font-bold text-emerald-ink">{t('goods_new_title')}</h1>
         <p className="mt-1 text-sm text-foreground-secondary">{t('goods_new_subtitle')}</p>
       </div>
-      <GoodsRfqForm categories={categories} states={INDIAN_STATES} defaults={defaults} prefill={prefill} documentIntakeEnabled={AGENT_ENABLED ? await isAgentEnabledForUser(admin, 'document_intake', user.id) : false} />
+      <GoodsRfqForm categories={categories} states={indianStateOptions(locale)} defaults={defaults} prefill={prefill} documentIntakeEnabled={AGENT_ENABLED ? await isAgentEnabledForUser(admin, 'document_intake', user.id) : false} />
     </div>
   )
 }

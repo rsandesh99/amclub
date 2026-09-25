@@ -3,15 +3,12 @@ import { Clock, MapPin, RefreshCw } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { CompareToggle } from '@/components/compare-v3/CompareToggle'
 import { pickI18n, formatResponseTime, initials } from '@/lib/format'
-import { INDIAN_STATES } from '@/lib/constants/india'
 import { PriceBlock } from './PriceBlock'
 import { Stars } from './Stars'
 import { ProviderCredential } from './ProviderCredential'
 import type { CatalogResult } from '@/lib/catalog/types'
 import type { CardTrust } from '@/lib/trust/card-trust'
-import { formatStatPct } from '@amclub/shared'
-
-const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
+import { formatStatPct, indianStateName } from '@amclub/shared'
 
 /**
  * The workhorse listing card (§4.3): provider identity + trust tick + rating,
@@ -23,7 +20,7 @@ export function ResultCard({ result, trust, equation = false, compare = false, s
   const t = useTranslations('catalog')
   const title = pickI18n(result.titleI18n, locale)
   const responseTime = formatResponseTime(result.medianResponseMinutes)
-  const stateLabel = STATE_LABEL.get(result.state) ?? result.state
+  const stateLabel = indianStateName(result.state, locale)
 
   const card = (
     <Link

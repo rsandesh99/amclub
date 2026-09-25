@@ -494,6 +494,10 @@ const MANIFEST: Entry[] = [
     file: '0083_rfqs_goods_spec_private.sql',
     note: 'Audit M4 part 2 (split from 0077): rfqs.goods_spec (buyer contact) not client-readable; column grant built from the catalogue; applied after the 0077 build is live',
   },
+  {
+    file: '0084_rfq_template_te_ta_labels.sql',
+    note: 'QA F4 (data only): label_te / label_ta on each categories.rfq_template field, per (slug, field name); never overwrites a set label',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

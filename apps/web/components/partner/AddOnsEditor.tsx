@@ -99,7 +99,7 @@ export function AddOnsEditor({ packageId, initial }: { packageId: string; initia
       .join(' · ')
 
   return (
-    <section className="mt-10 rounded-card border border-border bg-surface p-5" data-testid="addons-editor">
+    <section className="rounded-card border border-border bg-surface p-5" data-testid="addons-editor">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="font-display text-lg font-semibold">{t('editor_title')}</h2>
         <span className="text-xs text-foreground-secondary">{t('active_count', { count: active, max: MAX_ACTIVE_ADDONS })}</span>

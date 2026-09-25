@@ -3,6 +3,10 @@ import { getSessionUser, getMsmeProfile, getProviderProfile } from '@/lib/auth/s
 import { AppShell } from '@/components/shell/AppShell'
 import { AdminNav } from '@/components/shell/AdminNav'
 import { COUPONS_ENABLED, MART_ENABLED, AGENT_ENABLED } from '@/lib/flags'
+import { sectionTitle } from '@/lib/i18n/section-title'
+
+/** The admin area's tab title ("Admin panel | AMClub") unless a page names its own. */
+export const generateMetadata = sectionTitle('shell', 'admin_panel')
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
@@ -12,7 +16,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   if (!user.roles.includes('admin') && !user.roles.includes('ops')) {
-    redirect('/app')
+    // The shell shows "You don't have access to the admin area" (AccessNotice) instead of a silent bounce.
+    redirect('/app?denied=admin')
   }
 
   const [msme, provider] = await Promise.all([getMsmeProfile(user.id), getProviderProfile(user.id)])
@@ -21,6 +26,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <AppShell
       context="admin"
       name={user.fullName}
+      email={user.email}
+      phone={user.phone}
       roles={user.roles}
       userId={user.id}
       hasMsmeProfile={Boolean(msme)}

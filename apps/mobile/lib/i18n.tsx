@@ -21,7 +21,9 @@ type Messages = typeof en
 // te ships partial (grows as translation lands); resolution deep-falls back to
 // en key-by-key so a te user never sees a raw key name (S3.4). Cast te since
 // its partial JSON (plus a _comment) is not structurally the full Messages.
-const MESSAGES: Record<Locale, Partial<Messages>> = { en, hi, te: te as unknown as Partial<Messages> }
+// ta is a shared UI locale since E14 (web), but the app has no Tamil file yet
+// and its toggle offers en / hi / te only: a stored ta renders English.
+const MESSAGES: Record<Locale, Partial<Messages>> = { en, hi, te: te as unknown as Partial<Messages>, ta: {} }
 const LOCALE_KEY = 'amc_locale'
 
 /** Walk a dotted key path in a message object; undefined if any segment missing. */

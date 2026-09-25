@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const locale = request.nextUrl.searchParams.get('locale') ?? 'en'
   const { data } = await admin
     .from('packages')
-    .select('id, slug, title_i18n, price_paise, discount_bps, status, delivery_days, category:categories(slug, name_i18n), provider:provider_profiles!inner(slug)')
+    .select('id, slug, title_i18n, price_paise, discount_bps, status, delivery_days, category:categories(slug, name_i18n), provider:provider_profiles!inner(slug, status)')
     .eq('provider_id', actor.providerId)
     .neq('status', 'removed')
     .order('created_at', { ascending: false })
@@ -35,13 +35,15 @@ export async function GET(request: NextRequest) {
   const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null)
   const listings = (data ?? []).map((p) => {
     const cat = one(p.category as { slug: string; name_i18n: { en: string; hi?: string; te?: string } } | { slug: string; name_i18n: { en: string; hi?: string; te?: string } }[] | null)
-    const prov = one(p.provider as { slug: string } | { slug: string }[] | null)
+    const prov = one(p.provider as { slug: string; status: string } | { slug: string; status: string }[] | null)
     return {
       id: p.id as string,
       slug: p.slug as string,
       providerSlug: prov?.slug ?? null,
       title: pickLocale(p.title_i18n as { en: string; hi?: string; te?: string }, locale),
       status: p.status as string,
+      // QA F11 — a listing is visible to buyers only while its provider is active too.
+      providerActive: prov?.status === 'active',
       pricePaise: Number(p.price_paise),
       discountBps: Number(p.discount_bps ?? 0),
       deliveryDays: (p.delivery_days as number | null) ?? null,

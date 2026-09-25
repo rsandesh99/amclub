@@ -8,7 +8,7 @@ import { CatalogResults } from '@/components/catalog/CatalogResults'
 import { getCategoryBySlug, getCategories } from '@/lib/catalog/queries'
 import { parseFilters } from '@/lib/catalog/filters'
 import { pickI18n } from '@/lib/format'
-import { CATEGORY_SLUGS, parseSearchV2 } from '@amclub/shared'
+import { CATEGORY_SLUGS, indianStateName, parseSearchV2 } from '@amclub/shared'
 import { isOnForEveryone } from '@/lib/experiments'
 import { SearchResultsV3 } from '@/components/search-v3/SearchResultsV3'
 
@@ -52,7 +52,8 @@ export default async function CategoryListingPage({
   const t = await getTranslations('catalog')
   const locale = await getLocale()
   const allCategories = await getCategories()
-  const stateLabel = sp['state']
+  // The state's name in the reader's language (never the raw code).
+  const stateLabel = sp['state'] ? indianStateName(sp['state'], locale) : undefined
   // Experience v3 E2 (flag `search`): filters show before a query (FR-2.2).
   const v3 = isOnForEveryone('search')
 
@@ -82,7 +83,8 @@ export default async function CategoryListingPage({
         </div>
       </div>
 
-      {/* Other categories quick nav */}
+      {/* Other categories quick nav — the same 32px centred chip as the service chips below (without
+          `inline-flex items-center` the global 44px link minimum left the label at the top of a taller pill). */}
       <div className="mb-6 flex flex-wrap gap-2">
         {allCategories
           .filter((c) => c.slug !== category)
@@ -91,7 +93,7 @@ export default async function CategoryListingPage({
             <Link
               key={c.slug}
               href={`/services/${c.slug}`}
-              className="rounded-chip border border-border bg-surface px-3 py-1 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
+              className="inline-flex min-h-[32px] items-center rounded-chip border border-border bg-surface px-3 text-xs text-foreground-secondary hover:border-primary/40 hover:text-primary"
             >
               {pickI18n(c.nameI18n, locale)}
             </Link>

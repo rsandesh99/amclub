@@ -116,7 +116,8 @@ export function WhyAmclub({
           })}
         </ul>
         {items.length > shown.length && (
-          <button type="button" onClick={() => setExpanded(true)} className="mt-3 text-[13px] font-semibold text-primary hover:underline">
+          // Its own row (block): inline, it sat on the CTA's line, jammed against "Post a requirement".
+          <button type="button" onClick={() => setExpanded(true)} className="mt-3 block text-[13px] font-semibold text-primary hover:underline">
             {t('show_all', { count: items.length })}
           </button>
         )}

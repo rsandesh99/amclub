@@ -6,8 +6,7 @@ import { Link } from '@/i18n/navigation'
 import { routing, type AppLocale } from '@/i18n/routing'
 import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 import { Package, ShieldCheck } from 'lucide-react'
-import type { ActionItem } from '@amclub/shared'
-import { INDIAN_STATES } from '@/lib/constants/india'
+import { indianStateOptions, type ActionItem } from '@amclub/shared'
 import { formatINR } from '@/lib/format'
 import { SegmentedControl } from './SegmentedControl'
 import { Picker } from './Picker'
@@ -60,7 +59,7 @@ export function UiGallery() {
       </GroupedSection>
       <GroupedSection header={t('picker')}>
         <div className="p-3">
-          <Picker label={t('state')} value={state} onChange={setState} options={INDIAN_STATES} allowClear recentKey="devui_state" />
+          <Picker label={t('state')} value={state} onChange={setState} options={indianStateOptions(locale)} allowClear recentKey="devui_state" />
         </div>
       </GroupedSection>
       <GroupedSection header={t('grouped')} footer={t('grouped_footer')}>

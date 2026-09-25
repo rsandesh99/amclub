@@ -136,7 +136,8 @@ export function SupportChat({ role: _role }: { role: 'buyer' | 'provider' }) {
           void send(text)
         }}
       >
-        <input className="field flex-1" value={text} onChange={(e) => setText(e.target.value)} placeholder={t('placeholder')} maxLength={1000} aria-label={t('placeholder')} data-testid="support-input" />
+        {/* `field-control` is the app's input style (border, padding, focus ring); there is no `field` class. */}
+        <input className="field-control min-w-0 flex-1" value={text} onChange={(e) => setText(e.target.value)} placeholder={t('placeholder')} maxLength={1000} aria-label={t('placeholder')} data-testid="support-input" />
         <Button type="submit" disabled={busy || !text.trim()} data-testid="support-send">{t('send')}</Button>
       </form>
       <p className="text-xs text-foreground-secondary">{t('footer')}</p>

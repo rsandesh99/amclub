@@ -326,6 +326,7 @@
     "resume": "మళ్లీ ప్రారంభించండి",
     "discount": "{pct}% తగ్గింపు",
     "status_active": "ప్రత్యక్షం",
+    "status_awaiting_approval": "ఆమోదం కోసం వేచి ఉంది",
     "status_paused": "నిలిపివేయబడింది",
     "status_draft": "డ్రాఫ్ట్"
   },

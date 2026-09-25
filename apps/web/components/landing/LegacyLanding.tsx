@@ -86,7 +86,7 @@ export async function LegacyLanding() {
                 href={`/services/${c.slug}`}
                 className="inline-flex items-center rounded-chip border border-white/30 bg-white/15 px-3.5 py-1.5 font-medium leading-none text-white transition-colors hover:border-white/50 hover:bg-white/25"
               >
-                {locale === 'hi' && c.nameI18n.hi ? c.nameI18n.hi : c.nameI18n.en}
+                {pickI18n(c.nameI18n, locale)}
               </Link>
             ))}
           </div>

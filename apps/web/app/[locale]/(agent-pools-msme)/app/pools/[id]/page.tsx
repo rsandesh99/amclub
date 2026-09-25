@@ -28,7 +28,7 @@ export default async function BuyerPoolPage({ params }: { params: Promise<{ id: 
         view={view}
         labels={{
           service,
-          state: stateLabel(view.state),
+          state: stateLabel(view.state, locale),
           closesAt: istShort(view.closesAt),
           formBy: istShort(view.formBy) ?? '',
           validUntil: Object.fromEntries(view.offers.map((o) => [o.id, istDate(o.validUntil)])),

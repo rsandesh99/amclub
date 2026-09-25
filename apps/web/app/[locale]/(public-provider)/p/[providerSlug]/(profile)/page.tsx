@@ -26,14 +26,12 @@ import { TranslatedText } from '@/components/catalog/TranslatedText'
 import { isMachineTranslated } from '@amclub/shared'
 import { getSiteUrl } from '@/lib/site-url'
 import { pickI18n, initials, formatResponseTime, formatINR } from '@/lib/format'
-import { INDIAN_STATES } from '@/lib/constants/india'
+import { indianStateName } from '@amclub/shared'
 import { MART_ENABLED } from '@/lib/flags'
 import { listPublicProducts } from '@/lib/mart/queries'
 import { ProductCard } from '@/components/mart/ProductCard'
 
 export const revalidate = 300
-
-const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
 
 export async function generateMetadata({
   params,
@@ -85,7 +83,7 @@ export default async function ProviderProfilePage({
   const aboutLocal = (aboutI18n?.aboutI18n as Record<string, string | undefined> | null | undefined)?.[locale]?.trim() || null
   const aboutMachine = !!aboutLocal && isMachineTranslated(aboutI18n?.sources, 'about', locale)
 
-  const stateLabel = STATE_LABEL.get(provider.state) ?? provider.state
+  const stateLabel = indianStateName(provider.state, locale)
   const primaryCategory = provider.categories[0] ?? null
   const responseTime = formatResponseTime(provider.medianResponseMinutes)
   const headlineCredential = headlineCredentialKind(provider.badges.map((b) => b.kind))
@@ -100,7 +98,7 @@ export default async function ProviderProfilePage({
     url: `${appUrl}/p/${provider.slug}`,
     ...(provider.about ? { description: provider.about } : {}),
     ...(provider.logoUrl ? { image: provider.logoUrl } : {}),
-    address: { '@type': 'PostalAddress', addressRegion: stateLabel, addressCountry: 'IN' },
+    address: { '@type': 'PostalAddress', addressRegion: indianStateName(provider.state, 'en'), addressCountry: 'IN' },
     ...(provider.reviewCount > 0
       ? {
           aggregateRating: {

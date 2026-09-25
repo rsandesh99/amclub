@@ -31,6 +31,9 @@ export default async function PartnerGoodsPage() {
   const [activation, products] = await Promise.all([getGoodsActivation(admin, seller.id), listSellerProducts(admin, seller.id)])
   // E16 N41 — which of the seller's promises buyers still see (repeated breaches remove a badge).
   const shown = new Map((await withActiveBadges(admin, products)).map((p) => [p.id, p.promises]))
+  // QA F20 — the create route refuses a provider that is not approved yet (403), so no "New listing"
+  // until then; the activation banner below says why.
+  const canCreate = seller.status === 'active'
 
   return (
     <div className="mart-enter mx-auto max-w-3xl space-y-5 px-4 py-8">
@@ -42,9 +45,11 @@ export default async function PartnerGoodsPage() {
         <Link href={'/partner/goods/pools' as '/partner'} className="inline-flex shrink-0 items-center rounded-button border border-brass/60 px-3 py-2.5 text-sm font-semibold text-emerald-ink hover:bg-emerald/10">
           {t('pools_title')}
         </Link>
-        <Link href={'/partner/goods/new' as '/partner'} className="inline-flex shrink-0 items-center gap-2 rounded-button bg-emerald px-4 py-2.5 text-sm font-semibold text-ivory hover:bg-emerald-ink">
-          <Plus className="h-4 w-4" /> {t('new_listing')}
-        </Link>
+        {canCreate && (
+          <Link href={'/partner/goods/new' as '/partner'} className="inline-flex shrink-0 items-center gap-2 rounded-button bg-emerald px-4 py-2.5 text-sm font-semibold text-ivory hover:bg-emerald-ink">
+            <Plus className="h-4 w-4" /> {t('new_listing')}
+          </Link>
+        )}
       </div>
 
       {activation && <ActivationBanner state={activation.state} />}
@@ -53,10 +58,12 @@ export default async function PartnerGoodsPage() {
         <div className="jaali-ivory flex flex-col items-center gap-3 rounded-[10px] border border-dashed border-brass/60 px-6 py-16 text-center">
           <PackageOpen className="h-10 w-10 text-brass" />
           <h2 className="text-md font-semibold text-emerald-ink">{t('empty_title')}</h2>
-          <p className="max-w-sm text-sm text-foreground-secondary">{t('empty_body')}</p>
-          <Link href={'/partner/goods/new' as '/partner'} className="mt-2 inline-flex items-center gap-2 rounded-button bg-emerald px-4 py-2.5 text-sm font-semibold text-ivory hover:bg-emerald-ink">
-            <Plus className="h-4 w-4" /> {t('create_first')}
-          </Link>
+          {canCreate && <p className="max-w-sm text-sm text-foreground-secondary">{t('empty_body')}</p>}
+          {canCreate && (
+            <Link href={'/partner/goods/new' as '/partner'} className="mt-2 inline-flex items-center gap-2 rounded-button bg-emerald px-4 py-2.5 text-sm font-semibold text-ivory hover:bg-emerald-ink">
+              <Plus className="h-4 w-4" /> {t('create_first')}
+            </Link>
+          )}
         </div>
       ) : (
         <ul className="space-y-3">
