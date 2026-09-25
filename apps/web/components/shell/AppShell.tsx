@@ -65,6 +65,13 @@ export async function AppShell({
     // Rail + tab bar only where the role's surfaces exist (a buyer mid-onboarding
     // in the provider group sees the plain shell).
     const role = focused ? null : context === 'msme' ? 'buyer' : context === 'provider' && hasProvider ? 'provider' : null
+    const launcher = Boolean(role && AGENT_ENABLED)
+    // Bottom room so the last content can scroll clear of what is pinned to the
+    // bottom: the phone tab bar (3.5rem), and the corner assistant above it
+    // (1rem + 3rem) when it shows. From lg (no tab bar) only the assistant.
+    const mainClass = !role
+      ? 'min-w-0 flex-1'
+      : `min-w-0 flex-1 ${launcher ? 'pb-32 lg:pb-24' : 'pb-24 lg:pb-10'}`
     return (
       // --tabbar-h: sticky action bars (requirement form, …) sit above the phone tab bar.
       <div data-ui="v3" data-density={density} className={role ? 'flex min-h-screen flex-col bg-background text-foreground [--tabbar-h:3.5rem] lg:[--tabbar-h:0px]' : 'flex min-h-screen flex-col bg-background text-foreground'}>
@@ -100,11 +107,11 @@ export async function AppShell({
           />
           <div className="mx-auto flex w-full max-w-[1280px] flex-1 lg:px-6">
             {role && <SideRail role={role} martEnabled={MART_ENABLED} agentEnabled={AGENT_ENABLED} guide={isOnFor('guide', userId)} />}
-            <main className={role ? 'min-w-0 flex-1 pb-24 lg:pb-10' : 'min-w-0 flex-1'}>{children}</main>
+            <main className={mainClass}>{children}</main>
           </div>
           {role && <TabBar role={role} martEnabled={MART_ENABLED} />}
           {/* The assistant, minimised in the corner of every buyer / provider page (not in a focused task like checkout). */}
-          {role && AGENT_ENABLED && <AssistantLauncher persona={role} />}
+          {role && launcher && <AssistantLauncher persona={role} />}
         </ActionsProvider>
         <LegalGate />
       </div>

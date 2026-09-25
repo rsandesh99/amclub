@@ -342,7 +342,8 @@ export function CheckoutV3({
       {error && <p className="text-sm text-danger" role="alert">{error}</p>}
 
       {mode === 'pay' && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 pt-3 lg:static lg:border-0 lg:bg-transparent lg:p-0" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        // data-bottom-bar: the analytics notice (and any floating UI) sits above the pay bar on phones.
+        <div data-bottom-bar className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 pt-3 lg:static lg:border-0 lg:bg-transparent lg:p-0" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
           <Button onClick={pay} loading={loading} disabled={providerPaused} className="w-full" size="lg" data-testid="checkout-pay">
             {t('pay', { amount: formatINRExact(shown.totalPaise) })}
           </Button>

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { ArrowRight, MessageCircle, Mic, Sparkles, X } from 'lucide-react'
 import { Link, usePathname } from '@/i18n/navigation'
 import { useAnalytics } from '@/components/providers/posthog'
+import { useBottomBarLift } from '@/components/shell-v3/useBottomBarLift'
 import { cn } from '@/lib/utils'
 
 export const LAUNCHER_PREF_KEY = 'amc_assistant_button'
@@ -36,8 +37,9 @@ function actionIcon(name: Action['icon']) {
  * (AGENT_ENABLED; the shell mounts it). A tap opens a small panel of what the
  * assistant can do for this person right now: the capabilities that are on for
  * them (read on first open from /api/v1/agent/assistant), and always the way to
- * the assistant home. It sits above any bottom bar (tab bar, sticky actions),
- * measured from `[data-bottom-bar]`.
+ * the assistant home. It sits above any bottom bar (tab bar, sticky actions,
+ * notices), measured from `[data-bottom-bar]` (useBottomBarLift), never lower
+ * than the shell's --tabbar-h.
  */
 export function AssistantLauncher({ persona }: { persona: 'buyer' | 'provider' }) {
   const t = useTranslations('assistant_home.launcher')
@@ -46,7 +48,6 @@ export function AssistantLauncher({ persona }: { persona: 'buyer' | 'provider' }
   const [hidden, setHidden] = useState(true)
   const [open, setOpen] = useState(false)
   const [avail, setAvail] = useState<Availability | null>(null)
-  const [lift, setLift] = useState(0)
   const panel = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
   const home = persona === 'buyer' ? '/app/ai' : '/partner/ai'
@@ -62,28 +63,8 @@ export function AssistantLauncher({ persona }: { persona: 'buyer' | 'provider' }
   // Close on navigation.
   useEffect(() => { setOpen(false) }, [pathname])
 
-  // Stay above whatever is pinned to the bottom of the window.
-  useEffect(() => {
-    if (hidden) return
-    let raf = 0
-    const measure = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        let h = 0
-        document.querySelectorAll<HTMLElement>('[data-bottom-bar]').forEach((el) => {
-          const r = el.getBoundingClientRect()
-          // Pinned at (or floating just above) the bottom edge: the tab bar, sticky actions, the compare tray.
-          if (r.height > 0 && r.bottom >= window.innerHeight - 120) h = Math.max(h, window.innerHeight - r.top)
-        })
-        setLift(h)
-      })
-    }
-    measure()
-    const mo = new MutationObserver(measure)
-    mo.observe(document.body, { childList: true, subtree: true })
-    window.addEventListener('resize', measure)
-    return () => { cancelAnimationFrame(raf); mo.disconnect(); window.removeEventListener('resize', measure) }
-  }, [hidden, pathname])
+  // Stay above whatever is pinned to the bottom of the window (the tab bar, sticky actions, the compare tray, notices).
+  const lift = useBottomBarLift(!hidden)
 
   const load = useCallback(async () => {
     if (avail) return
@@ -128,7 +109,9 @@ export function AssistantLauncher({ persona }: { persona: 'buyer' | 'provider' }
   return (
     <div
       className="pointer-events-none fixed right-4 z-40 flex flex-col items-end gap-3 lg:right-6"
-      style={{ bottom: `calc(${lift}px + 1rem + env(safe-area-inset-bottom, 0px))` }}
+      // --tabbar-h (set by the shell: 3.5rem below lg, where the tab bar shows) is the floor, so the
+      // button clears the tab bar even before — or without — a measurement.
+      style={{ bottom: `calc(max(${lift}px, var(--tabbar-h, 0px)) + 1rem + env(safe-area-inset-bottom, 0px))` }}
       data-testid="assistant-launcher"
     >
       {open && (
@@ -157,6 +140,7 @@ export function AssistantLauncher({ persona }: { persona: 'buyer' | 'provider' }
               <li key={a.key}>
                 <Link
                   href={a.href as '/app'}
+                  prefetch={false}
                   onClick={() => analytics.capture('assistant_launcher_action', { persona, action: a.key })}
                   className="flex items-center gap-3 rounded-button border border-border px-3 py-2.5 text-left hover:border-primary/40 hover:bg-primary/5"
                 >
@@ -175,7 +159,7 @@ export function AssistantLauncher({ persona }: { persona: 'buyer' | 'provider' }
           )}
 
           <div className="mt-3 flex items-center justify-between gap-2">
-            <Link href={home as '/app'} onClick={() => analytics.capture('assistant_launcher_action', { persona, action: 'home' })} className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
+            <Link href={home as '/app'} prefetch={false} onClick={() => analytics.capture('assistant_launcher_action', { persona, action: 'home' })} className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
               {t('learn')} <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <button
