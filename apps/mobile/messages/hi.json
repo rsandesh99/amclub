@@ -904,6 +904,7 @@
     "resume": "फिर शुरू करें",
     "discount": "{pct}% छूट",
     "status_active": "चालू",
+    "status_awaiting_approval": "मंज़ूरी का इंतज़ार",
     "status_paused": "रुकी हुई",
     "status_draft": "ड्राफ़्ट"
   },

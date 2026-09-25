@@ -904,6 +904,7 @@
     "resume": "Resume",
     "discount": "{pct}% off",
     "status_active": "Live",
+    "status_awaiting_approval": "Waiting for approval",
     "status_paused": "Paused",
     "status_draft": "Draft"
   },
