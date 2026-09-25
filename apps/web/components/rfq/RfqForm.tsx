@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useAnalytics } from '@/components/providers/posthog'
 import { useRouter } from '@/i18n/navigation'
@@ -12,6 +12,7 @@ import {
   quoteSlaHours,
   RFQ_BUDGET_BANDS,
   RFQ_BUDGET_BAND_KEYS,
+  rfqSchema,
   type RfqBudgetBand,
   type RfqEntryPoint,
   type RfqMustHaves,
@@ -44,6 +45,13 @@ export interface RfqCategoryOption {
 
 const DRAFT_KEY = RFQ_DRAFT_KEY
 const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
+/** The server's title rule (rfqSchema), read from the schema so the form and the API never drift. */
+const TITLE_MIN = rfqSchema.innerType().shape.title.minLength ?? 10
+
+/** An inline field error, referenced by the control's aria-describedby. */
+function FieldError({ id, msg }: { id: string; msg: string | undefined }) {
+  return msg ? <p id={id} className="text-xs text-danger" role="alert">{msg}</p> : null
+}
 
 /** Experience v3 E6 — what the page hands the v3 form (flag `requirements`). */
 export interface RfqFormV3 {
@@ -118,6 +126,9 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
   const [quality, setQuality] = useState<{ rfqId: string; report: RfqQualityReport; deadlineAt: string | null; modelUsed: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Client-side checks, shown inline at each field: 'category' | 'title' | 'free' | `f:<template field>`.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const rootRef = useRef<HTMLDivElement>(null)
   const [restored, setRestored] = useState(false)
   // S1.8 — the ONE clarifying question (never persisted: the audio data URL is large and the round is transient).
   const [clarify, setClarify] = useState<{ payload: ClarifyPayload; prior: { transcript_english: string; parse: VoiceMeta['parse'] } } | null>(null)
@@ -167,7 +178,19 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
 
   function setField(name: string, value: string) {
     setS((prev) => ({ ...prev, details: { ...prev.details, [name]: value } }))
+    clearFieldError(name === 'additional_details' || name === freeField?.name ? 'free' : `f:${name}`)
   }
+
+  function clearFieldError(key: string) {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+  /** Spread onto Input / Textarea: the component renders the message under the field. */
+  const errOf = (key: string) => (fieldErrors[key] ? { error: fieldErrors[key] } : {})
 
   function label(f: RfqTemplateField): string {
     return rfqFieldLabel(f, locale)
@@ -341,13 +364,37 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
     if (strengthBucket) track('requirement_strength_changed', { bucket: strengthBucket })
   }, [strengthBucket, track])
 
-  async function submit() {
-    setError('')
-    if (!category) { setError(t('required_field')); return }
-    if (s.title.trim().length < 10) { setError(t('title_label') + ': ' + t('required_field')); return }
+  /** Every client-side problem at once, keyed by field (the keys match `data-rfq-field`). */
+  function validate(): Record<string, string> {
+    if (!category) return { category: t('required_field') }
+    const errs: Record<string, string> = {}
+    const title = s.title.trim()
+    if (!title) errs['title'] = t('required_field')
+    else if (title.length < TITLE_MIN) errs['title'] = t('err_title_min', { min: TITLE_MIN })
     for (const f of category.fields) {
       const v = f === freeField ? freeValue : s.details[f.name]
-      if (f.required && !v?.trim()) { setError(label(f) + ': ' + t('required_field')); return }
+      if (f.required && !v?.trim()) errs[f === freeField ? 'free' : `f:${f.name}`] = t('required_field')
+    }
+    return errs
+  }
+
+  /** Scroll to the first invalid field (in page order) and put focus on its control. */
+  function focusFirstInvalid(errs: Record<string, string>) {
+    requestAnimationFrame(() => {
+      const el = [...(rootRef.current?.querySelectorAll<HTMLElement>('[data-rfq-field]') ?? [])].find((n) => !!errs[n.dataset['rfqField'] ?? ''])
+      if (!el) return
+      el.scrollIntoView({ block: 'center' })
+      el.querySelector<HTMLElement>('input, textarea, select, button:not([tabindex="-1"])')?.focus({ preventScroll: true })
+    })
+  }
+
+  async function submit() {
+    setError('')
+    const errs = validate()
+    setFieldErrors(errs)
+    if (Object.keys(errs).length > 0 || !category) {
+      focusFirstInvalid(errs)
+      return
     }
     setLoading(true)
     try {
@@ -434,7 +481,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={rootRef} className="space-y-6">
       {restored && <p className="rounded-button bg-success/10 px-3 py-2 text-xs text-success">{t('draft_restored')}</p>}
 
       {/* Phase 8b — speak instead of type. Parse only pre-fills; never submits. */}
@@ -534,71 +581,96 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
       {v3 ? (
         <div className="space-y-5" data-testid="rfq-v3">
           <p className="text-center text-xs font-medium uppercase tracking-wide text-foreground-tertiary">{t3('or_type')}</p>
-          {/* FR-6.1 — category Picker, then the service. */}
-          <Picker
-            id="rfq-category"
-            label={`${t('pick_category')} *`}
-            value={s.categorySlug || null}
-            options={categories.map((c) => ({ value: c.slug, label: c.name }))}
-            onChange={(v) => {
-              markEdited('category')
-              setS((p) => ({ ...p, categorySlug: v ?? '', service: '', documents: [], details: p.voice ? p.details : {} }))
-            }}
-          />
-          {category && (v3.services[category.slug]?.length ?? 0) > 0 && (
+          {/* FR-6.1 — category Picker, then the service. Each Picker has a visible label (the button's own name is for screen readers). */}
+          <div className="flex flex-col gap-1.5" data-rfq-field="category">
+            <Label htmlFor="rfq-category">{t('pick_category')}<span className="text-danger"> *</span></Label>
             <Picker
-              id="rfq-service"
-              label={t3('service')}
-              value={s.service || null}
-              allowClear
-              clearLabel={t3('any_service')}
-              options={(v3.services[category.slug] ?? []).map((sv) => ({ value: sv, label: tSvc(sv as 'gst-filing') }))}
-              onChange={(v) => setS((p) => ({ ...p, service: v ?? '' }))}
+              id="rfq-category"
+              label={t('pick_category')}
+              placeholder={t3('choose')}
+              value={s.categorySlug || null}
+              options={categories.map((c) => ({ value: c.slug, label: c.name }))}
+              invalid={!!fieldErrors['category']}
+              describedBy={fieldErrors['category'] ? 'rfq-category-error' : undefined}
+              onChange={(v) => {
+                markEdited('category')
+                setFieldErrors({})
+                setS((p) => ({ ...p, categorySlug: v ?? '', service: '', documents: [], details: p.voice ? p.details : {} }))
+              }}
             />
+            <FieldError id="rfq-category-error" msg={fieldErrors['category']} />
+          </div>
+          {category && (v3.services[category.slug]?.length ?? 0) > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="rfq-service">{t3('service')}</Label>
+              <Picker
+                id="rfq-service"
+                label={t3('service')}
+                placeholder={t3('any_service')}
+                value={s.service || null}
+                allowClear
+                clearLabel={t3('any_service')}
+                options={(v3.services[category.slug] ?? []).map((sv) => ({ value: sv, label: tSvc(sv as 'gst-filing') }))}
+                onChange={(v) => setS((p) => ({ ...p, service: v ?? '' }))}
+              />
+            </div>
           )}
           {category && (
             <>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5" data-rfq-field="title">
                 <Label htmlFor="rfq-title">{t('title_label')}<span className="text-danger"> *</span></Label>
-                <Input id="rfq-title" value={s.title} onChange={(e) => { markEdited('title'); setS((p) => ({ ...p, title: e.target.value })) }} placeholder={t('title_placeholder')} />
+                <Input id="rfq-title" value={s.title} onChange={(e) => { markEdited('title'); clearFieldError('title'); setS((p) => ({ ...p, title: e.target.value })) }} placeholder={t('title_placeholder')} {...errOf('title')} />
               </div>
 
               {/* Template fields — a segmented control for ≤ 5 options, a Picker for more. */}
-              {category.fields.filter((f) => f !== freeField).map((f) => (
-                <div key={f.name} className="flex flex-col gap-1.5">
-                  {f.type === 'select' && (f.options ?? []).length > 5 ? (
-                    <Picker
-                      id={`f-${f.name}`}
-                      label={`${label(f)}${f.required ? ' *' : ''}`}
-                      value={s.details[f.name] || null}
-                      options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
-                      onChange={(v) => setField(f.name, v ?? '')}
-                    />
-                  ) : (
-                    <>
-                      <Label htmlFor={`f-${f.name}`}>{label(f)}{f.required && <span className="text-danger"> *</span>}</Label>
-                      {f.type === 'select' ? (
+              {category.fields.filter((f) => f !== freeField).map((f) => {
+                const key = `f:${f.name}`
+                const errId = `f-${f.name}-error`
+                return (
+                  <div key={f.name} className="flex flex-col gap-1.5" data-rfq-field={key}>
+                    <Label htmlFor={`f-${f.name}`}>{label(f)}{f.required && <span className="text-danger"> *</span>}</Label>
+                    {f.type === 'select' && (f.options ?? []).length > 5 ? (
+                      <>
+                        <Picker
+                          id={`f-${f.name}`}
+                          label={label(f)}
+                          placeholder={t3('choose')}
+                          value={s.details[f.name] || null}
+                          options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
+                          invalid={!!fieldErrors[key]}
+                          describedBy={fieldErrors[key] ? errId : undefined}
+                          onChange={(v) => setField(f.name, v ?? '')}
+                        />
+                        <FieldError id={errId} msg={fieldErrors[key]} />
+                      </>
+                    ) : f.type === 'select' ? (
+                      <>
+                        {/* Template options are data ("₹20 lakh – ₹1 crore"): the segments wrap instead of truncating. */}
                         <SegmentedControl<string>
                           size="sm"
+                          wrap
                           ariaLabel={label(f)}
                           options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
                           value={s.details[f.name] || null}
+                          invalid={!!fieldErrors[key]}
+                          ariaDescribedBy={fieldErrors[key] ? errId : undefined}
                           onChange={(v) => setField(f.name, v)}
                         />
-                      ) : f.type === 'textarea' ? (
-                        <Textarea id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} rows={3} />
-                      ) : (
-                        <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={f.placeholder_en ?? ''} />
-                      )}
-                    </>
-                  )}
-                </div>
-              ))}
+                        <FieldError id={errId} msg={fieldErrors[key]} />
+                      </>
+                    ) : f.type === 'textarea' ? (
+                      <Textarea id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} rows={3} {...errOf(key)} />
+                    ) : (
+                      <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={f.placeholder_en ?? ''} {...errOf(key)} />
+                    )}
+                  </div>
+                )
+              })}
 
               {/* ONE free-text field. */}
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5" data-rfq-field="free">
                 <Label htmlFor="rfq-free">{freeField ? label(freeField) : t('free_details_label')}{freeField?.required && <span className="text-danger"> *</span>}</Label>
-                <Textarea id="rfq-free" value={freeValue} onChange={(e) => { markEdited('description'); setField('additional_details', e.target.value) }} placeholder={t('free_details_placeholder')} rows={3} />
+                <Textarea id="rfq-free" value={freeValue} onChange={(e) => { markEdited('description'); setField('additional_details', e.target.value) }} placeholder={t('free_details_placeholder')} rows={3} {...errOf('free')} />
               </div>
 
               {/* Budget chips — bands write budget_min / budget_max. */}
@@ -706,16 +778,18 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
       ) : (
         <>
       {/* Category */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5" data-rfq-field="category">
         <Label htmlFor="rfq-category">{t('pick_category')}<span className="text-danger"> *</span></Label>
         <Select
           id="rfq-category"
           value={s.categorySlug}
           onChange={(e) => {
             markEdited('category')
+            setFieldErrors({})
             setS((p) => ({ ...p, categorySlug: e.target.value, details: p.voice ? p.details : {} }))
           }}
           placeholder="—"
+          {...errOf('category')}
         >
           {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
         </Select>
@@ -723,36 +797,37 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
 
       {category && (
         <>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5" data-rfq-field="title">
             <Label htmlFor="rfq-title">{t('title_label')}<span className="text-danger"> *</span></Label>
             <Input
               id="rfq-title"
               value={s.title}
-              onChange={(e) => { markEdited('title'); setS((p) => ({ ...p, title: e.target.value })) }}
+              onChange={(e) => { markEdited('title'); clearFieldError('title'); setS((p) => ({ ...p, title: e.target.value })) }}
               placeholder={t('title_placeholder')}
+              {...errOf('title')}
             />
           </div>
 
           {/* Dynamic fields from the category's rfq_template */}
           {category.fields.filter((f) => f !== freeField).map((f) => (
-            <div key={f.name} className="flex flex-col gap-1.5">
+            <div key={f.name} className="flex flex-col gap-1.5" data-rfq-field={`f:${f.name}`}>
               <Label htmlFor={`f-${f.name}`}>
                 {label(f)}{f.required && <span className="text-danger"> *</span>}
               </Label>
               {f.type === 'select' ? (
-                <Select id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder="—">
+                <Select id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder="—" {...errOf(`f:${f.name}`)}>
                   {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
               ) : f.type === 'textarea' ? (
-                <Textarea id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} rows={3} />
+                <Textarea id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} rows={3} {...errOf(`f:${f.name}`)} />
               ) : (
-                <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={f.placeholder_en ?? ''} />
+                <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={f.placeholder_en ?? ''} {...errOf(`f:${f.name}`)} />
               )}
             </div>
           ))}
 
           {/* Free-text */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5" data-rfq-field="free">
             <Label htmlFor="rfq-free">
               {freeField ? label(freeField) : t('free_details_label')}
               {freeField?.required && <span className="text-danger"> *</span>}
@@ -763,6 +838,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
               onChange={(e) => { markEdited('description'); setField('additional_details', e.target.value) }}
               placeholder={t('free_details_placeholder')}
               rows={3}
+              {...errOf('free')}
             />
           </div>
 
