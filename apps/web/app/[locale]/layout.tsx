@@ -156,10 +156,13 @@ export default async function LocaleLayout({
       {...(v3 ? { 'data-ui': 'v3' } : {})}
     >
       <body className="bg-background font-sans text-foreground antialiased">
-        {/* v3 materials: solid bars on low-memory devices (PRD §3.4.3). Tiny, sync, before paint. */}
+        {/* Tiny, sync, before paint. v3 materials: solid bars on low-memory devices (PRD §3.4.3).
+            data-auth: a session cookie exists, so the static public header reserves the avatar's
+            footprint (not "Sign in · Sign up") until /profile/me answers — no jump (F15). A hint
+            for CSS only: the server HTML is the same for everyone, so hydration is unaffected. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: "try{var m=navigator.deviceMemory;if(m&&m<=2)document.documentElement.setAttribute('data-lowmem','')}catch(e){}",
+            __html: "try{var m=navigator.deviceMemory;if(m&&m<=2)document.documentElement.setAttribute('data-lowmem','')}catch(e){}try{if(/(?:^|; )sb-[^=;]+-auth-token(?:\\.\\d+)?=/.test(document.cookie))document.documentElement.setAttribute('data-auth','')}catch(e){}",
           }}
         />
         <ResourceHints fonts={fonts} origins={hintOrigins} />

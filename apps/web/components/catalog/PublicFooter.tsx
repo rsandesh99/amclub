@@ -2,6 +2,7 @@ import { Link } from '@/i18n/navigation'
 import { getCategories } from '@/lib/catalog/queries'
 import { pickI18n } from '@/lib/format'
 import { getLocale, getTranslations } from 'next-intl/server'
+import { FooterSignIn } from './FooterSignIn'
 
 export async function PublicFooter() {
   const t = await getTranslations()
@@ -40,11 +41,8 @@ export async function PublicFooter() {
                 {t('legal.provider_addendum_title')}
               </Link>
             </li>
-            <li>
-              <Link href="/login" className="hover:text-primary">
-                {t('auth.sign_in')}
-              </Link>
-            </li>
+            {/* Hidden for a signed-in visitor (the page is static; the client knows). */}
+            <FooterSignIn />
           </ul>
         </div>
         <div>

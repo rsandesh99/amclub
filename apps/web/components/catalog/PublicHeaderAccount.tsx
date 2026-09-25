@@ -1,13 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
-import type { ProfileMeResponse } from '@amclub/shared'
 import { AccountMenu } from '@/components/shell/AccountMenu'
-
-// S2.3 — shared contract; Partial because the 401 body is {authenticated:false}.
-type Me = Partial<ProfileMeResponse> & { authenticated: boolean }
+import { usePublicMe } from './usePublicMe'
 
 /**
  * Client-side auth area for the (static) public header: shows the account menu
@@ -16,30 +12,16 @@ type Me = Partial<ProfileMeResponse> & { authenticated: boolean }
  */
 export function PublicHeaderAccount() {
   const tAuth = useTranslations('auth')
-  const [me, setMe] = useState<Me | null>(null)
-  const [loaded, setLoaded] = useState(false)
+  const me = usePublicMe()
 
-  useEffect(() => {
-    let active = true
-    fetch('/api/v1/profile/me', { cache: 'no-store' })
-      // Always drain the body — an unread (401) response keeps the request
-      // "in flight" in Chromium, so the page never reaches network-idle.
-      .then(async (r) => {
-        const d = (await r.json().catch(() => null)) as Me | null
-        return r.ok ? d : null
-      })
-      .then((d: Me | null) => {
-        if (!active) return
-        setMe(d?.authenticated ? d : null)
-        setLoaded(true)
-      })
-      .catch(() => active && setLoaded(true))
-    return () => { active = false }
-  }, [])
-
-  // Avoid a flash of the wrong state before we know.
-  // Reserve the exact footprint of "Sign in · Sign up" so the row never jumps.
-  if (!loaded) return <div className="h-10 w-[5.25rem] sm:w-[10.5rem]" aria-hidden />
+  // Until we know: an empty slot the size of what will most likely appear, so
+  // the header does not jump. The server HTML is the same for everyone (the
+  // "Sign in · Sign up" footprint); the root layout's pre-paint script marks
+  // <html data-auth> when a session cookie exists, and then the slot takes the
+  // avatar button's footprint instead (44 px; 66 px with its chevron from sm).
+  if (me === undefined) {
+    return <div className="h-10 w-[5.25rem] sm:w-[10.5rem] [html[data-auth]_&]:w-11 sm:[html[data-auth]_&]:w-[4.125rem]" aria-hidden data-testid="account-slot" />
+  }
 
   if (me) {
     const roles = me.roles ?? []
