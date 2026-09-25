@@ -25,7 +25,7 @@ export async function AttributeFacets({ base, current, facets }: { base: string;
         const param = `a.${f.key}`
         const label = pickLocale(f.label_i18n, locale)
         return (
-          <div key={f.key} className="-mx-4 flex items-center gap-2 overflow-x-auto px-4" role="group" aria-label={label}>
+          <div key={f.key} className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label={label}>
             <span className="shrink-0 text-meta font-medium text-foreground-secondary">{label}</span>
             <Link href={withParams(base, current, { [param]: undefined }) as '/services'} className={chip(!current[param])} aria-pressed={!current[param]}>{t('attr_any')}</Link>
             {f.values.map((v) => (
