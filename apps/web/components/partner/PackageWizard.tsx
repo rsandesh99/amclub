@@ -113,6 +113,9 @@ export function PackageWizard({
 
   function set(patch: Partial<PackageDraft>) {
     setDraft((d) => ({ ...d, ...patch }))
+    // QA F16 — a step's message ("Please choose a category.") goes once the field is edited;
+    // Continue re-checks the step.
+    setError('')
   }
 
   function commitPendingLists(): PackageDraft {
