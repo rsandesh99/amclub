@@ -14,18 +14,19 @@ const GRIEVANCE_EMAIL = GRIEVANCE_OFFICER.email
 export default async function HelpPage() {
   const t = await getTranslations('help')
 
+  // Each entry is a question (its title) and the answer.
   const faqs = [
-    { icon: Wallet, body: t('faq_orders') },
-    { icon: RotateCcw, body: t('faq_refund') },
-    { icon: ShieldCheck, body: t('faq_verify') },
+    { icon: Wallet, q: t('faq_orders_q'), body: t('faq_orders') },
+    { icon: RotateCcw, q: t('faq_refund_q'), body: t('faq_refund') },
+    { icon: ShieldCheck, q: t('faq_verify_q'), body: t('faq_verify') },
     // ADR-004 — providers never bear gateway charges.
-    { icon: Wallet, body: t('faq_fees') },
+    { icon: Wallet, q: t('faq_fees_q'), body: t('faq_fees') },
     // S2.4 / ADR-010 §9 (e) — the main parameters that can order quotes, named without weights (Consumer Protection
     // (E-Commerce) Rules 2020 disclosure; counsel to confirm the clause). Factors only: the formula is not published.
-    { icon: ArrowDownUp, body: t('faq_ranking') },
+    { icon: ArrowDownUp, q: t('faq_ranking_q'), body: t('faq_ranking') },
     // Experience v3 FR-4.5 — what "waiting on the government portal" means
     // (the external_wait pause); the package page's government line links here.
-    { icon: Landmark, body: t('faq_govt_wait'), id: 'government-portal' },
+    { icon: Landmark, q: t('faq_govt_wait_q'), body: t('faq_govt_wait'), id: 'government-portal' },
   ]
 
   return (
@@ -35,30 +36,34 @@ export default async function HelpPage() {
         <p className="mt-1 text-foreground-secondary">{t('subtitle')}</p>
       </header>
 
-      <section className="rounded-card border border-border bg-surface p-5 shadow-card space-y-3">
+      {/* Contact rows share one 44px pitch (links are 44px tall by the global tap-target rule; the hours line
+          matches), so the gaps between them are even. */}
+      <section className="rounded-card border border-border bg-surface p-5 shadow-card">
         <h2 className="text-lg font-semibold">{t('contact_title')}</h2>
-        <a
-          href={`mailto:${SUPPORT_EMAIL}`}
-          className="flex items-center gap-3 text-sm text-foreground hover:text-primary"
-        >
-          <Mail className="h-4 w-4 text-primary" />
-          <span className="text-foreground-secondary">{t('email_label')}:</span>
-          <span className="font-medium">{SUPPORT_EMAIL}</span>
-        </a>
-        <a
-          href={whatsappHref(SUPPORT_CONTACT.whatsappE164)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 text-sm text-foreground hover:text-primary"
-        >
-          <MessageCircle className="h-4 w-4 text-primary" />
-          <span className="text-foreground-secondary">{t('whatsapp_label')}:</span>
-          <span className="font-medium">{SUPPORT_WHATSAPP}</span>
-        </a>
-        <p className="flex items-center gap-2 pt-1 text-xs text-foreground-secondary">
-          <Clock className="h-3.5 w-3.5" />
-          {t('hours')}
-        </p>
+        <div className="mt-2 flex flex-col">
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="flex min-h-[44px] items-center gap-3 text-sm text-foreground hover:text-primary"
+          >
+            <Mail className="h-4 w-4 shrink-0 text-primary" />
+            <span className="text-foreground-secondary">{t('email_label')}:</span>
+            <span className="font-medium">{SUPPORT_EMAIL}</span>
+          </a>
+          <a
+            href={whatsappHref(SUPPORT_CONTACT.whatsappE164)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-h-[44px] items-center gap-3 text-sm text-foreground hover:text-primary"
+          >
+            <MessageCircle className="h-4 w-4 shrink-0 text-primary" />
+            <span className="text-foreground-secondary">{t('whatsapp_label')}:</span>
+            <span className="font-medium">{SUPPORT_WHATSAPP}</span>
+          </a>
+          <p className="flex min-h-[44px] items-center gap-3 text-xs text-foreground-secondary">
+            <Clock className="h-4 w-4 shrink-0" />
+            {t('hours')}
+          </p>
+        </div>
       </section>
 
       <section className="space-y-3">
@@ -66,8 +71,11 @@ export default async function HelpPage() {
         <div className="space-y-3">
           {faqs.map((f, i) => (
             <div key={i} id={'id' in f ? f.id : undefined} className="flex scroll-mt-24 gap-3 rounded-card border border-border bg-surface p-4">
-              <f.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-              <p className="text-sm text-foreground">{f.body}</p>
+              <f.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-foreground">{f.q}</h3>
+                <p className="mt-1 text-sm text-foreground-secondary">{f.body}</p>
+              </div>
             </div>
           ))}
         </div>
