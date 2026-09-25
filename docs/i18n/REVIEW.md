@@ -15,7 +15,7 @@ reviewer or switched on deliberately with the flag.
 | `apps/web/messages/<locale>.json` | Live copy | Always (English fallback key by key) |
 | `apps/web/messages/drafts/<locale>.json` | Machine drafts awaiting review — buying-path namespaces only | Only while `EXP_V3_LOCALES=on`, and only for the namespaces in `EXP_V3_LOCALES_NAMESPACES` (comma list; unset = all buying-path namespaces). Live copy always wins over a draft. The flag honours `on` only (message files load without a user). |
 | `apps/web/messages/drafts/REVIEW_LOG.json` | One line per promotion: locale, namespace, key count, reviewer, date | — |
-| `apps/web/i18n/coverage.config.json` | The ONE list of buying-path namespaces (incl. `notify`, the notification copy built by `lib/i18n/notify.ts`) | — |
+| `apps/web/i18n/coverage.config.json` | The ONE list of gated namespaces (key `buyingPath`): the buying path (incl. `notify`, the notification copy built by `lib/i18n/notify.ts`) and, since the 2026-09-25 QA pass (F4), every other buyer, provider and public namespace. Internal admin namespaces (`admin`, `admin_*`, `trust_admin`, `dev_ui`) stay English and are not listed | — |
 
 ## The gate (CI)
 
@@ -43,6 +43,8 @@ Launch acceptance (E14): native speakers review screenshots of the 12 key screen
 - **Dispute (ta):** drafts use சர்ச்சை; older live ta strings also use தகராறு.
 - **Plurals:** `catalog.orders_done` moves "done" inside each plural branch in te and ta so the verb agrees; the argument is unchanged.
 - **Category names** (migration 0060, `CATEGORIES` in shared) reuse the live gateway names; the te / ta descriptions are drafts and render once 0060 is applied — review them with the category pages.
+- **Legal drafts** (`legal`, `legal_gate`, the consent lines in `auth` / `provider_signup`): machine drafts of the Terms, Privacy Policy, Refund Policy and Provider Addendum render while `EXP_V3_LOCALES` covers them; have counsel check them with the native reviewer, or drop `legal` from `EXP_V3_LOCALES_NAMESPACES` until then.
+- **Hindi GST:** live `hi.json` writes GST / GSTIN in Latin script everywhere (as the invoices, the GST portal and the te / ta drafts do); the hi category descriptions (shared `CATEGORIES`, `categories.description_i18n`) still write जीएसटी.
 
 ## Numerals (D-PRD7)
 
