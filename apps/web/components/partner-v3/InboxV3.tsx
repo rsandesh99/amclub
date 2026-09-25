@@ -17,6 +17,8 @@ const TABS = ['open', 'quoted', 'closed'] as const
 export async function InboxV3({ userId, query }: { userId: string; query: InboxQuery }) {
   const [t, tRfq, locale] = await Promise.all([getTranslations('partner_v3'), getTranslations('rfq'), getLocale()])
   const inbox = await listProviderInboxV3(userId, query)
+  const filtered = !!(query.q || query.category || query.state || query.budget || query.closing || query.verified || query.files)
+  const total = inbox.counts.open + inbox.counts.quoted + inbox.counts.closed
   const pickName = (m: { en: string; hi?: string }) => (locale === 'hi' && m.hi ? m.hi : m.en)
   const catName = (slug: string | null) => (slug ? pickName(CATEGORY_LIST.find((c) => c.slug === slug)?.name_i18n ?? { en: slug }) : '—')
   const budget = (r: InboxRowV3) => (r.budgetMinPaise == null && r.budgetMaxPaise == null ? '—' : `${r.budgetMinPaise != null ? formatINR(r.budgetMinPaise) : ''}–${r.budgetMaxPaise != null ? formatINR(r.budgetMaxPaise) : ''}`)
@@ -42,7 +44,19 @@ export async function InboxV3({ userId, query }: { userId: string; query: InboxQ
         states={INDIAN_STATES.map((s) => ({ value: s.value, label: s.label }))}
       />
       {inbox.items.length === 0 ? (
-        <p className="rounded-card border border-dashed border-border px-4 py-10 text-center text-sm text-foreground-secondary">{t('inbox_empty')}</p>
+        // QA F19 — "match these filters" only when a filter is set; otherwise say why the inbox is empty.
+        <div className="rounded-card border border-dashed border-border px-4 py-10 text-center text-sm text-foreground-secondary" data-testid="inbox-empty">
+          {filtered ? (
+            <p>{t('inbox_empty')}</p>
+          ) : total === 0 ? (
+            <>
+              <p className="font-medium text-foreground">{tRfq('no_matched_title')}</p>
+              <p className="mt-1">{tRfq('no_matched_body')}</p>
+            </>
+          ) : (
+            <p>{tRfq(`inbox_empty_${query.tab}`)}</p>
+          )}
+        </div>
       ) : (
         <>
           <div className="hidden md:block" data-density="compact">
