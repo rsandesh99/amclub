@@ -58,7 +58,8 @@ export default async function EditListingPage({
     scopeExcluded: (pk.scope_excluded as string[]) ?? [],
     deliverables: (pk.deliverables as string[]) ?? [],
     requirements: reqFields.map((f) => f.label_en ?? '').filter(Boolean),
-    priceRupees: String(Math.round(Number(pk.price_paise) / 100)),
+    // Exact (₹4,999.50 stays 4999.5): rounding here would silently re-price the listing on save.
+    priceRupees: String(Number(pk.price_paise) / 100),
     discountPct: String((pk.discount_bps ?? 0) / 100),
     memberPct: String((pk.member_extra_discount_bps ?? 0) / 100),
     deliveryDays: String(pk.delivery_days),
