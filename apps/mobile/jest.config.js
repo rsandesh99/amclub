@@ -13,4 +13,9 @@ module.exports = {
   transformIgnorePatterns: [`node_modules/(?!(?:\\.pnpm/)?(?:${allow})(?:[/+@]|$))`],
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/$1' },
   setupFiles: ['<rootDir>/__tests__/setup.ts'],
+  // The screens load lazily and each test waits up to 5 s for its first render
+  // (findBy… { timeout: 5000 }); Jest's default 5 s per-test budget sat below
+  // that wait, so a cold transform on a busy CI runner failed the test before
+  // its own wait ran out. The budget must exceed the waits it contains.
+  testTimeout: 30_000,
 }
