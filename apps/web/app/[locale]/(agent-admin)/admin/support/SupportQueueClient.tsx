@@ -173,7 +173,7 @@ export function SupportQueueClient() {
           </div>
           {selected.ticket.status !== 'resolved' && (
             <div className="mt-3 space-y-2">
-              <textarea className="field w-full" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('note_placeholder')} maxLength={1000} aria-label={t('note_placeholder')} />
+              <textarea className="field-control w-full" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('note_placeholder')} maxLength={1000} aria-label={t('note_placeholder')} />
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => void act(selected.ticket.id, 'resolve')} disabled={busy} data-testid="support-resolve">{t('resolve')}</Button>
                 <Button size="sm" variant="outline" onClick={() => void act(selected.ticket.id, 'acknowledge')} disabled={busy}>{t('acknowledge')}</Button>
