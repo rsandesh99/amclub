@@ -25,6 +25,8 @@ import { AssistantLauncher } from '@/components/assistant/AssistantLauncher'
 export async function AppShell({
   context,
   name,
+  email = null,
+  phone = null,
   roles,
   userId,
   hasMsmeProfile,
@@ -34,6 +36,9 @@ export async function AppShell({
 }: {
   context: ShellContext
   name: string | null
+  /** The account menu says who is signed in (and the avatar letter) when there is no name. */
+  email?: string | null
+  phone?: string | null
   roles: string[]
   /** Needed for the v3 flag bucket and the density preference. */
   userId?: string
@@ -68,8 +73,10 @@ export async function AppShell({
             // A buyer's full results page; provider / admin shells use the public catalog.
             fullResultsPath={context === 'msme' ? '/app/search' : '/services'}
             brand={
-              <Link href={homeHref as '/app'} className="shrink-0 text-[22px] font-bold leading-none tracking-tight text-primary">
-                AMClub<span className="font-medium text-foreground-secondary">{suffix}</span>
+              // Phones: the wordmark alone, a little smaller (the " Partner" / " Admin" suffix
+              // joins from sm up; the tab bar already says which surface this is).
+              <Link href={homeHref as '/app'} prefetch={false} className="shrink-0 text-[20px] font-bold leading-none tracking-tight text-primary sm:text-[22px]">
+                AMClub<span className="hidden font-medium text-foreground-secondary sm:inline">{suffix}</span>
               </Link>
             }
             trailing={
@@ -79,6 +86,8 @@ export async function AppShell({
                 {context !== 'admin' && <NotificationBell href={notificationsHref} />}
                 <AccountMenu
                   name={name}
+                  email={email}
+                  phone={phone}
                   context={context}
                   hasMsme={hasMsme}
                   hasProvider={hasProvider}
@@ -105,21 +114,22 @@ export async function AppShell({
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-2 px-4 sm:gap-4">
           <Link
             href={homeHref as '/app'}
-            className="font-display text-[26px] font-bold leading-none tracking-tight text-primary"
+            prefetch={false}
+            className="shrink-0 font-display text-[22px] font-bold leading-none tracking-tight text-primary sm:text-[26px]"
           >
-            AMClub<span className="text-foreground-secondary">{suffix}</span>
+            AMClub<span className="hidden text-foreground-secondary sm:inline">{suffix}</span>
           </Link>
-          <div className="flex h-10 items-center gap-2">
+          <div className="flex h-10 min-w-0 items-center gap-1 sm:gap-2">
             {/* Jurisdiction is a buyer-discovery control — shown in the MSME shell. */}
             {context === 'msme' && <JurisdictionSelector className="hidden md:inline-flex" />}
             <LanguageSwitcher />
             {/* The bell links into the msme/provider notification centres — an
                 admin clicking it would be dropped out of the admin shell. */}
             {context !== 'admin' && <NotificationBell href={notificationsHref} />}
-            <AccountMenu name={name} context={context} hasMsme={hasMsme} hasProvider={hasProvider} isAdmin={isAdmin} />
+            <AccountMenu name={name} email={email} phone={phone} context={context} hasMsme={hasMsme} hasProvider={hasProvider} isAdmin={isAdmin} />
           </div>
         </div>
       </header>

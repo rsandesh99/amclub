@@ -22,6 +22,8 @@ export default async function ProviderLayout({ children }: { children: React.Rea
     <AppShell
       context="provider"
       name={user.fullName}
+      email={user.email}
+      phone={user.phone}
       roles={user.roles}
       userId={user.id}
       hasMsmeProfile={Boolean(msme)}

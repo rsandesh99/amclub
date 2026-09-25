@@ -45,7 +45,8 @@ export function LanguageSwitcher({ className }: { className?: string }) {
   return (
     <label
       className={cn(
-        'relative inline-flex h-11 items-center whitespace-nowrap rounded-button border border-border bg-surface text-sm text-foreground hover:border-primary/40 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20',
+        // min-w-0: in a crowded phone header the select clips its label rather than push the row off-screen.
+        'relative inline-flex h-11 min-w-0 items-center whitespace-nowrap rounded-button border border-border bg-surface text-sm text-foreground hover:border-primary/40 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20',
         className,
       )}
     >
@@ -53,13 +54,14 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       <span className="sr-only">{t('switch')}</span>
       {/* Visible at every width (the current language's own name), a 44 px
           target, and still the native picker for keyboard / screen readers.
-          The globe icon joins from sm up, where the header has room. */}
+          The globe icon joins from sm up, where the header has room; phones
+          get tighter padding and a smaller chevron. */}
       <select
         value={locale}
         onChange={(e) => switchTo(e.target.value as AppLocale)}
         aria-label={t('switch')}
         lang={locale}
-        className="font-system h-full min-h-0 cursor-pointer appearance-none rounded-button bg-transparent py-0 pl-2.5 pr-7 font-semibold text-foreground focus:outline-none sm:pl-8"
+        className="font-system h-full min-h-0 min-w-0 cursor-pointer appearance-none rounded-button bg-transparent py-0 pl-2 pr-5 font-semibold text-foreground focus:outline-none sm:pl-8 sm:pr-7"
       >
         {LOCALES.map((l) => (
           <option key={l} value={l} lang={l} className="bg-surface text-foreground">
@@ -67,7 +69,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2 h-4 w-4 text-foreground-secondary" aria-hidden />
+      <ChevronDown className="pointer-events-none absolute right-1.5 h-3.5 w-3.5 text-foreground-secondary sm:right-2 sm:h-4 sm:w-4" aria-hidden />
     </label>
   )
 }

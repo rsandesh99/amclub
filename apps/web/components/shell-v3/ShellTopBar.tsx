@@ -38,15 +38,18 @@ export function ShellTopBar({ brand, trailing, fullResultsPath = '/app/search' }
 
   return (
     <header className="material hairline-b sticky top-0 z-30">
-      <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-3 px-4 lg:px-6">
+      {/* Phones (360–390 px): the row must fit brand + search + language + bell + avatar with
+          no sideways scroll — tighter gaps, no empty spacer (the search icon takes ml-auto),
+          and the trailing cluster may shrink (the language select clips before anything overflows). */}
+      <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-2 px-4 sm:gap-3 lg:px-6">
         {brand}
-        <div className="flex flex-1 justify-center">
+        <div className="hidden flex-1 justify-center md:flex">
           <HeaderSearch fullResultsPath={fullResultsPath} />
         </div>
-        <button type="button" onClick={() => openSheet('button')} aria-label={t('trigger')} className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground-secondary hover:bg-foreground/5 md:hidden">
+        <button type="button" onClick={() => openSheet('button')} aria-label={t('trigger')} className="ml-auto inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground-secondary hover:bg-foreground/5 md:hidden">
           <Search className="h-5 w-5" strokeWidth={1.75} aria-hidden />
         </button>
-        <div className="flex h-10 items-center gap-2">{trailing}</div>
+        <div className="flex h-10 min-w-0 items-center gap-1 sm:gap-2">{trailing}</div>
       </div>
       {mounted && <CommandSearch open={open} onOpenChange={setOpen} fullResultsPath={fullResultsPath} />}
     </header>

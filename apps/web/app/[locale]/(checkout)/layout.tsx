@@ -44,6 +44,8 @@ export default async function CheckoutLayout({ children }: { children: React.Rea
     <AppShell
       context="msme"
       name={user.fullName}
+      email={user.email}
+      phone={user.phone}
       roles={user.roles}
       userId={user.id}
       hasMsmeProfile={Boolean(msme)}

@@ -21,6 +21,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <AppShell
       context="admin"
       name={user.fullName}
+      email={user.email}
+      phone={user.phone}
       roles={user.roles}
       userId={user.id}
       hasMsmeProfile={Boolean(msme)}

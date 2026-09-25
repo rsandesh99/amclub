@@ -27,6 +27,8 @@ export default async function MsmeLayout({ children }: { children: React.ReactNo
     <AppShell
       context="msme"
       name={user.fullName}
+      email={user.email}
+      phone={user.phone}
       roles={user.roles}
       userId={user.id}
       hasMsmeProfile={Boolean(msme)}
