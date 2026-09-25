@@ -31,6 +31,9 @@ export function SideRail({ role, martEnabled = false, agentEnabled = false, guid
             <li key={it.href}>
               <Link
                 href={it.href as '/app'}
+                // Every rail / tab link is a signed-in, dynamic page: prefetching all of them on
+                // viewport fired a burst of RSC requests on every load (503s on production, F10).
+                prefetch={false}
                 aria-current={active ? 'page' : undefined}
                 onClick={() => analytics.capture('nav_item_clicked', { item: it.labelKey, surface: 'rail', role })}
                 className={cn(
@@ -52,6 +55,7 @@ export function SideRail({ role, martEnabled = false, agentEnabled = false, guid
             <p className="mt-1 text-xs text-foreground-secondary">{tCard('body')}</p>
             <Link
               href="/app/rfq/new?entry=rail"
+              prefetch={false}
               onClick={() => analytics.capture('post_requirement_clicked', { surface: 'rail' })}
               className="mt-2.5 inline-flex h-9 w-full items-center justify-center rounded-button bg-primary text-[13px] font-semibold text-primary-foreground hover:bg-primary-strong"
             >
@@ -87,12 +91,15 @@ export function TabBar({ role, martEnabled = false }: { role: 'buyer' | 'provide
             <li key={it.href}>
               <Link
                 href={it.href as '/app'}
+                prefetch={false}
                 aria-current={active ? 'page' : undefined}
                 onClick={() => analytics.capture('nav_item_clicked', { item: it.labelKey, surface: 'tabbar', role })}
-                className={cn('relative flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium', active ? 'text-primary' : 'text-foreground-secondary')}
+                // Labels use the whole tab (72 px at 360) and step down 11 → 10.5 → 10 px on the
+                // narrowest phones, so "Requirements" and the Tamil / Telugu labels fit whole.
+                className={cn('relative flex h-14 flex-col items-center justify-center gap-0.5 text-[10px] font-medium min-[375px]:text-[10.5px] min-[390px]:text-[11px]', active ? 'text-primary' : 'text-foreground-secondary')}
               >
                 <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2 : 1.5} aria-hidden />
-                <span className="max-w-full truncate px-1">{t(it.labelKey)}</span>
+                <span className="max-w-full truncate px-px">{t(it.labelKey)}</span>
                 {n > 0 && <CountBadge count={n} label={t('badge_label', { count: n })} className="absolute right-[18%] top-1.5 h-4 min-w-4 px-1 text-[10px]" />}
               </Link>
             </li>
