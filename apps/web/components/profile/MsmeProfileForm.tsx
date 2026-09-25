@@ -2,13 +2,12 @@
 
 import { useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
+import { indianStateOptions, SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
 import { useRouter } from '@/i18n/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { INDIAN_STATES } from '@/lib/constants/india'
 import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 
 const isSupportedLocale = (l: string): l is SupportedLocale => (SUPPORTED_LOCALES as readonly string[]).includes(l)
@@ -123,7 +122,7 @@ export function MsmeProfileForm({ initial }: { initial: MsmeProfileInitial }) {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="stateCode">{t('state_label')}</Label>
           <Select id="stateCode" value={form.stateCode} onChange={(e) => update({ stateCode: e.target.value })} placeholder="—">
-            {INDIAN_STATES.map((s) => (
+            {indianStateOptions(locale).map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </Select>

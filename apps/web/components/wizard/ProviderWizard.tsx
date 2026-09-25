@@ -11,10 +11,11 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
-import { INDIAN_STATES } from '@/lib/constants/india'
 import {
   CATEGORY_LIST,
   categoriesRequiringCredential,
+  indianStateOptions,
+  pickI18n,
   statutoryOptionsForCategory,
   isStatutoryCredential,
   isValidGstin,
@@ -611,7 +612,7 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
                           : 'border-border text-foreground hover:border-primary hover:text-primary'
                       }`}
                     >
-                      {cat.name_i18n.en}
+                      {pickI18n(cat.name_i18n, locale)}
                     </button>
                   )
                 })}
@@ -621,7 +622,7 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
               <div className="flex-1 flex flex-col gap-1.5">
                 <Label htmlFor="stateCode">{t('state_label')} <span className="text-danger">*</span>{waChip('stateCode')}</Label>
                 <Select id="stateCode" value={draft.stateCode} onChange={(e) => update({ stateCode: e.target.value })} placeholder={t('state_placeholder')} className={triedContinue && !draft.stateCode ? 'border-danger' : ''}>
-                  {INDIAN_STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  {indianStateOptions(locale).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </Select>
               </div>
               <div className="flex-1 flex flex-col gap-1.5">
@@ -746,7 +747,7 @@ export function ProviderWizard({ skipAuth, waEnabled: waEnabledProp, waDraft: wa
                   return (
                     <div key={slug} className="flex flex-col gap-3 rounded-button border border-border p-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">{cat?.name_i18n.en}</p>
+                        <p className="text-sm font-medium">{cat ? pickI18n(cat.name_i18n, locale) : slug}</p>
                         {uploaded && pickedKind && number.trim() ? (
                           <p className="text-xs text-success">{t('credential_uploaded', { name: uploaded.name })}</p>
                         ) : (

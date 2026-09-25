@@ -1,7 +1,7 @@
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { notFound, redirect } from 'next/navigation'
 import { martPageGate } from '@/lib/mart/gate'
-import { INDIAN_STATES } from '@amclub/shared'
+import { indianStateOptions } from '@amclub/shared'
 import { getSessionUser } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/server'
 import { GoodsCheckoutClient } from './GoodsCheckoutClient'
@@ -14,7 +14,7 @@ export default async function MartCheckoutPage({ searchParams }: { searchParams:
   martPageGate()
   const user = await getSessionUser()
   if (!user) redirect('/login?next=/app/mart/checkout')
-  const [sp, t, defaults] = await Promise.all([searchParams, getTranslations('mart'), deliveryDefaults(await createAdminClient(), user.id)])
+  const [sp, t, locale, defaults] = await Promise.all([searchParams, getTranslations('mart'), getLocale(), deliveryDefaults(await createAdminClient(), user.id)])
   // E16 N42 — `?sample=<product id>`: one unit at the listing's sample price, outside the cart.
   const sampleId = sp['sample'] && /^[0-9a-f-]{36}$/i.test(sp['sample']) ? sp['sample'] : null
   const product = sampleId ? await getPublicProduct(sampleId) : null
@@ -26,7 +26,7 @@ export default async function MartCheckoutPage({ searchParams }: { searchParams:
     <div className="mx-auto max-w-lg px-4 py-8">
       <h1 className="font-display text-2xl font-bold text-emerald-ink">{sample ? t('sample_checkout_title') : t('checkout_title')}</h1>
       <p className="mb-6 mt-1 text-sm text-foreground-secondary">{sample ? t('sample_checkout_subtitle') : t('checkout_subtitle')}</p>
-      <GoodsCheckoutClient sellerId={sp['seller'] ?? null} states={INDIAN_STATES.map((s) => ({ value: s.value, label: s.label }))} defaults={defaults} sample={sample} />
+      <GoodsCheckoutClient sellerId={sp['seller'] ?? null} states={indianStateOptions(locale)} defaults={defaults} sample={sample} />
     </div>
   )
 }

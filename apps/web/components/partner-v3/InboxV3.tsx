@@ -1,5 +1,5 @@
 import { getLocale, getTranslations } from 'next-intl/server'
-import { CATEGORY_LIST, inboxQueryToString, INDIAN_STATES, type InboxQuery } from '@amclub/shared'
+import { CATEGORY_LIST, inboxQueryToString, indianStateOptions, pickI18n, type InboxQuery } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { formatINR } from '@/lib/format'
 import { istDay, istDeadline } from '@/lib/dates'
@@ -19,7 +19,7 @@ export async function InboxV3({ userId, query }: { userId: string; query: InboxQ
   const inbox = await listProviderInboxV3(userId, query)
   const filtered = !!(query.q || query.category || query.state || query.budget || query.closing || query.verified || query.files)
   const total = inbox.counts.open + inbox.counts.quoted + inbox.counts.closed
-  const pickName = (m: { en: string; hi?: string }) => (locale === 'hi' && m.hi ? m.hi : m.en)
+  const pickName = (m: { en: string; hi?: string; te?: string; ta?: string }) => pickI18n(m, locale)
   const catName = (slug: string | null) => (slug ? pickName(CATEGORY_LIST.find((c) => c.slug === slug)?.name_i18n ?? { en: slug }) : '—')
   const budget = (r: InboxRowV3) => (r.budgetMinPaise == null && r.budgetMaxPaise == null ? '—' : `${r.budgetMinPaise != null ? formatINR(r.budgetMinPaise) : ''}–${r.budgetMaxPaise != null ? formatINR(r.budgetMaxPaise) : ''}`)
   const closes = (r: InboxRowV3) => (Date.parse(r.expiresAt) > Date.now() ? istDeadline(r.expiresAt, locale) : '—')
@@ -41,7 +41,7 @@ export async function InboxV3({ userId, query }: { userId: string; query: InboxQ
         query={query}
         badgeOn={inbox.badgeOn}
         categories={CATEGORY_LIST.map((c) => ({ value: c.slug, label: pickName(c.name_i18n) }))}
-        states={INDIAN_STATES.map((s) => ({ value: s.value, label: s.label }))}
+        states={indianStateOptions(locale)}
       />
       {inbox.items.length === 0 ? (
         // QA F19 — "match these filters" only when a filter is set; otherwise say why the inbox is empty.

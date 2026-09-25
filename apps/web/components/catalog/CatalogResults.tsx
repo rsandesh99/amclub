@@ -1,7 +1,7 @@
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { SearchX, FileText } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
-import { INDIAN_STATES } from '@amclub/shared'
+import { indianStateName } from '@amclub/shared'
 import { searchPackages } from '@/lib/catalog/queries'
 import type { SearchFilters } from '@/lib/catalog/types'
 import { ResultCard } from './ResultCard'
@@ -59,7 +59,7 @@ export async function CatalogResults({
     // Human state name, not the ISO code ("Mizoram", never "MZ").
     const stateName =
       stateLabel ??
-      (filters.state ? INDIAN_STATES.find((s) => s.value === filters.state)?.label : undefined)
+      (filters.state ? indianStateName(filters.state, await getLocale()) : undefined)
     // "No providers match your filters" is a lie when no filters are applied —
     // an unfiltered empty catalog means providers are still onboarding.
     const unfilteredEmpty = !hasNarrowing && !filters.query

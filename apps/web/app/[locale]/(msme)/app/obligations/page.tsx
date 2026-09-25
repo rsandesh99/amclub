@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
-import { INDIAN_STATES } from '@amclub/shared'
+import { indianStateName } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { getSessionUser } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
@@ -22,7 +22,7 @@ export default async function ObligationsPage() {
   const locale = await getLocale()
   const view = await getMyObligations(await createClient(), user.id)
   if (!view) redirect('/signup?complete=1')
-  const stateName = INDIAN_STATES.find((s) => s.value === view.facts.state)?.label ?? view.facts.state
+  const stateName = indianStateName(view.facts.state, locale)
   const unknown = t('ob_unknown')
   // Each fact under its own label, in words (never the stored enum, never a bare "not set" of unknown meaning).
   const facts: [string, string][] = [

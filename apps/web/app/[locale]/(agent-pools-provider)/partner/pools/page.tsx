@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { Link } from '@/i18n/navigation'
 import { getSessionUser } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/server'
@@ -17,6 +17,7 @@ export default async function PartnerPoolsPage() {
   const { data: p } = await admin.from('provider_profiles').select('id').eq('user_id', user.id).maybeSingle()
   if (!p) redirect('/partner/onboarding')
   const t = await getTranslations('pools')
+  const locale = await getLocale()
   const tSvc = await getTranslations('services')
   const pools = await providerPools(admin, p.id as string)
   return (
@@ -32,7 +33,7 @@ export default async function PartnerPoolsPage() {
               <div>
                 <p className="font-semibold">{tSvc.has(pool.serviceSlug as 'gst-filing') ? tSvc(pool.serviceSlug as 'gst-filing') : pool.serviceSlug}</p>
                 <p className="text-sm text-foreground-secondary">
-                  {t('partner_row', { n: pool.joinedCount, state: stateLabel(pool.state) })}
+                  {t('partner_row', { n: pool.joinedCount, state: stateLabel(pool.state, locale) })}
                   {pool.status === 'open' && pool.closesAt ? <> · {t('closes_at', { when: istShort(pool.closesAt) ?? '' })}</> : <> · {t(`status_${pool.status}`)}</>}
                 </p>
               </div>

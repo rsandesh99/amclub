@@ -72,7 +72,7 @@ export default async function BuyerRfqPage({ params, searchParams }: { params: P
         const { data: pool } = await admin.from('service_pools').select('service_slug, state').eq('id', poolCard.poolId).maybeSingle()
         const tSvc = await getTranslations('services')
         const slug = (pool?.service_slug as string | undefined) ?? ''
-        return { service: slug && tSvc.has(slug as 'gst-filing') ? tSvc(slug as 'gst-filing') : slug, state: stateLabel((pool?.state as string | undefined) ?? '') }
+        return { service: slug && tSvc.has(slug as 'gst-filing') ? tSvc(slug as 'gst-filing') : slug, state: stateLabel((pool?.state as string | undefined) ?? '', locale) }
       })()
     : null
 

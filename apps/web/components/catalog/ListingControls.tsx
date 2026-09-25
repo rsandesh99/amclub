@@ -1,11 +1,11 @@
 'use client'
 
 import { BadgeCheck } from 'lucide-react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { INDIAN_STATES } from '@/lib/constants/india'
+import { indianStateOptions } from '@amclub/shared'
 
 const PRICE_BUCKETS: Record<string, { min?: number; max?: number }> = {
   any: {},
@@ -19,6 +19,7 @@ const LANGS = ['en', 'hi', 'te', 'ta', 'mr']
 
 export function ListingControls() {
   const t = useTranslations('catalog')
+  const locale = useLocale()
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -66,7 +67,7 @@ export function ListingControls() {
       >
         <option value="">{t('all_states')}</option>
         {/* E0 / U5 — every state and UT by name (was 10 raw codes). */}
-        {INDIAN_STATES.map((s) => (
+        {indianStateOptions(locale).map((s) => (
           <option key={s.value} value={s.value}>
             {s.label}
           </option>

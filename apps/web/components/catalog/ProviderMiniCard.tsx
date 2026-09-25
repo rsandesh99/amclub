@@ -1,21 +1,20 @@
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { MapPin } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { initials } from '@/lib/format'
-import { INDIAN_STATES } from '@/lib/constants/india'
+import { indianStateName } from '@amclub/shared'
 import { headlineCredentialKind } from '@/lib/catalog/credential'
 import { Stars } from './Stars'
 import { ProviderCredential } from './ProviderCredential'
 import type { ProviderDetail } from '@/lib/catalog/types'
 
-const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
-
 /** Compact provider card for the landing "top-rated" strip. Links to /p/[slug]. */
 export function ProviderMiniCard({ provider }: { provider: ProviderDetail }) {
   const t = useTranslations('catalog')
+  const locale = useLocale()
   const verified = provider.badges.length > 0
   const credentialKind = headlineCredentialKind(provider.badges.map((b) => b.kind))
-  const stateLabel = STATE_LABEL.get(provider.state) ?? provider.state
+  const stateLabel = indianStateName(provider.state, locale)
 
   return (
     <Link

@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { MapPin } from 'lucide-react'
 import { useRouter } from '@/i18n/navigation'
-import { INDIAN_STATES } from '@/lib/constants/india'
+import { indianStateOptions } from '@amclub/shared'
 import { cn } from '@/lib/utils'
 
 const COOKIE = 'amc_jurisdiction'
@@ -25,6 +25,7 @@ function readInitial(): string {
  */
 export function JurisdictionSelector({ className }: { className?: string }) {
   const t = useTranslations('catalog')
+  const locale = useLocale()
   const router = useRouter()
   const [state, setState] = useState('')
 
@@ -55,7 +56,7 @@ export function JurisdictionSelector({ className }: { className?: string }) {
         className="max-w-[8.5rem] cursor-pointer truncate bg-transparent py-1 pr-1 font-semibold text-foreground focus:outline-none"
       >
         <option value="">{t('all_states')}</option>
-        {INDIAN_STATES.map((s) => (
+        {indianStateOptions(locale).map((s) => (
           <option key={s.value} value={s.value}>{s.label}</option>
         ))}
       </select>

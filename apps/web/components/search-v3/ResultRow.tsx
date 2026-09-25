@@ -1,13 +1,11 @@
 import { useLocale, useTranslations } from 'next-intl'
-import { formatStatPct, INDIAN_STATES } from '@amclub/shared'
+import { formatStatPct, indianStateName } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { CompareToggle } from '@/components/compare-v3/CompareToggle'
 import { ProviderCredential } from '@/components/catalog/ProviderCredential'
 import { formatINR, formatResponseTime, initials, pickI18n } from '@/lib/format'
 import type { CatalogResult } from '@/lib/catalog/types'
 import type { CardTrust } from '@/lib/trust/card-trust'
-
-const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
 
 /**
  * FR-2.4 list view — one dense row per package: logo · name + credential ·
@@ -34,7 +32,7 @@ export function ResultRow({ result, trust, compare = false, sid, position }: { r
         <span className="min-w-0">
           <ProviderCredential name={result.displayName} credentialKind={result.headlineCredential} verified={result.verified} />
           <span className="block truncate text-sm text-foreground-secondary">
-            {pickI18n(result.titleI18n, locale)} · {result.city ?? STATE_LABEL.get(result.state) ?? result.state}
+            {pickI18n(result.titleI18n, locale)} · {result.city ?? indianStateName(result.state, locale)}
           </span>
         </span>
         <span className="text-right text-sm font-semibold tabular-nums md:order-last">{t('price_plus_gst', { price: formatINR(result.display.taxablePaise) })}</span>

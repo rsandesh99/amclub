@@ -7,7 +7,10 @@ import { useRouter } from '@/i18n/navigation'
 import { Mic } from 'lucide-react'
 import {
   voiceMetaSchema,
+  indianStateName,
   rfqFieldLabel,
+  rfqFieldPlaceholder,
+  rfqOptionLabel,
   rfqQualityScore,
   quoteSlaHours,
   RFQ_BUDGET_BANDS,
@@ -34,7 +37,6 @@ import { IntakeDocumentButton } from '@/components/rfq/IntakeDocumentButton'
 import type { IntakeResult, VoiceMetaClarify } from '@amclub/shared'
 import { QualityQuestionsCard } from '@/components/rfq/QualityQuestionsCard'
 import type { RfqQualityReport } from '@amclub/shared'
-import { INDIAN_STATES } from '@/lib/constants/india'
 import { RFQ_DRAFT_KEY } from './draft-key'
 
 export interface RfqCategoryOption {
@@ -44,7 +46,6 @@ export interface RfqCategoryOption {
 }
 
 const DRAFT_KEY = RFQ_DRAFT_KEY
-const STATE_LABEL = new Map(INDIAN_STATES.map((s) => [s.value, s.label]))
 /** The server's title rule (rfqSchema), read from the schema so the form and the API never drift. */
 const TITLE_MIN = rfqSchema.innerType().shape.title.minLength ?? 10
 
@@ -561,7 +562,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
               )}
               {voice.parse.state && (
                 <span className="rounded-chip bg-muted px-3 py-1 text-[13px] font-medium text-foreground">
-                  {STATE_LABEL.get(voice.parse.state) ?? voice.parse.state}
+                  {indianStateName(voice.parse.state, locale)}
                 </span>
               )}
             </div>
@@ -636,7 +637,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
                           label={label(f)}
                           placeholder={t3('choose')}
                           value={s.details[f.name] || null}
-                          options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
+                          options={(f.options ?? []).map((o) => ({ value: o, label: rfqOptionLabel(o, locale, f.option_labels) }))}
                           invalid={!!fieldErrors[key]}
                           describedBy={fieldErrors[key] ? errId : undefined}
                           onChange={(v) => setField(f.name, v ?? '')}
@@ -650,7 +651,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
                           size="sm"
                           wrap
                           ariaLabel={label(f)}
-                          options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
+                          options={(f.options ?? []).map((o) => ({ value: o, label: rfqOptionLabel(o, locale, f.option_labels) }))}
                           value={s.details[f.name] || null}
                           invalid={!!fieldErrors[key]}
                           ariaDescribedBy={fieldErrors[key] ? errId : undefined}
@@ -661,7 +662,7 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
                     ) : f.type === 'textarea' ? (
                       <Textarea id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} rows={3} {...errOf(key)} />
                     ) : (
-                      <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={f.placeholder_en ?? ''} {...errOf(key)} />
+                      <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={rfqFieldPlaceholder(f, locale)} {...errOf(key)} />
                     )}
                   </div>
                 )
@@ -816,12 +817,12 @@ export function RfqForm({ categories, documentIntakeEnabled = false, prefill, v3
               </Label>
               {f.type === 'select' ? (
                 <Select id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder="—" {...errOf(`f:${f.name}`)}>
-                  {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                  {(f.options ?? []).map((o) => <option key={o} value={o}>{rfqOptionLabel(o, locale, f.option_labels)}</option>)}
                 </Select>
               ) : f.type === 'textarea' ? (
                 <Textarea id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} rows={3} {...errOf(`f:${f.name}`)} />
               ) : (
-                <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={f.placeholder_en ?? ''} {...errOf(`f:${f.name}`)} />
+                <Input id={`f-${f.name}`} value={s.details[f.name] ?? ''} onChange={(e) => setField(f.name, e.target.value)} placeholder={rfqFieldPlaceholder(f, locale)} {...errOf(`f:${f.name}`)} />
               )}
             </div>
           ))}
