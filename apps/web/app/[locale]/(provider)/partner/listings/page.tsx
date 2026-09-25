@@ -113,6 +113,8 @@ export default async function ListingsPage() {
             /* eslint-disable @typescript-eslint/no-explicit-any */
             const cat = pk.category as any
             /* eslint-enable @typescript-eslint/no-explicit-any */
+            // QA F11 — "Live" only when buyers can see it: the public read also needs an active provider.
+            const awaitingApproval = pk.status === 'active' && provider.status !== 'active'
             return (
               <li
                 key={pk.id}
@@ -121,7 +123,11 @@ export default async function ListingsPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h2 className="truncate font-medium">{pickI18n(pk.title_i18n as { en: string; hi?: string }, locale)}</h2>
-                    <Badge variant={STATUS_VARIANT[pk.status] ?? 'default'}>{t(`status_${pk.status}` as 'status_active')}</Badge>
+                    {awaitingApproval ? (
+                      <Badge variant="warning">{t('status_awaiting_approval')}</Badge>
+                    ) : (
+                      <Badge variant={STATUS_VARIANT[pk.status] ?? 'default'}>{t(`status_${pk.status}` as 'status_active')}</Badge>
+                    )}
                   </div>
                   <p className="mt-0.5 text-xs text-foreground-secondary">
                     {cat?.name_i18n ? pickI18n(cat.name_i18n, locale) : ''}
