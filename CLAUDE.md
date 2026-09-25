@@ -160,7 +160,7 @@ any → held               (dispute open, provider suspended, or bank verificati
   - **`rfqs.goods_spec` is server-read only** (0083): read it on the service role after the ownership check, never on a session client.
   - **One contact masker** (`packages/shared/src/contact-mask.ts`): add a pattern there, with a fixture row, never a second rule set.
   - **ADR-028 (KYC):** a verification chip or penny drop needs ownership (shared `kycOwnership`: own GSTIN / PAN, or a name matching the GST-locked name); one active Udyam claim per number (0082).
-- **Audit wave 5d landed (agents, migration 0079):**
+- **Audit wave 5d landed (agents, migration 0079; applied to production 2026-09-24):**
   - **The runtime package is CommonJS on purpose** (as ESM it cannot see the source packages' re-exports and dies at boot); its image runs as `node`. Every pg-boss queue is in `apps/agent-runtime/src/queues.ts` and created before use (a unit test proves it).
   - **WhatsApp is bound to the phone:** consent must come from the conversation's phone; a phone change unbinds (trigger 0079). Inbound media is downloaded in the job, capped; unprocessed inbound is swept every minute.
   - **A free-text "yes" approves at most one open proposal** across Munshi / procurement / support; ambiguity re-sends the cards.
