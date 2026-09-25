@@ -1,9 +1,11 @@
+import { Suspense } from 'react'
 import { Link } from '@/i18n/navigation'
 import { resolveDensity } from '@amclub/shared'
 import { LanguageSwitcher } from '@/components/catalog/LanguageSwitcher'
 import { JurisdictionSelector } from '@/components/catalog/JurisdictionSelector'
 import { NotificationBell } from './NotificationBell'
 import { AccountMenu, type ShellContext } from './AccountMenu'
+import { AccessNotice } from './AccessNotice'
 import { LegalGate } from '@/components/legal/LegalGate'
 import { isOnFor } from '@/lib/experiments'
 import { getUiDensity } from '@/lib/auth/session'
@@ -111,7 +113,11 @@ export async function AppShell({
           />
           <div className="mx-auto flex w-full max-w-[1280px] flex-1 lg:px-6">
             {role && <SideRail role={role} martEnabled={MART_ENABLED} agentEnabled={AGENT_ENABLED} guide={isOnFor('guide', userId)} />}
-            <main className={mainClass}>{children}</main>
+            <main className={mainClass}>
+              {/* After a redirect for lack of access (the admin layout's ?denied=admin). */}
+              <Suspense fallback={null}><AccessNotice /></Suspense>
+              {children}
+            </main>
           </div>
           {role && <TabBar role={role} martEnabled={MART_ENABLED} />}
           {/* The assistant, minimised in the corner of every buyer / provider page (not in a focused task like checkout). */}
@@ -144,7 +150,10 @@ export async function AppShell({
           </div>
         </div>
       </header>
-      <main className="flex-1">{children}</main>
+      <main className="flex-1">
+        <Suspense fallback={null}><AccessNotice /></Suspense>
+        {children}
+      </main>
       {/* Phase 2b — blocks the shell until current-version legal docs are accepted. */}
       <LegalGate />
     </div>

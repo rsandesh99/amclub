@@ -681,7 +681,8 @@
     "not_ready_section_body": "These providers are live and quotable; their payouts will hold until the Route account is linked and the bank is verified. Work this list the same day you approve.",
     "not_ready_badge": "Approved · not payout-ready",
     "open_provider": "Open provider →",
-    "verification_not_pending": "This provider is no longer pending review. Open the provider page to change their status."
+    "verification_not_pending": "This provider is no longer pending review. Open the provider page to change their status.",
+    "access_denied": "You don't have access to the admin area."
   },
   "profile": {
     "completeness": "Profile completeness",
