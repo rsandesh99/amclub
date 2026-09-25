@@ -14,6 +14,7 @@ import {
 } from '@amclub/shared'
 import type { ChatParts } from '../llm/gateway'
 import { buildSupportIntentParts } from './parts'
+import { isSupportCapabilitiesQuestion } from './capabilities'
 
 /**
  * The ONE support engine (S2.3), used by the web / mobile route (session
@@ -130,8 +131,11 @@ export async function runSupportTurn(deps: SupportTurnDeps, input: SupportTurnIn
   const lookup = baseLookup(role)
   const refs: SupportTurnResult['lookupRefs'] = {}
 
-  // 2. escalation decided by code from the classification + the streak
-  const unclear = intent.intent === 'other'
+  // 2. escalation decided by code from the classification + the streak.
+  // "What can you help me with?" has no intent of its own: on a turn the model left unclear (and did not escalate),
+  // a deterministic text match answers with the capabilities template instead, and the turn is not unclear.
+  const capabilities = !intent.escalate && (intent.intent === 'other' || (intent.intent === 'how_to' && (intent.how_to_topic ?? 'other') === 'other')) && isSupportCapabilitiesQuestion(input.text)
+  const unclear = intent.intent === 'other' && !capabilities
   const streak = unclear ? input.history.unclearStreak + 1 : 0
   const escalateReason = intent.escalate && intent.escalate_reason ? intent.escalate_reason : ESCALATING.includes(intent.intent) ? (intent.intent as string) : intent.escalate ? 'other' : unclear && streak >= deps.settings.escalateAfterTurns ? 'unclear_twice' : null
   if (escalateReason) return finish(role, intent, lookup, refs, streak, { reason: escalateReason, summary: intent.ops_summary }, 'escalated')
@@ -164,6 +168,6 @@ export async function runSupportTurn(deps: SupportTurnDeps, input: SupportTurnIn
   if (intent.intent === 'how_to') lookup.how_to_topic = intent.how_to_topic ?? 'other'
   if (intent.intent === 'new_need') lookup.procurement_available = input.procurementAvailable === true && role === 'buyer'
 
-  const forceKey: SupportReply['key'] | undefined = unclear && streak > 0 && input.history.unclearStreak > 0 ? 'unclear_again' : undefined
+  const forceKey: SupportReply['key'] | undefined = capabilities ? 'capabilities' : unclear && streak > 0 && input.history.unclearStreak > 0 ? 'unclear_again' : undefined
   return finish(role, intent, lookup, refs, streak, undefined, forceKey)
 }

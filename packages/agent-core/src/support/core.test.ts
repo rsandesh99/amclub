@@ -95,6 +95,35 @@ describe('runSupportTurn — the engine', () => {
     expect(u3.reply.key).toBe('escalated')
     expect(u3.escalate?.reason).toBe('unclear_twice')
   })
+  it('"What can you help me with?" on an unclear turn → the capabilities template, not unclear; it never counts toward escalation', async () => {
+    const lk = fakeLookups({})
+    const a = await runSupportTurn(deps({ intent: 'other' }, lk), turn('What can you help me with?'))
+    expect(a.reply.key).toBe('capabilities')
+    expect(a.reply.text).toContain('person')
+    expect(a.unclearStreak).toBe(0)
+    expect(a.escalate).toBeUndefined()
+    expect(a.numbers.ok).toBe(true)
+    // after an unclear turn: still the capabilities answer, and the streak resets instead of escalating
+    const b = await runSupportTurn(deps({ intent: 'other' }, lk), turn('what can you do', ['buyer'], { unclearStreak: 1 }))
+    expect(b.reply.key).toBe('capabilities')
+    expect(b.escalate).toBeUndefined()
+    expect(b.unclearStreak).toBe(0)
+    // a how-to with no topic gets the same answer; Hindi renders in Hindi
+    const c = await runSupportTurn(deps({ intent: 'how_to', how_to_topic: 'other', language: 'hi' }, lk), { ...turn('आप क्या मदद कर सकते हैं?'), locale: 'hi' })
+    expect(c.reply.key).toBe('capabilities')
+    expect(c.reply.text).toContain('मदद')
+  })
+  it('the capabilities match never overrides a real intent or an escalation, and leaves real gibberish unclear', async () => {
+    const lk = fakeLookups({ orders: [o(1, 'in_progress')] })
+    const order = await runSupportTurn(deps({ intent: 'order_status', order_ref: 'latest' }, lk), turn('what can you tell me about my order'))
+    expect(order.reply.key).toBe('order_status.in_progress')
+    const esc = await runSupportTurn(deps({ intent: 'other', escalate: true, escalate_reason: 'asked_for_human', ops_summary: 'Wants a person.' }, lk), turn('what can you do, I want a person'))
+    expect(esc.reply.key).toBe('escalated')
+    const topic = await runSupportTurn(deps({ intent: 'how_to', how_to_topic: 'refund' }, lk), turn('how can you help with a refund'))
+    expect(topic.reply.key).toBe('how_to.refund')
+    const gib = await runSupportTurn(deps({ intent: 'other' }, lk), turn('asdf qwer'))
+    expect(gib.reply.key).toBe('unclear')
+  })
   it('complaint / dispute language / payment problem / explicit escalate → escalated with the reason and the ops summary', async () => {
     const lk = fakeLookups({ orders: [o(1, 'in_progress')] })
     for (const [intent, reason] of [['complaint', 'complaint'], ['dispute_language', 'dispute_language'], ['payment_problem', 'payment_problem']] as const) {
