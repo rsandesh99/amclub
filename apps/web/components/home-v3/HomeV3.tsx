@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server'
-import { HOME_ACTION_MAX, HOME_COMPLETENESS_THRESHOLD } from '@amclub/shared'
+import { MessageCircle, Sparkles } from 'lucide-react'
+import { COMING_DUE_DAYS, HOME_ACTION_MAX, HOME_COMPLETENESS_THRESHOLD } from '@amclub/shared'
 import { Link } from '@/i18n/navigation'
 import { getMyActions } from '@/lib/me/actions'
 import { listBuyAgainShelf } from '@/lib/home/buy-again'
@@ -89,7 +90,8 @@ export async function HomeV3({
           <div data-testid="home-coming-due">
             <GroupedSection
               header={tLic('coming_due')}
-              action={<Link href="/app/licences" className="t-footnote font-medium text-primary">{t('see_all')}</Link>}
+              // Named for where it goes: the buyer's licence list (not a longer "coming due" list).
+              action={<Link href="/app/licences" className="t-footnote font-medium text-primary">{tLic('title')}</Link>}
             >
               {comingDue.length > 0 ? (
                 comingDue.map((l) => (
@@ -103,7 +105,11 @@ export async function HomeV3({
                   />
                 ))
               ) : (
-                <GroupedRow href="/app/obligations" title={tLic('what_do_i_need')} subtitle={tLic('home_prompt')} />
+                <>
+                  {/* Empty: say so under the header, then the checklist prompt. */}
+                  <GroupedRow title={<span className="text-foreground-secondary">{tLic('coming_due_none', { days: COMING_DUE_DAYS })}</span>} />
+                  <GroupedRow href="/app/obligations" title={tLic('what_do_i_need')} subtitle={tLic('home_prompt')} />
+                </>
               )}
             </GroupedSection>
           </div>
@@ -155,11 +161,12 @@ export async function HomeV3({
           </GroupedSection>
         )}
 
+        {/* Help and the buying assistant as one grouped section like the rest of the home (a lone pill floated on its own). */}
         {(supportOn || assistantOn) && (
-          <div className="flex flex-wrap gap-2">
-            {assistantOn && <Link href="/app/assistant" className="rounded-chip border border-border px-3 py-1.5 text-sm">{tShell('assistant_entry')}</Link>}
-            {supportOn && <Link href="/app/support" className="rounded-chip border border-border px-3 py-1.5 text-sm">{tShell('help_entry')}</Link>}
-          </div>
+          <GroupedSection header={t('get_help')}>
+            {assistantOn && <GroupedRow href="/app/assistant" leading={<Sparkles className="h-4 w-4" aria-hidden />} title={tShell('assistant_entry')} />}
+            {supportOn && <GroupedRow href="/app/support" leading={<MessageCircle className="h-4 w-4" aria-hidden />} title={tShell('help_entry')} subtitle={t('help_sub')} />}
+          </GroupedSection>
         )}
       </div>
 

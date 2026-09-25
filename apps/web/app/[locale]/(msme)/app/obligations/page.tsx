@@ -24,18 +24,28 @@ export default async function ObligationsPage() {
   if (!view) redirect('/signup?complete=1')
   const stateName = INDIAN_STATES.find((s) => s.value === view.facts.state)?.label ?? view.facts.state
   const unknown = t('ob_unknown')
+  // Each fact under its own label, in words (never the stored enum, never a bare "not set" of unknown meaning).
+  const facts: [string, string][] = [
+    [t('ob_fact_activity'), view.facts.activity ? t(`activity_${view.facts.activity}` as 'activity_services') : unknown],
+    [t('ob_fact_state'), stateName ?? unknown],
+    [t('ob_fact_size'), view.facts.sizeBand ? view.facts.sizeBand.replace('-', '–') : unknown],
+  ]
   return (
     <div className="mx-auto max-w-2xl space-y-5 px-4 py-6" data-testid="obligations-page" data-rules={view.rules.map((r) => r.licenceType).join(',')}>
       <ChecklistViewed rules={view.rules.length} />
       <h1 className="t-large-title">{t('ob_title')}</h1>
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-border bg-surface p-4" data-testid="obligations-facts">
-        <p className="text-sm">
-          {t('ob_facts', {
-            activity: view.facts.activity ? t(`activity_${view.facts.activity}` as 'activity_services') : unknown,
-            state: stateName ?? unknown,
-            size: view.facts.sizeBand ? t('size_band', { band: view.facts.sizeBand }) : unknown,
-          })}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2 rounded-card border border-border bg-surface p-4" data-testid="obligations-facts">
+        <div className="min-w-0">
+          <p className="t-footnote font-medium text-foreground-secondary">{t('ob_facts_title')}</p>
+          <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            {facts.map(([label, value]) => (
+              <div key={label} className="flex gap-1.5">
+                <dt className="text-foreground-secondary">{label}</dt>
+                <dd className="font-medium text-foreground">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
         <Link href="/app/profile" className="t-footnote font-medium text-primary">{t('ob_edit')}</Link>
       </div>
       {view.rules.length === 0 ? (
