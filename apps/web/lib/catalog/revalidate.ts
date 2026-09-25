@@ -32,8 +32,8 @@ export function revalidateCatalog(opts: {
   }
   // Belt-and-braces for runtimes where pattern purges work.
   if (opts.providerSlug) {
-    revalidatePath('/[locale]/(public)/p/[providerSlug]', 'page')
-    revalidatePath('/[locale]/(public)/p/[providerSlug]/[packageSlug]', 'page')
+    // Every page under the provider layout (profile, reviews, packages) — the (public-provider) group.
+    revalidatePath('/[locale]/(public-provider)/p/[providerSlug]', 'layout')
   }
 }
 
@@ -63,6 +63,6 @@ export async function revalidateProviderCatalog(admin: Admin, providerId: string
       if (slug) revalidatePath(`${l}/services/${slug}`)
     }
   }
-  revalidatePath('/[locale]/(public)/p/[providerSlug]', 'page')
-  revalidatePath('/[locale]/(public)/p/[providerSlug]/[packageSlug]', 'page')
+  // Every page under the provider layout (profile, reviews, packages) — the (public-provider) group.
+  revalidatePath('/[locale]/(public-provider)/p/[providerSlug]', 'layout')
 }

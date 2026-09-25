@@ -246,8 +246,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     for (const p of paths) revalidatePath(p)
     // Belt-and-braces for self-hosted runtimes where patterns DO work.
-    revalidatePath('/[locale]/(public)/p/[providerSlug]', 'page')
-    revalidatePath('/[locale]/(public)/p/[providerSlug]/[packageSlug]', 'page')
+    // Every page under the provider layout (profile, reviews, packages) — the (public-provider) group.
+    revalidatePath('/[locale]/(public-provider)/p/[providerSlug]', 'layout')
   }
 
   await writeAudit(admin, request, {

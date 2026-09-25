@@ -74,9 +74,10 @@ async function main() {
     created.msmeId = msme!.id
 
     // ── 1. Emergency takedown <5s ─────────────────────────────────────────────
-    // Disappearance is judged by CONTENT, not status code: the page streams
-    // (loading.tsx boundary) so the 200 is committed before notFound() throws —
-    // a suspended provider serves the not-found UI with HTTP 200 (soft-404).
+    // Disappearance is judged by CONTENT. Since the /p pages moved to the
+    // (public-provider) group (existence checked in the segment layout, above
+    // the loading boundary) a suspended provider is a real HTTP 404; the content
+    // check holds either way (it predates that, when the page streamed a soft 404).
     const pageUrl = `${BASE}/p/${slug}`
     const marker = 'P8 Prov'
     const beforeBody = await (await fetch(pageUrl)).text()
