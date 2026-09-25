@@ -24,11 +24,13 @@ export function CategoryGrid({
           <div className="flex h-10 w-10 items-center justify-center rounded-button bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
             <CategoryIcon icon={c.icon} className="h-5 w-5" />
           </div>
-          <span className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary">
+          {/* Two title lines are reserved so every description in a row starts at the same height,
+              whether or not the name wraps; the description gets three lines before it clamps. */}
+          <span className={`text-sm font-semibold leading-snug text-foreground group-hover:text-primary${compact ? '' : ' min-h-[2.75em]'}`}>
             {pickI18n(c.nameI18n, locale)}
           </span>
           {!compact && c.descriptionI18n && (
-            <span className="line-clamp-2 text-xs text-foreground-secondary">
+            <span className="line-clamp-3 text-xs text-foreground-secondary">
               {pickI18n(c.descriptionI18n, locale)}
             </span>
           )}
