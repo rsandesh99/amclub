@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { MEMBER_PRICING_ENABLED } from '@/lib/public-flags'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/i18n/navigation'
@@ -82,12 +82,15 @@ export function PackageWizard({
   initial,
   allowedCategorySlugs,
   offerServices = false,
+  pricingExtras,
 }: {
   mode: 'create' | 'edit'
   initial?: Partial<PackageDraft>
   allowedCategorySlugs: string[]
   /** Experience v3 E2 (flag `search`): ask which service this package is. */
   offerServices?: boolean
+  /** Edit only: the add-ons / plan editors, shown on the Pricing step above the step buttons. */
+  pricingExtras?: ReactNode
 }) {
   const tServices = useTranslations('services')
   const t = useTranslations('listings')
@@ -494,6 +497,14 @@ export function PackageWizard({
                 {draft.scopeIncluded.map((s, i) => <li key={i}>{s}</li>)}
               </ul>
             </div>
+            {draft.scopeExcluded.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold">{t('preview_not_included')}</p>
+                <ul className="mt-1 list-inside list-disc text-sm text-foreground-secondary">
+                  {draft.scopeExcluded.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
             <div>
               <p className="text-sm font-semibold">{t('deliverables')}</p>
               <ul className="mt-1 list-inside list-disc text-sm text-foreground-secondary">
@@ -508,6 +519,14 @@ export function PackageWizard({
               {t('commission_note', { pct: commissionPct })}{' '}
               <span className="text-foreground-secondary/70">{t('commission_subject')}</span>
             </p>
+          </div>
+        )}
+
+        {/* QA F27 — add-ons and the plan belong to Pricing, above the step buttons. They save on
+            their own, so they stay mounted (hidden) on the other steps and keep what was saved. */}
+        {pricingExtras && (
+          <div className="mt-6 space-y-6" hidden={step !== 'pricing'}>
+            {pricingExtras}
           </div>
         )}
 

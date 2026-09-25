@@ -87,9 +87,20 @@ export default async function EditListingPage({
         <ChevronLeft className="h-4 w-4" /> {t('back_to_listings')}
       </Link>
       <h1 className="mb-6 font-display text-2xl font-bold">{t('edit_listing')}</h1>
-      <PackageWizard mode="edit" initial={initial} allowedCategorySlugs={[]} offerServices={offerServices} />
-      {addons && <AddOnsEditor packageId={pk.id} initial={addons} />}
-      {milestones && <MilestonesEditor packageId={pk.id} initial={milestones} />}
+      <PackageWizard
+        mode="edit"
+        initial={initial}
+        allowedCategorySlugs={[]}
+        offerServices={offerServices}
+        pricingExtras={
+          addons || milestones ? (
+            <>
+              {addons && <AddOnsEditor packageId={pk.id} initial={addons} />}
+              {milestones && <MilestonesEditor packageId={pk.id} initial={milestones} />}
+            </>
+          ) : null
+        }
+      />
     </div>
   )
 }
