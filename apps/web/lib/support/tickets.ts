@@ -1,13 +1,15 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { redactContactInfo, ticketRefFromId, type SupportIntent, type SupportLocale, type SupportTicketStatus } from '@amclub/shared'
-import { buildTicketSummaryParts, supportTicketSummarySchema } from '@amclub/agent-core'
+import { isSchemaNotReady, redactChatSecrets, redactContactInfo, ticketRefFromId, waLocaleFor, type SupportIntent, type SupportLocale, type SupportTicketStatus } from '@amclub/shared'
+import { buildTicketSummaryParts, supportTicketSummarySchema, type WaSendRequest } from '@amclub/agent-core'
 import { boundedChatJson, BudgetExceededError } from '@/lib/agent/bounded'
 import { createNotification } from '@/lib/notifications/create'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { writeAudit } from '@/lib/audit/log'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 import { inQuietHours, getSupportSettings, SUPPORT_SLA } from '@/lib/support/settings'
+import { sendOpsWhatsApp, windowOpen } from '@/lib/whatsapp/admin'
 
 /**
  * S2.3 — tickets (escalations a human resolves) and the web / mobile chat
@@ -200,15 +202,79 @@ export async function listTickets(admin: SupabaseClient, status: 'open' | 'all' 
   return status === 'all' ? rows.sort((a, b) => (a.status === 'resolved' ? 1 : 0) - (b.status === 'resolved' ? 1 : 0) || a.created_at.localeCompare(b.created_at)) : rows
 }
 
-export async function getTicket(admin: SupabaseClient, id: string): Promise<{ ticket: SupportTicketRow; transcript: { id: string; role: string; body: string; created_at: string }[]; subject: { order?: { id: string; order_number: string; status: string } | null; rfq?: { id: string; title: string; status: string } | null } } | null> {
+export interface TranscriptLine {
+  id: string
+  role: string
+  body: string
+  created_at: string
+  /** The text was removed by retention or an erasure (the row is kept for the record). */
+  redacted?: boolean
+}
+
+export type WaTranscriptScope = 'bound' | 'current_holder' | 'not_holder' | 'missing'
+
+/** True when the ticket's user holds the conversation's number now: bound to them, or unbound and their phone. */
+async function holdsNumber(admin: SupabaseClient, userId: string, conv: { user_id: string | null; phone_e164: string }): Promise<'bound' | 'current_holder' | 'not_holder'> {
+  if (conv.user_id === userId) return 'bound'
+  if (conv.user_id) return 'not_holder'
+  const { data: u } = await admin.from('users').select('phone').eq('id', userId).maybeSingle()
+  const digits = String((u as { phone?: string | null } | null)?.phone ?? '').replace(/\D/g, '')
+  return digits && digits === String(conv.phone_e164).replace(/\D/g, '') ? 'current_holder' : 'not_holder'
+}
+
+/**
+ * The transcript of a WhatsApp ticket (audit §6, ADR-030 §6). A conversation is one PHONE, and numbers change hands, so
+ * it shows only the ticket user's own chat: messages on that conversation since `wa_conversations.bound_at` (its
+ * `created_at` where no bind time was recorded), and only while the user holds the number (`bound` / `current_holder`);
+ * a number that is someone else's now shows nothing (`not_holder`). Rows that carry another user (0086
+ * `wa_messages.user_id`) never show. Secrets and contact details are masked; redacted rows say so.
+ */
+export async function whatsappTranscript(admin: SupabaseClient, ticket: Pick<SupportTicketRow, 'user_id' | 'conversation_id'>, limit = 50): Promise<{ lines: TranscriptLine[]; since: string | null; scope: WaTranscriptScope }> {
+  if (!ticket.conversation_id) return { lines: [], since: null, scope: 'missing' }
+  let conv = await admin.from('wa_conversations').select('id, phone_e164, user_id, created_at, bound_at').eq('id', ticket.conversation_id).maybeSingle()
+  if (conv.error && isSchemaNotReady(conv.error)) conv = await admin.from('wa_conversations').select('id, phone_e164, user_id, created_at').eq('id', ticket.conversation_id).maybeSingle()
+  const c = conv.data as { id: string; phone_e164: string; user_id: string | null; created_at: string; bound_at?: string | null } | null
+  if (!c) return { lines: [], since: null, scope: 'missing' }
+  const scope = await holdsNumber(admin, ticket.user_id, c)
+  if (scope === 'not_holder') return { lines: [], since: null, scope }
+  const since = c.bound_at ?? c.created_at
+  let res: { data: unknown[] | null; error: { code?: string; message?: string } | null } = await admin.from('wa_messages').select('id, direction, body, created_at, redacted_at').eq('conversation_id', c.id).gte('created_at', since).or(`user_id.is.null,user_id.eq.${ticket.user_id}`).order('created_at', { ascending: false }).limit(limit)
+  if (res.error && isSchemaNotReady(res.error)) res = await admin.from('wa_messages').select('id, direction, body, created_at').eq('conversation_id', c.id).gte('created_at', since).order('created_at', { ascending: false }).limit(limit)
+  const rows = ((((res.data as any[]) ?? []).reverse()) as { id: string; direction: string; body: string | null; created_at: string; redacted_at?: string | null }[])
+  return {
+    since,
+    scope,
+    lines: rows.map((m) => ({
+      id: m.id,
+      role: m.direction === 'in' ? 'user' : 'assistant',
+      body: m.body == null ? '' : redactContactInfo(redactChatSecrets(m.body).text).text,
+      created_at: m.created_at,
+      ...(m.redacted_at || m.body == null ? { redacted: true } : {}),
+    })),
+  }
+}
+
+export type TranscriptScope = WaTranscriptScope | 'thread' | 'none'
+
+export async function getTicket(
+  admin: SupabaseClient,
+  id: string,
+  opts?: { audit?: { request: Request | null; actorId: string } },
+): Promise<{ ticket: SupportTicketRow; transcript: TranscriptLine[]; transcriptScope: TranscriptScope; subject: { order?: { id: string; order_number: string; status: string } | null; rfq?: { id: string; title: string; status: string } | null } } | null> {
   const { data } = await admin.from('support_tickets').select(TICKET_COLS).eq('id', id).is('deleted_at', null).maybeSingle()
   const ticket = data as SupportTicketRow | null
   if (!ticket) return null
-  let transcript: { id: string; role: string; body: string; created_at: string }[] = []
-  if (ticket.thread_id) transcript = (await listThreadMessages(admin, ticket.thread_id, 50)).map((m) => ({ id: m.id, role: m.role, body: m.body, created_at: m.created_at }))
-  else if (ticket.conversation_id) {
-    const { data: msgs } = await admin.from('wa_messages').select('id, direction, body, created_at').eq('conversation_id', ticket.conversation_id).order('created_at', { ascending: false }).limit(50)
-    transcript = (((msgs as any[]) ?? []).reverse()).map((m) => ({ id: m.id, role: m.direction === 'in' ? 'user' : 'assistant', body: redactContactInfo(String(m.body ?? '')).text, created_at: m.created_at }))
+  let transcript: TranscriptLine[] = []
+  let transcriptScope: TranscriptScope = 'none'
+  if (ticket.thread_id) {
+    transcript = (await listThreadMessages(admin, ticket.thread_id, 50)).map((m) => ({ id: m.id, role: m.role, body: m.body, created_at: m.created_at }))
+    transcriptScope = 'thread'
+  } else if (ticket.conversation_id) {
+    const wa = await whatsappTranscript(admin, ticket, 50)
+    transcript = wa.lines
+    transcriptScope = wa.scope
+    // every ops read of a WhatsApp transcript is on the record: who, which ticket, from when, how many messages
+    if (opts?.audit) await writeAudit(admin, opts.audit.request, { actorId: opts.audit.actorId, action: 'wa_transcript_read', entity: 'support_ticket', entityId: ticket.id, before: null, after: { conversation_id: ticket.conversation_id, scope: wa.scope, since: wa.since, messages: wa.lines.length } })
   }
   const subject: { order?: { id: string; order_number: string; status: string } | null; rfq?: { id: string; title: string; status: string } | null } = {}
   if (ticket.order_id) {
@@ -219,7 +285,87 @@ export async function getTicket(admin: SupabaseClient, id: string): Promise<{ ti
     const { data: r } = await admin.from('rfqs').select('id, title, status').eq('id', ticket.rfq_id).maybeSingle()
     subject.rfq = (r as any) ?? null
   }
-  return { ticket, transcript, subject }
+  return { ticket, transcript, transcriptScope, subject }
+}
+
+// ── ops replies (ADR-030 §6) ─────────────────────────────────────────────────
+
+export type OpsReplyError = 'not_found' | 'already_resolved' | 'number_changed' | 'no_channel'
+export interface OpsReplyResult {
+  channel: 'whatsapp' | 'thread'
+  /** thread: 'stored'; WhatsApp: the send outcome (sent / stub / duplicate / skipped / failed). */
+  outcome: string
+  reason: string | null
+  usedTemplate: boolean
+  messageId: string | null
+}
+
+/**
+ * A person answers the ticket. WhatsApp ticket: free text inside the user's 24-hour window (a reply to their own
+ * message), else the approved `support_reply` template with { title: the ticket ref, body: the text } — both through
+ * the one send path (consent, suppression, ledger row, one message per click) and only while the user still holds the
+ * number. Web / mobile ticket: the reply joins the chat thread (as AMClub) and the user gets an in-app notice. An open
+ * ticket moves to in progress. Audit-logged (without the text).
+ */
+export async function opsReplyToTicket(
+  admin: SupabaseClient,
+  request: Request | null,
+  args: { id: string; adminUserId: string; text: string; clickId: string },
+): Promise<({ ok: true } & OpsReplyResult) | { ok: false; error: OpsReplyError }> {
+  const { data } = await admin.from('support_tickets').select(TICKET_COLS).eq('id', args.id).is('deleted_at', null).maybeSingle()
+  const ticket = data as SupportTicketRow | null
+  if (!ticket) return { ok: false, error: 'not_found' }
+  if (ticket.status === 'resolved') return { ok: false, error: 'already_resolved' }
+  const ref = ticketRef(ticket.id)
+  let result: OpsReplyResult
+
+  if (ticket.thread_id) {
+    const { data: msg, error } = await admin
+      .from('support_messages')
+      .insert({ thread_id: ticket.thread_id, role: 'assistant', body: args.text, reply_key: 'ops_reply', lookup_refs: { ticket_id: ticket.id } })
+      .select('id')
+      .single()
+    if (error) throw new Error(`support_messages insert: ${error.message}`)
+    await createNotification(admin, {
+      userId: ticket.user_id,
+      kind: 'support_ops_reply',
+      titleI18n: notifyText('support_ops_reply.title', { ref }),
+      bodyI18n: sameText(args.text.slice(0, 300)),
+      link: ticket.role === 'provider' ? '/partner/support' : '/app/support',
+    })
+    result = { channel: 'thread', outcome: 'stored', reason: null, usedTemplate: false, messageId: (msg as { id: string }).id }
+  } else if (ticket.conversation_id) {
+    const { data: conv } = await admin.from('wa_conversations').select('id, phone_e164, user_id, window_open_until, locale').eq('id', ticket.conversation_id).maybeSingle()
+    const c = conv as { id: string; phone_e164: string; user_id: string | null; window_open_until: string | null; locale: string | null } | null
+    // the same holder rule as the transcript: never message a number that is someone else's now
+    if (!c || (await holdsNumber(admin, ticket.user_id, c)) === 'not_holder') return { ok: false, error: 'number_changed' }
+    const inWindow = windowOpen(c.window_open_until)
+    const common = { phoneE164: c.phone_e164, userId: ticket.user_id, conversationId: c.id, purpose: 'transactional' as const, kind: 'support_ops_reply', idempotencyKey: `ops_reply:${ticket.id}:${args.clickId}`, meta: { ticket_id: ticket.id, ops_user_id: args.adminUserId } }
+    const req: WaSendRequest = inWindow
+      ? { ...common, initiation: 'reply', body: { type: 'text', text: args.text } }
+      : { ...common, initiation: 'business', body: { type: 'template', kind: 'support_reply', locale: waLocaleFor(c.locale), values: { title: ref, body: args.text } } }
+    const res = await sendOpsWhatsApp(admin, req)
+    result = { channel: 'whatsapp', outcome: res.outcome, reason: res.reason ?? res.error?.kind ?? null, usedTemplate: res.usedTemplate ?? !inWindow, messageId: res.messageId ?? null }
+  } else {
+    return { ok: false, error: 'no_channel' }
+  }
+
+  let after = ticket
+  if (ticket.status === 'open') {
+    const now = new Date().toISOString()
+    const { data: upd } = await admin.from('support_tickets').update({ status: 'in_progress', acknowledged_at: ticket.acknowledged_at ?? now, updated_at: now }).eq('id', ticket.id).eq('status', 'open').select(TICKET_COLS).maybeSingle()
+    if (upd) after = upd as SupportTicketRow
+  }
+  await writeAudit(admin, request, {
+    actorId: args.adminUserId,
+    action: 'support_ops_reply',
+    entity: 'support_tickets',
+    entityId: ticket.id,
+    before: { status: ticket.status, acknowledged_at: ticket.acknowledged_at },
+    after: { status: after.status, acknowledged_at: after.acknowledged_at, channel: result.channel, outcome: result.outcome, reason: result.reason, used_template: result.usedTemplate, message_id: result.messageId, chars: args.text.length },
+  })
+  captureServerEvent(args.adminUserId, 'support_ops_reply', { channel: result.channel, outcome: result.outcome, used_template: result.usedTemplate })
+  return { ok: true, ...result }
 }
 
 export type TicketAction = 'acknowledge' | 'assign' | 'resolve'

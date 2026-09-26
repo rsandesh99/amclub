@@ -28,7 +28,9 @@ interface Ticket {
 interface Detail {
   ticket: Ticket
   ref: string
-  transcript: { id: string; role: string; body: string; created_at: string }[]
+  transcript: { id: string; role: string; body: string; created_at: string; redacted?: boolean }[]
+  /** ADR-030 §6: a WhatsApp transcript shows only the ticket user's own chat while they hold the number. */
+  transcriptScope?: 'thread' | 'bound' | 'current_holder' | 'not_holder' | 'missing' | 'none'
   subject: { order?: { id: string; order_number: string; status: string } | null; rfq?: { id: string; title: string; status: string } | null }
 }
 
@@ -56,6 +58,7 @@ export function SupportQueueClient() {
   const [showAll, setShowAll] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [reply, setReply] = useState('')
 
   const load = useCallback(async () => {
     const [q, s] = await Promise.all([
@@ -74,6 +77,22 @@ export function SupportQueueClient() {
     const d = await fetch(`/api/v1/agent/admin/support/tickets/${id}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
     setSelected(d)
     setNote('')
+    setReply('')
+  }
+  /** ADR-030 §6 — a person replies: WhatsApp (free text in the window, else the approved template) or the chat thread. */
+  async function sendReply(id: string) {
+    if (!reply.trim()) return
+    setBusy(true)
+    const res = await fetch(`/api/v1/agent/admin/support/tickets/${id}/reply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: reply, clickId: crypto.randomUUID() }) }).catch(() => null)
+    const body = res ? await res.json().catch(() => null) : null
+    setBusy(false)
+    if (res?.status === 409 && body?.error === 'number_changed') return toast(t('reply_number_changed'))
+    if (!res?.ok) return toast(t('error'))
+    if (body?.channel === 'thread') toast(t('reply_stored'))
+    else if (body?.outcome === 'sent' || body?.outcome === 'stub' || body?.outcome === 'duplicate') toast(body?.usedTemplate ? t('reply_sent_template') : t('reply_sent'))
+    else toast(t('reply_not_sent', { reason: body?.reason ?? body?.outcome ?? '—' }))
+    setReply('')
+    await open(id)
   }
   async function act(id: string, action: 'acknowledge' | 'assign' | 'resolve') {
     if (action === 'resolve' && !note.trim()) return toast(t('note_required'))
@@ -163,14 +182,27 @@ export function SupportQueueClient() {
           </div>
           {selected.subject.order && <p className="mt-1 text-sm">{t('order')}: {selected.subject.order.order_number} ({selected.subject.order.status})</p>}
           {selected.subject.rfq && <p className="mt-1 text-sm">{t('request')}: {selected.subject.rfq.title} ({selected.subject.rfq.status})</p>}
-          <div className="mt-3 max-h-80 space-y-2 overflow-y-auto rounded-card border border-border p-3">
+          {(selected.transcriptScope === 'bound' || selected.transcriptScope === 'current_holder') && <p className="mt-2 text-xs text-foreground-secondary">{t('transcript_scoped')}</p>}
+          <div className="mt-3 max-h-80 space-y-2 overflow-y-auto rounded-card border border-border p-3" tabIndex={0} role="region" aria-label={t('transcript')}>
             {selected.transcript.map((m) => (
               <p key={m.id} className={m.role === 'user' ? 'text-sm' : 'text-sm text-foreground-secondary'}>
-                <span className="font-medium">{m.role === 'user' ? t('user') : t('assistant')}:</span> {m.body}
+                <span className="font-medium">{m.role === 'user' ? t('user') : t('assistant')}:</span> {m.redacted ? <span className="italic">{t('transcript_redacted')}</span> : m.body}
               </p>
             ))}
-            {selected.transcript.length === 0 && <p className="text-sm text-foreground-secondary">{t('no_transcript')}</p>}
+            {selected.transcript.length === 0 && (
+              <p className="text-sm text-foreground-secondary">
+                {selected.transcriptScope === 'not_holder' ? t('transcript_not_holder') : selected.transcriptScope === 'missing' ? t('transcript_missing') : t('no_transcript')}
+              </p>
+            )}
           </div>
+          {selected.ticket.status !== 'resolved' && (
+            <div className="mt-3 space-y-2" data-testid="support-ops-reply">
+              <label className="block text-sm font-medium" htmlFor="support-reply">{t('reply_label')}</label>
+              <p className="text-xs text-foreground-secondary">{selected.ticket.channel === 'whatsapp' ? t('reply_hint_whatsapp') : t('reply_hint_thread')}</p>
+              <textarea id="support-reply" className="field-control w-full" rows={3} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={t('reply_placeholder')} maxLength={1000} />
+              <Button size="sm" variant="outline" onClick={() => void sendReply(selected.ticket.id)} disabled={busy || !reply.trim()}>{t('reply_send')}</Button>
+            </div>
+          )}
           {selected.ticket.status !== 'resolved' && (
             <div className="mt-3 space-y-2">
               <textarea className="field-control w-full" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('note_placeholder')} maxLength={1000} aria-label={t('note_placeholder')} />

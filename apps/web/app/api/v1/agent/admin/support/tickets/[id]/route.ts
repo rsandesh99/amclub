@@ -9,7 +9,9 @@ import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { actOnTicket, getTicket, ticketRef } from '@/lib/support/tickets'
 
 /**
- * GET   /api/v1/agent/admin/support/tickets/[id] — the ticket, the masked transcript, the linked subject.
+ * GET   /api/v1/agent/admin/support/tickets/[id] — the ticket, the masked transcript, the linked subject. A WhatsApp
+ *       transcript shows only the ticket user's own chat (since the number was bound to them, while they hold it) and
+ *       every read is audit-logged (`wa_transcript_read`, ADR-030 §6).
  * PATCH … { action: acknowledge | assign | resolve, note? } — the human's decision (audit-logged); resolve
  *       re-enables the agent on that conversation / thread and tells the user. Never a delegated token.
  */
@@ -18,7 +20,7 @@ export const dynamic = 'force-dynamic'
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
 const patchSchema = z.object({ action: z.enum(['acknowledge', 'assign', 'resolve']), note: z.string().max(1000).optional() }).strict()
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = agentApiGate()
   if (gate) return gate
   const auth = await requireAdmin()
@@ -26,7 +28,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { id } = await params
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const admin = await createAdminClient()
-  const t = await getTicket(admin, id)
+  const t = await getTicket(admin, id, { audit: { request, actorId: auth.userId } })
   if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ ...t, ref: ticketRef(t.ticket.id) }, { headers: NO_STORE })
 }

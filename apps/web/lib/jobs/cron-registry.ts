@@ -99,6 +99,9 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { name: 'licence-reminders', staleAfterMs: 26 * H },
   { name: 'onboarding-nudges', staleAfterMs: 2 * H },
   { name: 'data-foundations', staleAfterMs: 26 * H }, // nightly 21:40 UTC (E15 retention + F4)
+  // ADR-030 §6 privacy ops — daily. Degraded when a step failed or 0086 is not applied yet (`notReady`).
+  { name: 'wa-retention', staleAfterMs: 26 * H, issues: (r) => issue('step_errors', num(r['errors']) + (r['notReady'] === true ? 1 : 0)) },
+  { name: 'wa-template-sync', staleAfterMs: 26 * H, issues: (r) => issue('step_errors', num(r['errors']) + (r['notReady'] === true ? 1 : 0)) },
   { name: 'pool-close', staleAfterMs: 3 * H, requires: 'mart' }, // hourly Mart cron; inert (no beat) while MART_ENABLED=false
   // Agent crons beat even while AGENT_ENABLED=false (they only skip the enqueue).
   { name: 'agent-munshi-scan', staleAfterMs: 1 * H, issues: enqueueIssues },
