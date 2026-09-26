@@ -145,3 +145,33 @@ export function waPhoneFromVendor(from: string | null | undefined): string | nul
   const s = String(from ?? '').trim().replace(/^\+/, '')
   return /^\d{8,15}$/.test(s) ? s : null
 }
+
+// ── Secrets typed into chat ──────────────────────────────────────────────────
+// A user sometimes pastes an OTP, a UPI PIN or a card number into WhatsApp. Stored text never keeps them: the webhook
+// stores the redacted body and the job warns the user (never ask for these; the "official AMClub" page says so).
+const CARD_RE = /\b\d(?:[ -]?\d){12,18}\b/g
+const SECRET_CONTEXT_RE = /\b(otp|one[- ]time|pin|upi pin|mpin|cvv|cvc|password|passcode)\b[^\d]{0,20}(\d{3,8})\b/gi
+function luhnOk(digits: string): boolean {
+  let sum = 0
+  let dbl = false
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = digits.charCodeAt(i) - 48
+    if (dbl) { d *= 2; if (d > 9) d -= 9 }
+    sum += d
+    dbl = !dbl
+  }
+  return sum % 10 === 0
+}
+export interface ChatRedaction { text: string; redacted: Array<'card' | 'secret_code'> }
+/** Replace card numbers (Luhn-valid, 13–19 digits) and codes next to OTP / PIN / CVV / password words with [removed]. */
+export function redactChatSecrets(text: string | null | undefined): ChatRedaction {
+  const kinds = new Set<'card' | 'secret_code'>()
+  let out = String(text ?? '')
+  out = out.replace(CARD_RE, (m) => {
+    const d = m.replace(/\D/g, '')
+    if (d.length >= 13 && d.length <= 19 && luhnOk(d)) { kinds.add('card'); return '[removed]' }
+    return m
+  })
+  out = out.replace(SECRET_CONTEXT_RE, (m, word: string) => { kinds.add('secret_code'); return `${word} [removed]` })
+  return { text: out, redacted: [...kinds] }
+}

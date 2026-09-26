@@ -89,3 +89,16 @@ describe('quiet hours (IST)', () => {
     expect(quietHoursEnd(noon, win)).toBe(noon)
   })
 })
+
+import { redactChatSecrets } from '../whatsapp'
+describe('redactChatSecrets', () => {
+  it('removes Luhn-valid card numbers and codes after OTP / PIN words', () => {
+    expect(redactChatSecrets('my card 4111 1111 1111 1111 exp 12/27').text).toBe('my card [removed] exp 12/27')
+    expect(redactChatSecrets('OTP is 482913').text).toBe('OTP [removed]')
+    expect(redactChatSecrets('my upi pin: 1234').redacted).toContain('secret_code')
+  })
+  it('leaves order numbers, phone numbers and amounts alone', () => {
+    const s = 'Order AMC-2026-000123 for ₹5,900; call 9876543210'
+    expect(redactChatSecrets(s)).toEqual({ text: s, redacted: [] })
+  })
+})

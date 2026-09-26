@@ -6,6 +6,7 @@ export * from './types'
 export * from './templates'
 export * from './media'
 export * from './send'
+export * from './template-types'
 
 /**
  * Audit M42 — the vendor id of the message a WhatsApp reply QUOTES (Meta:
