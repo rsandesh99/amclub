@@ -24,7 +24,7 @@ import {
   type WaTemplateUpsert,
 } from '@amclub/shared'
 import { fetchWithTimeout } from '@/lib/outbound'
-import { notReady, phoneDigits, type Admin } from '@/lib/privacy/common'
+import { fetchPages, notReady, phoneDigits, type Admin } from '@/lib/privacy/common'
 
 /**
  * ADR-030 §6 — the WhatsApp ops console (/admin/whatsapp). Every read is on the service role behind requireAdmin (the
@@ -161,27 +161,30 @@ export async function waDeliveryLog(admin: Admin, f: WaDeliveryFilters, now = ne
   if (f.kind) q = q.eq('notification_kind', f.kind)
   if (f.status) q = q.eq('status', f.status)
   if (f.errorCode != null) q = q.eq('error_code', f.errorCode)
-  const [list, stats] = await Promise.all([
+  const out = () => admin.from('wa_messages').select('id', { count: 'exact', head: true }).eq('direction', 'out').gte('created_at', since)
+  // counts are exact (head counts per status); the error ranking reads the latest failures page by page (≤ 5,000) and
+  // the kind filter's choices come from the latest page (PostgREST answers ≤ 1,000 rows per request)
+  const [list, total, perStatus, failures, recent] = await Promise.all([
     q,
-    admin.from('wa_messages').select('status, error_code, error_title, notification_kind').eq('direction', 'out').gte('created_at', since).limit(20000),
+    out(),
+    Promise.all(WA_OUTBOUND_STATUSES.map(async (s) => [s, await out().eq('status', s)] as const)),
+    fetchPages<{ error_code: number; error_title: string | null }>((from, to) => admin.from('wa_messages').select('error_code, error_title').eq('direction', 'out').gte('created_at', since).not('error_code', 'is', null).order('created_at', { ascending: false }).order('id').range(from, to), 5000),
+    admin.from('wa_messages').select('notification_kind').eq('direction', 'out').gte('created_at', since).not('notification_kind', 'is', null).order('created_at', { ascending: false }).limit(1000),
   ])
-  if (list.error || stats.error) {
-    if (notReady('wa_messages ledger columns (0086)', list.error ?? stats.error)) return empty
-    throw new Error(`wa_messages: ${(list.error ?? stats.error)!.message}`)
+  const firstErr = list.error ?? total.error ?? failures.error ?? recent.error ?? perStatus.find(([, r]) => r.error)?.[1].error ?? null
+  if (firstErr) {
+    if (notReady('wa_messages ledger columns (0086)', firstErr)) return empty
+    throw new Error(`wa_messages: ${firstErr.message}`)
   }
-  const all = (stats.data ?? []) as { status: string; error_code: number | null; error_title: string | null; notification_kind: string | null }[]
   const counts: Record<string, number> = {}
+  for (const [s, r] of perStatus) if (r.count) counts[s] = r.count
   const errors = new Map<number, { title: string | null; n: number }>()
-  const kinds = new Set<string>()
-  for (const r of all) {
-    counts[r.status] = (counts[r.status] ?? 0) + 1
-    if (r.notification_kind) kinds.add(r.notification_kind)
-    if (r.error_code != null) {
-      const e = errors.get(r.error_code) ?? { title: r.error_title, n: 0 }
-      e.n++
-      errors.set(r.error_code, e)
-    }
+  for (const r of failures.rows) {
+    const e = errors.get(r.error_code) ?? { title: r.error_title, n: 0 }
+    e.n++
+    errors.set(r.error_code, e)
   }
+  const kinds = new Set(((recent.data ?? []) as { notification_kind: string }[]).map((r) => r.notification_kind))
   const raw = (list.data ?? []) as Array<{ id: string; conversation_id: string; kind: string; notification_kind: string | null; template_name: string | null; template_language: string | null; category: string | null; status: string; error_code: number | null; error_title: string | null; created_at: string; status_at: string | null }>
   const phones = await phonesOf(admin, raw.map((r) => r.conversation_id))
   return {
@@ -203,7 +206,7 @@ export async function waDeliveryLog(admin: Admin, f: WaDeliveryFilters, now = ne
     counts,
     topErrors: [...errors.entries()].map(([code, e]) => ({ code, title: e.title, n: e.n })).sort((a, b) => b.n - a.n).slice(0, 10),
     kinds: [...kinds].sort(),
-    total: all.length,
+    total: total.count ?? 0,
   }
 }
 
@@ -256,7 +259,7 @@ export function codeTemplates() {
 
 export async function waTemplatesReport(admin: Admin): Promise<{ notReady: boolean; rows: WaTemplateStatusRow[]; lastSyncedAt: string | null; flags: Record<string, number> }> {
   const code = codeTemplates()
-  const { data, error } = await admin.from('wa_templates').select('name, language, category, status, rejection_reason, synced_at').limit(2000)
+  const { data, error } = await admin.from('wa_templates').select('name, language, category, status, rejection_reason, synced_at').order('name').limit(1000)
   if (error) {
     if (notReady('wa_templates (0086)', error)) return { notReady: true, rows: compareWaTemplates(code, []), lastSyncedAt: null, flags: {} }
     throw new Error(`wa_templates: ${error.message}`)
@@ -327,7 +330,7 @@ export async function syncWaTemplates(admin: Admin, fetchImpl: typeof fetch = fe
   }
   let markedDeleted = 0
   if (complete) {
-    const { data: existing } = await admin.from('wa_templates').select('name, language, status').neq('status', 'deleted').limit(5000)
+    const { data: existing } = await admin.from('wa_templates').select('name, language, status').neq('status', 'deleted').order('name').limit(1000)
     const keys = new Set(seen.map((r) => `${r.name}|${r.language}`))
     for (const r of (existing ?? []) as { name: string; language: string }[]) {
       if (keys.has(`${r.name}|${r.language}`)) continue
@@ -343,19 +346,22 @@ export async function syncWaTemplates(admin: Admin, fetchImpl: typeof fetch = fe
 
 export async function waSpendReport(admin: Admin, now = new Date()): Promise<{ notReady: boolean; report: WaSpendReport | null; truncated: boolean; since: string }> {
   const since = new Date(now.getTime() - 30 * DAY).toISOString()
-  const LIMIT = 50_000
-  const { data, error } = await admin
-    .from('wa_messages')
-    .select('created_at, category, pricing_category, cost_millipaise, billable')
-    .eq('direction', 'out')
-    .gte('created_at', since)
-    .limit(LIMIT)
+  const { rows, error, truncated } = await fetchPages<Parameters<typeof aggregateWaSpend>[0][number]>(
+    (from, to) => admin
+      .from('wa_messages')
+      .select('created_at, category, pricing_category, cost_millipaise, billable')
+      .eq('direction', 'out')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to),
+    50_000,
+  )
   if (error) {
     if (notReady('wa_messages cost columns (0086)', error)) return { notReady: true, report: null, truncated: false, since }
     throw new Error(`wa_messages: ${error.message}`)
   }
-  const rows = (data ?? []) as Parameters<typeof aggregateWaSpend>[0][number][]
-  return { notReady: false, report: aggregateWaSpend(rows), truncated: rows.length >= LIMIT, since }
+  return { notReady: false, report: aggregateWaSpend(rows), truncated, since }
 }
 
 // ── consents and suppressions ────────────────────────────────────────────────
@@ -397,12 +403,15 @@ export async function waConsentsReport(admin: Admin): Promise<WaConsentsReport> 
 
 /** The suppression row an opaque key names (bounded scan; the table holds delivery failures only). */
 export async function findSuppression(admin: Admin, key: string): Promise<{ phone_e164: string; reason: string; error_code: number | null; until: string | null } | null | 'not_ready'> {
-  const { data, error } = await admin.from('wa_suppressions').select('phone_e164, reason, error_code, until').limit(10_000)
+  const { rows, error } = await fetchPages<{ phone_e164: string; reason: string; error_code: number | null; until: string | null }>(
+    (from, to) => admin.from('wa_suppressions').select('phone_e164, reason, error_code, until').order('phone_e164').range(from, to),
+    20_000,
+  )
   if (error) {
     if (notReady('wa_suppressions (0086)', error)) return 'not_ready'
     throw new Error(`wa_suppressions: ${error.message}`)
   }
-  return ((data ?? []) as { phone_e164: string; reason: string; error_code: number | null; until: string | null }[]).find((s) => suppressionKey(s.phone_e164) === key) ?? null
+  return rows.find((s) => suppressionKey(s.phone_e164) === key) ?? null
 }
 
 // ── unrouted inbound ─────────────────────────────────────────────────────────

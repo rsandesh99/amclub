@@ -1,5 +1,5 @@
 import 'server-only'
-import { notReady, phoneDigits, type Admin } from './common'
+import { fetchPages, notReady, phoneDigits, type Admin } from './common'
 
 /**
  * ADR-030 §6 / DPDP s.11 — the "access" answer: one JSON document with the data AMClub holds about the account, built
@@ -9,6 +9,7 @@ import { notReady, phoneDigits, type Admin } from './common'
  * columns, tokens, hashes) are left out; a section whose table is not migrated yet says so instead of failing.
  */
 
+// PostgREST answers at most 1,000 rows per request; WhatsApp messages are read page by page
 const LIMIT = { orders: 1000, rfqs: 500, notifications: 1000, messages: 5000, consents: 1000 } as const
 const SECRET_KEY = /encrypt|secret|token|hash|password|_enc$|cipher/i
 
@@ -83,7 +84,7 @@ export async function buildUserExport(admin: Admin, userId: string): Promise<Use
       : admin.from('wa_phone_consents').select('phone_e164, purpose, status, updated_at').eq('user_id', userId)),
     rows('agent_grants', admin.from('agent_grants').select('persona, channel, scopes, created_at, revoked_at').eq('user_id', userId).order('created_at', { ascending: false })),
     convIds.length
-      ? rows('wa_messages', admin.from('wa_messages').select('conversation_id, direction, kind, body, transcript, template_name, status, created_at, redacted_at').in('conversation_id', convIds).order('created_at', { ascending: true }).limit(LIMIT.messages))
+      ? rows('wa_messages', fetchPages<Record<string, unknown>>((from, to) => admin.from('wa_messages').select('conversation_id, direction, kind, body, transcript, template_name, status, created_at, redacted_at').in('conversation_id', convIds).order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to), LIMIT.messages).then((r) => ({ data: r.rows, error: r.error })))
       : Promise.resolve([] as unknown[]),
     rows('notifications', admin.from('notifications').select('kind, title_i18n, body_i18n, link, created_at, read_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(LIMIT.notifications)),
     rows('dpdp_requests', admin.from('dpdp_requests').select('kind, source, status, details, resolution, due_at, resolved_at, created_at').eq('user_id', userId).is('deleted_at', null).order('created_at', { ascending: false })),

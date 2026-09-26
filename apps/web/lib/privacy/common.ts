@@ -33,6 +33,24 @@ export class SchemaNotReadyError extends Error {
   }
 }
 
+/** PostgREST answers at most `max_rows` (1000) rows per request: read bigger sets page by page (the query must have a
+ *  stable order). Stops at `max` rows; `truncated` says there was more. */
+export const PAGE_ROWS = 1000
+export async function fetchPages<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }>,
+  max: number,
+): Promise<{ rows: T[]; error: { code?: string; message: string } | null; truncated: boolean }> {
+  const rows: T[] = []
+  for (let from = 0; from < max; from += PAGE_ROWS) {
+    const { data, error } = await page(from, Math.min(from + PAGE_ROWS, max) - 1)
+    if (error) return { rows, error, truncated: false }
+    const got = (Array.isArray(data) ? data : []) as T[]
+    rows.push(...got)
+    if (got.length < Math.min(PAGE_ROWS, max - from)) return { rows, error: null, truncated: false }
+  }
+  return { rows, error: null, truncated: true }
+}
+
 /** E.164 digits without '+'. */
 export const phoneDigits = (p: string | null | undefined): string => String(p ?? '').replace(/\D/g, '')
 
