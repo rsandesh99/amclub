@@ -159,6 +159,11 @@ export * from './service-pools'
 export * from './onboarding'
 export * from './onboarding-copy'
 
+// ADR-030 — WhatsApp channel vocabulary (locales, consent purposes / sources, the keyword classifier)
+export * from './whatsapp'
+// ADR-030 §4 — the notification registry contract, preferences and IST quiet hours
+export * from './notify'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

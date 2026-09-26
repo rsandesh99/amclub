@@ -17,7 +17,7 @@ import { DEFAULT_MEDIA_LIMITS, MediaRefusedError, baseMime, fetchWithTimeout, mi
  * id; downloadMedia resolves it to a URL then fetches the bytes with the token.
  */
 
-const LANG: Record<WaLocale, string> = { en: 'en', hi: 'hi', te: 'te' }
+const LANG: Record<WaLocale, string> = { en: 'en', hi: 'hi', te: 'te', ta: 'ta' }
 
 function err(detail: string): SendResult {
   return { ok: false, vendorMessageId: null, detail: `error:${detail}` }

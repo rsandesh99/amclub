@@ -201,7 +201,7 @@ Each category carries: icon, description (i18n), commission rate, RFQ form templ
 | Auth | Supabase Auth: **phone OTP (MSG91/Twilio SMS hook)** + email/password + Google OAuth | Phone-first for Bharat |
 | Payments | **Razorpay**: Payment Gateway + **Route** (split settlements for marketplace payouts) + Webhooks | Native marketplace splits, UPI dominant |
 | File storage | Supabase Storage (S3-compatible) | Order documents, credentials, images |
-| Notifications | MSG91 (SMS), **WhatsApp Business API via Gupshup/Interakt** (transactional), Resend (email), Web Push | Order events; WhatsApp is the channel MSMEs actually read |
+| Notifications | MSG91 (SMS, DLT), **WhatsApp directly on Meta's Cloud API** (no BSP; ADR-030), Resend (email), Web Push | Order events; WhatsApp is the channel MSMEs actually read. Consent per phone and purpose; one send path; outbox with SMS / email fallback |
 | i18n | next-intl, ICU messages, all strings in locale JSON; **no hardcoded copy ever** | en + hi launch; 8+ languages later |
 | Hosting | Vercel (frontend+API), Supabase cloud (Mumbai region `ap-south-1`) | Data residency + latency |
 | Monitoring | Sentry (errors), Vercel Analytics, PostHog (product analytics, self-serve funnels) | Funnel metrics in §1.9 must be measurable from day 1 |
@@ -213,7 +213,7 @@ Each category carries: icon, description (i18n), commission rate, RFQ form templ
 |---------|---------|------|
 | Razorpay PG + Route | Payments, refunds, split payouts | % per txn |
 | MSG91 | OTP + transactional SMS | Paid, cheap |
-| Gupshup / Interakt | WhatsApp transactional messages | Paid |
+| Meta WhatsApp Cloud API | WhatsApp messages (templates, replies, media) — direct, INR account | Paid per message (ADR-030) |
 | Resend | Email | Free tier OK V1 |
 | Surepass / Signzy (pick one) | **GSTIN, Udyam, PAN, bank-account verification APIs** for provider KYC | Paid per check — critical for the trust layer |
 | Google Maps Places | Provider location autocomplete | Free tier |
@@ -641,6 +641,11 @@ saved_providers (msme_id fk, provider_id fk, pk(msme_id, provider_id))
 
 notifications (id, user_id fk, kind text, title_i18n jsonb, body_i18n jsonb,
                link text, channels text[], read_at timestamptz)
+-- ADR-030 (0086 / 0087): WhatsApp consent is per phone and purpose (wa_consent_events append-only + wa_phone_consents),
+-- delivery suppression (wa_suppressions), the outbound ledger on wa_messages, wa_templates, wa_account_events;
+-- notification_preferences (category × channel), notification_settings (IST quiet hours, pause, lead digest),
+-- notification_outbox (one row per notification × channel, retry, fallback), notification_reminders, dpdp_requests.
+-- Marketing on any channel needs its own consent and a per-user cap (PRD_WHATSAPP W3b); none is sent by default.
 
 coupons (id, code unique, kind text, value_bps int, max_discount_paise bigint,
          category_id fk null, valid_from, valid_to, usage_limit int, used_count int, is_active bool)
@@ -677,7 +682,7 @@ Conventions: cursor pagination, `Idempotency-Key` honoured on all POSTs that cre
 
 ## 5.9 Background jobs (pg-boss)
 
-`rfq.fanout` (match & notify) · `rfq.expire` (72h) · `order.auto_cancel_unaccepted` (24h) · `order.auto_accept_delivered` (72h, with 24/48h reminders) · `payout.schedule_and_transfer` (daily batch via Razorpay Route) · `provider.stats_nightly` (rating, response time, top-rated) · `notification.dispatch` (channel fan-out with per-channel retry) · `invoice.generate_pdf`.
+`rfq.fanout` (match & notify) · `rfq.expire` (72h) · `order.auto_cancel_unaccepted` (24h) · `order.auto_accept_delivered` (72h, with 24/48h reminders) · `payout.schedule_and_transfer` (daily batch via Razorpay Route) · `provider.stats_nightly` (rating, response time, top-rated) · `notification.dispatch` (channel fan-out with per-channel retry: the `notification_outbox` + `cron/notify-dispatch`, ADR-030 §4; WhatsApp → SMS / email fallback) · `notification.reminders` (accept-by, review-by, request / quote expiring, pay-by; `notification_reminders` claims) · `invoice.generate_pdf`.
 
 ---
 

@@ -10,7 +10,9 @@ import type { MediaLimits } from './media'
 
 export type WhatsAppDriverName = 'meta_cloud' | 'interakt' | 'stub'
 
-export type WaLocale = 'en' | 'hi' | 'te'
+// ADR-030: the locale list lives in shared (WA_LOCALES) so web, runtime and the templates agree; ta added (audit B2).
+export type { WaLocale } from '@amclub/shared'
+import type { WaLocale } from '@amclub/shared'
 
 export interface SendResult {
   ok: boolean

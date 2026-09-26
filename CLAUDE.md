@@ -16,7 +16,7 @@
 | **Search** | Postgres FTS + pg_trgm → Meilisearch/Typesense at >5K listings |
 | **Auth** | Supabase Auth · phone OTP primary (MSG91 hook) · Google OAuth secondary |
 | **Payments** | Razorpay PG + Route · UPI default · webhooks are the ONLY payment truth |
-| **Notifications** | MSG91 (SMS) · Gupshup/Interakt (WhatsApp) · Resend (email) · Web Push |
+| **Notifications** | MSG91 (SMS, DLT) · WhatsApp direct on Meta's Cloud API (ADR-030) · Resend (email) · Web Push |
 | **i18n** | next-intl · ICU messages · en + hi at launch; 8+ languages later |
 | **Validation** | Zod everywhere — API input, forms, env. Schema first, types derived. |
 | **Monitoring** | Sentry · PostHog · Vercel Analytics |

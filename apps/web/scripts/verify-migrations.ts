@@ -503,6 +503,17 @@ const MANIFEST: Entry[] = [
     triggers: [['agent_grants', 'agent_grants_immutable']],
     note: 'WhatsApp readiness audit: agent_grants server-written only (no client INSERT / UPDATE; self insert / revoke policies dropped); agent_grants_immutable trigger (a revoked grant stays revoked; only revoked_at changes); default TRUNCATE / REFERENCES / TRIGGER withdrawn on agent_grants and wa_*',
   },
+  {
+    file: '0086_whatsapp_ledger.sql',
+    tables: ['wa_consent_events', 'wa_phone_consents', 'wa_suppressions', 'wa_templates', 'wa_account_events'],
+    triggers: [['wa_messages', 'wa_messages_status_forward'], ['wa_consent_events', 'wa_consent_events_append_only']],
+    note: 'ADR-030: WhatsApp consent ledger (append-only events + per phone/purpose state via record_wa_consent, service role only), delivery suppressions, the outbound ledger columns on wa_messages (idempotency key, error code, pricing, cost in millipaise; statuses never move backwards), BSUID / entry window / referral / bind time on wa_conversations, the template registry and account events',
+  },
+  {
+    file: '0087_notification_outbox.sql',
+    tables: ['notification_preferences', 'notification_settings', 'notification_outbox', 'notification_reminders', 'dpdp_requests'],
+    note: 'ADR-030 §4–§6: notification preferences (category × channel), quiet hours / pause / lead digest, the dispatcher outbox with retry and fallback (audit M37), reminder claims, DPDP requests; server-written, self read',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

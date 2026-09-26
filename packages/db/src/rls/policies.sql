@@ -486,6 +486,34 @@ CREATE POLICY "agent_settings: admin read" ON agent_settings
 
 REVOKE INSERT, UPDATE, DELETE ON agent_settings FROM anon, authenticated;
 
+-- ─── WhatsApp consent / ledger / templates (0086, ADR-030) — server-written; self read of own consent ─
+ALTER TABLE wa_consent_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wa_phone_consents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wa_suppressions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wa_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wa_account_events ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON wa_consent_events, wa_phone_consents, wa_suppressions, wa_templates, wa_account_events FROM anon, authenticated;
+GRANT SELECT ON wa_consent_events, wa_phone_consents TO authenticated;
+DROP POLICY IF EXISTS "wa_consent_events: self read" ON wa_consent_events;
+CREATE POLICY "wa_consent_events: self read" ON wa_consent_events FOR SELECT USING (user_id = auth_user_id());
+DROP POLICY IF EXISTS "wa_phone_consents: self read" ON wa_phone_consents;
+CREATE POLICY "wa_phone_consents: self read" ON wa_phone_consents FOR SELECT USING (user_id = auth_user_id());
+
+-- ─── notification preferences / settings / outbox / reminders, dpdp_requests (0087) — server-written; self read ─
+ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_outbox ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_reminders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dpdp_requests ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON notification_preferences, notification_settings, notification_outbox, notification_reminders, dpdp_requests FROM anon, authenticated;
+GRANT SELECT ON notification_preferences, notification_settings, dpdp_requests TO authenticated;
+DROP POLICY IF EXISTS "notification_preferences: self read" ON notification_preferences;
+CREATE POLICY "notification_preferences: self read" ON notification_preferences FOR SELECT USING (user_id = auth_user_id());
+DROP POLICY IF EXISTS "notification_settings: self read" ON notification_settings;
+CREATE POLICY "notification_settings: self read" ON notification_settings FOR SELECT USING (user_id = auth_user_id());
+DROP POLICY IF EXISTS "dpdp_requests: self read" ON dpdp_requests;
+CREATE POLICY "dpdp_requests: self read" ON dpdp_requests FOR SELECT USING (user_id = auth_user_id() AND deleted_at IS NULL);
+
 -- ─── agent_grants (0027, 0085) — delegated-identity consent; self read, server-written ─
 -- 0085: consent evidence and the source of delegated-token scopes, so no client role writes it (a delegated token is
 -- role=authenticated). Writers: /api/v1/agent/grants and the enable routes on the service role, the WhatsApp runtime,
