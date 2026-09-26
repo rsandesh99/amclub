@@ -58,7 +58,7 @@ export function WhatsAppSettingsSection({ source = 'web_settings' }: { source?: 
     setView({ kind: 'ready', state: before })
     if (res.status === 409) { toast(t('notice_changed'), 'info'); void load() }
     else if (res.status === 422) toast(t('phone_required'), 'error')
-    else if (res.status === 503) setView({ kind: 'not_ready' })
+    else if (res.status === 503 || res.status === 404) setView({ kind: 'not_ready' })
     else toast(t('save_failed'), 'error')
   }
 

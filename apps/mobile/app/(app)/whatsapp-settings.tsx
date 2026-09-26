@@ -49,7 +49,7 @@ export default function WhatsAppSettingsScreen() {
     setView({ kind: 'ready', state: before })
     if (r.status === 409) { setNote({ tone: 'error', text: t('whatsapp.notice_changed') }); void load() }
     else if (r.status === 422) setNote({ tone: 'error', text: t('whatsapp.phone_required') })
-    else if (r.status === 503) setView({ kind: 'not_ready' })
+    else if (r.status === 503 || r.status === 404) setView({ kind: 'not_ready' })
     else setNote({ tone: 'error', text: t('whatsapp.save_failed') })
   }
 
@@ -61,7 +61,7 @@ export default function WhatsAppSettingsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScreenHeader title={t('whatsapp.title')} />
-      <ScrollView contentContainerClassName="gap-4 px-4 py-4" testID="whatsapp-settings" accessibilityLabel={view.kind}>
+      <ScrollView contentContainerClassName="gap-4 px-4 py-4" testID="whatsapp-settings">
         <Text className="text-sm text-foreground-secondary">{t('whatsapp.subtitle')}</Text>
 
         {view.kind === 'loading' && <View className="items-center py-8"><ActivityIndicator size="large" color="#1B4D3E" /></View>}

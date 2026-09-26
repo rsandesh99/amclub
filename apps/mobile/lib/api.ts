@@ -1154,6 +1154,11 @@ async function getSettingsJson(path: string): Promise<{ status: number; body: Re
   }
 }
 
+/** Not there yet: migration not applied (503 / ready:false) or route not deployed (404) — "coming soon", not an error. */
+function settingsNotReady(status: number, body: Record<string, unknown> | null): boolean {
+  return status === 503 || status === 404 || body?.['ready'] === false
+}
+
 async function sendSettingsJson(path: string, method: 'POST' | 'PUT' | 'PATCH', body: unknown): Promise<{ ok: boolean; status: number; data: Record<string, unknown> | null }> {
   try {
     const res = await fetch(`${API_URL}${path}`, {
@@ -1169,7 +1174,7 @@ async function sendSettingsJson(path: string, method: 'POST' | 'PUT' | 'PATCH', 
 
 export async function fetchWhatsAppConsent(): Promise<SettingsLoad<WaConsentState>> {
   const { status, body } = await getSettingsJson('/api/v1/me/whatsapp')
-  if (status === 503 || body?.['ready'] === false) return { kind: 'not_ready' }
+  if (settingsNotReady(status, body)) return { kind: 'not_ready' }
   if (status !== 200 || !body || typeof body['purposes'] !== 'object') return { kind: 'error' }
   return { kind: 'ready', data: body as unknown as WaConsentState }
 }
@@ -1190,7 +1195,7 @@ export async function sendSignupWhatsAppOptIn(): Promise<void> {
   for (const wait of [0, 1500, 5000]) {
     if (wait) await new Promise((r) => setTimeout(r, wait))
     const r = await updateWhatsAppConsent('transactional', true, 'signup')
-    if (r.ok || [400, 401, 403, 409, 422, 503].includes(r.status)) return
+    if (r.ok || [400, 401, 403, 404, 409, 422, 503].includes(r.status)) return
   }
 }
 
@@ -1198,7 +1203,7 @@ export interface NotificationSettingsLoad { settings: NotificationSettings; esse
 
 export async function fetchNotificationSettings(): Promise<SettingsLoad<NotificationSettingsLoad>> {
   const { status, body } = await getSettingsJson('/api/v1/me/notification-preferences')
-  if (status === 503 || body?.['ready'] === false) return { kind: 'not_ready' }
+  if (settingsNotReady(status, body)) return { kind: 'not_ready' }
   const s = body?.['settings'] as Partial<NotificationSettings> | undefined
   if (status !== 200 || !s || typeof s !== 'object') return { kind: 'error' }
   return {
@@ -1217,7 +1222,7 @@ export async function saveNotificationSettings(settings: NotificationSettings): 
 
 export async function fetchPrivacyRequests(): Promise<SettingsLoad<PrivacyRequestView[]>> {
   const { status, body } = await getSettingsJson('/api/v1/me/privacy-requests')
-  if (body?.['ready'] === false) return { kind: 'not_ready' }
+  if (settingsNotReady(status, body)) return { kind: 'not_ready' }
   if (status !== 200 || !Array.isArray(body?.['requests'])) return { kind: 'error' }
   return { kind: 'ready', data: body['requests'] as PrivacyRequestView[] }
 }

@@ -31,6 +31,11 @@ async function getJson(url: string): Promise<{ status: number; body: Record<stri
   }
 }
 
+/** Not there yet: the migration is not applied (503 / ready:false) or the route is not deployed (404). Calm, not an error. */
+function notReady(status: number, body: Record<string, unknown> | null): boolean {
+  return status === 503 || status === 404 || body?.['ready'] === false
+}
+
 async function send<T>(url: string, method: 'POST' | 'PUT', body: unknown, keepalive = false): Promise<Sent<T>> {
   try {
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive })
@@ -46,7 +51,7 @@ async function send<T>(url: string, method: 'POST' | 'PUT', body: unknown, keepa
 
 export async function loadWhatsAppConsent(): Promise<Loaded<WaConsentState>> {
   const { status, body } = await getJson('/api/v1/me/whatsapp')
-  if (status === 503 || body?.['ready'] === false) return { kind: 'not_ready' }
+  if (notReady(status, body)) return { kind: 'not_ready' }
   if (status !== 200 || !body || typeof body['purposes'] !== 'object') return { kind: 'error' }
   return { kind: 'ready', data: body as unknown as WaConsentState }
 }
@@ -65,7 +70,7 @@ export interface NotificationSettingsPayload {
 
 export async function loadNotificationSettings(): Promise<Loaded<NotificationSettingsPayload>> {
   const { status, body } = await getJson('/api/v1/me/notification-preferences')
-  if (status === 503 || body?.['ready'] === false) return { kind: 'not_ready' }
+  if (notReady(status, body)) return { kind: 'not_ready' }
   if (status !== 200 || !body || typeof body['settings'] !== 'object' || !body['settings']) return { kind: 'error' }
   const s = body['settings'] as Partial<NotificationSettings>
   return {
@@ -90,7 +95,7 @@ export function saveNotificationSettings(settings: NotificationSettings): Promis
 
 export async function loadPrivacyRequests(): Promise<Loaded<PrivacyRequestView[]>> {
   const { status, body } = await getJson('/api/v1/me/privacy-requests')
-  if (body?.['ready'] === false) return { kind: 'not_ready' }
+  if (notReady(status, body)) return { kind: 'not_ready' }
   if (status !== 200 || !Array.isArray(body?.['requests'])) return { kind: 'error' }
   return { kind: 'ready', data: body['requests'] as PrivacyRequestView[] }
 }
@@ -156,7 +161,7 @@ export function sendPendingWhatsAppOptIn(): Promise<void> {
       if (wait) await new Promise((r) => setTimeout(r, wait))
       const res = await saveWhatsAppConsent('transactional', true, pending.source, true)
       // Done, or a definite answer that retrying cannot change (notice changed, no phone, not ready, bad request).
-      if (res.ok || [400, 401, 403, 409, 422, 503].includes(res.status)) { rememberWhatsAppOptIn(pending.source, false); return }
+      if (res.ok || [400, 401, 403, 404, 409, 422, 503].includes(res.status)) { rememberWhatsAppOptIn(pending.source, false); return }
     }
     // Still failing (network / 5xx): keep it for the next page that calls this, at most three rounds in all.
     try {

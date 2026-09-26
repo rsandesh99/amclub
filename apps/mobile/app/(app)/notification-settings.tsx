@@ -84,7 +84,7 @@ export default function NotificationSettingsScreen() {
       if (mine !== seq.current) return
       setSettings(saved.current)
       if (r.status === 422 && r.error === 'essential_needs_channel') setNote({ tone: 'error', text: t('notification_settings.essential_note') })
-      else if (r.status === 503) setLoad('not_ready')
+      else if (r.status === 503 || r.status === 404) setLoad('not_ready')
       else setNote({ tone: 'error', text: t('notification_settings.save_failed') })
     })
   }

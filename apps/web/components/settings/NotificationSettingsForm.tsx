@@ -87,7 +87,7 @@ export function NotificationSettingsForm({ persona, whatsappHref }: { persona: '
       if (mine !== seq.current) return
       setSettings(saved.current)
       if (res.status === 422 && res.error === 'essential_needs_channel') toast(t('essential_note'), 'error')
-      else if (res.status === 503) setView({ kind: 'not_ready' })
+      else if (res.status === 503 || res.status === 404) setView({ kind: 'not_ready' })
       else toast(t('save_failed'), 'error')
     })
   }
@@ -167,7 +167,7 @@ export function NotificationSettingsForm({ persona, whatsappHref }: { persona: '
                       </button>
                     )
                   })}
-                  <span className="flex min-h-11 items-center justify-between gap-2 rounded-button border border-dashed border-border px-3 text-sm text-foreground-tertiary" aria-disabled="true">
+                  <span className="flex min-h-11 items-center justify-between gap-2 rounded-button border border-dashed border-border px-3 text-sm text-foreground-secondary" aria-disabled="true">
                     <span>{t('channel_push')}</span>
                     <span className="text-[11px]">{t('push_soon')}</span>
                   </span>
