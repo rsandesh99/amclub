@@ -36,6 +36,12 @@ const serverEnvSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   MSG91_AUTH_KEY: z.string().optional(),
+  // ADR-030 §4 — the notification SMS channel (MSG91 Flow, DLT). Optional sender id (the DLT header) when the flow
+  // needs one; the per-kind DLT templates live in agent_settings.sms_dlt_templates.
+  MSG91_SENDER_ID: z.string().min(1).max(11).optional(),
+  // ADR-030 §4 — kill switch for the notification outbox: 'off' sends every external channel directly (the behaviour
+  // before migration 0087). Unset / 'on' = the outbox (once 0087 is applied).
+  NOTIFY_OUTBOX: z.enum(['on', 'off']).optional(),
   // Supabase Auth "Send SMS" hook secret ("v1,whsec_…"); production refuses unsigned hook calls without it.
   SEND_SMS_HOOK_SECRET: z.string().optional(),
   WHATSAPP_API_KEY: z.string().optional(),

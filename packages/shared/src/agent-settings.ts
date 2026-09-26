@@ -481,14 +481,15 @@ export const AGENT_SETTING_DEFS = {
   },
   // ── ADR-030 notifications ─────────────────────────────────────────────────
   sms_dlt_templates: {
-    // Partial map notification kind → the MSG91 Flow template registered on DLT and the ordered value keys it takes
-    // (sent as VAR1…VARn). A kind with no entry never sends SMS (skipped: no-dlt-template), so nothing bills by default.
+    // Partial map notification kind → the MSG91 Flow template registered on DLT and the value keys it takes (each sent
+    // under its own name, as the OTP hook sends `otp`). A kind with no entry never sends SMS (skipped: no-dlt-template),
+    // so nothing bills by default.
     schema: z.record(
       z.enum(NOTIFICATION_KIND_NAMES as [NotificationKind, ...NotificationKind[]]),
       z.object({ templateId: z.string().min(1).max(64), vars: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/)).max(10) }).strict(),
     ),
     default: {} as Partial<Record<NotificationKind, { templateId: string; vars: string[] }>>,
-    hint: 'ADR-030 §4: the MSG91 Flow (DLT) template per notification kind for the SMS channel and the WhatsApp fallback — { "<kind>": { "templateId": "…", "vars": ["ref", "amount"] } }; the values go as VAR1…VARn (each ≤ 30 characters, DLT). A kind without a template never sends SMS. Values available: title, body, link and the kind\'s own (ref, amount, deadline, count …).',
+    hint: 'ADR-030 §4: the MSG91 Flow (DLT) template per notification kind for the SMS channel and the WhatsApp fallback — { "<kind>": { "templateId": "…", "vars": ["ref", "amount"] } }. Each value goes under its own name (define the flow\'s variables as ##ref##, ##amount## …), cut to 30 characters (DLT); a link is shortened by MSG91. A kind without a template never sends SMS. Values available: title, body, link and the kind\'s own (ref, amount, deadline, count …).',
   },
 } as const satisfies Record<string, AgentSettingDef>
 

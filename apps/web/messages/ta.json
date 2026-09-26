@@ -394,7 +394,9 @@
     "jobs_issue_refunds_failing": "{n} பணத்திருப்பங்கள் இன்னும் தோல்வியடைகின்றன",
     "jobs_issue_not_enqueued": "ஏஜென்ட் ரன்டைம் பணியை ஏற்கவில்லை",
     "jobs_issue_update_errors": "{n} வரிசைகள் புதுப்பிக்கப்படவில்லை",
-    "jobs_issue_step_errors": "{n} படிகள் தோல்வியடைந்தன"
+    "jobs_issue_step_errors": "{n} படிகள் தோல்வியடைந்தன",
+    "jobs_issue_notifications_failed": "{n} அறிவிப்புகள் தோல்வியடைந்தன",
+    "jobs_issue_outbox_missing": "மைக்ரேஷன் 0087 (அறிவிப்பு அவுட்பாக்ஸ்) பயன்படுத்தப்படவில்லை — அறிவிப்புகள் நேரடியாக அனுப்பப்படுகின்றன"
   },
   "orders": {
     "dispute_statement_title": "உங்கள் தரப்பு",

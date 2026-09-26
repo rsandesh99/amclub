@@ -21,6 +21,8 @@
     { "path": "/api/v1/cron/agent-demand-pools", "schedule": "35 * * * *" },
     { "path": "/api/v1/cron/data-foundations", "schedule": "40 21 * * *" },
     { "path": "/api/v1/cron/wa-retention", "schedule": "50 22 * * *" },
-    { "path": "/api/v1/cron/wa-template-sync", "schedule": "20 1 * * *" }
+    { "path": "/api/v1/cron/wa-template-sync", "schedule": "20 1 * * *" },
+    { "path": "/api/v1/cron/notify-dispatch", "schedule": "* * * * *" },
+    { "path": "/api/v1/cron/notify-reminders", "schedule": "50 * * * *" }
   ]
 }

@@ -140,6 +140,8 @@ export const limiters = {
   quotePreview: build(60, '1 m', 'rl:quote-preview'),
   /** E8b — order messages per user (a conversation, not a firehose). */
   orderMessage: build(20, '1 m', 'rl:order-message'),
+  /** ADR-030 §4 — notification preference saves per user. */
+  notifyPrefs: build(30, '10 m', 'rl:notify-prefs'),
 } as const
 
 export interface RateLimitResult {

@@ -2398,7 +2398,9 @@
     "money_err_payments_unavailable": "Payments are not connected on this deployment (no live Razorpay keys), so no money moved and nothing changed. Add the Razorpay keys, then try again.",
     "money_err_payment_simulated": "This order was paid in simulation, so no real refund or transfer can be made for it. Nothing changed. Simulation-era orders are voided at the payment cutover.",
     "manual_refund_provider_paid_confirm": "The provider has already been paid {existing}, and there is no way yet to take money back from a provider. Refunding {refund} now means the platform bears it. Refund the buyer anyway?",
-    "payout_simulated_badge": "simulated"
+    "payout_simulated_badge": "simulated",
+    "jobs_issue_notifications_failed": "{n, plural, one {# notification failed} other {# notifications failed}}",
+    "jobs_issue_outbox_missing": "Migration 0087 (notification outbox) is not applied — notifications go out directly"
   },
   "gateway": {
     "meta_title": "AMClub — Verified business services for MSMEs",
@@ -4177,7 +4179,7 @@
     },
     "order_placed_buyer": {
       "title": "Payment received — order placed",
-      "body": "Your order {ref} is placed."
+      "body": "We received your payment of {amount}. Your order {ref} is placed."
     },
     "order_accepted": {
       "title": "Provider accepted your order",
@@ -4263,7 +4265,8 @@
     },
     "payout_paid": {
       "title": "Payout sent",
-      "body": "₹{amount} has been transferred to your bank account."
+      "body": "{amount} for order {ref} has been transferred to your bank account.",
+      "body_ref": "{amount} for order {ref} has been transferred to your bank account. Transfer reference: {transfer}."
     },
     "review_reply": {
       "title": "The provider replied to your review",
@@ -4355,6 +4358,142 @@
     "pool_lapsed": {
       "title": "Not enough businesses joined",
       "body": "The group did not open. Your request carries on as usual."
+    },
+    "email": {
+      "open": "Open AMClub",
+      "footer": "You receive this because it concerns your AMClub account, order or request. Transactional message — not marketing. Choose what we send you, and on which channel, in your notification settings."
+    },
+    "the_deadline": "the deadline",
+    "goods_order_accepted": {
+      "title": "The seller accepted your order",
+      "body": "The seller accepted {ref} and will dispatch it. We will tell you when it is on its way."
+    },
+    "goods_dispatched": {
+      "title": "Your order is on its way",
+      "body": "Your order {ref} has been dispatched. We will tell you when it is delivered."
+    },
+    "goods_delivered": {
+      "title": "Your order was delivered",
+      "body": "Your order {ref} was delivered. Check it and confirm receipt, or open a return, by {deadline}. After that it is accepted automatically."
+    },
+    "goods_received": {
+      "title": "The buyer confirmed receipt",
+      "body": "The buyer confirmed they received {ref}."
+    },
+    "goods_return_opened": {
+      "title": "A return was opened",
+      "body": "A return was opened on {ref}. Our team will review it."
+    },
+    "payout_held": {
+      "title": "Your payout is on hold",
+      "body": "Your payout of {amount} for order {ref} is on hold: {reasons}. It is released once this is cleared."
+    },
+    "payout_hold_reason": {
+      "dispute": "the order has an open dispute or return",
+      "proof": "a delivery or work-complete photo is still needed",
+      "buyer_confirmation": "the buyer has not confirmed the delivery yet",
+      "return_window": "the return window is still open",
+      "refund": "a refund on the order changed the amount due",
+      "review": "a check on the payment is in progress"
+    },
+    "refund_processed": {
+      "title": "Refund processed",
+      "body": "Your refund of {amount} for order {ref} has been processed. Your bank usually shows it within 5–7 working days."
+    },
+    "refund_failed": {
+      "title": "Your refund is delayed",
+      "body": "The refund of {amount} for order {ref} did not go through at the bank. Our team is sending it again — you don't need to do anything."
+    },
+    "dispute_resolved": {
+      "title": "{goods, select, yes {The return on {ref} is resolved} other {The dispute on {ref} is resolved}}",
+      "buyer_refund_full": "You get a full refund of {amount}. Your bank usually shows it within 5–7 working days.",
+      "buyer_refund_partial": "You get a refund of {amount}. Your bank usually shows it within 5–7 working days.",
+      "buyer_release": "It was decided without a refund, and the payment was released.",
+      "provider_refund_full": "The buyer was refunded {amount} in full, so no payout is due for this order.",
+      "provider_refund_partial": "The buyer was refunded {amount}. Your payout of {payout} is being processed.",
+      "provider_release": "The payment was released to you. Your payout of {payout} is being processed."
+    },
+    "provider_verified": {
+      "title": "Your AMClub profile is approved",
+      "body": "You are verified and can now receive orders on AMClub. Check your listings to get started."
+    },
+    "provider_rejected": {
+      "title": "Your AMClub application was not approved",
+      "body": "Reason: {reason}. You can correct this and apply again."
+    },
+    "provider_needs_info": {
+      "title": "We need a little more to verify you",
+      "body": "Please update your application: {reason}"
+    },
+    "order_accept_reminder": {
+      "title": "Accept order {ref}",
+      "body": "Order {ref} is waiting for you. Accept it within {hours, plural, one {# hour} other {# hours}} or it is cancelled and the buyer is refunded."
+    },
+    "order_review_reminder": {
+      "title": "Review the delivery for {ref}",
+      "body": "Check the delivery for {ref} and accept it or ask for a revision by {deadline}. After that it is accepted automatically."
+    },
+    "goods_review_reminder": {
+      "title": "Confirm you received {ref}",
+      "body": "Confirm you received {ref}, or open a return, by {deadline}. After that it is accepted automatically."
+    },
+    "rfq_expiring_reminder": {
+      "title": "Your request closes soon",
+      "body": "\"{title}\" has {count, plural, one {# quote} other {# quotes}} waiting and closes in {hours, plural, one {# hour} other {# hours}}. Compare and accept one before it closes."
+    },
+    "pool_pay_reminder": {
+      "title": "Pay for your group buy",
+      "body": "{title}: pay your share by {deadline} to confirm your order, or your commitment lapses."
+    },
+    "rfq_digest": {
+      "title": "{n, plural, one {# new request} other {# new requests}} for you",
+      "body": "{n, plural, one {# new request matches} other {# new requests match}} your services. Open AMClub to quote."
+    },
+    "mart_pool_met": {
+      "title": "Group buy is on — pay to confirm",
+      "body": "{title}: the pool reached its minimum. Pay your share by {deadline} to confirm your order."
+    },
+    "mart_pool_unmet": {
+      "title": "Group buy did not reach its minimum",
+      "body": "{title} closed short of the minimum quantity. Nothing is charged; your commitment is released."
+    },
+    "mart_pool_cancelled": {
+      "title": "Group buy cancelled",
+      "body": "{title} was cancelled by AMC. Nothing is charged."
+    },
+    "mart_pool_defaulted": {
+      "title": "Pool commitment lapsed",
+      "body": "You did not pay for {title} inside the window. The commitment is recorded as lapsed on your buyer record."
+    },
+    "mart_pool_met_seller": {
+      "title": "Group buy met: {title}",
+      "body": "{members, plural, one {# buyer} other {# buyers}} committed {qty} {unit}. Their orders arrive as they pay over the next two days."
+    },
+    "mart_pool_ordered": {
+      "title": "Group buy ordered: {title}",
+      "body": "{members, plural, one {# paid order} other {# paid orders}} totalling {qty} {unit}. Accept and dispatch them from your orders."
+    },
+    "mart_reorder": {
+      "title": "Time to reorder {name}?",
+      "body": "You usually reorder every {days} days. Today's price is ready on your reorder list."
+    },
+    "rfq_matched_goods": {
+      "title": "New goods request for you"
+    },
+    "support_ticket_ops": {
+      "title": "Support ticket {ref} ({role}, {channel}): {reason}"
+    },
+    "dispute_statement_ops": {
+      "title": "{who, select, buyer {The buyer} other {The provider}} stated their side on {ref}",
+      "body": "Open the dispute console to read both statements."
+    },
+    "dispute_triage_ready": {
+      "title": "Dispute triage for {ref} — suggests: {rec} ({confidence})",
+      "body": "The card lists the timeline, each party's claims with evidence and the gaps. Nothing is resolved until you click."
+    },
+    "payout_dossier_ready": {
+      "title": "Payout {amount} for {ref} — recommendation: {rec, select, approve {approve} other {hold}}",
+      "body": "The evidence dossier is ready. Approve releases the payout; Hold keeps it held. Nothing moves until you tap."
     }
   },
   "content_translate": {
