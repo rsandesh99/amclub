@@ -31,7 +31,7 @@ import { routeSupportInbound } from '../agents/support/index'
 import { routeProcurementInbound } from '../agents/procurement/index'
 import type { ProcurementDecideJob, ProcurementTurnJob } from '../agents/procurement/index'
 import { buttonPayloadOf } from '../agents/onboarding/index'
-import { haltConversationWork, reconcileConversationOwner, unbindConversation, userByPhone, whatsappGrantsFor } from './binding'
+import { haltConversationWork, reconcileConversationOwner, unbindConversation, whatsappGrantsFor } from './binding'
 import { routeFreeText } from './confirmations'
 import { grantWhatsAppPersonas, isStopped, needsRebindConfirmation, phoneConsentState, recordWaConsent, revokeWhatsAppGrants } from './consent'
 import {

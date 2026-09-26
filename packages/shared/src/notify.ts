@@ -213,6 +213,10 @@ export const NOTIFICATION_KINDS = {
   support_resolved: inAppKind('account'),
   /** Ops: a new support ticket (the caller holds WhatsApp during the ops quiet hours). */
   support_ticket_opened: updateKind('account'),
+  /** Ops answered a web / mobile support thread (a WhatsApp ticket is answered on WhatsApp by the ops console itself). */
+  support_ops_reply: updateKind('account', ['email']),
+  /** The answer to the person's DPDP request (ADR-030 §6): it must reach them, so it keeps its channel. */
+  dpdp_request_answered: essentialKind('account', false, ['email']),
 
   // ── assistant ───────────────────────────────────────────────────────────────
   // Munshi's own WhatsApp messages come from the agent runtime; the web writes the in-app row only.

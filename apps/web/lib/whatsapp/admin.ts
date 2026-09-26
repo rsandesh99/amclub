@@ -4,6 +4,9 @@ import {
   createWhatsAppProvider,
   sendWhatsApp,
   whatsappConfigFromEnv,
+  whatsappDriverState,
+  DEFAULT_WA_GRAPH_VERSION,
+  type WhatsAppDriverState,
   WA_TEMPLATES,
   type WaSendRequest,
   type WaSendResult,
@@ -34,49 +37,12 @@ import { fetchPages, notReady, phoneDigits, type Admin } from '@/lib/privacy/com
 
 // ── driver state ─────────────────────────────────────────────────────────────
 
-export const WA_GRAPH_DEFAULT_VERSION = 'v24.0'
-
-export interface WaDriverState {
-  /** The driver in use (the stub unless the requested driver has its credentials). */
-  driver: 'meta_cloud' | 'interakt' | 'stub'
-  /** A real (billing) driver is configured. */
-  live: boolean
-  /** The requested driver has every credential it needs (incl. the webhook secret). */
-  configured: boolean
-  graphVersion: string
-  phoneNumberIdSet: boolean
-  tokenSet: boolean
-  appSecretSet: boolean
-  wabaIdSet: boolean
-}
-
-/**
- * Local fallback for agent-core `whatsappDriverState()` (the transport work adds it; on merge, switch to it — same
- * shape). Booleans only: values never leave the server.
- */
-export function waDriverState(env: Record<string, string | undefined> = process.env): WaDriverState {
-  const cfg = whatsappConfigFromEnv(env)
-  const set = (k: string) => typeof env[k] === 'string' && env[k]!.trim().length > 0
-  const requested = env['WHATSAPP_DRIVER'] ?? 'stub'
-  const configured =
-    requested === 'meta_cloud' ? set('WHATSAPP_PHONE_NUMBER_ID') && set('WHATSAPP_ACCESS_TOKEN') && set('WHATSAPP_APP_SECRET')
-    : requested === 'interakt' ? set('INTERAKT_API_KEY')
-    : false
-  return {
-    driver: cfg.driver,
-    live: cfg.driver !== 'stub',
-    configured,
-    graphVersion: graphVersion(env),
-    phoneNumberIdSet: set('WHATSAPP_PHONE_NUMBER_ID'),
-    tokenSet: set('WHATSAPP_ACCESS_TOKEN'),
-    appSecretSet: set('WHATSAPP_APP_SECRET'),
-    wabaIdSet: set('WHATSAPP_WABA_ID'),
-  }
-}
+/** The transport's own driver state (agent-core `whatsappDriverState`): booleans and env names, never a value. */
+export type WaDriverState = WhatsAppDriverState
+export const waDriverState = (env: Record<string, string | undefined> = process.env): WaDriverState => whatsappDriverState(env)
 
 export function graphVersion(env: Record<string, string | undefined> = process.env): string {
-  const v = (env['WHATSAPP_GRAPH_VERSION'] ?? '').trim()
-  return /^v\d{1,3}\.\d{1,2}$/.test(v) ? v : WA_GRAPH_DEFAULT_VERSION
+  return whatsappConfigFromEnv(env).graphVersion ?? DEFAULT_WA_GRAPH_VERSION
 }
 
 // ── overview ─────────────────────────────────────────────────────────────────
