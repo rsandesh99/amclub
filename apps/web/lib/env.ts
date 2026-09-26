@@ -49,10 +49,10 @@ const serverEnvSchema = z.object({
   WHATSAPP_VERIFY_TOKEN: z.string().optional(),
   // The WhatsApp Business Account id (account webhooks for another WABA are dropped).
   WHATSAPP_WABA_ID: z.string().optional(),
-  // Pinned Graph API version (audit B5): `vNN.0`, default v24.0 in agent-core.
-  WHATSAPP_GRAPH_VERSION: z.string().regex(/^v\d{2}\.0$/, 'WHATSAPP_GRAPH_VERSION must look like v24.0').optional(),
-  // Timeout for every Graph call, ms (1000–60000; default 10000).
-  WHATSAPP_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).optional(),
+  // Pinned Graph API version (audit B5): `vNN.0`, default v24.0 in agent-core. Blank = unset.
+  WHATSAPP_GRAPH_VERSION: z.preprocess((v) => (v === '' ? undefined : v), z.string().regex(/^v\d{2}\.0$/, 'WHATSAPP_GRAPH_VERSION must look like v24.0').optional()),
+  // Timeout for every Graph call, ms (1000–60000; default 10000). Blank = unset.
+  WHATSAPP_TIMEOUT_MS: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().min(1_000).max(60_000).optional()),
   RESEND_API_KEY: z.string().optional(),
   KYC_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),

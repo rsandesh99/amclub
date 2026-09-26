@@ -295,8 +295,9 @@ async function writeConversation(db: SupabaseClient, op: 'insert' | 'update', ba
   if (r.error && isMissingSchemaError(r.error)) {
     logOnce('conv_cols', '[wa] wa_conversations 0086 columns missing (bsuid, entry window, referral) — storing without them until 0086 is applied')
     r = await attempt(base)
-  } else if (r.error && r.error.code === '23505' && 'bsuid' in extra && op === 'update') {
-    // another conversation (a `u:<bsuid>` one) already holds this BSUID: keep the phone conversation without it
+  } else if (r.error && r.error.code === '23505' && 'bsuid' in extra) {
+    // another conversation (a `u:<bsuid>` one) may already hold this BSUID: keep the phone conversation without it
+    // (an insert that fails again on the phone itself is a concurrent first message — the caller reads it back)
     const rest = Object.fromEntries(Object.entries(extra).filter(([k]) => k !== 'bsuid'))
     r = await attempt({ ...base, ...rest })
   }

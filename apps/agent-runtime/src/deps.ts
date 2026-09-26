@@ -71,10 +71,12 @@ function makeBudget(runId: string, userId: string, agentName?: string): Budget {
 /** Exchange the runtime HMAC for a run-bound delegated JWT via the web endpoint. */
 export async function mintRuntimeToken(args: { runId: string; persona: AgentPersona; userId: string }): Promise<string> {
   const cred = signRuntimeCredential(RUNTIME_ENV.RUNTIME_SECRET, args)
+  // every outbound fetch carries a timeout (audit wave 5a; WhatsApp readiness audit "smaller must-fix")
   const res = await fetch(`${RUNTIME_ENV.API_URL}/api/v1/agent/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `AMC-Runtime ${cred}` },
     body: '{}',
+    signal: AbortSignal.timeout(15_000),
   })
   // S1.4 guard: the web flag is off (404) or the user has no active grant for
   // this persona (403) are TERMINAL for a run — the worker never retries them.
