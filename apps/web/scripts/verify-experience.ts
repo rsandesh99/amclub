@@ -1734,6 +1734,73 @@ async function e17() {
   check('E17 on: not asked yet → null; accept / decline stored for the current version; anything else 422', first.choice == null && accept.ok && afterAccept.choice === 'granted' && decline.ok && afterDecline.choice === 'denied' && bad.status === 422)
 }
 
+/**
+ * PRD_WHATSAPP W1 (team U) — the user surfaces: the safety page and its links, the settings pages for buyers and
+ * providers, the WhatsApp section on the profile (not gated on AGENT_ENABLED), the DPDP requests API, and the language
+ * saved to the account. Tolerates a database without 0087 (the API then answers 503 not_ready / { ready: false }).
+ */
+async function eWa() {
+  console.log('\nWhatsApp W1 — safety page, settings, privacy requests, preferred language')
+  const safety = await fetch(`${BASE}/help/whatsapp-safety`)
+  const sh = visible(await safety.text())
+  check('WA: /help/whatsapp-safety renders the official number, what we never ask for and the link rule',
+    safety.ok && sh.includes('data-testid="whatsapp-safety"') && sh.includes('data-testid="official-number"') && sh.includes('UPI PIN') && sh.includes('amclub.in'), `status ${safety.status}`)
+  const help = visible(await (await fetch(`${BASE}/help`)).text())
+  check('WA: /help links the safety page', help.includes('href="/help/whatsapp-safety"'))
+  const services = visible(await (await fetch(`${BASE}/services`)).text())
+  check('WA: the public footer links the safety page', services.includes('href="/help/whatsapp-safety"'))
+
+  const buyer = await mkUser('wabuyer')
+  const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'WA Buyer Co', state: 'TS', sector: 'services' }).select('id').single()
+  created.msmeIds.push(msme!.id)
+  await api(buyer.token, '/api/v1/legal/accept', { docs: ['terms', 'privacy'], surface: 'web', locale: 'en' })
+  const page = async (p: string, cookie: string) => {
+    const r = await fetch(`${BASE}${p}`, { headers: { cookie }, redirect: 'manual' })
+    return { status: r.status, html: r.ok ? visible(await r.text()) : '' }
+  }
+  const profile = await page('/app/profile', buyer.cookie)
+  check('WA: the buyer profile has the WhatsApp section (for everyone) and the settings links',
+    profile.status === 200 && profile.html.includes('data-testid="whatsapp-settings"') && profile.html.includes('href="/app/settings/notifications"') && profile.html.includes('href="/app/privacy"'), `status ${profile.status}`)
+  const notif = await page('/app/settings/notifications', buyer.cookie)
+  check('WA: /app/settings/notifications renders', notif.status === 200 && notif.html.includes('data-testid="notification-settings-page"'), `status ${notif.status}`)
+  const priv = await page('/app/privacy', buyer.cookie)
+  check('WA: /app/privacy renders', priv.status === 200 && priv.html.includes('data-testid="privacy-page"'), `status ${priv.status}`)
+
+  const prov = await mkUser('waprov', ['provider'])
+  const pNotif = await page('/partner/settings/notifications', prov.cookie)
+  const pPriv = await page('/partner/privacy', prov.cookie)
+  check('WA: /partner/settings/notifications and /partner/privacy render for a provider account', pNotif.status === 200 && pNotif.html.includes('data-testid="notification-settings-page"') && pPriv.status === 200 && pPriv.html.includes('data-testid="privacy-page"'), `${pNotif.status}/${pPriv.status}`)
+
+  // DPDP requests API
+  check('WA: privacy requests without a session → 401', (await fetch(`${BASE}/api/v1/me/privacy-requests`)).status === 401)
+  const bad = await api(buyer.token, '/api/v1/me/privacy-requests', { kind: 'correction' })
+  check('WA: a correction with no details → 422 details_required', bad.status === 422 && ((await bad.json()) as { error?: string }).error === 'details_required')
+  check('WA: an ops-only kind is refused', (await api(buyer.token, '/api/v1/me/privacy-requests', { kind: 'nomination' })).status === 422)
+  const first = await api(buyer.token, '/api/v1/me/privacy-requests', { kind: 'access', details: 'Please send my data' })
+  if (first.status === 503) {
+    const list = (await (await api(buyer.token, '/api/v1/me/privacy-requests', undefined, 'GET')).json()) as { ready?: boolean }
+    check('WA: before 0087 the API says not_ready (POST 503, GET ready:false)', list.ready === false)
+  } else {
+    const made = (await first.json()) as { request?: { id: string; kind: string; status: string; dueAt: string; createdAt: string } }
+    const days = made.request ? (Date.parse(made.request.dueAt) - Date.parse(made.request.createdAt)) / 86_400_000 : 0
+    check('WA: an access request is filed, open, due in 30 days', first.status === 201 && made.request?.kind === 'access' && made.request.status === 'open' && Math.round(days) === 30, `status ${first.status}`)
+    const again = await api(buyer.token, '/api/v1/me/privacy-requests', { kind: 'access' })
+    check('WA: a second open request of the same kind → 409 already_open', again.status === 409 && ((await again.json()) as { error?: string }).error === 'already_open')
+    const { data: row } = await admin.from('dpdp_requests').select('user_id, source').eq('id', made.request?.id ?? '').maybeSingle()
+    check('WA: the row belongs to the caller, source web', row?.user_id === buyer.uid && row?.source === 'web')
+    const list = (await (await api(buyer.token, '/api/v1/me/privacy-requests', undefined, 'GET')).json()) as { ready?: boolean; requests?: { id: string }[] }
+    const other = (await (await api(prov.token, '/api/v1/me/privacy-requests', undefined, 'GET')).json()) as { requests?: { id: string }[] }
+    check('WA: GET lists the caller’s own requests only', list.ready === true && list.requests?.some((r) => r.id === made.request?.id) === true && !other.requests?.some((r) => r.id === made.request?.id))
+    await admin.from('dpdp_requests').delete().in('user_id', [buyer.uid, prov.uid])
+  }
+
+  // Language follows the account (audit §5 item 10)
+  const loc = await api(buyer.token, '/api/v1/profile/preferences', { preferredLocale: 'hi' }, 'PATCH')
+  const { data: u } = await admin.from('users').select('preferred_locale').eq('id', buyer.uid).single()
+  check('WA: PATCH preferredLocale saves the account language', loc.status === 200 && u?.preferred_locale === 'hi')
+  check('WA: an unknown language → 422', (await api(buyer.token, '/api/v1/profile/preferences', { preferredLocale: 'fr' }, 'PATCH')).status === 422)
+}
+
 async function e15b() {
   console.log('\nE15b — data foundations: search telemetry + attribution, declared vs actual, consented corpora, synonyms')
   const cronSecret = process.env['CRON_SECRET']
@@ -1920,6 +1987,7 @@ async function main() {
     await e15a()
     await e15b()
     await e17()
+    await eWa()
     await e18()
   } finally {
     await cleanup()
