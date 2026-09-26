@@ -488,11 +488,13 @@ export async function sendWhatsApp(deps: WaSendDeps, req: WaSendRequest): Promis
   const legacy = claim.mode === 'legacy'
   const attempt = claim.mode === 'legacy' ? 1 : claim.attempt
 
-  // 6. the vendor call; outside the window after all (131047) → once more as the fallback template
+  // 6. the vendor call; outside the window after all (131047) → once more as the fallback template — which is then a
+  //    business-initiated message, so a "reply" needs the purpose's opt-in for it
   let r = await callDriver(deps, phone, body, tpl)
   if (!r.ok && r.error?.code === 131047 && body.type !== 'template' && req.fallbackTemplate) {
     const fb = resolveTemplate(req.fallbackTemplate.kind, req.fallbackTemplate.locale)
-    if (fb && (await templateUsable(db, fb))) {
+    const asBusiness = initiation === 'business' || (await mayMessage(db, phone, req.purpose, 'business', { kind: req.kind, userId: req.userId ?? conv.user_id, now })).ok
+    if (fb && asBusiness && (await templateUsable(db, fb))) {
       body = req.fallbackTemplate
       tpl = fb
       meta = req.fallbackMeta ?? meta

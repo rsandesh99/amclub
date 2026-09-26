@@ -217,6 +217,13 @@ describe('the 24-hour window', () => {
     expect(db.tables['wa_messages']).toHaveLength(1)
     expect(db.tables['wa_messages']![0]).toMatchObject({ kind: 'template', template_name: 'amc_support_reply_en', status: 'sent' })
   })
+  it('131047 on a reply from a phone with no opt-in → no template retry (it would be business-initiated)', async () => {
+    const db = fakeDb(seed(), { unique: UNIQUE })
+    const { p, calls } = provider([graphFail(131047), {}])
+    const r = await sendWhatsApp({ db: db.client, provider: p, now: () => NOW, settings }, reply())
+    expect(r).toMatchObject({ outcome: 'failed', usedTemplate: false, error: { code: 131047, kind: 'outside_window' } })
+    expect(calls.map((c) => c.method)).toEqual(['text'])
+  })
   it('a template Meta paused or re-categorised is refused before sending', async () => {
     const db = fakeDb(seed({ consents: [['transactional', 'opted_in']], extra: { wa_templates: [{ name: 'amc_order_accepted_te', language: 'te', status: 'paused', category: 'utility' }] } }), { unique: UNIQUE })
     expect(await sendWhatsApp({ db: db.client, provider: provider().p, now: () => NOW, settings }, notice())).toEqual({ outcome: 'skipped', reason: 'template_not_approved' })
