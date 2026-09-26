@@ -3,7 +3,8 @@
  * running app on a database with migration 0087 (CI: the disposable stack, flag-default server :3000). Drives the real
  * routes with per-user Bearer tokens and the two crons with CRON_SECRET; reads rows on the service role.
  *
- *   N1  GET /me/notification-preferences: ready, the full matrix, the essential categories; PUT saves (no quiet hours)
+ *   N1  GET /me/notification-preferences: ready, the full matrix, the essential categories; PUT saves (no quiet hours);
+ *       a delegated agent token is refused (403)
  *   N2  the registry decides: provider_needs_info → WhatsApp + email rows, SMS held as the WhatsApp fallback
  *   N3  a preference turns WhatsApp off for the category → no WhatsApp row (SMS goes directly)
  *   N4  an essential category cannot lose every channel (PUT 422 essential_needs_channel); rows that say so anyway
@@ -18,6 +19,7 @@
  *
  * Run: BASE_URL=http://localhost:3000 tsx scripts/verify-notifications.ts
  */
+import { createHmac } from 'node:crypto'
 import { config } from 'dotenv'
 import path from 'path'
 config({ path: path.resolve(__dirname, '../.env.local') })
@@ -114,6 +116,19 @@ async function main() {
     const noQuiet = await api(prov.token, '/api/v1/me/notification-preferences', settings(prefs()), 'PUT')
     const nq = await json(noQuiet)
     check('N1b PUT defaults with no quiet hours → 200, quietHours null', noQuiet.status === 200 && nq['settings']?.['quietHours'] === null, `status ${noQuiet.status}`)
+    // A delegated agent token (signed like lib/agent/token.ts mints them) never changes a person's choices.
+    const jwtSecret = process.env['AUTHZ_JWT_SECRET']
+    if (jwtSecret) {
+      const b64u = (v: string) => Buffer.from(v).toString('base64url')
+      const iat = Math.floor(Date.now() / 1000)
+      const head = b64u(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+      const payload = b64u(JSON.stringify({ sub: prov.uid, role: 'authenticated', aud: 'authenticated', iat, exp: iat + 600, amc_persona: 'provider', amc_scopes: ['support_lookup'] }))
+      const token = `${head}.${payload}.${createHmac('sha256', jwtSecret).update(`${head}.${payload}`).digest('base64url')}`
+      const del = await api(token, '/api/v1/me/notification-preferences', settings(prefs()), 'PUT')
+      check('N1c a delegated agent token cannot change the preferences (403)', del.status === 403, `status ${del.status}`)
+    } else {
+      console.log('  (AUTHZ_JWT_SECRET unset — the delegated-token probe is skipped; CI sets it)')
+    }
 
     const needsInfo = async (reason: string) => {
       const r = await api(adminUser.token, `/api/v1/admin/verifications/${providerId}`, { action: 'needs_info', reason })
