@@ -165,6 +165,10 @@ export * from './whatsapp'
 export * from './whatsapp-copy'
 // ADR-030 §4 — the notification registry contract, preferences and IST quiet hours
 export * from './notify'
+// Audit §5 item 8 — the official channels (one WhatsApp number everywhere, the domain, support + grievance contacts)
+export * from './official-channels'
+// ADR-030 §6 — DPDP data-principal requests from web / mobile (kinds, the form rule, the due date)
+export * from './privacy-requests'
 
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'

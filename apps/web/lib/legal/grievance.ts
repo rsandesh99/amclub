@@ -1,7 +1,17 @@
+import {
+  GRIEVANCE_OFFICER as OFFICER,
+  GRIEVANCE_SLA as SLA,
+  SUPPORT_EMAIL,
+  officialWhatsApp,
+  waMeHref,
+} from '@amclub/shared'
+
 /**
- * Grievance Officer + support contact — the ONE place these facts live.
- * Rendered by <GrievanceOfficerBlock /> on /grievance and /terms, and used by
- * /help. Change the address/phone here and every surface follows.
+ * Grievance Officer + support contact for the web. The facts themselves live in
+ * `@amclub/shared` official-channels (one source for web and mobile); this file
+ * binds them to the web's env. Rendered by <GrievanceOfficerBlock /> on
+ * /grievance and /terms, and used by /help, /account-suspended, the WhatsApp
+ * safety page and the WhatsApp settings.
  *
  * Statutory basis: IT (Intermediary Guidelines) Rules 2021 r.3(2) and the
  * Consumer Protection (E-Commerce) Rules 2020 r.4(4)–(5) require a named
@@ -10,28 +20,22 @@
  *
  * DRAFT FOR COUNSEL REVIEW — facts supplied by the founder on 2026-08-28.
  */
-export const GRIEVANCE_OFFICER = {
-  name: 'Sandesh Reddy',
-  designation: 'Grievance Officer',
-  organisation: 'AMC — All India MSME Club',
-  addressLines: ['Flat 205, Pegasus Meenakshi', 'Hyderabad, Telangana 500084'] as const,
-  /** Company line — also the support WhatsApp number. */
-  phone: '+91 83411 15455',
-  phoneE164: '+918341115455',
-  email: 'grievance@amclub.in',
-} as const
+export const GRIEVANCE_OFFICER = OFFICER
+
+/**
+ * THE official WhatsApp number (audit §5 item 8): the Cloud API business
+ * number (NEXT_PUBLIC_WHATSAPP_NUMBER), or the company line while it is unset —
+ * never both at once. Build-time env, so client components may read it.
+ */
+export const OFFICIAL_WHATSAPP = officialWhatsApp(process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'])
 
 export const SUPPORT_CONTACT = {
-  email: 'support@amclub.in',
-  whatsapp: GRIEVANCE_OFFICER.phone,
-  whatsappE164: GRIEVANCE_OFFICER.phoneE164,
+  email: SUPPORT_EMAIL,
+  whatsapp: OFFICIAL_WHATSAPP.display,
+  whatsappE164: OFFICIAL_WHATSAPP.e164,
 } as const
 
 /** Service commitments — every surface must quote exactly these. */
-export const GRIEVANCE_SLA = {
-  acknowledgeHours: 24,
-  resolveDays: 15,
-} as const
+export const GRIEVANCE_SLA = SLA
 
-export const whatsappHref = (e164: string, text?: string) =>
-  `https://wa.me/${e164.replace(/[^0-9]/g, '')}${text ? `?text=${encodeURIComponent(text)}` : ''}`
+export const whatsappHref = (e164: string, text?: string) => waMeHref(e164, text)
