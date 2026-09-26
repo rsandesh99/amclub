@@ -75,6 +75,12 @@ describe('registry invariants (what Meta accepts)', () => {
       }
     }
   })
+  it('every submitted template has a sample for every variable (Meta rejects a submission without one)', () => {
+    for (const r of templateApprovalList()) {
+      expect(r.sample, r.name).not.toMatch(/\{\{\d+\}\}/)
+      if (r.button) expect(r.button.example, r.name).toMatch(/^[a-z]/)
+    }
+  })
   it('the four locales are submitted for every core kind, and each language has distinct text per template', () => {
     for (const [kind, s] of Object.entries(CORE_TEMPLATES)) expect([...s.locales].sort(), kind).toEqual([...WA_LOCALES].sort())
     for (const l of WA_LOCALES) {

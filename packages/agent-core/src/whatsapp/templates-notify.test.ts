@@ -60,7 +60,9 @@ describe('NOTIFY_TEMPLATES', () => {
     expect(spec.urlButton).toBeDefined()
     const suffix = spec.urlButton!.suffix(SAMPLE)
     expect(suffix).toBe('app/orders/1')
-    expect(spec.urlButton!.suffix({ ...SAMPLE, path: null })).toBeNull()
+    // no path → the link's own path; another host is dropped, so the button still opens our domain
+    expect(spec.urlButton!.suffix({ ...SAMPLE, path: null })).toBe('app/orders/1')
+    expect(spec.urlButton!.suffix({ link: 'https://evil.example/steal?x=1' })).toBe('steal?x=1')
     for (const label of Object.values(spec.urlButton!.label)) expect([...String(label)].length).toBeLessThanOrEqual(25)
   })
 })

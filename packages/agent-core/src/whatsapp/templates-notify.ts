@@ -1,3 +1,4 @@
+import { linkSuffix } from './template-kit'
 import type { WaTemplateRegistry, WaTemplateSpec, WaTemplateValues } from './template-types'
 
 /**
@@ -14,8 +15,11 @@ import type { WaTemplateRegistry, WaTemplateSpec, WaTemplateValues } from './tem
  */
 
 const s = (v: string | null | undefined): string => String(v ?? '').trim()
-/** The screen the button opens: the notification's own path (never another domain). */
-const path = (v: WaTemplateValues): string | null => s(v['path']) || null
+/**
+ * The screen the button opens: the notification's own path, else the path of its link (template-kit `linkSuffix`,
+ * the one rule every registry shares: the host is dropped, so a button can only open our own domain).
+ */
+const path = (v: WaTemplateValues): string => s(v['path']).replace(/^\/+/, '') || linkSuffix(v['link'])
 
 const VIEW_ORDER = { en: 'View order', hi: 'ऑर्डर देखें', te: 'ఆర్డర్ చూడండి', ta: 'ஆர்டரைப் பார்க்க' }
 const OPEN_REQUEST = { en: 'Open request', hi: 'अनुरोध खोलें', te: 'అభ్యర్థన తెరవండి', ta: 'கோரிக்கையைத் திற' }
@@ -23,8 +27,23 @@ const OPEN_AMCLUB = { en: 'Open AMClub', hi: 'AMClub खोलें', te: 'AMCl
 const PAY_NOW = { en: 'Pay your share', hi: 'अपना हिस्सा दें', te: 'మీ వాటా చెల్లించండి', ta: 'பங்கைச் செலுத்து' }
 const VIEW_GROUP = { en: 'View group buy', hi: 'ग्रुप बाय देखें', te: 'గ్రూప్ కొనుగోలు చూడండి', ta: 'குழு வாங்குதல்' }
 
+/** Meta asks for a sample of every variable at submission: one realistic set covers every key these bodies use. */
+const SAMPLE: WaTemplateValues = {
+  title: 'GST registration for a new shop', body: 'Hyderabad, needed within 7 days.', ref: 'AMC-2417', amount: '₹4,720.00',
+  deadline: '27 Sept, 9:00 pm IST', count: '3', hours: '6', reason: 'the GST certificate is unreadable',
+  reasons: 'the buyer has not confirmed the delivery yet', members: '4', qty: '120', unit: 'kg',
+}
+/** The sample button suffix follows the screen the button names. */
+const SAMPLE_PATH = new Map<unknown, string>([
+  [VIEW_ORDER, 'app/orders/9d1c2f0e'],
+  [OPEN_REQUEST, 'app/rfq/4b7e11aa'],
+  [VIEW_GROUP, 'app/mart/pools/7c2d9e41'],
+  [PAY_NOW, 'app/mart/pools/7c2d9e41'],
+])
+
 function tpl(kind: string, spec: Omit<WaTemplateSpec, 'stem' | 'category' | 'locales'>): WaTemplateSpec {
-  return { stem: `amc_${kind}`, category: 'utility', locales: ['en', 'hi', 'te', 'ta'], ...spec }
+  const example = spec.example ?? { ...SAMPLE, path: SAMPLE_PATH.get(spec.urlButton?.label) ?? 'app/notifications' }
+  return { stem: `amc_${kind}`, category: 'utility', locales: ['en', 'hi', 'te', 'ta'], ...spec, example }
 }
 
 export const NOTIFY_TEMPLATES: WaTemplateRegistry = {

@@ -36,7 +36,7 @@ function labels(key: WaCopyKey): Partial<Record<WaLocale, string>> & { en: strin
 
 const paramsOf = (slots: readonly string[]) => (v: WaTemplateValues): string[] => slots.map((s) => String(v[s] ?? ''))
 
-function spec(stem: string, key: WaCopyKey, slots: readonly string[], extra: Pick<WaTemplateSpec, 'quickReplies'> = {}): WaTemplateSpec {
+function spec(stem: string, key: WaCopyKey, slots: readonly string[], extra: Pick<WaTemplateSpec, 'quickReplies' | 'example'> = {}): WaTemplateSpec {
   return { stem, category: 'utility', locales: WA_LOCALES, body: bodies(key, slots), params: paramsOf(slots), ...extra }
 }
 
@@ -56,7 +56,9 @@ export const SYSTEM_TEMPLATES: WaTemplateRegistry = {
   // Anything the runtime cannot answer: "Reply MENU to see what I can do" (≤ 1 per 24 h).
   wa_holding_reply: spec('amc_wa_holding', 'holding', []),
   // LANGUAGE / a language name / the language list → sent in the NEW language. [the language named in itself]
-  wa_language_changed: spec('amc_wa_language_changed', 'language_changed', ['language']),
+  wa_language_changed: spec('amc_wa_language_changed', 'language_changed', ['language'], { example: { language: 'हिन्दी' } }),
   // MY DATA / DELETE MY DATA → [what was asked, the reference, the due date (IST)]
-  wa_data_request_received: spec('amc_wa_data_request', 'data_received', ['what', 'ref', 'date']),
+  wa_data_request_received: spec('amc_wa_data_request', 'data_received', ['what', 'ref', 'date'], {
+    example: { what: 'a copy of your data', ref: 'D-8F3A21', date: '26 Oct 2026' },
+  }),
 }
