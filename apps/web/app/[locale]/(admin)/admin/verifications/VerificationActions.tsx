@@ -17,13 +17,13 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const { toast } = useToast()
-  const [mode, setMode] = useState<'idle' | 'rejecting'>('idle')
+  const [mode, setMode] = useState<'idle' | 'rejecting' | 'needs_info'>('idle')
   const [reason, setReason] = useState('')
-  const [loading, setLoading] = useState<'approve' | 'reject' | null>(null)
+  const [loading, setLoading] = useState<'approve' | 'reject' | 'needs_info' | null>(null)
   const [error, setError] = useState('')
 
-  async function act(action: 'approve' | 'reject') {
-    if (action === 'reject' && !reason.trim()) {
+  async function act(action: 'approve' | 'reject' | 'needs_info') {
+    if (action !== 'approve' && !reason.trim()) {
       setError(t('reason_required'))
       return
     }
@@ -48,6 +48,12 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
         if (d.readiness && d.readiness !== 'ready') toast(t('approved_not_ready'), 'error')
         else toast(t('approved_ready'), 'success')
       }
+      // ADR-030 §4 — the application stays pending; the provider is told what to add.
+      if (action === 'needs_info') {
+        toast(t('needs_info_sent'), 'success')
+        setMode('idle')
+        setReason('')
+      }
       router.refresh()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('action_failed'))
@@ -58,13 +64,13 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
 
   return (
     <div className="mt-5 border-t border-border pt-4">
-      {mode === 'rejecting' ? (
+      {mode !== 'idle' ? (
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`reason-${providerId}`}>{t('reject_reason_label')}</Label>
+            <Label htmlFor={`reason-${providerId}`}>{mode === 'rejecting' ? t('reject_reason_label') : t('needs_info_label')}</Label>
             <Textarea
               id={`reason-${providerId}`}
-              placeholder={t('reject_reason_placeholder')}
+              placeholder={mode === 'rejecting' ? t('reject_reason_placeholder') : t('needs_info_placeholder')}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
@@ -72,15 +78,21 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
           </div>
           {error && <p className="text-sm text-danger">{error}</p>}
           <div className="flex gap-2">
-            <Button
-              variant="danger"
-              onClick={() => act('reject')}
-              loading={loading === 'reject'}
-              size="sm"
-            >
-              {t('confirm_reject')}
-            </Button>
-            <Button variant="ghost" onClick={() => { setMode('idle'); setReason('') }} size="sm">
+            {mode === 'rejecting' ? (
+              <Button
+                variant="danger"
+                onClick={() => act('reject')}
+                loading={loading === 'reject'}
+                size="sm"
+              >
+                {t('confirm_reject')}
+              </Button>
+            ) : (
+              <Button onClick={() => act('needs_info')} loading={loading === 'needs_info'} size="sm">
+                {t('confirm_needs_info')}
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => { setMode('idle'); setReason(''); setError('') }} size="sm">
               {tCommon('cancel')}
             </Button>
           </div>
@@ -93,6 +105,9 @@ export function VerificationActions({ providerId }: VerificationActionsProps) {
             size="sm"
           >
             {t('approve_btn')}
+          </Button>
+          <Button variant="outline" onClick={() => setMode('needs_info')} size="sm">
+            {t('needs_info_btn')}
           </Button>
           <Button
             variant="outline"

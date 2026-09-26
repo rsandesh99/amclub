@@ -682,7 +682,12 @@
     "not_ready_badge": "Approved · not payout-ready",
     "open_provider": "Open provider →",
     "verification_not_pending": "This provider is no longer pending review. Open the provider page to change their status.",
-    "access_denied": "You don't have access to the admin area."
+    "access_denied": "You don't have access to the admin area.",
+    "needs_info_btn": "Ask for more info",
+    "needs_info_label": "What should the provider add or fix?",
+    "needs_info_placeholder": "e.g. The GST certificate is unreadable — upload a clearer copy.",
+    "confirm_needs_info": "Send request",
+    "needs_info_sent": "Sent. The application stays pending until they update it."
   },
   "profile": {
     "completeness": "Profile completeness",
