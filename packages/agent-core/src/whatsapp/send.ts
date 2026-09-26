@@ -168,6 +168,9 @@ const LEGACY_TRANSACTIONAL_KINDS: ReadonlySet<string> = new Set([
  *   - suppression (`wa_suppressions`, `until` null or future) blocks every purpose, except `marketing_stopped`, which
  *     blocks marketing only.
  *   - `wa_opt_out_confirmed` passes the consent check (it confirms the STOP; the send path allows it once per STOP).
+ *   - a business send to a known user needs an opt-in that user gave (or one given anonymously from the phone): an
+ *     opt-in recorded for another account on the same number is not consent (recycled numbers; 0086 also withdraws
+ *     the old number's opt-ins when a user's phone changes).
  * Before 0086 (no wa_phone_consents): the old rule — replies pass; order / payment kinds pass; anything else needs an
  * active WhatsApp agent grant given from this phone (`channel_identity = '+' || phone`); marketing never.
  */
@@ -182,7 +185,7 @@ export async function mayMessage(
   if (!phone) return { ok: false, reason: 'bad_phone' }
   const now = opts.now ?? new Date()
   if (now.getTime() < consentMissingUntil) return legacyMayMessage(db, phone, purpose, initiation, opts)
-  const { data, error } = await db.from('wa_phone_consents').select('purpose, status').eq('phone_e164', phone)
+  const { data, error } = await db.from('wa_phone_consents').select('purpose, status, user_id').eq('phone_e164', phone)
   if (error) {
     if (isMissingSchemaError(error)) {
       consentMissingUntil = now.getTime() + RECHECK_MS
@@ -192,7 +195,8 @@ export async function mayMessage(
     console.error('[wa] consent read failed — not sending', error.message)
     return { ok: false, reason: 'no_consent' }
   }
-  const status = new Map(((data as { purpose: string; status: string }[] | null) ?? []).map((r) => [r.purpose, r.status]))
+  const rows = (data as { purpose: string; status: string; user_id: string | null }[] | null) ?? []
+  const status = new Map(rows.map((r) => [r.purpose, r.status]))
   if (opts.kind !== WA_OPT_OUT_CONFIRMED_KIND) {
     const stopped = status.get('transactional') === 'opted_out' && status.get('assistant') === 'opted_out'
     if (initiation === 'reply' && purpose !== 'marketing') {
@@ -201,6 +205,9 @@ export async function mayMessage(
       const st = status.get(purpose)
       if (st === 'opted_out' || (stopped && purpose !== 'marketing')) return { ok: false, reason: 'opted_out' }
       if (st !== 'opted_in') return { ok: false, reason: 'no_consent' }
+      // A recycled number: an opt-in another account gave on this phone is not this recipient's consent.
+      const giver = rows.find((r) => r.purpose === purpose)?.user_id ?? null
+      if (opts.userId && giver && giver !== opts.userId) return { ok: false, reason: 'no_consent' }
     }
   }
   const { data: sup, error: supErr } = await db.from('wa_suppressions').select('reason, until').eq('phone_e164', phone).maybeSingle()

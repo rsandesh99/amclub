@@ -12,7 +12,7 @@
 --   wa_templates        the template registry mirrored from Meta (category, status, rejection reason).
 --   wa_account_events   template status / category, phone quality and account webhooks, stored as received.
 --
--- Rollback: DROP FUNCTION record_wa_consent; DROP TABLE wa_account_events, wa_templates, wa_suppressions,
+-- Rollback: DROP TRIGGER users_phone_change_wa_consent ON users; DROP FUNCTION wa_consent_on_phone_change, record_wa_consent; DROP TABLE wa_account_events, wa_templates, wa_suppressions,
 -- wa_phone_consents, wa_consent_events; the added columns are nullable / defaulted and can stay.
 
 -- ── wa_conversations ────────────────────────────────────────────────────────
@@ -214,6 +214,39 @@ $$;
 REVOKE EXECUTE ON FUNCTION record_wa_consent(text, uuid, text[], text, text, text, text, text, text, text, text) FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION record_wa_consent(text, uuid, text[], text, text, text, text, text, text, text, text) TO service_role;
+--> statement-breakpoint
+
+-- Consent belongs to the phone AND the person who gave it. When a user's phone changes, what they opted into on the
+-- old number is withdrawn (event source `system`, keyword `phone_change`): a recycled number reaching a new owner
+-- starts with no consent. Runs beside 0079's unbind trigger; the send path also requires the consent's user to be the
+-- recipient (agent-core mayMessage).
+CREATE OR REPLACE FUNCTION wa_consent_on_phone_change() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_old text := regexp_replace(coalesce(OLD.phone, ''), '\D', '', 'g');
+  v_purposes text[];
+BEGIN
+  IF v_old = regexp_replace(coalesce(NEW.phone, ''), '\D', '', 'g') OR v_old !~ '^\d{8,15}$' THEN RETURN NULL; END IF;
+  SELECT array_agg(c.purpose ORDER BY c.purpose) INTO v_purposes
+    FROM wa_phone_consents c
+   WHERE c.phone_e164 = v_old AND c.status = 'opted_in' AND (c.user_id = OLD.id OR c.user_id IS NULL);
+  IF v_purposes IS NOT NULL THEN
+    PERFORM record_wa_consent(v_old, OLD.id, v_purposes, 'opt_out', 'system', NULL, 'phone_change');
+  END IF;
+  RETURN NULL;
+END
+$$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION wa_consent_on_phone_change() FROM PUBLIC, anon, authenticated;
+--> statement-breakpoint
+DROP TRIGGER IF EXISTS users_phone_change_wa_consent ON users;
+--> statement-breakpoint
+CREATE TRIGGER users_phone_change_wa_consent
+  AFTER UPDATE OF phone ON users
+  FOR EACH ROW EXECUTE FUNCTION wa_consent_on_phone_change();
 --> statement-breakpoint
 
 CREATE TABLE IF NOT EXISTS wa_suppressions (

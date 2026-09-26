@@ -146,6 +146,15 @@ describe('consent (ADR-030 §2)', () => {
     expect(await mayMessage(db.client, PHONE, 'transactional', 'business', { now: NOW })).toEqual({ ok: true })
     expect(await mayMessage(db.client, PHONE, 'marketing', 'reply', { now: NOW })).toEqual({ ok: false, reason: 'no_consent' })
   })
+  it('a recycled number: an opt-in another account gave is not the recipient\'s consent; an anonymous one is', async () => {
+    const other = fakeDb({ ...seed(), wa_phone_consents: [{ phone_e164: PHONE, purpose: 'transactional', status: 'opted_in', user_id: 'someone-else' }] })
+    expect(await mayMessage(other.client, PHONE, 'transactional', 'business', { userId: 'u1', now: NOW })).toEqual({ ok: false, reason: 'no_consent' })
+    expect(await mayMessage(other.client, PHONE, 'transactional', 'reply', { userId: 'u1', now: NOW })).toEqual({ ok: true })
+    const own = fakeDb({ ...seed(), wa_phone_consents: [{ phone_e164: PHONE, purpose: 'transactional', status: 'opted_in', user_id: 'u1' }] })
+    expect(await mayMessage(own.client, PHONE, 'transactional', 'business', { userId: 'u1', now: NOW })).toEqual({ ok: true })
+    const anon = fakeDb({ ...seed(), wa_phone_consents: [{ phone_e164: PHONE, purpose: 'transactional', status: 'opted_in', user_id: null }] })
+    expect(await mayMessage(anon.client, PHONE, 'transactional', 'business', { userId: 'u1', now: NOW })).toEqual({ ok: true })
+  })
   it('a business-scoped id is never a phone', async () => {
     const db = fakeDb(seed(), { unique: UNIQUE })
     expect(await sendWhatsApp({ db: db.client, provider: provider().p, now: () => NOW, settings }, notice({ phoneE164: 'IN.919876543210' }))).toEqual({ outcome: 'skipped', reason: 'bad_phone' })
