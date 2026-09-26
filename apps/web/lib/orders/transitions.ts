@@ -497,7 +497,7 @@ export async function settleCancellationRefund(
     reportOpsError(e, 'refund_failed', { tags: { order_id: order.id, from: fromStatus } })
     await addEvent(admin, order.id, 'refund_failed', null, { reason, from: fromStatus })
     // ADR-030 §4 — the buyer hears the refund is delayed (once per order); the sweeper keeps re-driving it.
-    try { await notifyRefund(admin, order, 'failed', null) } catch (err) { console.error('[notifyRefund]', err) }
+    try { await notifyRefund(admin, order, 'failed', computeRefundPaise({ totalPaise: order.total_paise, fromStatus })) } catch (err) { console.error('[notifyRefund]', err) }
     return { status: order.status, refundedPaise: 0, error: 'refund_failed' }
   }
   if (refunded <= 0) return { status: order.status, refundedPaise: 0 }
