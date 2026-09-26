@@ -2,7 +2,11 @@
  *  API as web (§ Phase 3). Auth'd calls attach the Supabase access token. */
 import Constants from 'expo-constants'
 import { supabase } from './supabase'
-import type { BuyAgain, MeActions, PriceDisplay, ProfileMeResponse, QuoteExtractResponse } from '@amclub/shared'
+import type {
+  BuyAgain, MeActions, NotificationCategory, NotificationSettings, PriceDisplay, PrivacyRequestKind, PrivacyRequestView,
+  ProfileMeResponse, QuoteExtractResponse, WaConsentPurpose, WaConsentState,
+} from '@amclub/shared'
+import { WA_NOTICE_VERSION } from '@amclub/shared'
 
 const API_URL =
   (Constants.expoConfig?.extra?.['apiUrl'] as string | undefined) ??
@@ -1133,4 +1137,107 @@ export async function uploadCredentialDocument(category: string, file: { uri: st
   } catch {
     return { ok: false, url: null }
   }
+}
+
+// ── Settings: WhatsApp consent, notification preferences, privacy requests, language (PRD_WHATSAPP W1) ──
+// Every call resolves (never throws). Before migrations 0086 / 0087 the routes answer { ready: false } / 503
+// not_ready, which the screens show as "coming soon", never as an error.
+
+export type SettingsLoad<T> = { kind: 'ready'; data: T } | { kind: 'not_ready' } | { kind: 'error' }
+
+async function getSettingsJson(path: string): Promise<{ status: number; body: Record<string, unknown> | null }> {
+  try {
+    const res = await fetch(`${API_URL}${path}`, { headers: await authHeaders() })
+    return { status: res.status, body: (await res.json().catch(() => null)) as Record<string, unknown> | null }
+  } catch {
+    return { status: 0, body: null }
+  }
+}
+
+async function sendSettingsJson(path: string, method: 'POST' | 'PUT' | 'PATCH', body: unknown): Promise<{ ok: boolean; status: number; data: Record<string, unknown> | null }> {
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'x-amc-surface': 'mobile', ...(await authHeaders()) },
+      body: JSON.stringify(body),
+    })
+    return { ok: res.ok, status: res.status, data: (await res.json().catch(() => null)) as Record<string, unknown> | null }
+  } catch {
+    return { ok: false, status: 0, data: null }
+  }
+}
+
+export async function fetchWhatsAppConsent(): Promise<SettingsLoad<WaConsentState>> {
+  const { status, body } = await getSettingsJson('/api/v1/me/whatsapp')
+  if (status === 503 || body?.['ready'] === false) return { kind: 'not_ready' }
+  if (status !== 200 || !body || typeof body['purposes'] !== 'object') return { kind: 'error' }
+  return { kind: 'ready', data: body as unknown as WaConsentState }
+}
+
+/** One purpose on or off (source mobile_settings, or signup from the sign-up screen) with the notice shown. */
+export async function updateWhatsAppConsent(
+  purpose: WaConsentPurpose,
+  optIn: boolean,
+  source: 'mobile_settings' | 'signup' = 'mobile_settings',
+): Promise<{ ok: boolean; status: number; error: string | null; state: WaConsentState | null }> {
+  const r = await sendSettingsJson('/api/v1/me/whatsapp', 'POST', { purpose, optIn, source, noticeVersion: WA_NOTICE_VERSION })
+  const state = r.ok && r.data && typeof r.data['purposes'] === 'object' ? (r.data as unknown as WaConsentState) : null
+  return { ok: r.ok, status: r.status, error: typeof r.data?.['error'] === 'string' ? (r.data['error'] as string) : null, state }
+}
+
+/** The WhatsApp box at sign-up: sent once the profile exists, retried briefly, never blocking. */
+export async function sendSignupWhatsAppOptIn(): Promise<void> {
+  for (const wait of [0, 1500, 5000]) {
+    if (wait) await new Promise((r) => setTimeout(r, wait))
+    const r = await updateWhatsAppConsent('transactional', true, 'signup')
+    if (r.ok || [400, 401, 403, 409, 422, 503].includes(r.status)) return
+  }
+}
+
+export interface NotificationSettingsLoad { settings: NotificationSettings; essentialCategories: NotificationCategory[] }
+
+export async function fetchNotificationSettings(): Promise<SettingsLoad<NotificationSettingsLoad>> {
+  const { status, body } = await getSettingsJson('/api/v1/me/notification-preferences')
+  if (status === 503 || body?.['ready'] === false) return { kind: 'not_ready' }
+  const s = body?.['settings'] as Partial<NotificationSettings> | undefined
+  if (status !== 200 || !s || typeof s !== 'object') return { kind: 'error' }
+  return {
+    kind: 'ready',
+    data: {
+      settings: { preferences: Array.isArray(s.preferences) ? s.preferences : [], quietHours: s.quietHours ?? null, pausedUntil: s.pausedUntil ?? null, digestLeads: s.digestLeads === true },
+      essentialCategories: Array.isArray(body?.['essentialCategories']) ? (body['essentialCategories'] as NotificationCategory[]) : [],
+    },
+  }
+}
+
+export async function saveNotificationSettings(settings: NotificationSettings): Promise<{ ok: boolean; status: number; error: string | null }> {
+  const r = await sendSettingsJson('/api/v1/me/notification-preferences', 'PUT', settings)
+  return { ok: r.ok, status: r.status, error: typeof r.data?.['error'] === 'string' ? (r.data['error'] as string) : null }
+}
+
+export async function fetchPrivacyRequests(): Promise<SettingsLoad<PrivacyRequestView[]>> {
+  const { status, body } = await getSettingsJson('/api/v1/me/privacy-requests')
+  if (body?.['ready'] === false) return { kind: 'not_ready' }
+  if (status !== 200 || !Array.isArray(body?.['requests'])) return { kind: 'error' }
+  return { kind: 'ready', data: body['requests'] as PrivacyRequestView[] }
+}
+
+export async function createPrivacyRequest(kind: PrivacyRequestKind, details: string | null): Promise<{ ok: boolean; status: number; error: string | null; request: PrivacyRequestView | null; dueAt: string | null }> {
+  const r = await sendSettingsJson('/api/v1/me/privacy-requests', 'POST', { kind, details, source: 'mobile' })
+  const request = r.ok && r.data?.['request'] ? (r.data['request'] as PrivacyRequestView) : null
+  return {
+    ok: r.ok && !!request,
+    status: r.status,
+    error: typeof r.data?.['error'] === 'string' ? (r.data['error'] as string) : null,
+    request,
+    dueAt: typeof r.data?.['dueAt'] === 'string' ? (r.data['dueAt'] as string) : null,
+  }
+}
+
+/** Audit §5 item 10 — the chosen language follows the account (email, SMS, WhatsApp). Signed out: nothing to save. */
+export async function savePreferredLocale(locale: string): Promise<boolean> {
+  const headers = await authHeaders()
+  if (!headers['Authorization']) return false
+  const r = await sendSettingsJson('/api/v1/profile/preferences', 'PATCH', { preferredLocale: locale })
+  return r.ok
 }

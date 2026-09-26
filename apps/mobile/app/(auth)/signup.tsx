@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/lib/i18n'
 import { isEmail, signInWithGoogle } from '@/lib/auth'
 import { normalizeIndianPhone, phoneSchema, toE164India } from '@amclub/shared'
+import { sendSignupWhatsAppOptIn } from '@/lib/api'
 
 type Method = 'phone' | 'email'
 type Step = 'auth' | 'otp' | 'profile'
@@ -15,7 +16,7 @@ type Step = 'auth' | 'otp' | 'profile'
 const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? ''
 
 export default function SignupScreen() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [method, setMethod] = useState<Method>('phone')
   const [step, setStep] = useState<Step>('auth')
   const [phone, setPhone] = useState('')
@@ -31,6 +32,8 @@ export default function SignupScreen() {
   // and is written to terms_acceptances (surface 'mobile') before the profile
   // POST, which refuses without it.
   const [agreed, setAgreed] = useState(false)
+  // Audit §5 item 1 — the unticked WhatsApp box (phone sign-up only); sent after the profile exists, never blocking.
+  const [waOptIn, setWaOptIn] = useState(false)
 
   useEffect(() => {
     if (step !== 'otp' || resendIn <= 0) return
@@ -96,6 +99,7 @@ export default function SignupScreen() {
     const res = await signInWithGoogle()
     setLoading(false)
     if (!res.ok) { if (!res.cancelled) Alert.alert(t('common.error'), res.error ?? t('errors.google_failed')); return }
+    setWaOptIn(false) // a Google account has no phone yet, so there is no WhatsApp number to opt in
     setStep('profile') // collect quick profile → creates the user + msme profile
   }
 
@@ -115,9 +119,11 @@ export default function SignupScreen() {
       const res = await fetch(`${API_URL}/api/v1/profile/msme`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ fullName: fullName.trim(), businessName: businessName.trim() }),
+        // Audit §5 item 10 — the language chosen on this phone becomes the account's (email, SMS, WhatsApp follow it).
+        body: JSON.stringify({ fullName: fullName.trim(), businessName: businessName.trim(), preferredLocale: locale }),
       })
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? 'Profile save failed') }
+      if (waOptIn && method === 'phone') void sendSignupWhatsAppOptIn()
       router.replace('/(app)/home')
     } catch (e: unknown) {
       Alert.alert(t('common.error'), e instanceof Error ? e.message : t('errors.generic'))
@@ -163,6 +169,17 @@ export default function SignupScreen() {
                   <Text className="text-primary underline" onPress={() => Linking.openURL(`${API_URL}/privacy`)}>{t('auth.consent_privacy')}</Text>.
                 </Text>
               </TouchableOpacity>
+              {method === 'phone' && (
+                <TouchableOpacity onPress={() => setWaOptIn((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: waOptIn }} accessibilityHint={t('whatsapp.notice_transactional')} className="flex-row items-start gap-3 rounded-xl border border-gray-200 bg-surface px-4 py-3" testID="signup-wa-optin">
+                  <View className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${waOptIn ? 'border-primary bg-primary' : 'border-gray-400 bg-surface'}`}>
+                    {waOptIn && <Text className="text-xs font-bold text-white">✓</Text>}
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-sm font-medium leading-5 text-foreground">{t('whatsapp.checkbox_label')}</Text>
+                    <Text className="mt-0.5 text-xs leading-4 text-foreground-secondary">{t('whatsapp.notice_transactional')}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity onPress={sendOtp} disabled={loading || !agreed} className={`rounded-xl py-4 items-center ${loading || !agreed ? 'bg-primary/60' : 'bg-primary'}`}>
                 <Text className="text-base font-semibold text-white">{loading ? t('common.loading') : t('auth.send_otp_btn')}</Text>
               </TouchableOpacity>
