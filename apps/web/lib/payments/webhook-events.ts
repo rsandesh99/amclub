@@ -3,6 +3,7 @@ import { CAPTURE_EXCEPTION_STATUS, REFUND_STATUS } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { stableEntityId, writeAudit } from '@/lib/audit/log'
 import { deadTransferIds, markPaid } from './payout'
+import { notifyRefund } from '@/lib/notifications/events'
 import { CHARGEBACK_EVENTS, type ChargebackEvent } from './release-gate'
 
 export { CHARGEBACK_EVENTS, type ChargebackEvent }
@@ -70,7 +71,11 @@ export async function handleRefundEvent(admin: Admin, event: 'refund.processed' 
         .eq('id', r.id)
         .eq('status', REFUND_STATUS.pending)
         .select('id')
-      if (moved?.length && orderId) await eventOnce(admin, orderId, 'refund_confirmed', 'razorpay_refund_id', refundId, { amount_paise: Number(r.amount_paise), source: 'gateway' })
+      if (moved?.length && orderId) {
+        await eventOnce(admin, orderId, 'refund_confirmed', 'razorpay_refund_id', refundId, { amount_paise: Number(r.amount_paise), source: 'gateway' })
+        // ADR-030 §4 — the buyer hears it (once per order; a settlement that already announced it stays quiet).
+        try { await notifyRefund(admin, orderId, 'processed', Number(r.amount_paise)) } catch (e) { console.error('[webhook] notify refund', e) }
+      }
       return { ok: true, handled: event, changed: Boolean(moved?.length) }
     }
     // failed: the buyer did not get it. pending | processed → failed, an ops marker once, never an automatic re-send.
@@ -85,6 +90,8 @@ export async function handleRefundEvent(admin: Admin, event: 'refund.processed' 
       if (orderId) await eventOnce(admin, orderId, 'refund_failed', 'razorpay_refund_id', refundId, detail)
       await writeAudit(admin, null, { actorId: null, action: 'refund_failed_at_gateway', entity: 'refunds', entityId: r.id, after: { razorpay_refund_id: refundId, order_id: orderId, ...detail } })
       console.error('[webhook] refund.failed — ops must re-send', { refundId, orderId })
+      // ADR-030 §4 — the buyer hears the refund is delayed and being re-sent (once per order).
+      if (orderId) try { await notifyRefund(admin, orderId, 'failed', Number(r.amount_paise)) } catch (e) { console.error('[webhook] notify refund', e) }
     }
     return { ok: true, handled: event, changed: Boolean(moved?.length) }
   }

@@ -302,7 +302,6 @@ export async function runLicenceReminders(admin: Admin, today = todayIST()): Pro
       titleI18n: { en: `Your ${label.en} expires on ${istDay(r.expires_on, 'en')}`, hi: `आपका ${label.hi} ${istDay(r.expires_on, 'hi')} को समाप्त होगा`, te: `మీ ${label.te} ${istDay(r.expires_on, 'te')}న గడువు ముగుస్తుంది`, ta: `உங்கள் ${label.ta} ${istDay(r.expires_on, 'ta')} அன்று காலாவதியாகும்` },
       bodyI18n: { en: 'Renew with a verified provider.', hi: 'किसी सत्यापित प्रदाता से नवीनीकरण करवाएँ।', te: 'ధృవీకరించిన ప్రొవైడర్‌తో పునరుద్ధరించండి.', ta: 'சரிபார்க்கப்பட்ட வழங்குநருடன் புதுப்பிக்கவும்.' },
       link,
-      channels: ['whatsapp'],
     })
     captureServerEvent(userId, 'renewal_reminder_sent', { threshold })
     sent++

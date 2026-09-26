@@ -97,7 +97,7 @@ export async function announceCaptureException(admin: Admin, exceptionId: string
     titleI18n: notifyText('capture_refund.title'),
     bodyI18n: row.reason === 'duplicate_capture' ? notifyText('capture_refund.body_duplicate', { amount, ref }) : notifyText('capture_refund.body_expired', { amount }),
     link: row.order_id ? `/app/orders/${row.order_id}` : '/app/orders',
-    channels: ['email', 'sms'],
+    values: { amount, ref },
   })
 }
 

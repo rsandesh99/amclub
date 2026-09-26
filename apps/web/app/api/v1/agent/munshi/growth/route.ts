@@ -46,7 +46,6 @@ export async function POST(request: NextRequest) {
     titleI18n: { en: 'A tip from Munshi', hi: 'मुंशी की एक सलाह', te: 'మున్షీ నుండి ఒక సూచన' },
     bodyI18n: { en: growthNudgeLine(n, 'en', names['en'] ?? null), hi: growthNudgeLine(n, 'hi', names['hi'] ?? null), te: growthNudgeLine(n, 'te', names['te'] ?? null) },
     link: LINK[n.kind],
-    channels: [],
   })
   return NextResponse.json({ ok: true })
 }

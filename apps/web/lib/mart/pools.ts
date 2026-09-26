@@ -37,6 +37,8 @@ import {
 } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification } from '@/lib/notifications/create'
+import { istDateTime } from '@/lib/notifications/format'
+import { notifyText } from '@/lib/i18n/notify'
 import { getMartCategory, getMartSetting } from './config'
 import { publicAssetUrl } from './assets'
 import { SELF_DEALING, isOwnProvider } from '@/lib/orders/self-dealing'
@@ -779,49 +781,28 @@ export async function buyerDiscipline(admin: Admin, msmeId: string): Promise<{ d
 
 // ── Notifications ────────────────────────────────────────────────────────────
 
-type PoolNotifyKind = 'pool_met' | 'pool_unmet' | 'pool_cancelled' | 'pool_defaulted' | 'pool_ordered'
+type PoolNotifyKind = 'pool_met' | 'pool_unmet' | 'pool_cancelled' | 'pool_defaulted'
 
-function fmtIst(iso: string): string {
-  return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-}
-
+/** Member notices (ADR-030 §4): the kind picks the channels (pool_met is essential and urgent — it carries the pay-by
+ *  deadline); the copy is `notify.mart_pool_*`, the deadline in IST. */
 async function notifyMembers(admin: Admin, pool: PoolDetail, members: PoolMemberRow[], kind: PoolNotifyKind, extra: { pay_by?: string } = {}): Promise<void> {
-  const copy: Record<PoolNotifyKind, { en: [string, string]; hi: [string, string]; link: string; channels: string[] }> = {
-    pool_met: {
-      en: ['Group buy is on — pay to confirm', `${pool.title}: the pool reached its minimum. Pay your share by ${extra.pay_by ? fmtIst(extra.pay_by) : 'the deadline'} to confirm your order.`],
-      hi: ['ग्रुप बाय तय — भुगतान करें', `${pool.title}: पूल का न्यूनतम पूरा हुआ। ${extra.pay_by ? fmtIst(extra.pay_by) : 'समय सीमा'} तक भुगतान कर ऑर्डर पक्का करें।`],
-      link: `/app/mart/pools/${pool.id}/pay`,
-      channels: ['whatsapp', 'sms', 'email'],
-    },
-    pool_unmet: {
-      en: ['Group buy did not reach its minimum', `${pool.title} closed short of the minimum quantity. Nothing is charged; your commitment is released.`],
-      hi: ['ग्रुप बाय न्यूनतम तक नहीं पहुँचा', `${pool.title} न्यूनतम मात्रा से कम पर बंद हुआ। कोई शुल्क नहीं; आपकी प्रतिबद्धता मुक्त कर दी गई।`],
-      link: `/mart/pools/${pool.id}`,
-      channels: ['whatsapp', 'email'],
-    },
-    pool_cancelled: {
-      en: ['Group buy cancelled', `${pool.title} was cancelled by AMC. Nothing is charged.`],
-      hi: ['ग्रुप बाय रद्द', `${pool.title} AMC द्वारा रद्द किया गया। कोई शुल्क नहीं।`],
-      link: `/mart/pools/${pool.id}`,
-      channels: ['whatsapp', 'email'],
-    },
-    pool_defaulted: {
-      en: ['Pool commitment lapsed', `You did not pay for ${pool.title} inside the window. The commitment is recorded as lapsed on your buyer record.`],
-      hi: ['पूल प्रतिबद्धता चूक गई', `${pool.title} के लिए समय सीमा में भुगतान नहीं हुआ। यह आपके खरीदार रिकॉर्ड में दर्ज है।`],
-      link: `/app/mart/pools`,
-      channels: ['email'],
-    },
-    pool_ordered: { en: ['', ''], hi: ['', ''], link: '', channels: [] },
+  const link: Record<PoolNotifyKind, string> = {
+    pool_met: `/app/mart/pools/${pool.id}/pay`,
+    pool_unmet: `/mart/pools/${pool.id}`,
+    pool_cancelled: `/mart/pools/${pool.id}`,
+    pool_defaulted: `/app/mart/pools`,
   }
-  const c = copy[kind]
+  const title = pool.title
+  const deadline = extra.pay_by ? istDateTime(extra.pay_by) : notifyText('the_deadline')
+  const key = `mart_${kind}`
   for (const m of members) {
     await createNotification(admin, {
       userId: m.user_id,
       kind,
-      titleI18n: { en: c.en[0], hi: c.hi[0] },
-      bodyI18n: { en: c.en[1], hi: c.hi[1] },
-      link: c.link,
-      channels: c.channels,
+      titleI18n: notifyText(`${key}.title`),
+      bodyI18n: notifyText(`${key}.body`, { title, deadline }),
+      link: link[kind],
+      values: { title, deadline },
     })
   }
 }
@@ -830,17 +811,15 @@ async function notifySeller(admin: Admin, pool: PoolDetail, kind: 'pool_met' | '
   if (!pool.seller_id) return
   const { data: p } = await admin.from('provider_profiles').select('user_id').eq('id', pool.seller_id).maybeSingle()
   if (!p?.user_id) return
-  const en =
-    kind === 'pool_met'
-      ? [`Group buy met: ${pool.title}`, `${extra.members} buyers committed ${extra.committed_qty} ${pool.unit}. Their orders arrive as they pay over the next two days.`]
-      : [`Group buy ordered: ${pool.title}`, `${extra.members} paid orders totalling ${extra.qty} ${pool.unit}. Accept and dispatch them from your orders.`]
+  const values = { title: pool.title, members: extra.members, qty: (kind === 'pool_met' ? extra.committed_qty : extra.qty) ?? 0, unit: pool.unit }
+  const key = kind === 'pool_met' ? 'mart_pool_met_seller' : 'mart_pool_ordered'
   await createNotification(admin, {
     userId: p.user_id,
-    kind,
-    titleI18n: { en: en[0]!, hi: en[0]! },
-    bodyI18n: { en: en[1]!, hi: en[1]! },
+    kind: kind === 'pool_met' ? 'pool_met_seller' : 'pool_ordered',
+    titleI18n: notifyText(`${key}.title`, { title: pool.title }),
+    bodyI18n: notifyText(`${key}.body`, values),
     link: '/partner/goods/pools',
-    channels: ['whatsapp', 'email'],
+    values,
   })
 }
 

@@ -77,7 +77,7 @@ export async function nudgeOrder(admin: SupabaseClient, orderId: string, args: N
   const { data: ins, error } = await admin.from('nudges').insert({ subject_kind: 'order', subject_id: orderId, from_user_id: args.userId, to_user_id: toUserId, decision_id: decisionId }).select('id').single()
   if (error) throw new Error(`nudge insert: ${error.message}`)
   const body = COPY.order.body(String(order.order_number))
-  await createNotification(admin, { userId: toUserId, kind: 'order_nudge', titleI18n: COPY.order.title, bodyI18n: body, link: isBuyer ? `/partner/orders/${orderId}` : `/app/orders/${orderId}`, channels: ['whatsapp'] })
+  await createNotification(admin, { userId: toUserId, kind: 'order_nudge', titleI18n: COPY.order.title, bodyI18n: body, link: isBuyer ? `/partner/orders/${orderId}` : `/app/orders/${orderId}`, values: { ref: String(order.order_number) } })
   await addEvent(admin, orderId, 'nudged', args.userId, { by: isBuyer ? 'buyer' : 'provider', via: args.via })
   captureServerEvent(args.userId, 'nudge_sent', { subject_kind: 'order', via: args.via })
   return { ok: true, nudgeId: (ins as { id: string }).id, recipients: 1 }
@@ -108,14 +108,14 @@ export async function nudgeRfq(admin: SupabaseClient, rfqId: string, args: Nudge
     if (!userIds.length) return { ok: false, error: 'no_recipient' }
     const { data: ins, error } = await admin.from('nudges').insert({ subject_kind: 'rfq', subject_id: rfqId, from_user_id: args.userId, to_user_id: null, decision_id: decisionId }).select('id').single()
     if (error) throw new Error(`nudge insert: ${error.message}`)
-    await createNotificationsBulk(admin, userIds, { kind: 'rfq_nudge', titleI18n: COPY.rfq.title, bodyI18n: COPY.rfq.body(title), link: `/partner/rfqs/${rfqId}`, channels: ['whatsapp'] })
+    await createNotificationsBulk(admin, userIds, { kind: 'rfq_nudge', titleI18n: COPY.rfq.title, bodyI18n: COPY.rfq.body(title), link: `/partner/rfqs/${rfqId}`, values: { title } })
     captureServerEvent(args.userId, 'nudge_sent', { subject_kind: 'rfq', via: args.via, recipients: userIds.length })
     return { ok: true, nudgeId: (ins as { id: string }).id, recipients: userIds.length }
   }
   const toUserId: string = rfq.msme.user_id
   const { data: ins, error } = await admin.from('nudges').insert({ subject_kind: 'rfq', subject_id: rfqId, from_user_id: args.userId, to_user_id: toUserId, decision_id: decisionId }).select('id').single()
   if (error) throw new Error(`nudge insert: ${error.message}`)
-  await createNotification(admin, { userId: toUserId, kind: 'rfq_nudge', titleI18n: COPY.rfq_buyer.title, bodyI18n: COPY.rfq_buyer.body(title), link: `/app/rfq/${rfqId}`, channels: ['whatsapp'] })
+  await createNotification(admin, { userId: toUserId, kind: 'rfq_nudge', titleI18n: COPY.rfq_buyer.title, bodyI18n: COPY.rfq_buyer.body(title), link: `/app/rfq/${rfqId}`, values: { title } })
   captureServerEvent(args.userId, 'nudge_sent', { subject_kind: 'rfq', via: args.via, recipients: 1 })
   return { ok: true, nudgeId: (ins as { id: string }).id, recipients: 1 }
 }

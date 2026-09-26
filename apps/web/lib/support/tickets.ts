@@ -4,6 +4,7 @@ import { isSchemaNotReady, redactChatSecrets, redactContactInfo, ticketRefFromId
 import { buildTicketSummaryParts, supportTicketSummarySchema, type WaSendRequest } from '@amclub/agent-core'
 import { boundedChatJson, BudgetExceededError } from '@/lib/agent/bounded'
 import { createNotification } from '@/lib/notifications/create'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 import { getAgentSetting } from '@/lib/agent/settings'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { writeAudit } from '@/lib/audit/log'
@@ -168,7 +169,9 @@ export async function openTicket(admin: SupabaseClient, args: OpenTicketArgs): P
     titleI18n: { en: `A person will contact you (${ref})`, hi: `एक व्यक्ति आपसे संपर्क करेगा (${ref})`, te: `ఒక వ్యక్తి మిమ్మల్ని సంప్రదిస్తారు (${ref})` },
     bodyI18n: { en: `We acknowledge within ${SUPPORT_SLA.acknowledge_hours} hours and resolve within ${SUPPORT_SLA.resolve_days} days.`, hi: `हम ${SUPPORT_SLA.acknowledge_hours} घंटे में पावती देते हैं और ${SUPPORT_SLA.resolve_days} दिन में निपटाते हैं।`, te: `మేము ${SUPPORT_SLA.acknowledge_hours} గంటల్లో స్వీకరించి ${SUPPORT_SLA.resolve_days} రోజుల్లో పరిష్కరిస్తాం.` },
     link: args.role === 'provider' ? '/partner/support' : '/app/support',
+    // Documented channel override (ADR-030 §4): the answer goes back on the channel the user wrote on.
     channels: args.channel === 'whatsapp' ? ['whatsapp'] : [],
+    values: { ref },
   })
   const opsUserId = (await getAgentSetting(admin, 'ops_user_id')) as string | null
   if (opsUserId) {
@@ -177,10 +180,12 @@ export async function openTicket(admin: SupabaseClient, args: OpenTicketArgs): P
     await createNotification(admin, {
       userId: opsUserId,
       kind: 'support_ticket_opened',
-      titleI18n: { en: `Support ticket ${ref} (${args.role}, ${args.channel}): ${args.reason}`, hi: `सपोर्ट टिकट ${ref} (${args.role}, ${args.channel}): ${args.reason}` },
-      bodyI18n: { en: summary, hi: summary },
+      titleI18n: notifyText('support_ticket_ops.title', { ref, role: args.role, channel: args.channel, reason: args.reason }),
+      bodyI18n: sameText(summary),
       link: `/admin/support?ticket=${ticket.id}`,
+      // Documented channel override: WhatsApp to the ops user is held during the ops quiet hours (support_ops_quiet_hours).
       channels: quiet ? ['email'] : ['email', 'whatsapp'],
+      values: { ref },
     })
   }
   captureServerEvent(args.userId, 'support_ticket_opened', { channel: args.channel, role: args.role, reason: args.reason, has_summary: summary !== FALLBACK_SUMMARY })
@@ -407,7 +412,9 @@ export async function actOnTicket(admin: SupabaseClient, request: Request | null
       titleI18n: { en: `Your support ticket ${ticketRef(ticket.id)} is resolved`, hi: `आपका सपोर्ट टिकट ${ticketRef(ticket.id)} निपट गया`, te: `మీ సపోర్ట్ టికెట్ ${ticketRef(ticket.id)} పరిష్కారం అయింది` },
       bodyI18n: { en: note, hi: note, te: note },
       link: ticket.role === 'provider' ? '/partner/support' : '/app/support',
+      // Documented channel override: the resolution goes back on the channel the ticket came from.
       channels: ticket.channel === 'whatsapp' ? ['whatsapp'] : [],
+      values: { ref: ticketRef(ticket.id) },
     })
     captureServerEvent(args.adminUserId, 'support_ticket_resolved', { ticket_id: ticket.id, channel: ticket.channel, minutes_open: Math.round((Date.now() - new Date(ticket.created_at).getTime()) / 60000) })
   }

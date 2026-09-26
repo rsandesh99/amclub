@@ -16,7 +16,7 @@ import { getPaymentGateway } from '@/lib/payments'
 import { moneyMovementBlock, MoneyPathBlockedError, paymentsAvailable } from '@/lib/payments/simulation'
 import { PAYOUT_AUTO_RELEASE } from '@/lib/flags'
 import { generateInvoices } from '@/lib/invoices/generate'
-import { notifyOrderTransition, notifyAutoCancelled, notifyAutoAccepted } from '@/lib/notifications/events'
+import { notifyOrderTransition, notifyAutoCancelled, notifyAutoAccepted, notifyRefund } from '@/lib/notifications/events'
 import { getGoodsDossier } from '@/lib/mart/release'
 import { getTdsConfig } from '@/lib/mart/config'
 import { getServicesEvidence } from '@/lib/orders/evidence'
@@ -496,9 +496,13 @@ export async function settleCancellationRefund(
     console.error('[settleCancellationRefund] refund failed', order.id, reason)
     reportOpsError(e, 'refund_failed', { tags: { order_id: order.id, from: fromStatus } })
     await addEvent(admin, order.id, 'refund_failed', null, { reason, from: fromStatus })
+    // ADR-030 §4 — the buyer hears the refund is delayed (once per order); the sweeper keeps re-driving it.
+    try { await notifyRefund(admin, order, 'failed', null) } catch (err) { console.error('[notifyRefund]', err) }
     return { status: order.status, refundedPaise: 0, error: 'refund_failed' }
   }
   if (refunded <= 0) return { status: order.status, refundedPaise: 0 }
+  // ADR-030 §4 — the buyer hears the refund went through, with the exact amount (once per order).
+  try { await notifyRefund(admin, order, 'processed', refunded) } catch (err) { console.error('[notifyRefund]', err) }
   const { data: moved } = await admin
     .from('orders')
     .update({ status: 'refunded', updated_at: new Date().toISOString() })

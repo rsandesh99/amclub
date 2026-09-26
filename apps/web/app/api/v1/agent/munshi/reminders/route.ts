@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
       hi: `"${title}" पर ${h} घंटे में कोटेशन दें या अस्वीकार करें।`,
       te: `"${title}" కు ${h} గంటల్లో కొటేషన్ ఇవ్వండి లేదా తిరస్కరించండి.`,
     },
+    // In-app only (registry): Munshi's WhatsApp comes from the agent runtime itself.
     link: `/partner/rfqs/${parsed.data.rfq_id}`,
-    channels: [],
   })
   return NextResponse.json({ ok: true })
 }

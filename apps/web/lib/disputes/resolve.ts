@@ -14,6 +14,7 @@ import { processRefund } from '@/lib/orders/transitions'
 import { runPayouts } from '@/lib/payments/payout'
 import { paymentForOrder, refundForOrder } from '@/lib/payments/order-payment'
 import { moneyMovementBlock, PAYMENTS_UNAVAILABLE, type PAYMENT_SIMULATED } from '@/lib/payments/simulation'
+import { markRefundAnnounced, notifyDisputeResolved } from '@/lib/notifications/events'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -257,6 +258,15 @@ export async function resolveDispute(
       event: 'return_resolved',
       payload: { resolution, refund_paise: refundPaise, dispute_id: disputeId },
     })
+  }
+
+  // ADR-030 §4 — both parties hear the outcome and the amounts, after every money write (best-effort; never fails the
+  // resolution). The refund is named here, so the gateway's later refund webhook stays quiet.
+  try {
+    if (plan.refund && refundPaise > 0) await markRefundAnnounced(admin, order.id)
+    await notifyDisputeResolved(admin, { order, resolution, refundPaise, providerPaidPaise })
+  } catch (e) {
+    console.error('[resolveDispute] notify', e)
   }
 
   return { ok: true, refundPaise, providerPaidPaise, orderStatus: newStatus, ...(resuming ? { resumed: true } : {}) }

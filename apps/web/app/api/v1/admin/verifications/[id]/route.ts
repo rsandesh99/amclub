@@ -10,9 +10,15 @@ import { serverError } from '@/lib/api/errors'
 import { writeAudit } from '@/lib/audit/log'
 import { revalidateProviderCatalog } from '@/lib/catalog/revalidate'
 import { getProviderReadiness } from '@/lib/payments/readiness-server'
+import { notifyVerificationDecision } from '@/lib/notifications/events'
 
+/**
+ * approve / reject decide a pending application; needs_info (ADR-030 §4) keeps it pending and tells the provider
+ * what is missing (the reason is required, like a rejection's). Every decision notifies the provider (the signup
+ * copy promises it) and is audit-logged.
+ */
 const bodySchema = z.object({
-  action: z.enum(['approve', 'reject']),
+  action: z.enum(['approve', 'reject', 'needs_info']),
   reason: z.string().max(1000).optional(),
 })
 
@@ -42,7 +48,7 @@ export async function POST(
 
   const { action, reason } = parsed.data
 
-  if (action === 'reject' && !reason?.trim()) {
+  if ((action === 'reject' || action === 'needs_info') && !reason?.trim()) {
     return NextResponse.json({ error: 'Reject reason is required' }, { status: 422 })
   }
 
@@ -57,6 +63,24 @@ export async function POST(
   const fromStatus = before.status as ProviderStatus
   if (!PROVIDER_REVIEWABLE_STATUSES.includes(fromStatus)) {
     return NextResponse.json({ error: 'not_pending', code: 'not_pending', status: fromStatus }, { status: 409 })
+  }
+
+  // needs_info: the application stays pending; the provider hears what to add. Nothing else changes.
+  if (action === 'needs_info') {
+    await writeAudit(admin, request, {
+      actorId: gate.userId,
+      action: 'provider_verification_needs_info',
+      entity: 'provider_profiles',
+      entityId: providerId,
+      before: { status: fromStatus },
+      after: { status: fromStatus, reason: reason ?? null },
+    })
+    try {
+      await notifyVerificationDecision(admin, providerId, 'needs_info', reason)
+    } catch (e) {
+      console.error('[admin/verifications POST] notify:', e)
+    }
+    return NextResponse.json({ success: true, status: fromStatus })
   }
 
   // provider_profiles only carries status (active | rejected). Reviewer audit
@@ -123,6 +147,12 @@ export async function POST(
   // the admin dashboard "Payout-ready" tile, so it is the founder's checklist
   // item from this instant, not something waiting on the provider.
   const { readiness } = await getProviderReadiness(admin, providerId)
+  // ADR-030 §4 — the provider hears the decision (the signup copy promises it), with the reason on a rejection.
+  try {
+    await notifyVerificationDecision(admin, providerId, action, action === 'reject' ? reason : null)
+  } catch (e) {
+    console.error('[admin/verifications POST] notify:', e)
+  }
   if (action === 'approve') {
     console.warn(`[admin/verifications] Provider ${providerId} approved by ${gate.userId} — payout readiness: ${readiness}`)
   } else {

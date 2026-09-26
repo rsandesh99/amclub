@@ -9,6 +9,7 @@ import {
 } from '@amclub/shared'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotification } from '@/lib/notifications/create'
+import { notifyText } from '@/lib/i18n/notify'
 import { getPublicProductsByIds, tierDisplay, type TierDisplay } from './queries'
 import { publicAssetUrl } from './assets'
 
@@ -125,12 +126,10 @@ export async function sendDueReorderReminders(admin: Admin, now = new Date()): P
     await createNotification(admin, {
       userId: r.user_id,
       kind: 'mart_reorder_reminder',
-      titleI18n: { en: `Time to reorder ${name}?`, hi: `${name} फिर से मँगाने का समय?` },
-      bodyI18n: {
-        en: `You usually reorder every ${r.interval_days} days. Today's price is ready on your reorder list.`,
-        hi: `आप आमतौर पर हर ${r.interval_days} दिन में दोबारा मँगाते हैं। आज की कीमत आपकी रीऑर्डर सूची में है।`,
-      },
+      titleI18n: notifyText('mart_reorder.title', { name }),
+      bodyI18n: notifyText('mart_reorder.body', { days: Number(r.interval_days) }),
       link: '/app/mart/reorder',
+      values: { name, days: Number(r.interval_days) },
     })
     sent++
   }

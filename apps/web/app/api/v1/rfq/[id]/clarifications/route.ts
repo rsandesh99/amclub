@@ -86,7 +86,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       titleI18n: notifyText('rfq_question.title'),
       bodyI18n: sameText(question),
       link: `/app/rfq/${rfqId}`,
-      channels: ['whatsapp'],
     })
   }
   captureServerEvent(userId, 'rfq_question_asked', { rfq_id: rfqId, kind: party.rfq.kind, redacted, open_count: open + 1, role: 'provider' })

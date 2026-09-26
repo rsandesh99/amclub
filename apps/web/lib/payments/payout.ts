@@ -1,6 +1,6 @@
 import type { createAdminClient } from '@/lib/supabase/server'
 import type { GatewayTransfer, PaymentGateway } from './types'
-import { notifyPayoutPaid } from '@/lib/notifications/events'
+import { notifyPayoutHeld, notifyPayoutPaid } from '@/lib/notifications/events'
 import { assertFeeHeadroom, FeeHeadroomError } from './fees'
 import { payoutRunBlockers } from './release-gate'
 import { reportOpsError, reportOpsIssue } from '@/lib/observability'
@@ -83,7 +83,7 @@ export async function markPaid(admin: Admin, payout: any, transfer: GatewayTrans
       ...(extra ?? {}),
     },
   })
-  try { await notifyPayoutPaid(admin, payout.provider_id, Number(payout.amount_paise), payout.order_id) } catch (e) { console.error('[notifyPayoutPaid]', e) }
+  try { await notifyPayoutPaid(admin, payout.provider_id, Number(payout.amount_paise), payout.order_id, transfer.simulated ? null : transfer.razorpayTransferId) } catch (e) { console.error('[notifyPayoutPaid]', e) }
   return true
 }
 
@@ -142,6 +142,8 @@ export async function runPayouts(
         payload: { payout_id: p.id, amount_paise: p.amount_paise, reasons: blockers, at: 'release' },
       })
       held++
+      // ADR-030 §4 — the provider hears why (once per payout and set of reasons); never blocks the run.
+      try { await notifyPayoutHeld(admin, p, blockers) } catch (e) { console.error('[notifyPayoutHeld]', e) }
       continue
     }
 
