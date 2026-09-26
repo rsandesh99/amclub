@@ -1,6 +1,6 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { AGENT_NAMES, agentRunnable, type AgentName, type AgentsEnabled } from '@amclub/shared'
+import { AGENT_NAMES, agentRunnable, inAgentCohort, type AgentName, type AgentsEnabled } from '@amclub/shared'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { agentRuntimeReady } from '@/lib/agent/runtime-client'
 import { getAgentSetting, getAgentsEnabled } from '@/lib/agent/settings'
@@ -16,11 +16,13 @@ export type AgentAvailability = Record<AgentName, boolean>
 export async function agentAvailability(admin: SupabaseClient, userId: string): Promise<AgentAvailability> {
   const none = Object.fromEntries(AGENT_NAMES.map((n) => [n, false])) as AgentAvailability
   if (!AGENT_ENABLED) return none
-  const [enabled, cohort] = await Promise.all([
+  const [enabled, mode, cohort] = await Promise.all([
     getAgentsEnabled(admin) as Promise<AgentsEnabled | null>,
-    getAgentSetting(admin, 'cohort_user_ids') as Promise<string[] | null>,
+    getAgentSetting(admin, 'cohort_mode'),
+    getAgentSetting(admin, 'cohort_user_ids'),
   ])
-  const inCohort = Array.isArray(cohort) && cohort.includes(userId)
+  // audit B8: cohort_mode 'all' = every user (still subject to each agent's switch and the user's grant)
+  const inCohort = inAgentCohort(mode, cohort, userId)
   if (!inCohort || !enabled) return none
   const ready = agentRuntimeReady()
   return Object.fromEntries(AGENT_NAMES.map((n) => [n, !!enabled[n] && agentRunnable(n, ready)])) as AgentAvailability

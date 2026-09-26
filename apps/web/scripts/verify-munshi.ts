@@ -128,7 +128,8 @@ async function http() {
     const { data: msme } = await admin.from('msme_profiles').insert({ user_id: buyer.uid, business_name: 'Munshi Buyer Co', state: 'KA', sector: 'services' }).select('id').single()
     created.msmeIds.push(msme!.id)
     async function mkProvider(label: string) {
-      const u = await mkUser(label, ['provider'])
+      // real roles (audit B3): every account starts as msme and provider signup appends provider
+      const u = await mkUser(label, ['msme', 'provider'])
       const { data: p } = await admin.from('provider_profiles').insert({ user_id: u.uid, legal_name: `${label} Pvt`, display_name: label, slug: `${tag}-${label}`, state: 'KA', city: 'X', languages: ['en'], status: 'active', gstin: `29AAAAA0000A1Z${label.length}` }).select('id').single()
       created.providerIds.push(p!.id)
       await admin.from('provider_categories').insert({ provider_id: p!.id, category_id: categoryId })
@@ -578,6 +579,8 @@ async function http() {
           await del('wa_conversations', admin.from('wa_conversations').delete().in('id', created.convIds))
         }
         await del('grants', admin.from('agent_grants').delete().in('user_id', users))
+        // ADR-030: STOP wrote the phone's consent state (the append-only events stay as evidence, user_id nulled)
+        await del('wa_phone_consents', admin.from('wa_phone_consents').delete().in('user_id', users))
         await del('notifications', admin.from('notifications').delete().in('user_id', users))
         await del('audit', admin.from('audit_logs').delete().in('actor_id', users))
         await del('provider_categories', admin.from('provider_categories').delete().in('provider_id', pids))

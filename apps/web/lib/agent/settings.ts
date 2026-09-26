@@ -5,6 +5,7 @@ import {
   agentSettingDefault,
   AGENT_SETTING_DEFS,
   AGENT_SETTING_KEYS,
+  inAgentCohort,
   type AgentName,
   type AgentSettingKey,
   type AgentsEnabled,
@@ -55,13 +56,14 @@ export async function getAgentsEnabled(admin: SupabaseClient): Promise<AgentsEna
 }
 
 /**
- * True only when the agent's flag is on AND the user is in the cohort allowlist
+ * True only when the agent's flag is on AND the user is in the cohort (the
+ * cohort_user_ids allowlist, or everyone with cohort_mode = 'all' — audit B8)
  * AND, for a runtime agent, the runtime is configured (shared `agentRunnable`).
  */
 export async function isAgentEnabledForUser(admin: SupabaseClient, name: AgentName, userId: string): Promise<boolean> {
   if (!agentRunnable(name, agentRuntimeReady())) return false
   const enabled = await getAgentsEnabled(admin)
   if (!enabled?.[name]) return false
-  const cohort = (await getAgentSetting(admin, 'cohort_user_ids')) as string[]
-  return Array.isArray(cohort) && cohort.includes(userId)
+  const [mode, cohort] = await Promise.all([getAgentSetting(admin, 'cohort_mode'), getAgentSetting(admin, 'cohort_user_ids')])
+  return inAgentCohort(mode, cohort, userId)
 }

@@ -30,13 +30,13 @@ import {
   LEGAL_VERSIONS,
   ONBOARDING_MAX_DRAFTS,
   capabilityFactsFromDraft,
+  classifyWaKeyword,
   onboardingCopyIds,
   onboardingCopy,
   onboardingDraftSchema,
   type OnboardingDraft,
 } from '@amclub/shared'
 import {
-  classifyKeyword,
   createGateway,
   createRedisBudget,
   createSupabaseLedger,
@@ -116,7 +116,7 @@ function offline() {
   const summary = renderDraftSummary(draft, 'hi')
   check('render: summary in Hindi with ₹ from paise and "not stated"', summary.join('\n').includes('₹3,000') && summary.join('\n').includes('नहीं बताया') && summary.every((c) => c.length <= 1024))
   check('facts: one per scope/deliverable line', capabilityFactsFromDraft(draft, 'hi').length === 2)
-  check("keywords: JOIN → 'onboard'; START still opt_in; STOP still opt_out", classifyKeyword('JOIN') === 'onboard' && classifyKeyword('START') === 'opt_in' && classifyKeyword('STOP') === 'opt_out')
+  check("keywords (ADR-030, shared classifyWaKeyword): JOIN → join; START → start; STOP → stop; 'yes' / 'hi' are greetings, never consent", classifyWaKeyword('JOIN')?.intent === 'join' && classifyWaKeyword('START')?.intent === 'start' && classifyWaKeyword('STOP')?.intent === 'stop' && classifyWaKeyword('yes')?.intent === 'greeting' && classifyWaKeyword('hi')?.intent === 'greeting')
   check('templates: the four onboarding kinds exist in te', ['onboarding_start', 'onboarding_resume', 'onboarding_draft_ready', 'onboarding_expired'].every((k) => templateFor(k, 'te')?.name.endsWith('_te')))
   check('budget: budget_run_paise_by_agent.onboarding overrides the global run cap', resolveCaps({ budget_run_paise: 2000, budget_run_paise_by_agent: { onboarding: 1500 } }, 'onboarding').runPaise === 1500 && resolveCaps({ budget_run_paise: 2000, budget_run_paise_by_agent: { onboarding: 1500 } }, 'rfq_quality').runPaise === 2000)
   check('welcome prompt carries the name and three language buttons', (promptFor('language', session(), { name: 'Ravi' })[0] as any).text.includes('Ravi') && (promptFor('language', session())[1] as any).buttons.length === 3)
@@ -174,8 +174,9 @@ async function http() {
   const flagOn = probe.status !== 404
 
   try {
-    const prov = await mkUser('prov', ['provider'])
-    const other = await mkUser('other', ['provider'])
+    // real roles (audit B3): every account starts as msme and provider signup appends provider
+    const prov = await mkUser('prov', ['msme', 'provider'])
+    const other = await mkUser('other', ['msme', 'provider'])
 
     // Cron route is wired and guarded whatever the flag.
     const cronNo = await fetch(`${BASE}/api/v1/cron/agent-onboarding-expire`)
@@ -222,6 +223,12 @@ async function http() {
     const rt = require('../../agent-runtime/src/agents/onboarding/index') as typeof import('../../agent-runtime/src/agents/onboarding/index')
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const inbound = require('../../agent-runtime/src/whatsapp/inbound') as typeof import('../../agent-runtime/src/whatsapp/inbound')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const outboundMod = require('../../agent-runtime/src/whatsapp/outbound') as typeof import('../../agent-runtime/src/whatsapp/outbound')
+    // ADR-030: the dispatcher's own replies (consent, the menu) go through sendSystem — recorded here per conversation
+    const sysSent: Array<{ conv: string; kind: string; buttons: string[] }> = []
+    const sysSend: typeof outboundMod.sendSystem = async (conv, kind, locale, opts) => { sysSent.push({ conv: conv.id, kind, buttons: (opts.buttons ?? []).map((b) => b.id) }); return outboundMod.sendSystem(conv, kind, locale, opts) }
+    const sysKindsOf = (conv: string) => sysSent.filter((s) => s.conv === conv).map((s) => s.kind)
     loadDefaultPrompts() // the runtime's main.ts does this at boot; in-process the rig must register the prompt set itself
     const stubLog: string[] = []
     const whatsapp = makeStubDriver((l) => stubLog.push(l))
@@ -262,7 +269,7 @@ async function http() {
       const { data, error } = await admin.from('wa_messages').insert({ conversation_id: convId, direction: 'in', vendor_message_id: `${tag}-${++vendorSeq}`, kind: m.kind, body: m.body ?? (m.kind === 'button' ? m.payload : null), media_ref: m.mediaRef ?? null, mime: m.mime ?? null, status: 'received', payload: raw }).select('id').single()
       if (error) throw new Error(`wa_messages: ${error.message}`)
       await admin.from('wa_conversations').update({ last_inbound_at: new Date().toISOString(), window_open_until: new Date(Date.now() + 24 * 3600 * 1000).toISOString() }).eq('id', convId)
-      await inbound.handleWaInbound(data!.id as string, hooks)
+      await inbound.handleWaInbound(data!.id as string, hooks, { send: sysSend })
       const results = await drain()
       return { messageId: data!.id as string, results }
     }
@@ -282,11 +289,15 @@ async function http() {
     check('agent OFF: POST start → 404', offStart.status === 404, `status ${offStart.status}`)
     const convP = await conversationFor(prov)
     const join1 = await say(convP, { kind: 'text', body: 'JOIN' })
-    const { data: g1 } = await admin.from('agent_grants').select('id').eq('user_id', prov.uid).eq('channel', 'whatsapp').is('revoked_at', null)
-    check('JOIN without a grant keeps the S0.5 meaning: opt-in grant created, no session', (g1?.length ?? 0) === 1 && join1.results.length === 0 && (await outbound(convP)).some((m) => m.template_name?.startsWith('amc_wa_opt_in')))
+    const { data: g0 } = await admin.from('agent_grants').select('id').eq('user_id', prov.uid).eq('channel', 'whatsapp').is('revoked_at', null)
+    const ask = sysSent.filter((s) => s.conv === convP).at(-1)
+    check('JOIN without an opt-in is NOT consent (ADR-030 / audit B4): no grant, no session — the reply asks for the Start tap (wa:start)', (g0?.length ?? 0) === 0 && join1.results.length === 0 && ask?.kind === 'wa_join_needs_start' && JSON.stringify(ask?.buttons) === '["wa:start"]', JSON.stringify(ask))
+    await say(convP, { kind: 'button', payload: 'wa:start', body: 'Start' })
+    const { data: g1 } = await admin.from('agent_grants').select('persona, channel_identity').eq('user_id', prov.uid).eq('channel', 'whatsapp').is('revoked_at', null)
+    check('the Start tap opts in: a WhatsApp grant from this phone for EACH persona held (buyer + provider, audit B3), the confirmation', JSON.stringify(((g1 ?? []) as any[]).map((g) => g.persona).sort()) === '["buyer","provider"]' && ((g1 ?? []) as any[]).every((g) => g.channel_identity === `+91${prov.digits}`) && sysKindsOf(convP).at(-1) === 'wa_opt_in_confirmed', JSON.stringify({ g1, sys: sysKindsOf(convP) }))
     const join2 = await say(convP, { kind: 'text', body: 'JOIN' })
     const { count: sess0 } = await admin.from('onboarding_sessions').select('id', { count: 'exact', head: true }).eq('user_id', prov.uid)
-    check('agent OFF: JOIN with a grant → holding reply only, no session, no run', (sess0 ?? 0) === 0 && join2.results.length === 0 && (await outbound(convP)).some((m) => m.template_name?.startsWith('amc_wa_holding')))
+    check('agent OFF: JOIN with a grant → the HELP menu only, no session, no run', (sess0 ?? 0) === 0 && join2.results.length === 0 && sysKindsOf(convP).at(-1) === 'wa_menu', JSON.stringify(sysKindsOf(convP)))
 
     // Agent ON + cohort.
     await setSetting('agents_enabled', { ...enabledBefore, onboarding: true })
@@ -462,7 +473,7 @@ async function http() {
     check('GET draft for an unconfirmed hand-off → answers only, draft null', dvB.status === 200 && dvBb.draft === null && dvBb.answers.length > 0)
 
     // Budget: per-agent cap 0 → the draft turn fails cleanly.
-    const prov3 = await mkUser('prov3', ['provider'])
+    const prov3 = await mkUser('prov3', ['msme', 'provider'])
     tokens.set(prov3.uid, prov3.token)
     await setSetting('cohort_user_ids', [...new Set([...cohortBefore, prov.uid, other.uid, prov3.uid])])
     await setSetting('budget_run_paise_by_agent', { onboarding: 0 })
@@ -481,7 +492,7 @@ async function http() {
     await setSetting('budget_run_paise_by_agent', settingsBefore.get('budget_run_paise_by_agent')?.existed ? settingsBefore.get('budget_run_paise_by_agent')!.value : {})
 
     // Expiry: an attached session past expires_at, out of window → abandoned + the expired template.
-    const prov4 = await mkUser('prov4', ['provider'])
+    const prov4 = await mkUser('prov4', ['msme', 'provider'])
     tokens.set(prov4.uid, prov4.token)
     await setSetting('cohort_user_ids', [...new Set([...cohortBefore, prov.uid, other.uid, prov3.uid, prov4.uid])])
     const conv4 = await conversationFor(prov4)
@@ -522,6 +533,8 @@ async function http() {
           await del('wa_conversations', admin.from('wa_conversations').delete().in('id', created.convIds))
         }
         await del('grants', admin.from('agent_grants').delete().in('user_id', users))
+        // ADR-030: the Start tap wrote the phone's consent state (the append-only events stay as evidence, user_id nulled)
+        await del('wa_phone_consents', admin.from('wa_phone_consents').delete().in('user_id', users))
         await del('terms', admin.from('terms_acceptances').delete().in('user_id', users))
         await del('notifications', admin.from('notifications').delete().in('user_id', users))
         await del('audit', admin.from('audit_logs').delete().in('actor_id', users))

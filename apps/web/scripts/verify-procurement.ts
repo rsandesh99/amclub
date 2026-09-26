@@ -211,7 +211,8 @@ async function http() {
     const { data: cat } = await admin.from('categories').select('id').eq('slug', 'tax-accounting').single()
     const categoryId = cat!.id as string
     async function mkProvider(label: string) {
-      const u = await mkUser(label, ['provider'])
+      // real roles (audit B3): every account starts as msme and provider signup appends provider
+      const u = await mkUser(label, ['msme', 'provider'])
       const { data: p, error } = await admin.from('provider_profiles').insert({ user_id: u.uid, legal_name: `${label} Pvt`, display_name: label, slug: `${tag}-${label}`, state: 'KA', city: 'X', languages: ['en'], status: 'active', gstin: `29AAAAA0000A1Z${label.length % 10}` }).select('id').single()
       if (error) throw new Error(`provider ${label}: ${error.message}`)
       created.providerIds.push(p!.id)
@@ -250,25 +251,27 @@ async function http() {
       const vp0 = await fetch(`${BASE}/api/v1/rfq/voice-parse`, { method: 'POST', headers: { Authorization: `Bearer ${b.token}` }, body: new FormData() })
       const vp0b = await json(vp0)
       check('voice-parse with neither audio nor text → 422 audio_required (byte-identical)', vp0.status === 422 && vp0b['error'] === 'audio_required', `status ${vp0.status}`)
-      // WhatsApp: procurement off → the dispatcher is the S2.3 one: a buyer's text → the holding reply
-      if (!has0045) skip('flag OFF WhatsApp: a buyer text → the holding reply (dispatcher byte-identical)', NEEDS_0045)
+      // WhatsApp: procurement off → no agent job; a buyer's text → the ADR-030 HELP menu (no model)
+      if (!has0045) skip('flag OFF WhatsApp: a buyer text → the HELP menu, no agent job', NEEDS_0045)
       else {
         await remember('agents_enabled')
         const en = (settingsBefore.get('agents_enabled')?.value ?? {}) as Record<string, boolean>
-        if (en['procurement'] || en['support']) skip('flag OFF WhatsApp holding reply', 'agents_enabled.procurement / support already true on this DB — not a dark baseline')
+        if (en['procurement'] || en['support']) skip('flag OFF WhatsApp HELP menu', 'agents_enabled.procurement / support already true on this DB — not a dark baseline')
         else {
           process.env['AGENT_ENABLED'] = 'true'
           process.env['WHATSAPP_DRIVER'] = 'stub'
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const inbound = require('../../agent-runtime/src/whatsapp/inbound') as typeof import('../../agent-runtime/src/whatsapp/inbound')
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const outboundMod = require('../../agent-runtime/src/whatsapp/outbound') as typeof import('../../agent-runtime/src/whatsapp/outbound')
           const { data: c } = await admin.from('wa_conversations').insert({ phone_e164: `91${b.digits}`, user_id: b.uid, locale: 'en', last_inbound_at: new Date().toISOString(), window_open_until: new Date(Date.now() + 86400 * 1000).toISOString() }).select('id').single()
           created.convIds.push(c!.id)
           await admin.from('agent_grants').insert({ user_id: b.uid, persona: 'buyer', scopes: [], channel: 'whatsapp', channel_identity: `+91${b.digits}`, consent: { locale: 'en', surface: 'whatsapp', keyword: 'START', text_version: 'v1', at: new Date().toISOString() } })
           const { data: m } = await admin.from('wa_messages').insert({ conversation_id: c!.id, direction: 'in', vendor_message_id: `${tag}-off-1`, kind: 'text', body: 'I need a CA for GST filing', status: 'received', payload: { type: 'text', text: { body: 'I need a CA for GST filing' } } }).select('id').single()
           const jobs: string[] = []
-          await inbound.handleWaInbound(m!.id as string, { enqueueSupportReply: async () => { jobs.push('support'); return 'q' }, enqueueProcurementTurn: async () => { jobs.push('procurement'); return 'q' }, enqueueProcurementDecide: async () => { jobs.push('procurement'); return 'q' } })
-          const { data: outs } = await admin.from('wa_messages').select('template_name').eq('conversation_id', c!.id).eq('direction', 'out')
-          check('flag OFF WhatsApp: a buyer’s need text → no procurement or support job, the S0.5 holding reply only (dispatcher byte-identical)', jobs.length === 0 && (outs ?? []).length === 1 && /holding/.test(String((outs as any[])[0]?.template_name ?? '')), JSON.stringify({ jobs, outs }))
+          const sysKinds: string[] = []
+          await inbound.handleWaInbound(m!.id as string, { enqueueSupportReply: async () => { jobs.push('support'); return 'q' }, enqueueProcurementTurn: async () => { jobs.push('procurement'); return 'q' }, enqueueProcurementDecide: async () => { jobs.push('procurement'); return 'q' } }, { send: async (conv, kind, locale, opts) => { sysKinds.push(kind); return outboundMod.sendSystem(conv, kind, locale, opts) } })
+          check('flag OFF WhatsApp: a buyer’s need text → no procurement or support job, the HELP menu only (ADR-030, no model)', jobs.length === 0 && JSON.stringify(sysKinds) === '["wa_menu"]', JSON.stringify({ jobs, sysKinds }))
         }
       }
       return
@@ -309,6 +312,12 @@ async function http() {
     const sup = require('../../agent-runtime/src/agents/support/index') as typeof import('../../agent-runtime/src/agents/support/index')
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const inbound = require('../../agent-runtime/src/whatsapp/inbound') as typeof import('../../agent-runtime/src/whatsapp/inbound')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const outboundMod = require('../../agent-runtime/src/whatsapp/outbound') as typeof import('../../agent-runtime/src/whatsapp/outbound')
+    // ADR-030: the dispatcher's own replies (consent, the menu) go through sendSystem — recorded here per conversation
+    const sysSent: Array<{ conv: string; kind: string }> = []
+    const sysSend: typeof outboundMod.sendSystem = async (conv, kind, locale, opts) => { sysSent.push({ conv: conv.id, kind }); return outboundMod.sendSystem(conv, kind, locale, opts) }
+    const sysKindsOf = (conv: string) => sysSent.filter((s) => s.conv === conv).map((s) => s.kind)
     loadDefaultPrompts()
     const whatsapp = makeStubDriver(() => undefined)
     const store = new Map<string, number>()
@@ -362,7 +371,7 @@ async function http() {
       const { data, error } = await admin.from('wa_messages').insert({ conversation_id: conv, direction: 'in', vendor_message_id: `${tag}-${++vendorSeq}`, kind: m.kind, body: m.kind === 'audio' ? null : (m.body ?? m.payload ?? null), media_ref: m.mediaRef ?? null, mime: m.mime ?? null, status: 'received', payload: raw }).select('id').single()
       if (error) throw new Error(`waSay: ${error.message}`)
       await admin.from('wa_conversations').update({ last_inbound_at: new Date().toISOString(), window_open_until: new Date(Date.now() + 86400 * 1000).toISOString() }).eq('id', conv)
-      await inbound.handleWaInbound(data!.id as string, hooks)
+      await inbound.handleWaInbound(data!.id as string, hooks, { send: sysSend })
       return { id: data!.id as string, results: await drain() }
     }
     const outbound = async (conv: string) => ((await admin.from('wa_messages').select('id, kind, body, template_name, payload, created_at').eq('conversation_id', conv).eq('direction', 'out').order('created_at', { ascending: true })).data ?? []) as any[]
@@ -615,12 +624,13 @@ async function http() {
     if (bb?.existed) await setSetting('budget_run_paise_by_agent', bb.value)
     else await admin.from('agent_settings').delete().eq('key', 'budget_run_paise_by_agent')
 
-    // ── STOP → WhatsApp stops, the web mirror continues ──
+    // ── STOP → WhatsApp stops: every WhatsApp grant revoked, the session delivering on WhatsApp closes (ADR-030 §2:
+    //    processing stops after STOP), and nothing more goes out there ──
+    const sysBeforeStop = sysKindsOf(convB).length
     await waSay(convB, { kind: 'text', body: 'STOP' })
     const waBefore = (await outbound(convB)).length
     const turnsBefore = (await agentTurns(s1?.id ?? NIL)).length
-    // a NEW quote set on B's session after STOP (a fourth provider, matched by hand) → the watch writes the summary to the
-    // web mirror only
+    // a NEW quote set on B's request after STOP (a fourth provider, matched by hand) → the watch sends nothing anywhere
     const p4 = await mkProvider('p4')
     await admin.from('rfq_matches').insert({ rfq_id: rfqId, provider_id: p4.providerId, notified_at: new Date().toISOString() })
     const qD = await quoteOf(p4, 2_450_000, 6, true)
@@ -628,24 +638,31 @@ async function http() {
     const { data: gB } = await admin.from('agent_grants').select('channel').eq('user_id', b.uid).eq('persona', 'buyer').is('revoked_at', null)
     const sStop = await sessionOf(s1?.id ?? NIL)
     const afterTurns = await agentTurns(s1?.id ?? NIL)
-    check('STOP → the WhatsApp grant revoked (the web grant stays) → a new quote after STOP: the watch writes the summary to the web mirror, and NO new WhatsApp message', !!qD && ((gB ?? []) as any[]).every((g) => g.channel !== 'whatsapp') && ((gB ?? []) as any[]).some((g) => g.channel === 'web') && (await outbound(convB)).length === waBefore && afterTurns.length > turnsBefore && afterTurns.at(-1)?.proposal?.key === 'quotes_summary' && !['failed', 'expired'].includes(sStop?.state), JSON.stringify({ qD, grants: gB, state: sStop?.state, turns: [turnsBefore, afterTurns.length] }))
+    const convBRow = (await admin.from('wa_conversations').select('procurement_session_id').eq('id', convB).single()).data as any
+    check('STOP → the WhatsApp grant revoked (the web grant stays), the WhatsApp session closes (failed, wa_stop, the conversation pointer cleared), the opt-out confirmation once → a new quote after STOP: NO turn and NO WhatsApp message', !!qD && ((gB ?? []) as any[]).every((g) => g.channel !== 'whatsapp') && ((gB ?? []) as any[]).some((g) => g.channel === 'web') && sStop?.state === 'failed' && sStop?.close_reason === 'wa_stop' && !sStop?.open_run_id && convBRow?.procurement_session_id === null && JSON.stringify(sysKindsOf(convB).slice(sysBeforeStop)) === '["wa_opt_out_confirmed"]' && (await outbound(convB)).length === waBefore && afterTurns.length === turnsBefore, JSON.stringify({ qD, grants: gB, state: sStop?.state, reason: sStop?.close_reason, sys: sysKindsOf(convB).slice(sysBeforeStop), turns: [turnsBefore, afterTurns.length] }))
 
-    // ── revoke mid-flow → the next watch closes the session and sends nothing ──
+    // ── disable after STOP → the web grant goes too; the closed session stays closed and nothing is sent ──
     const r0 = (await agentTurns(s1?.id ?? NIL)).length
     await api(b.token, '/api/v1/agent/procurement/disable', {}).then(json)
     await pr.runProcurementWatch(deps, { sessionIds: [s1?.id ?? NIL] })
     const sRev = await sessionOf(s1?.id ?? NIL)
-    check('disable (the grant revoked) mid-flow → the next watch closes the session as failed (grant_revoked), cancels any parked run, and sends NOTHING (no turn, no WhatsApp)', sRev?.state === 'failed' && sRev?.close_reason === 'grant_revoked' && !sRev?.open_run_id && (await agentTurns(s1?.id ?? NIL)).length === r0, JSON.stringify({ state: sRev?.state, reason: sRev?.close_reason }))
+    const { data: gB2 } = await admin.from('agent_grants').select('channel').eq('user_id', b.uid).eq('persona', 'buyer').is('revoked_at', null)
+    check('disable after STOP → no buyer grant left; the next watch leaves the closed session closed, cancels nothing new, and sends NOTHING (no turn, no WhatsApp)', sRev?.state === 'failed' && !sRev?.open_run_id && ((gB2 ?? []) as any[]).length === 0 && (await agentTurns(s1?.id ?? NIL)).length === r0 && (await outbound(convB)).length === waBefore, JSON.stringify({ state: sRev?.state, reason: sRev?.close_reason, grants: gB2 }))
+    skip('disable mid-flow on an ACTIVE session → failed (grant_revoked)', 'STOP now closes the WhatsApp session first (ADR-030); the watch rule is unchanged (procurement watch.ts)')
 
-    // ── "hi" never strips the widened WhatsApp scopes (the grantWhatsApp fix) ──
+    // ── "hi" is never consent (ADR-030 / audit B4): the menu, the widened WhatsApp scopes untouched; START keeps them ──
     const h = await mkBuyer('h')
     tokens.set(h.uid, h.token)
     const convH = await mkConv(h)
     await setSetting('cohort_user_ids', [...baseCohort, b.uid, other.uid, p1.uid, p2.uid, p3.uid, q.uid, c.uid, k.uid, h.uid])
     await api(h.token, '/api/v1/agent/procurement/enable', { consent_text_version: 'procurement-v1-2026-09-23' }).then(json)
+    const { data: gH0 } = await admin.from('agent_grants').select('id').eq('user_id', h.uid).eq('channel', 'whatsapp').is('revoked_at', null)
     await waSay(convH, { kind: 'text', body: 'hi' })
-    const { data: gH } = await admin.from('agent_grants').select('scopes').eq('user_id', h.uid).eq('channel', 'whatsapp').is('revoked_at', null)
-    check('a re-sent opt-in keyword (“hi”, no session open) refreshes the WhatsApp consent but KEEPS the widened procurement scopes', ((gH ?? []) as any[]).length === 1 && PROCUREMENT_SCOPES.every((s) => ((gH as any[])[0].scopes as string[]).includes(s)), JSON.stringify(gH))
+    const { data: gH } = await admin.from('agent_grants').select('id, scopes').eq('user_id', h.uid).eq('channel', 'whatsapp').is('revoked_at', null)
+    check('“hi” (no session open) is a greeting, never consent: the HELP menu, the WhatsApp grant untouched (same row, procurement scopes kept)', JSON.stringify(sysKindsOf(convH)) === '["wa_menu"]' && ((gH ?? []) as any[]).length === 1 && (gH as any[])[0].id === (gH0 as any[] | null)?.[0]?.id && PROCUREMENT_SCOPES.every((s) => ((gH as any[])[0].scopes as string[]).includes(s)), JSON.stringify({ gH, sys: sysKindsOf(convH) }))
+    await waSay(convH, { kind: 'text', body: 'START' })
+    const { data: gH2 } = await admin.from('agent_grants').select('id, scopes').eq('user_id', h.uid).eq('channel', 'whatsapp').is('revoked_at', null)
+    check('START refreshes the WhatsApp consent (a new grant row) but KEEPS the procurement scopes consented from this phone', ((gH2 ?? []) as any[]).length === 1 && (gH2 as any[])[0].id !== (gH as any[] | null)?.[0]?.id && PROCUREMENT_SCOPES.every((s) => ((gH2 as any[])[0].scopes as string[]).includes(s)) && sysKindsOf(convH).at(-1) === 'wa_opt_in_confirmed', JSON.stringify(gH2))
 
     // ── the admin tile ──
     const st = await json(await api(adminU.token, '/api/v1/agent/admin/procurement/stats', undefined, 'GET'))
@@ -709,6 +726,8 @@ async function http() {
       await del('wa_conversations', admin.from('wa_conversations').delete().in('id', convIds))
       for (const o of created.objects) await admin.storage.from(BUCKET).remove([o])
       await del('grants', admin.from('agent_grants').delete().in('user_id', users))
+      // ADR-030: STOP / START wrote the phone's consent state (the append-only events stay as evidence, user_id nulled)
+      await del('wa_phone_consents', admin.from('wa_phone_consents').delete().in('user_id', users))
       await del('audit', admin.from('audit_logs').delete().in('actor_id', users))
       await del('provider_categories', admin.from('provider_categories').delete().in('provider_id', pids))
       await del('provider_profiles', admin.from('provider_profiles').delete().in('id', pids))
