@@ -12,7 +12,7 @@ const LOCALE_RE = new RegExp(`^/(${LOCALE_PREFIX_PATTERN})(/|$)`)
 // Role-level gating (provider/admin) deliberately does NOT live here: checking
 // DB roles in middleware would add a round-trip to every request, so the
 // (provider)/(admin) layouts enforce roles server-side instead.
-const PROTECTED_PREFIXES = ['/app', '/partner/onboarding', '/partner/earnings', '/partner/listings', '/partner/rfqs', '/partner/orders', '/partner/profile', '/admin']
+const PROTECTED_PREFIXES = ['/app', '/partner/onboarding', '/partner/earnings', '/partner/listings', '/partner/rfqs', '/partner/orders', '/partner/profile', '/partner/settings', '/partner/privacy', '/admin']
 
 // Experience v3 E5 (FR-5.1): with EXP_V3_CHECKOUT=on a signed-out visitor may
 // open ONE path — a package checkout — and sign up inline on it. Read here

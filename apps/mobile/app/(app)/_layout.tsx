@@ -46,6 +46,8 @@ const ALL_ROUTES = [
   'support', 'assistant', 'notifications',
   'partner-listings', 'partner-earnings', 'profile', 'invoices',
   'partner-reviews', 'partner-insights', 'partner-profile', 'partner-onboarding',
+  // PRD_WHATSAPP W1 — Help, WhatsApp, notification settings and privacy requests, for everyone.
+  'help', 'whatsapp-settings', 'notification-settings', 'privacy',
 ] as const
 
 export default function AppLayout() {
@@ -199,6 +201,11 @@ export default function AppLayout() {
       <Tabs.Screen name="partner-insights" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="partner-profile" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="partner-onboarding" options={{ href: null, headerShown: false }} />
+      {/* PRD_WHATSAPP W1 — reachable for everyone (Help from the home header, settings from Help / notifications). */}
+      <Tabs.Screen name="help" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="whatsapp-settings" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="notification-settings" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="privacy" options={{ href: null, headerShown: false }} />
     </Tabs>
     </>
   )

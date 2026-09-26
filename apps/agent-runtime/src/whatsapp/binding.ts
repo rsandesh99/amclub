@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Ledger } from '@amclub/agent-core'
-import { PROCUREMENT_SESSION_STATES, procurementSessionIsActive } from '@amclub/shared'
+import { PROCUREMENT_SESSION_STATES, procurementSessionIsActive, waLocaleFor } from '@amclub/shared'
 
 const ACTIVE_PROCUREMENT_STATES = PROCUREMENT_SESSION_STATES.filter((s) => procurementSessionIsActive(s))
 
@@ -18,6 +18,10 @@ const ACTIVE_PROCUREMENT_STATES = PROCUREMENT_SESSION_STATES.filter((s) => procu
  *  - every WhatsApp grant lookup filters on the channel identity;
  *  - every outbound picks the conversation of the user's current phone
  *    (`boundConversationFor`).
+ *
+ * ADR-030 adds two callers of the same halt: STOP (`haltConversationWork`, the
+ * conversation stays bound but nothing answers there any more) and Meta's "user
+ * changed number" system message (`unbindConversation`).
  *
  * Migration 0079 adds the DB half: a trigger on `users.phone` that unbinds the
  * old phone's conversations and revokes its grants the moment the phone changes.
@@ -44,6 +48,8 @@ export interface PhoneUser {
 
 /** The user holding this phone now (users.phone is UNIQUE). Matches the '+' form and bare digits. */
 export async function userByPhone(admin: SupabaseClient, digits: string): Promise<PhoneUser | null> {
+  // ADR-030 / audit 2.9: a BSUID-only conversation is keyed `u:<bsuid>` — never a phone, never reduced to digits
+  if (String(digits ?? '').startsWith('u:')) return null
   const d = phoneDigits(digits)
   if (!d) return null
   const { data } = await admin.from('users').select('id, phone, preferred_locale, roles').in('phone', [`+${d}`, d]).limit(1).maybeSingle()
@@ -127,13 +133,83 @@ async function cancelParkedRun(ledger: Ledger | null, runId: string | null, reas
   }
 }
 
+export interface HaltResult {
+  cancelledDrafts: number
+  closedSessions: number
+}
+
+/**
+ * Stop every piece of agent work that answers on this conversation for `userId` (a phone change, a number change,
+ * STOP — ADR-030 §2 "processing stops after STOP"): the conversation's pointers (onboarding session, procurement
+ * session, support ticket) are cleared, the Munshi drafts whose buttons went out on WhatsApp are expired (their parked
+ * runs cancelled), and the procurement sessions delivering to this conversation fail with their open proposal
+ * cancelled. The onboarding session row and the support ticket stay (the web wizard / ops carry on); only their route
+ * to this chat goes. Guarded writes: a concurrent job that already did it changes nothing.
+ */
+export async function haltConversationWork(
+  admin: SupabaseClient,
+  conv: { id: string },
+  userId: string | null,
+  opts: { ledger?: Ledger | null; now?: Date; reason: string },
+): Promise<HaltResult> {
+  const now = (opts.now ?? new Date()).toISOString()
+  const out: HaltResult = { cancelledDrafts: 0, closedSessions: 0 }
+  await admin.from('wa_conversations').update({ active_session_id: null, support_ticket_id: null, updated_at: now }).eq('id', conv.id)
+  // the procurement pointer is a separate write: a database without 0045 then costs this line only
+  await admin.from('wa_conversations').update({ procurement_session_id: null }).eq('id', conv.id)
+  if (!userId) return out
+  // Munshi drafts still open for the user whose buttons went out on WhatsApp: nothing is approved from a chat that
+  // stopped (or is no longer theirs); the web / app keep nothing open for it either
+  const { data: drafts } = await admin.from('munshi_drafts').select('id, run_id, delivered').eq('user_id', userId).eq('status', 'proposed').is('deleted_at', null).limit(100)
+  for (const d of (drafts as { id: string; run_id: string | null; delivered: Record<string, unknown> | null }[] | null) ?? []) {
+    if (!d.delivered || !d.delivered['whatsapp']) continue
+    await cancelParkedRun(opts.ledger ?? null, d.run_id, opts.reason)
+    const { data: upd } = await admin.from('munshi_drafts').update({ status: 'expired', result_ref: { reason: opts.reason }, updated_at: now }).eq('id', d.id).eq('status', 'proposed').select('id')
+    if (Array.isArray(upd) && upd.length) out.cancelledDrafts++
+  }
+  // procurement sessions delivering to this conversation: their open proposal is cancelled and the session closes
+  const { data: sessions } = await admin.from('procurement_sessions').select('id, state, open_run_id').eq('conversation_id', conv.id).eq('user_id', userId).is('deleted_at', null).in('state', ACTIVE_PROCUREMENT_STATES)
+  for (const s of (sessions as { id: string; state: string; open_run_id: string | null }[] | null) ?? []) {
+    await cancelParkedRun(opts.ledger ?? null, s.open_run_id, opts.reason)
+    const { data: upd } = await admin.from('procurement_sessions').update({ state: 'failed', open_run_id: null, close_reason: opts.reason }).eq('id', s.id).eq('state', s.state).select('id')
+    if (Array.isArray(upd) && upd.length) out.closedSessions++
+  }
+  return out
+}
+
+/**
+ * Unbind a conversation from the user it is bound to: user_id → null (guarded on that user), the WhatsApp grants given
+ * from this phone revoked, and its work halted (`haltConversationWork`). Used when the phone is no longer the user's
+ * (audit M41) and on Meta's "user changed number" system message (ADR-030).
+ */
+export async function unbindConversation(
+  admin: SupabaseClient,
+  conv: { id: string; phone_e164: string; user_id: string | null },
+  opts: { ledger?: Ledger | null; now?: Date; reason: string },
+): Promise<{ unboundFrom: string | null; revokedGrants: number } & HaltResult> {
+  const now = (opts.now ?? new Date()).toISOString()
+  const old = conv.user_id
+  if (!old) return { unboundFrom: null, revokedGrants: 0, ...(await haltConversationWork(admin, conv, null, opts)) }
+  // 1. unbind — guarded on the user it was bound to (a concurrent job may already have done it)
+  await admin.from('wa_conversations').update({ user_id: null, updated_at: now }).eq('id', conv.id).eq('user_id', old)
+  // 2. the grants this phone gave (consent is the phone's, not the account's)
+  const { data: revoked } = await admin.from('agent_grants').update({ revoked_at: now }).eq('user_id', old).eq('channel', 'whatsapp').eq('channel_identity', channelIdentityOf(conv.phone_e164)).is('revoked_at', null).select('id')
+  // 3. the drafts / proposals / sessions answering here
+  const halted = await haltConversationWork(admin, conv, old, opts)
+  const revokedGrants = Array.isArray(revoked) ? revoked.length : 0
+  console.warn('[wa] conversation unbound', JSON.stringify({ conversation: conv.id, reason: opts.reason, revoked: revokedGrants, drafts: halted.cancelledDrafts, sessions: halted.closedSessions }))
+  return { unboundFrom: old, revokedGrants, ...halted }
+}
+
+let boundAtMissingLogged = false
+
 /**
  * Re-derive the owner of a conversation from `users.phone` (called on EVERY
  * inbound message, before anything reads the binding). When the bound user no
- * longer holds the phone: unbind (user_id, active_session_id,
- * procurement_session_id, support_ticket_id → null), revoke the WhatsApp grants
- * given from this phone, cancel the Munshi drafts delivered here and close the
- * procurement sessions that deliver here. Then bind the phone's current holder.
+ * longer holds the phone: unbind (`unbindConversation`: user_id and the
+ * pointers → null, the WhatsApp grants given from this phone revoked, the
+ * Munshi drafts delivered here cancelled, the procurement sessions that
+ * deliver here closed). Then bind the phone's current holder.
  */
 export async function reconcileConversationOwner(
   admin: SupabaseClient,
@@ -148,40 +224,26 @@ export async function reconcileConversationOwner(
     return out
   }
   if (conv.user_id) {
-    const old = conv.user_id
-    out.unboundFrom = old
-    // 1. unbind — guarded on the user it was bound to (a concurrent job may already have done it)
-    await admin.from('wa_conversations').update({ user_id: null, active_session_id: null, support_ticket_id: null, updated_at: now }).eq('id', conv.id).eq('user_id', old)
-    // the procurement pointer is a separate write: a database without 0045 then costs this line only
-    await admin.from('wa_conversations').update({ procurement_session_id: null }).eq('id', conv.id)
-    // 2. the grants this phone gave (consent is the phone's, not the account's)
-    const { data: revoked } = await admin.from('agent_grants').update({ revoked_at: now }).eq('user_id', old).eq('channel', 'whatsapp').eq('channel_identity', channelIdentityOf(conv.phone_e164)).is('revoked_at', null).select('id')
-    out.revokedGrants = Array.isArray(revoked) ? revoked.length : 0
-    // 3. Munshi drafts still open for the old owner: their buttons went to this phone; the web / app keep nothing open
-    //    for a number that is no longer theirs to approve from
-    const { data: drafts } = await admin.from('munshi_drafts').select('id, run_id, delivered').eq('user_id', old).eq('status', 'proposed').is('deleted_at', null).limit(100)
-    for (const d of (drafts as { id: string; run_id: string | null; delivered: Record<string, unknown> | null }[] | null) ?? []) {
-      if (!d.delivered || !d.delivered['whatsapp']) continue
-      await cancelParkedRun(opts.ledger ?? null, d.run_id, 'phone_changed')
-      const { data: upd } = await admin.from('munshi_drafts').update({ status: 'expired', result_ref: { reason: 'phone_changed' }, updated_at: now }).eq('id', d.id).eq('status', 'proposed').select('id')
-      if (Array.isArray(upd) && upd.length) out.cancelledDrafts++
-    }
-    // 4. procurement sessions delivering to this conversation: their open proposal is cancelled and the session closes
-    const { data: sessions } = await admin.from('procurement_sessions').select('id, state, open_run_id').eq('conversation_id', conv.id).eq('user_id', old).is('deleted_at', null).in('state', ACTIVE_PROCUREMENT_STATES)
-    for (const s of (sessions as { id: string; state: string; open_run_id: string | null }[] | null) ?? []) {
-      await cancelParkedRun(opts.ledger ?? null, s.open_run_id, 'phone_changed')
-      const { data: upd } = await admin.from('procurement_sessions').update({ state: 'failed', open_run_id: null, close_reason: 'phone_changed' }).eq('id', s.id).eq('state', s.state).select('id')
-      if (Array.isArray(upd) && upd.length) out.closedSessions++
-    }
-    console.warn('[wa] conversation unbound: the phone is no longer its user\'s', JSON.stringify({ conversation: conv.id, revoked: out.revokedGrants, drafts: out.cancelledDrafts, sessions: out.closedSessions }))
+    const r = await unbindConversation(admin, conv, { ...opts, reason: 'phone_changed' })
+    out.unboundFrom = r.unboundFrom
+    out.revokedGrants = r.revokedGrants
+    out.cancelledDrafts = r.cancelledDrafts
+    out.closedSessions = r.closedSessions
     out.userId = null
   }
-  // 5. bind the phone's current holder (their own START from this phone creates their grant)
+  // bind the phone's current holder (their own START from this phone creates their grants)
   if (holder) {
-    const { data: bound } = await admin.from('wa_conversations').update({ user_id: holder.id, locale: holder.preferred_locale === 'hi' || holder.preferred_locale === 'te' ? holder.preferred_locale : 'en', updated_at: now }).eq('id', conv.id).is('user_id', null).select('id')
+    const { data: bound } = await admin.from('wa_conversations').update({ user_id: holder.id, locale: waLocaleFor(holder.preferred_locale), updated_at: now }).eq('id', conv.id).is('user_id', null).select('id')
     if (Array.isArray(bound) && bound.length) {
       out.userId = holder.id
       out.locale = holder.preferred_locale
+      // 0086: when the current holder was bound (transcripts never show an earlier holder's messages). A separate write,
+      // so a database without 0086 costs this line only.
+      const { error } = await admin.from('wa_conversations').update({ bound_at: now }).eq('id', conv.id)
+      if (error && !boundAtMissingLogged) {
+        boundAtMissingLogged = true
+        console.error('[wa] wa_conversations.bound_at not written (apply migration 0086)', error.message)
+      }
     }
   }
   return out

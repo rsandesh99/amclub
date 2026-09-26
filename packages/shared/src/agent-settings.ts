@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { VOICE_SEARCH_LANGUAGES, voiceLanguageEvalsSchema } from './voice-languages'
+import { NOTIFICATION_KIND_NAMES, type NotificationKind } from './notify'
 
 /**
  * Agent config registry (ADR-009 §7, ARCHITECTURE.md §8). Every key the runtime
@@ -67,6 +68,19 @@ const AGENTS_ENABLED_DEFAULT: AgentsEnabled = Object.fromEntries(
   AGENT_NAMES.map((n) => [n, false]),
 ) as AgentsEnabled
 
+// ── ADR-030 consent — the cohort rule (audit B8), read by the runtime and the web availability checks ──
+export const COHORT_MODES = ['list', 'all'] as const
+export type CohortMode = (typeof COHORT_MODES)[number]
+
+/**
+ * Is this user in the agents' cohort? `cohort_mode = 'all'` → everyone; otherwise (the default, and any unreadable value)
+ * the `cohort_user_ids` allowlist. Callers still check the agent's own switch (agents_enabled) and the user's grant.
+ */
+export function inAgentCohort(mode: unknown, cohortUserIds: unknown, userId: string): boolean {
+  if (mode === 'all') return true
+  return Array.isArray(cohortUserIds) && cohortUserIds.includes(userId)
+}
+
 export interface AgentSettingDef {
   schema: z.ZodTypeAny
   /** The launch value when the key is unset in the DB. */
@@ -110,6 +124,17 @@ export const AGENT_SETTING_DEFS = {
     schema: z.string().min(1).max(40),
     default: 'v1',
     hint: 'Version tag of the WhatsApp consent text captured in agent_grants.consent (S0.5). Bump when the wording changes.',
+  },
+  // ── ADR-030 transport (the one WhatsApp send path + the delivery ledger) ──
+  wa_window_margin_seconds: {
+    schema: z.number().int().min(0).max(3600),
+    default: 120,
+    hint: 'ADR-030 seconds before the 24-hour customer-service window closes from which free-form WhatsApp (text, buttons, links, media) is no longer sent; a template goes instead (or nothing). Guards against a message landing just after the window shut (Meta error 131047).',
+  },
+  wa_rate_millipaise: {
+    schema: z.record(z.string().min(1).max(40), z.number().int().min(0).max(10_000_000)),
+    default: { utility: 11_500, marketing: 86_310, authentication: 11_500, service: 11_500 },
+    hint: 'ADR-030 WhatsApp list price per billable message by Meta pricing category, in MILLIPAISE (1/1000 paise), excl. 18 % GST. The status webhook records cost_millipaise from it; a non-billable message costs 0, an unknown category stays null. Update when Meta changes the India rate card.',
   },
   // ── S0.4 trust mechanics ─────────────────────────────────────────────────
   rfq_max_quotes: {
@@ -421,6 +446,50 @@ export const AGENT_SETTING_DEFS = {
     schema: z.number().int().min(1).max(48),
     default: 12,
     hint: "S3.4 hours between a group's close and the earliest member request's expiry, so every group price can still be paid.",
+  },
+  // ── ADR-030 consent (WhatsApp: who the assistant serves, recycled numbers) ──
+  cohort_mode: {
+    schema: z.enum(COHORT_MODES),
+    default: 'list' as CohortMode,
+    hint: "Audit B8 / D-WA2: 'list' = an enabled agent runs only for cohort_user_ids (today's allowlist); 'all' = every user, still subject to each agent's own switch in agents_enabled and the user's own grant. The non-AI WhatsApp HELP menu serves everyone either way. Budgets: the open envelope (budget_month_open_paise) still follows the explicit list.",
+  },
+  wa_rebind_dormant_days: {
+    schema: z.number().int().min(0).max(3650),
+    default: 90,
+    hint: 'ADR-030 recycled numbers: before WhatsApp acts for an account not signed in for this many days (users.last_seen_at, else its creation), it asks the person to sign in first ("confirm it is you") and does nothing else for that account. Telcos reissue numbers after about 90 days. 0 = off.',
+  },
+  // ── ADR-030 privacy ops (D-WA5 retention, DPDP requests) ─────────────────
+  wa_retention_text_days: {
+    schema: z.number().int().min(30).max(1825),
+    default: 180,
+    hint: 'ADR-030 §6 days after which the wa-retention cron redacts WhatsApp message text, transcripts and payloads (unless on legal hold, or the user has an open ticket, open dispute or an order not yet done).',
+  },
+  wa_retention_media_days: {
+    schema: z.number().int().min(7).max(1825),
+    default: 90,
+    hint: 'ADR-030 §6 days after which WhatsApp media (voice notes, photos, documents in the wa-media bucket) are deleted, with the same holds as text.',
+  },
+  wa_retention_unknown_days: {
+    schema: z.number().int().min(7).max(365),
+    default: 30,
+    hint: 'ADR-030 §6 days after which the conversation of a number that never bound to an AMClub account is deleted with its messages and media (consent events stay as proof).',
+  },
+  dpdp_due_days: {
+    schema: z.number().int().min(1).max(90),
+    default: 30,
+    hint: 'ADR-030 §6 days within which a DPDP request (access, correction, erasure, withdrawal, grievance) is answered; the due date is set when the request is recorded and /admin/privacy flags overdue ones.',
+  },
+  // ── ADR-030 notifications ─────────────────────────────────────────────────
+  sms_dlt_templates: {
+    // Partial map notification kind → the MSG91 Flow template registered on DLT and the value keys it takes (each sent
+    // under its own name, as the OTP hook sends `otp`). A kind with no entry never sends SMS (skipped: no-dlt-template),
+    // so nothing bills by default.
+    schema: z.record(
+      z.enum(NOTIFICATION_KIND_NAMES as [NotificationKind, ...NotificationKind[]]),
+      z.object({ templateId: z.string().min(1).max(64), vars: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/)).max(10) }).strict(),
+    ),
+    default: {} as Partial<Record<NotificationKind, { templateId: string; vars: string[] }>>,
+    hint: 'ADR-030 §4: the MSG91 Flow (DLT) template per notification kind for the SMS channel and the WhatsApp fallback — { "<kind>": { "templateId": "…", "vars": ["ref", "amount"] } }. Each value goes under its own name (define the flow\'s variables as ##ref##, ##amount## …), cut to 30 characters (DLT); a link is shortened by MSG91. A kind without a template never sends SMS. Values available: title, body, link and the kind\'s own (ref, amount, deadline, count …).',
   },
 } as const satisfies Record<string, AgentSettingDef>
 

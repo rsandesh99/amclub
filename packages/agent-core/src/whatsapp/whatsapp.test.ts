@@ -12,12 +12,13 @@ import {
   allTemplateNames,
   classifyKeyword,
   createWhatsAppProvider,
-  makeInteraktDriver,
   makeMetaCloudDriver,
   makeStubDriver,
   metaVerifyChallenge,
+  resolveTemplate,
   templateFor,
   whatsappConfigFromEnv,
+  whatsappDriverState,
 } from './index'
 
 // ── recorded fixtures (shapes as the vendors send them) ─────────────────────
@@ -32,46 +33,42 @@ const META_TEXT = {
 const META_IMAGE_AND_STATUS = {
   object: 'whatsapp_business_account',
   entry: [{ id: '1', changes: [{ field: 'messages', value: {
+    metadata: { display_phone_number: '15550001111', phone_number_id: 'PNID' },
     messages: [{ from: '919876543210', id: 'wamid.IMG1', timestamp: '1726800100', type: 'image', image: { id: 'MEDIA123', mime_type: 'image/jpeg', caption: 'site photo' } }],
     statuses: [{ id: 'wamid.OUT1', status: 'delivered', timestamp: '1726800101', recipient_id: '919876543210' }],
   } }] }],
 }
-const INTERAKT_TEXT = {
-  version: '1.0', timestamp: '2026-09-20T10:00:00Z', type: 'message_received',
-  data: { customer: { id: 'c1', phone_number: '9876543210', country_code: '+91', traits: {} },
-    message: { id: 'int-msg-1', message: 'STOP', chat_message_type: 'Text', media_url: null, received_at_utc: '2026-09-20T10:00:00Z' } },
-}
-const INTERAKT_DELIVERED = { type: 'message_api_delivered', data: { customer: { phone_number: '9876543210', country_code: '+91' }, message: { id: 'int-out-1', received_at_utc: '2026-09-20T10:01:00Z' } } }
-
 const noNetwork: typeof fetch = (async () => { throw new Error('network call attempted') }) as unknown as typeof fetch
 
 describe('template registry', () => {
-  it('covers every transactional kind and never an unknown one', () => {
-    for (const k of ['order_placed', 'order_delivered', 'payout_paid', 'rfq_new_quote', 'milestone_added']) expect(templateFor(k, 'hi')?.name).toMatch(/_hi$/)
+  it('covers every transactional kind in every locale and never an unknown one', () => {
+    for (const k of ['order_placed', 'order_delivered', 'payout_paid', 'rfq_new_quote', 'milestone_added']) {
+      expect(templateFor(k, 'hi')?.name).toMatch(/_hi$/)
+      expect(resolveTemplate(k, 'te')).toMatchObject({ name: expect.stringMatching(/_te$/), language: 'te' })
+      expect(resolveTemplate(k, 'ta')).toMatchObject({ name: expect.stringMatching(/_ta$/), language: 'ta' })
+    }
     expect(templateFor('marketing_blast', 'en')).toBeNull()
     expect(allTemplateNames().length).toBe(new Set(allTemplateNames()).size)
   })
-  it('S1.6 onboarding templates exist in en/hi/te and are opt-in gated', () => {
+  it('S1.6 onboarding templates exist in en/hi/te/ta; expired carries the link as its URL button only', () => {
     for (const k of ['onboarding_start', 'onboarding_resume', 'onboarding_draft_ready', 'onboarding_expired']) {
       expect(templateFor(k, 'te')?.name).toMatch(/_te$/)
       expect(templateFor(k, 'hi')?.name).toMatch(/_hi$/)
-      expect(WA_ALWAYS_ALLOWED_KINDS.has(k)).toBe(false)
     }
-    expect(templateFor('onboarding_expired', 'en')?.spec.params({ title: 't', body: 'b', link: 'https://x' })).toEqual(['https://x'])
+    const spec = templateFor('onboarding_expired', 'en')!.spec
+    expect(spec.params({ link: 'https://amclub.in/partner/onboarding?session=s1' })).toEqual([])
+    expect(spec.urlButton?.suffix({ link: 'https://amclub.in/partner/onboarding?session=s1' })).toBe('partner/onboarding?session=s1')
   })
-  it('always-allowed kinds are order/payment events only', () => {
-    for (const k of WA_ALWAYS_ALLOWED_KINDS) expect(WA_TEMPLATES[k]).toBeDefined()
-    expect(WA_ALWAYS_ALLOWED_KINDS.has('rfq_matched')).toBe(false)
-    expect(WA_ALWAYS_ALLOWED_KINDS.has('review_prompt')).toBe(false)
+  it('ADR-030: no kind is sendable without consent any more (the always-allowed set is gone)', () => {
+    expect(WA_ALWAYS_ALLOWED_KINDS.size).toBe(0)
+    for (const k of ['rfq_matched', 'review_prompt', 'order_placed']) expect(WA_TEMPLATES[k]?.category).toBe('utility')
+    // the three system kinds move to templates-system.ts (the dispatcher's own copy)
+    for (const k of ['wa_opt_in_confirmed', 'wa_opt_out_confirmed', 'wa_holding_reply']) expect(Object.keys(WA_TEMPLATES).includes(k) ? 'system' : 'absent').toMatch(/system|absent/)
   })
-  it('classifies opt-in / opt-out keywords, incl. vernacular, case-insensitively', () => {
+  it('deprecated keyword classifier still answers for its remaining callers', () => {
     expect(classifyKeyword(' Start ')).toBe('opt_in')
-    expect(classifyKeyword('JOIN')).toBe('onboard') // S1.6: onboarding keyword (dispatcher falls back to opt-in without a grant)
-    expect(classifyKeyword(' onboard ')).toBe('onboard')
-    expect(classifyKeyword('చేరండి')).toBe('onboard')
-    expect(classifyKeyword('नमस्ते')).toBe('opt_in')
+    expect(classifyKeyword('JOIN')).toBe('onboard')
     expect(classifyKeyword('STOP')).toBe('opt_out')
-    expect(classifyKeyword('बंद')).toBe('opt_out')
     expect(classifyKeyword('how much for gst filing?')).toBeNull()
   })
 })
@@ -102,7 +99,7 @@ describe('meta_cloud driver', () => {
   })
   it('parses an interactive list reply as a button with the row id as payload', () => {
     const d = makeMetaCloudDriver(cfg, noNetwork)
-    const body = { entry: [{ changes: [{ value: { messages: [{ from: '919876543210', id: 'wamid.LIST1', timestamp: '1726800200', type: 'interactive', interactive: { type: 'list_reply', list_reply: { id: 'cat:legal', title: 'Legal' } } }] } }] }] }
+    const body = { entry: [{ changes: [{ value: { metadata: { phone_number_id: 'PNID' }, messages: [{ from: '919876543210', id: 'wamid.LIST1', timestamp: '1726800200', type: 'interactive', interactive: { type: 'list_reply', list_reply: { id: 'cat:legal', title: 'Legal' } } }] } }] }] }
     expect(d.parseInbound(body).messages[0]).toMatchObject({ kind: 'button', buttonPayload: 'cat:legal', body: 'Legal' })
   })
   it('sends ≤ 3 buttons as an interactive button message and more as a list', async () => {
@@ -119,26 +116,13 @@ describe('meta_cloud driver', () => {
     const calls: { url: string; body: unknown }[] = []
     const f: typeof fetch = (async (url: string, init: RequestInit) => { calls.push({ url, body: JSON.parse(String(init.body)) }); return new Response(JSON.stringify({ messages: [{ id: 'wamid.OUT9' }] }), { status: 200 }) }) as unknown as typeof fetch
     const d = makeMetaCloudDriver(cfg, f)
-    const r = await d.sendTemplate('919876543210', 'amc_order_placed_hi', 'hi', ['Order placed', 'AMC-1'])
+    const r = await d.sendTemplate('919876543210', { name: 'amc_order_placed_hi', language: 'hi' }, { body: ['Order placed', 'AMC-1'] })
     expect(r).toEqual({ ok: true, vendorMessageId: 'wamid.OUT9', detail: 'sent' })
-    expect(calls[0]?.url).toContain('/PNID/messages')
+    expect(calls[0]?.url).toContain('/v24.0/PNID/messages')
     expect(calls[0]?.body).toMatchObject({ type: 'template', template: { name: 'amc_order_placed_hi', language: { code: 'hi' } } })
-  })
-})
-
-describe('interakt driver', () => {
-  const cfg = { driver: 'interakt' as const, interaktApiKey: 'k', interaktWebhookSecret: 'shh' }
-  it('parses inbound text (country code + number → E.164 digits) and status events', () => {
-    const d = makeInteraktDriver(cfg, noNetwork)
-    const a = d.parseInbound(INTERAKT_TEXT)
-    expect(a.messages[0]).toMatchObject({ vendorMessageId: 'int-msg-1', fromE164: '919876543210', kind: 'text', body: 'STOP' })
-    const b = d.parseInbound(INTERAKT_DELIVERED)
-    expect(b.statuses[0]).toMatchObject({ vendorMessageId: 'int-out-1', status: 'delivered' })
-  })
-  it('verifies the shared-secret header', () => {
-    const d = makeInteraktDriver(cfg, noNetwork)
-    expect(d.verifySignature('{}', { 'x-interakt-secret': 'shh' })).toBe(true)
-    expect(d.verifySignature('{}', { 'x-interakt-secret': 'nope' })).toBe(false)
+    // the deprecated positional form takes the language from the name, never from the locale (audit B2)
+    await d.sendTemplate('919876543210', 'amc_order_placed_en', 'te', ['x'])
+    expect(calls[1]?.body).toMatchObject({ template: { name: 'amc_order_placed_en', language: { code: 'en' } } })
   })
 })
 
@@ -146,7 +130,7 @@ describe('stub driver + env selection', () => {
   it('never touches the network and reports stub', async () => {
     const log = vi.fn()
     const d = makeStubDriver(log)
-    const r = await d.sendTemplate('919876543210', 'amc_order_placed_en', 'en', ['a'])
+    const r = await d.sendTemplate('919876543210', { name: 'amc_order_placed_en', language: 'en' }, { body: ['a'] })
     expect(r.detail).toBe('stub')
     expect(r.ok).toBe(true)
     expect(log).toHaveBeenCalled()
@@ -155,8 +139,25 @@ describe('stub driver + env selection', () => {
     expect(whatsappConfigFromEnv({}).driver).toBe('stub')
     expect(whatsappConfigFromEnv({ WHATSAPP_DRIVER: 'meta_cloud' }).driver).toBe('stub')
     expect(whatsappConfigFromEnv({ WHATSAPP_DRIVER: 'meta_cloud', WHATSAPP_PHONE_NUMBER_ID: 'p', WHATSAPP_ACCESS_TOKEN: 't' }).driver).toBe('meta_cloud')
-    expect(whatsappConfigFromEnv({ WHATSAPP_DRIVER: 'interakt', INTERAKT_API_KEY: 'k' }).driver).toBe('interakt')
+    expect(whatsappConfigFromEnv({ WHATSAPP_DRIVER: 'interakt', INTERAKT_API_KEY: 'k' }).driver).toBe('stub') // Interakt removed (ADR-030)
     expect(createWhatsAppProvider(whatsappConfigFromEnv({})).name).toBe('stub')
+  })
+  it('pins the Graph version (default v24.0; an invalid value is replaced and reported) and a timeout', () => {
+    expect(whatsappConfigFromEnv({}).graphVersion).toBe('v24.0')
+    expect(whatsappConfigFromEnv({ WHATSAPP_GRAPH_VERSION: 'v25.0' }).graphVersion).toBe('v25.0')
+    expect(whatsappConfigFromEnv({ WHATSAPP_GRAPH_VERSION: 'latest' }).graphVersion).toBe('v24.0')
+    expect(whatsappConfigFromEnv({}).timeoutMs).toBe(10_000)
+    expect(whatsappConfigFromEnv({ WHATSAPP_TIMEOUT_MS: '4000' }).timeoutMs).toBe(4000)
+    expect(whatsappDriverState({ WHATSAPP_GRAPH_VERSION: 'v20' }).invalid).toContain('WHATSAPP_GRAPH_VERSION')
+  })
+  it('fails loud: meta_cloud named without credentials is reported (names only, never values)', () => {
+    const s = whatsappDriverState({ WHATSAPP_DRIVER: 'meta_cloud', WHATSAPP_ACCESS_TOKEN: 'secret-token' })
+    expect(s).toMatchObject({ requested: 'meta_cloud', driver: 'stub', live: false, configured: false, tokenSet: true, phoneNumberIdSet: false })
+    expect(s.missing).toEqual(['WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN'])
+    expect(JSON.stringify(s)).not.toContain('secret-token')
+    const ok = whatsappDriverState({ WHATSAPP_DRIVER: 'meta_cloud', WHATSAPP_PHONE_NUMBER_ID: 'p', WHATSAPP_ACCESS_TOKEN: 't', WHATSAPP_APP_SECRET: 'a', WHATSAPP_VERIFY_TOKEN: 'v', WHATSAPP_WABA_ID: 'w' })
+    expect(ok).toMatchObject({ driver: 'meta_cloud', live: true, configured: true, wabaIdSet: true, missing: [] })
+    expect(whatsappDriverState({})).toMatchObject({ driver: 'stub', requested: 'stub', configured: true })
   })
 })
 
@@ -218,11 +219,8 @@ describe('downloadMedia limits (audit M34)', () => {
       })) as unknown as typeof fetch
     await expect(makeMetaCloudDriver(cfg, slow).downloadMedia('MEDIA6', { ...limits, timeoutMs: 20 })).rejects.toMatchObject({ code: 'timeout' })
   })
-  it('refuses a malformed media id and a non-https / internal Interakt URL', async () => {
+  it('refuses a malformed media id', async () => {
     await expect(makeMetaCloudDriver(cfg, noNetwork).downloadMedia('../../etc', limits)).rejects.toBeInstanceOf(MediaRefusedError)
-    const d = makeInteraktDriver({ driver: 'interakt', interaktApiKey: 'k', interaktWebhookSecret: 's' }, noNetwork)
-    await expect(d.downloadMedia('http://169.254.169.254/latest', limits)).rejects.toMatchObject({ code: 'bad_ref' })
-    await expect(d.downloadMedia('https://localhost/x', limits)).rejects.toMatchObject({ code: 'bad_ref' })
   })
   it('media limits come from env, clamped; the allow-list is code', () => {
     expect(mediaLimitsFromEnv({}).maxBytes).toBe(DEFAULT_MEDIA_LIMITS.maxBytes)

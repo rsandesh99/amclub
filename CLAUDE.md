@@ -16,7 +16,7 @@
 | **Search** | Postgres FTS + pg_trgm → Meilisearch/Typesense at >5K listings |
 | **Auth** | Supabase Auth · phone OTP primary (MSG91 hook) · Google OAuth secondary |
 | **Payments** | Razorpay PG + Route · UPI default · webhooks are the ONLY payment truth |
-| **Notifications** | MSG91 (SMS) · Gupshup/Interakt (WhatsApp) · Resend (email) · Web Push |
+| **Notifications** | MSG91 (SMS, DLT) · WhatsApp direct on Meta's Cloud API (ADR-030) · Resend (email) · Web Push |
 | **i18n** | next-intl · ICU messages · en + hi at launch; 8+ languages later |
 | **Validation** | Zod everywhere — API input, forms, env. Schema first, types derived. |
 | **Monitoring** | Sentry · PostHog · Vercel Analytics |
@@ -169,6 +169,25 @@ any → held               (dispute open, provider suspended, or bank verificati
   - `agent_grants` is **server-written only**. It is consent evidence and the source of delegated-token scopes, and a delegated token is role=authenticated. `/api/v1/agent/grants` writes on the service role after `requireNotDelegated` and a persona-held check; the `agent_grants_immutable` trigger lets only `revoked_at` change and never revives a grant. A client write grant on it is review-blocking.
   - Every write route no agent tool wraps calls `requireNotDelegated` first — Mart included. `verify-authz` §10 and `verify-mart` F2 probe for an exact 403.
   - Eight blockers stand before any live WhatsApp number (section 1 of the audit). Read the audit before WhatsApp work.
+- **ADR-030 wave 1 landed (WhatsApp on Meta's Cloud API + notifications; migrations 0086, 0087; nothing reaches Meta until `WHATSAPP_DRIVER=meta_cloud` + its credentials). It fixes the audit's B1–B7; B8 is the `cohort_mode` switch (default `list`, D-WA2):**
+  - **One send path:** every WhatsApp message goes through agent-core `sendWhatsApp`, from the web dispatcher, the runtime or the ops console. Its steps: consent (`mayMessage`), then the window, then a `wa_messages` ledger row keyed by an idempotency key, then the driver, then a classified error. Never call a driver directly. The Graph version is pinned to `v24.0`.
+  - **Consent is per phone and purpose** (transactional / assistant / marketing):
+    - `wa_consent_events` is append-only. `wa_phone_consents` is written only by `record_wa_consent()` (service role).
+    - STOP stops everything. A greeting is not consent, and "no" / "cancel" are not STOP (shared `classifyWaKeyword`).
+    - A business send needs an opt-in the recipient themselves gave. A phone change withdraws the old number's opt-ins (0086 trigger).
+    - `WA_ALWAYS_ALLOWED_KINDS` stays empty.
+  - **Templates:**
+    - The registry is CORE + NOTIFY + SYSTEM (`whatsapp/templates*.ts`): four locales, utility only, and every template has sample values.
+    - A URL button only opens our own domain (template-kit `linkSuffix`).
+    - A template change regenerates PRE_LAUNCH_CHECKLIST 1.3 (`templates:list`).
+  - **Notifications:**
+    - Call sites name a KIND. Shared `NOTIFICATION_KINDS`, the user's preferences and the essential floor decide the channels. Register a new kind there first; it needs a template before it gets WhatsApp.
+    - Delivery runs through `notification_outbox` and the cron `notify-dispatch`: retry, IST quiet hours, the lead digest, and WhatsApp → SMS / email fallback. `NOTIFY_OUTBOX=off` is the kill switch.
+    - SMS goes out only for a kind with a DLT template in `sms_dlt_templates`.
+  - **User controls:** `/me/whatsapp`, `/me/notification-preferences` and `/me/privacy-requests` (DPDP, one open request per kind), all behind `requireNotDelegated`; web and mobile settings; the HELP menu on WhatsApp.
+  - **Ops:** `/admin/whatsapp` (driver, delivery, spend, templates vs Meta, unrouted replies) and `/admin/privacy` (the DPDP queue); crons `wa-retention` and `wa-template-sync`.
+  - **No WhatsApp content in any corpus or eval set**, nor anything derived from it (shared `corpusSourceAllowed`).
+  - Runbooks: `docs/agents/WHATSAPP.md`, `docs/agents/WHATSAPP_OPS.md`. Rigs: `whatsapp:verify`, `verify-whatsapp-consent`, `verify-whatsapp-ops`, `verify-notifications`.
 - **ADR-023 landed (money safety; amends ADR-003):** the simulation gateway never takes a payment on the production deployment. ADR-003's live-cutover procedure and checklist still govern how production starts taking payments. `paymentsAvailable(isReal, VERCEL_ENV)` (`lib/payments/simulation.ts`) is false only for the mock on `VERCEL_ENV=production`; then every checkout entry point (`/checkout`, `/checkout/simulate`, `/mart/checkout`, `/mart/pools/[id]/checkout`) returns 503 `payments_unavailable`. Previews, CI and the rigs keep simulating. `verify-money-loop` asserts it.
 - **ADR-019 landed (E12a, money, dark: `addons_enabled`, migration 0065):** package add-ons. Shared `packageCharge` is the ONE rule: package + Σ add-ons, the package discount on the package only, a coupon on the whole subtotal, one `computeOrderAmounts`, byte-identical with no add-ons. Checkout, `POST /api/v1/checkout/preview`, the coupon route and the checkout page all call it. The snapshot is frozen on the session and copied onto the order by trigger. An id that isn't an active add-on → 409 `addon_changed`. Invoices get one line per add-on. Writes go only through `/api/v1/partner/packages/[id]/addons` on the service role.
 - **ADR-020 landed (E12b, money, dark: `quote_options_enabled`, migration 0066):** quote speed options. The quote row IS Standard. `quote_options` holds Economy / Express per quote revision (immutable rows, service role only). Coherence is shared `quoteOptionsProblems`: Express faster and never cheaper, Economy slower and never dearer; otherwise 400. Compare choices come from shared `quoteChoices` / `choiceExtremes`. Checkout `optionId` must be this quote's at its current revision, else 404 `option_not_found`; it charges `quoteChargeAmounts(option price, quote GST mode)` with the option's days. Finalize records `quotes.selected_option_id`, and loss labels use the winning option.

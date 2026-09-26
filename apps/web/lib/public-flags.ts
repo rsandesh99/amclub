@@ -19,3 +19,10 @@ export const MEMBER_PRICING_ENABLED = process.env['NEXT_PUBLIC_MEMBER_PRICING_EN
  * itself, so the first paint already knows.
  */
 export const ANALYTICS_CONSENT_REQUIRED = process.env['NEXT_PUBLIC_ANALYTICS_CONSENT_REQUIRED'] === 'true'
+
+/**
+ * WHATSAPP_MARKETING_ENABLED — PRD_WHATSAPP D-WA3 (built dark). The "Offers"
+ * WhatsApp toggle in settings renders only when this is on, or when the person
+ * already opted in to marketing (so they can always opt out). Default OFF.
+ */
+export const WHATSAPP_MARKETING_ENABLED = process.env['NEXT_PUBLIC_WHATSAPP_MARKETING_ENABLED'] === 'true'

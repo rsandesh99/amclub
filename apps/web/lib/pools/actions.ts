@@ -10,6 +10,7 @@ import {
   type PoolMemberStatus,
   type PoolOfferInput,
   type ServicePoolStatus,
+  type NotificationKind,
 } from '@amclub/shared'
 import { recordAiDecision } from '@/lib/mart/events'
 import { createNotification, createNotificationsBulk } from '@/lib/notifications/create'
@@ -364,7 +365,7 @@ export async function cancelPool(admin: SupabaseClient, a: { adminUserId: string
 }
 
 /** One notification to one buyer (used by the clock for per-member outcomes). */
-export async function notifyBuyer(admin: SupabaseClient, msmeId: string, input: { kind: string; titleKey: string; bodyKey: string; values?: Record<string, string | number>; link: string }): Promise<void> {
+export async function notifyBuyer(admin: SupabaseClient, msmeId: string, input: { kind: NotificationKind; titleKey: string; bodyKey: string; values?: Record<string, string | number>; link: string }): Promise<void> {
   const [userId] = await buyerUserIds(admin, [msmeId])
   if (!userId) return
   await createNotification(admin, { userId, kind: input.kind, titleI18n: notifyText(input.titleKey), bodyI18n: notifyText(input.bodyKey, input.values ?? {}), link: input.link })

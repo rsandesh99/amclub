@@ -80,7 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       titleI18n: notifyText('quote_declined.title'),
       bodyI18n: sameText(composed.message),
       link: `/partner/rfqs/${rfqId}`,
-      channels: ['whatsapp'],
+      values: { title: rfq.title },
     })
   }
 

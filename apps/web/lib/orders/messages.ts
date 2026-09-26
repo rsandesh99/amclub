@@ -148,7 +148,7 @@ export async function sendOrderMessage(admin: Admin, thread: OrderThread, userId
         titleI18n: notifyText('order_message.title', { ref: thread.orderNumber }),
         bodyI18n: sameText(thread.title),
         link,
-        channels: ['whatsapp'],
+        values: { ref: thread.orderNumber },
       })
     }
   }

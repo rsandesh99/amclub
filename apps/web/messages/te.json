@@ -1096,7 +1096,9 @@
     "jobs_issue_refunds_failing": "{n} రీఫండ్‌లు ఇంకా విఫలమవుతున్నాయి",
     "jobs_issue_not_enqueued": "ఏజెంట్ రన్‌టైమ్ జాబ్‌ను స్వీకరించలేదు",
     "jobs_issue_update_errors": "{n} వరుసలు అప్‌డేట్ కాలేదు",
-    "jobs_issue_step_errors": "{n} దశలు విఫలమయ్యాయి"
+    "jobs_issue_step_errors": "{n} దశలు విఫలమయ్యాయి",
+    "jobs_issue_notifications_failed": "{n} నోటిఫికేషన్లు విఫలమయ్యాయి",
+    "jobs_issue_outbox_missing": "మైగ్రేషన్ 0087 (నోటిఫికేషన్ అవుట్‌బాక్స్) వర్తించలేదు — నోటిఫికేషన్లు నేరుగా పంపబడుతున్నాయి"
   },
   "orders": {
     "dispute_statement_title": "మీ వాదన",

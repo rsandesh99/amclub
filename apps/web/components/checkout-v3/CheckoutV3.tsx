@@ -14,6 +14,8 @@ import { RefundLine } from '@/components/packages-v3/BuyBox'
 import { useAnalytics } from '@/components/providers/posthog'
 import { readSearchAttribution } from '@/components/search-v3/SearchAttributionCapture'
 import { acceptLegalDocs } from '@/lib/legal/client'
+import { hasPendingWhatsAppOptIn, rememberWhatsAppOptIn, sendPendingWhatsAppOptIn } from '@/lib/api/settings-client'
+import { WhatsAppOptInCheckbox } from '@/components/settings/WhatsAppOptInCheckbox'
 import { CHECKOUT_ERROR_KEYS, checkoutErrorKey, isCheckoutExpired, newIdempotencyKey, payCheckout, startCheckout } from '@/lib/payments/razorpay-client'
 
 // Loaded only when needed: the sign-in panel (guests) and the success moment (after paying).
@@ -104,6 +106,19 @@ export function CheckoutV3({
     setConsentedState(v)
     try { sessionStorage.setItem('amc_checkout_consent', v ? '1' : '0') } catch { /* private mode */ }
   }
+  // Audit §5 item 1 — the unticked WhatsApp box on the inline sign-up. Like the consent it survives the refresh after
+  // sign-in (sessionStorage, in settings-client); it is sent once the account exists (pay mode), never blocking checkout.
+  const [waOptIn, setWaOptInState] = useState(false)
+  const [waShownInProfile, setWaShownInProfile] = useState(false)
+  useEffect(() => {
+    const pending = hasPendingWhatsAppOptIn()
+    setWaOptInState(pending)
+    setWaShownInProfile(pending)
+  }, [])
+  const setWaOptIn = (on: boolean) => { setWaOptInState(on); rememberWhatsAppOptIn('checkout', on) }
+  useEffect(() => {
+    if (mode === 'pay' && hasPendingWhatsAppOptIn()) void sendPendingWhatsAppOptIn()
+  }, [mode])
   const [fullName, setFullName] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [coupon, setCoupon] = useState('')
@@ -291,6 +306,7 @@ export function CheckoutV3({
             onAuthenticated={() => router.refresh()}
             googleRedirectTo={`/app/checkout/${packageId}`}
             consent={{ checked: consented, onChange: setConsented }}
+            whatsapp={{ checked: waOptIn, onChange: setWaOptIn }}
           />
         </section>
       )}
@@ -307,6 +323,8 @@ export function CheckoutV3({
             <Input id="co-biz" autoComplete="organization" value={businessName} onChange={(e) => setBusinessName(e.target.value)} maxLength={150} />
           </div>
           <ConsentCheckbox checked={consented} onChange={setConsented} id="checkout-consent" />
+          {/* The box ticked at the phone step, shown again so it can be changed before the account is made. */}
+          {waShownInProfile && <WhatsAppOptInCheckbox checked={waOptIn} onChange={setWaOptIn} id="checkout-wa-optin" />}
           <Button onClick={saveProfile} loading={loading} className="w-full">{tv('continue_to_pay')}</Button>
         </section>
       )}

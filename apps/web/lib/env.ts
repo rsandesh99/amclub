@@ -36,17 +36,29 @@ const serverEnvSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   MSG91_AUTH_KEY: z.string().optional(),
+  // ADR-030 §4 — the notification SMS channel (MSG91 Flow, DLT). Optional sender id (the DLT header) when the flow
+  // needs one; the per-kind DLT templates live in agent_settings.sms_dlt_templates.
+  MSG91_SENDER_ID: z.string().min(1).max(11).optional(),
+  // ADR-030 §4 — kill switch for the notification outbox: 'off' sends every external channel directly (the behaviour
+  // before migration 0087). Unset / 'on' = the outbox (once 0087 is applied).
+  NOTIFY_OUTBOX: z.enum(['on', 'off']).optional(),
   // Supabase Auth "Send SMS" hook secret ("v1,whsec_…"); production refuses unsigned hook calls without it.
   SEND_SMS_HOOK_SECRET: z.string().optional(),
   WHATSAPP_API_KEY: z.string().optional(),
-  // S0.5 WhatsApp rails. Driver is stub (no bill) unless WHATSAPP_DRIVER + creds are set.
-  WHATSAPP_DRIVER: z.enum(['meta_cloud', 'interakt', 'stub']).optional(),
+  // WhatsApp on Meta's Cloud API (ADR-030; the Interakt driver is removed). Driver is stub (no bill) unless
+  // WHATSAPP_DRIVER=meta_cloud + the phone number id and token are set; agent-core `whatsappDriverState()` reports a
+  // named driver with a missing credential.
+  WHATSAPP_DRIVER: z.enum(['meta_cloud', 'stub']).optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_APP_SECRET: z.string().optional(),
   WHATSAPP_VERIFY_TOKEN: z.string().optional(),
-  INTERAKT_API_KEY: z.string().optional(),
-  INTERAKT_WEBHOOK_SECRET: z.string().optional(),
+  // The WhatsApp Business Account id (account webhooks for another WABA are dropped).
+  WHATSAPP_WABA_ID: z.string().optional(),
+  // Pinned Graph API version (audit B5): `vNN.0`, default v24.0 in agent-core. Blank = unset.
+  WHATSAPP_GRAPH_VERSION: z.preprocess((v) => (v === '' ? undefined : v), z.string().regex(/^v\d{2}\.0$/, 'WHATSAPP_GRAPH_VERSION must look like v24.0').optional()),
+  // Timeout for every Graph call, ms (1000–60000; default 10000). Blank = unset.
+  WHATSAPP_TIMEOUT_MS: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().min(1_000).max(60_000).optional()),
   RESEND_API_KEY: z.string().optional(),
   KYC_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),

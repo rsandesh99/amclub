@@ -86,7 +86,6 @@ export async function runOnboardingNudges(admin: Admin, now: Date = new Date()):
       },
       bodyI18n: { en: `Pick up at “${label.en}”.`, hi: `“${label.hi}” से आगे बढ़ें।`, te: `“${label.te}” నుండి కొనసాగించండి.`, ta: `“${label.ta}” இலிருந்து தொடருங்கள்.` },
       link: `/partner/onboarding?step=${r.step}`,
-      channels: ['whatsapp'],
     })
     if (due === 1) captureServerEvent(r.user_id, 'onboarding_abandoned', { step: r.step })
     captureServerEvent(r.user_id, 'onboarding_nudge_sent', { step: r.step })

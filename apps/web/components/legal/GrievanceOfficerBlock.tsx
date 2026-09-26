@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { Mail, MapPin, Phone, UserRound } from 'lucide-react'
-import { GRIEVANCE_OFFICER, GRIEVANCE_SLA, whatsappHref } from '@/lib/legal/grievance'
+import { GRIEVANCE_OFFICER, GRIEVANCE_SLA, OFFICIAL_WHATSAPP, whatsappHref } from '@/lib/legal/grievance'
 
 /**
  * The statutory Grievance Officer block (name, designation, address, phone,
@@ -44,8 +44,9 @@ export async function GrievanceOfficerBlock({ compact = false }: { compact?: boo
           <Phone className="h-4 w-4 shrink-0 text-primary" aria-hidden />
           <a href={`tel:${o.phoneE164}`} className="hover:text-primary hover:underline">{o.phone}</a>
           <span className="text-foreground-secondary">·</span>
-          <a href={whatsappHref(o.phoneE164)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-            {t('whatsapp')}
+          {/* One WhatsApp number everywhere (audit §5 item 8): the official one, not necessarily this phone line. */}
+          <a href={whatsappHref(OFFICIAL_WHATSAPP.e164)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+            {t('whatsapp')}{OFFICIAL_WHATSAPP.e164 !== o.phoneE164 ? ` ${OFFICIAL_WHATSAPP.display}` : ''}
           </a>
         </span>
         <span className="flex items-center gap-2">

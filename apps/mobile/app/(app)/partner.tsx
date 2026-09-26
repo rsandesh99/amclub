@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/i18n'
 import { formatINR } from '@/lib/format'
 import type { ProfileMeResponse } from '@amclub/shared'
 import { AvatarButton } from '@/components/AvatarButton'
+import { WhatsAppOptInCard } from '@/components/WhatsAppOptInCard'
 
 interface ProviderStatus {
   status: 'under_review' | 'active' | 'rejected' | 'suspended' | null
@@ -90,6 +91,9 @@ export default function PartnerScreen() {
           )}
         </View>
 
+        {/* PRD_WHATSAPP W1 — one-time "Get order updates on WhatsApp" for accounts that never chose. */}
+        {providerStatus !== null && <WhatsAppOptInCard persona="provider" />}
+
         {/* Status banner */}
         {providerStatus === 'under_review' && (
           <View className="rounded-xl border border-yellow-300 bg-yellow-50 p-5">
@@ -153,17 +157,6 @@ export default function PartnerScreen() {
 
             {scoreCard && <ScoreCard card={scoreCard} t={t} />}
 
-            {/* S2.3 — the Help chat (only for an enabled, cohorted user; the server decides) */}
-            {supportEnabled && (
-              <TouchableOpacity onPress={() => router.push('/support' as never)} className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-surface p-5" testID="support-tile">
-                <View>
-                  <Text className="text-base font-semibold text-foreground">{t('support.title')}</Text>
-                  <Text className="mt-0.5 text-xs text-foreground-secondary">{t('support.tile_sub')}</Text>
-                </View>
-                <Text className="text-2xl">💬</Text>
-              </TouchableOpacity>
-            )}
-
             {/* E13 — the rest of the provider's phone toolkit (reviews, insights, availability) while `mobile` is on */}
             {mobileV3 && (
               <View className="flex-row gap-2" testID="today-v3-links">
@@ -191,6 +184,15 @@ export default function PartnerScreen() {
             )}
           </>
         )}
+
+        {/* Help for every provider (audit §7: it was cohort-only); the assistant chat inside it stays cohort-only. */}
+        <TouchableOpacity onPress={() => router.push('/help' as never)} className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-surface p-5" testID="help-tile" accessibilityRole="button">
+          <View className="flex-1 pr-3">
+            <Text className="text-base font-semibold text-foreground">{t('help_center.title')}</Text>
+            <Text className="mt-0.5 text-xs text-foreground-secondary">{supportEnabled ? t('support.tile_sub') : t('help_center.tile_sub')}</Text>
+          </View>
+          <Text className="text-2xl">💬</Text>
+        </TouchableOpacity>
 
         {/* Not yet applied */}
         {providerStatus === null && (

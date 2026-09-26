@@ -57,6 +57,10 @@ export default function NotificationsScreen() {
         {unread > 0 && (
           <TouchableOpacity onPress={markAll}><Text className="text-sm text-trust">{t('notifications.mark_all_read')}</Text></TouchableOpacity>
         )}
+        {/* PRD_WHATSAPP W1 — channels, quiet hours, pause */}
+        <TouchableOpacity onPress={() => router.push('/notification-settings' as never)} accessibilityLabel={t('notification_settings.title')} className="p-1" testID="notifications-settings">
+          <Ionicons name="settings-outline" size={20} color="#1A1D1A" />
+        </TouchableOpacity>
       </View>
 
       {loading ? (

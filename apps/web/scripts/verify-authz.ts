@@ -1102,6 +1102,11 @@ async function main() {
         eq('provider token → PATCH /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, { price_paise: 1 }, 'PATCH')).status, 403)
         eq('provider token → POST /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, { action: 'publish' })).status, 403)
         eq('provider token → DELETE /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, undefined, 'DELETE')).status, 403)
+        // ADR-030: a person's own WhatsApp consent, privacy requests and notification settings are never an agent action
+        eq('buyer token → POST /me/whatsapp', (await api(asBuyer, '/api/v1/me/whatsapp', { purpose: 'transactional', optIn: true })).status, 403)
+        eq('buyer token → POST /me/privacy-requests', (await api(asBuyer, '/api/v1/me/privacy-requests', { kind: 'erasure' })).status, 403)
+        eq('buyer token → PUT /me/notification-preferences', (await api(asBuyer, '/api/v1/me/notification-preferences', { preferences: [] }, 'PUT')).status, 403)
+        eq('provider token → PATCH /profile/preferences', (await api(asProvider, '/api/v1/profile/preferences', { preferredLocale: 'hi' }, 'PATCH')).status, 403)
       } else {
         console.log('  (AUTHZ_JWT_SECRET unset — delegated-token probes skipped; CI sets it)')
       }

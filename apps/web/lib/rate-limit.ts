@@ -108,6 +108,8 @@ export const limiters = {
   quoteSubmit: build(30, '1 m', 'rl:quote-submit'),
   /** Review submit / reply / flag per user — abuse + review-bomb guard. */
   reviewWrite: build(20, '10 m', 'rl:review-write'),
+  // ADR-030 §6 — DPDP requests from web / mobile (per user; one open per kind is enforced separately).
+  privacyRequest: build(5, '1 h', 'rl:privacy-request'),
   /** Coupon code validation per user — blunts code-guessing/brute force. */
   couponValidate: build(30, '1 m', 'rl:coupon-validate', 'local'),
   /** Admin mutations (suspend, resolve dispute, commission change, …) per user. */
@@ -138,6 +140,8 @@ export const limiters = {
   quotePreview: build(60, '1 m', 'rl:quote-preview'),
   /** E8b — order messages per user (a conversation, not a firehose). */
   orderMessage: build(20, '1 m', 'rl:order-message'),
+  /** ADR-030 §4 — notification preference saves per user. */
+  notifyPrefs: build(30, '10 m', 'rl:notify-prefs'),
 } as const
 
 export interface RateLimitResult {

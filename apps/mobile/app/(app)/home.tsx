@@ -10,6 +10,7 @@ import { AvatarButton } from '@/components/AvatarButton'
 import { LocaleToggle } from '@/components/LocaleToggle'
 import { HeroBanner } from '@/components/HeroBanner'
 import { HomeV3Block } from '@/components/HomeV3Block'
+import { WhatsAppOptInCard } from '@/components/WhatsAppOptInCard'
 import { CATEGORY_LIST, pickLocale } from '@amclub/shared'
 
 export default function HomeScreen() {
@@ -17,7 +18,6 @@ export default function HomeScreen() {
   const [userName, setUserName] = useState('')
   const [q, setQ] = useState('')
   const [unread, setUnread] = useState(0)
-  const [supportEnabled, setSupportEnabled] = useState(false)
   const [assistantEnabled, setAssistantEnabled] = useState(false)
   const [homeV3, setHomeV3] = useState(false)
   // E13 — the avatar opens the profile sheet (role switch, invoices, sign out) while `mobile` is on.
@@ -25,9 +25,8 @@ export default function HomeScreen() {
 
   useEffect(() => {
     void (async () => {
-      // S2.3 — the Help chat exists only for an enabled, cohorted user (the server decides).
+      // S2.3 — the Help chat (cohort-only) now sits inside the Help screen, which is for everyone.
       const me = await fetchMe()
-      setSupportEnabled(me?.supportEnabled === true)
       // S3.1 — the buying assistant for an enabled, cohorted buyer (the server decides; the routes 404 for everyone else)
       setAssistantEnabled(me?.procurementEnabled === true)
       // Experience v3 E9 — the server decides (flag `home`).
@@ -61,11 +60,10 @@ export default function HomeScreen() {
                 <Ionicons name="chatbubbles-outline" size={18} color="#5C645C" />
               </TouchableOpacity>
             )}
-            {supportEnabled && (
-              <TouchableOpacity onPress={() => router.push('/support' as never)} className="rounded-lg border border-gray-200 p-2" testID="support-entry">
-                <Ionicons name="help-circle-outline" size={18} color="#5C645C" />
-              </TouchableOpacity>
-            )}
+            {/* Help for everyone (audit §7); the assistant chat inside it stays cohort-only. */}
+            <TouchableOpacity onPress={() => router.push('/help' as never)} className="rounded-lg border border-gray-200 p-2" testID="help-entry" accessibilityLabel={t('help_center.title')}>
+              <Ionicons name="help-circle-outline" size={18} color="#5C645C" />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/notifications' as never)} className="relative rounded-lg border border-gray-200 p-2">
               <Ionicons name="notifications-outline" size={18} color="#5C645C" />
               {unread > 0 && (
@@ -103,6 +101,9 @@ export default function HomeScreen() {
             <Text className="text-xs font-semibold text-white">{t('catalog.search_btn')}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* PRD_WHATSAPP W1 — one-time "Get order updates on WhatsApp" for accounts that never chose. */}
+        <WhatsAppOptInCard persona="buyer" />
 
         {/* Experience v3 E9 — needs your action + buy again (the same payload as the web home) */}
         {homeV3 && <HomeV3Block />}

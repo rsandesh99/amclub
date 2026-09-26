@@ -161,7 +161,7 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
       titleI18n: notifyText('quote_accepted.title'),
       bodyI18n: sameText(claimed.title),
       link: '/partner/orders',
-      channels: ['sms', 'whatsapp'],
+      values: { title: claimed.title },
     })
   }
 
@@ -172,8 +172,9 @@ export async function finalizeQuoteAcceptance(admin: Admin, orderId: string): Pr
       .select('user_id')
       .in('id', declinedProviderIds)
     const userIds = (provs ?? []).map((p) => p.user_id).filter(Boolean) as string[]
+    // In-app only (the registry's `quote_lost`); the buyer's own decline of a quote is `quote_declined`.
     await createNotificationsBulk(admin, userIds, {
-      kind: 'quote_declined',
+      kind: 'quote_lost',
       titleI18n: notifyText('quote_lost.title'),
       bodyI18n: sameText(claimed.title),
       link: '/partner/rfqs',
@@ -262,7 +263,7 @@ async function handleDuplicateRfqOrder(admin: Admin, orderId: string, rfqId: str
       titleI18n: notifyText('duplicate_payment.title'),
       bodyI18n: notifyText(refunded ? 'duplicate_payment.body_refunded' : 'duplicate_payment.body_pending', { ref: String(order.order_number) }),
       link: `/app/orders/${orderId}`,
-      channels: ['email', 'sms'],
+      values: { ref: String(order.order_number) },
     })
   }
   return 'duplicate_flagged'

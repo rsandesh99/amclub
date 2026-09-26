@@ -23,6 +23,9 @@ export const CRON_ISSUE_CODES = [
   'not_enqueued',
   'update_errors',
   'step_errors',
+  // ADR-030 §4 notifications
+  'notifications_failed',
+  'outbox_missing',
 ] as const
 export type CronIssueCode = (typeof CRON_ISSUE_CODES)[number]
 export interface CronIssue {
@@ -99,6 +102,9 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { name: 'licence-reminders', staleAfterMs: 26 * H },
   { name: 'onboarding-nudges', staleAfterMs: 2 * H },
   { name: 'data-foundations', staleAfterMs: 26 * H }, // nightly 21:40 UTC (E15 retention + F4)
+  // ADR-030 §6 privacy ops — daily. Degraded when a step failed or 0086 is not applied yet (`notReady`).
+  { name: 'wa-retention', staleAfterMs: 26 * H, issues: (r) => issue('step_errors', num(r['errors']) + (r['notReady'] === true ? 1 : 0)) },
+  { name: 'wa-template-sync', staleAfterMs: 26 * H, issues: (r) => issue('step_errors', num(r['errors']) + (r['notReady'] === true ? 1 : 0)) },
   { name: 'pool-close', staleAfterMs: 3 * H, requires: 'mart' }, // hourly Mart cron; inert (no beat) while MART_ENABLED=false
   // Agent crons beat even while AGENT_ENABLED=false (they only skip the enqueue).
   { name: 'agent-munshi-scan', staleAfterMs: 1 * H, issues: enqueueIssues },
@@ -107,6 +113,15 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { name: 'agent-munshi-growth', staleAfterMs: 8 * 24 * H, issues: enqueueIssues }, // weekly (S2.4)
   { name: 'agent-procurement-watch', staleAfterMs: 1 * H, issues: enqueueIssues }, // every 15 min (S3.1)
   { name: 'agent-demand-pools', staleAfterMs: 3 * H }, // hourly (S3.4); a no-op beat while the switch is off
+  // ADR-030 §4 — the notification outbox, every minute: amber when a notification finally failed with no fallback.
+  // Before 0087 the run reports ready: false and stays green (the direct fan-out is in use; notify-reminders flags it).
+  { name: 'notify-dispatch', staleAfterMs: 15 * 60_000, issues: (r) => issue('notifications_failed', r['failed']) },
+  // Hourly deadline reminders: amber while 0087 is missing (nothing can be claimed, nothing is sent) or a step failed.
+  {
+    name: 'notify-reminders',
+    staleAfterMs: 3 * H,
+    issues: (r) => [...(r['ready'] === false ? [{ code: 'outbox_missing' as const, n: 1 }] : []), ...issue('step_errors', r['stepErrors'])],
+  },
 ]
 
 /** The failures a finished run reported (empty = ok). Unknown job names report nothing. */

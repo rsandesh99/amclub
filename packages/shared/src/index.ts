@@ -159,6 +159,19 @@ export * from './service-pools'
 export * from './onboarding'
 export * from './onboarding-copy'
 
+// ADR-030 — WhatsApp channel vocabulary (locales, consent purposes / sources, the keyword classifier)
+export * from './whatsapp'
+// ADR-030 §2 — every line the WhatsApp runtime sends without a model (consent, HELP menu, language, data requests)
+export * from './whatsapp-copy'
+// ADR-030 §6 — the WhatsApp ops console and privacy operations (retention, spend in millipaise, DPDP requests)
+export * from './wa-ops'
+// ADR-030 §4 — the notification registry contract, preferences and IST quiet hours
+export * from './notify'
+// Audit §5 item 8 — the official channels (one WhatsApp number everywhere, the domain, support + grievance contacts)
+export * from './official-channels'
+// ADR-030 §6 — DPDP data-principal requests from web / mobile (kinds, the form rule, the due date)
+export * from './privacy-requests'
+
 // Legal documents: current versions (single source for pages, modal, acceptance rows)
 export * from './legal'
 

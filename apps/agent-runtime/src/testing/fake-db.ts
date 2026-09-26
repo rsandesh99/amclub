@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * An in-memory stand-in for the PostgREST query builder — TESTS ONLY. It covers
- * the subset the runtime's WhatsApp paths use (select / insert / update with
+ * the subset the runtime's WhatsApp paths use (select / insert / update / upsert with
  * eq / neq / is / in / gt / gte / lt / lte, `col->>key` JSON paths, order,
  * limit, maybeSingle / single, count head) so the binding, confirmation and
  * sweep rules run without a database. Selected columns are not projected.
@@ -38,7 +38,8 @@ export function fakeDb(seed: Record<string, Row[]> = {}): FakeDb {
   function builder(table: string) {
     const rows = () => (tables[table] ??= [])
     const filters: Filter[] = []
-    let op: 'select' | 'insert' | 'update' | 'delete' = 'select'
+    let op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select'
+    let onConflict: string[] | null = null
     let patch: Row | null = null
     let inserts: Row[] = []
     let returning = false
@@ -53,6 +54,21 @@ export function fakeDb(seed: Record<string, Row[]> = {}): FakeDb {
         const created = inserts.map((r) => ({ id: r['id'] ?? `row-${++seq}`, created_at: r['created_at'] ?? new Date().toISOString(), ...r }))
         rows().push(...created)
         return shape(created)
+      }
+      if (op === 'upsert') {
+        const out: Row[] = []
+        for (const r of inserts) {
+          const hit = onConflict ? rows().find((x) => onConflict!.every((k) => x[k] === r[k])) : undefined
+          if (hit) {
+            Object.assign(hit, r)
+            out.push(hit)
+          } else {
+            const created = { id: r['id'] ?? `row-${++seq}`, created_at: r['created_at'] ?? new Date().toISOString(), ...r }
+            rows().push(created)
+            out.push(created)
+          }
+        }
+        return returning ? shape(out) : { data: null, error: null }
       }
       let hit = rows().filter((r) => filters.every((f) => f(r)))
       if (op === 'update') {
@@ -94,6 +110,12 @@ export function fakeDb(seed: Record<string, Row[]> = {}): FakeDb {
       update(p: Row) {
         op = 'update'
         patch = p
+        return b
+      },
+      upsert(r: Row | Row[], o?: { onConflict?: string }) {
+        op = 'upsert'
+        inserts = Array.isArray(r) ? r : [r]
+        onConflict = o?.onConflict ? o.onConflict.split(',') : null
         return b
       },
       delete() {

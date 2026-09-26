@@ -24,8 +24,9 @@ function Row({ icon, label, onPress, testID }: { icon: ComponentProps<typeof Ion
 /**
  * PRD Experience v3 E13 — the profile (avatar) sheet: who is signed in, the
  * buyer / provider switch for an account with both (FR-13.1; remembered on
- * this device), invoices (buyer, FR-13.3), notifications, help, language and
- * sign out. Reads /profile/me only.
+ * this device), invoices (buyer, FR-13.3), notifications and their settings,
+ * WhatsApp, privacy requests, help (for everyone), language and sign out.
+ * Reads /profile/me only.
  */
 export default function ProfileScreen() {
   const { t } = useI18n()
@@ -72,7 +73,11 @@ export default function ProfileScreen() {
           {role === 'provider' && <Row icon="star-outline" label={t('profile_v3.reviews')} onPress={() => router.push('/partner-reviews' as never)} />}
           {role === 'provider' && <Row icon="stats-chart-outline" label={t('profile_v3.insights')} onPress={() => router.push('/partner-insights' as never)} />}
           <Row icon="notifications-outline" label={t('profile_v3.notifications')} onPress={() => router.push('/notifications' as never)} />
-          {me.supportEnabled && <Row icon="help-circle-outline" label={t('profile_v3.help')} onPress={() => router.push('/support' as never)} />}
+          {/* PRD_WHATSAPP W1 — settings and Help for everyone (the assistant chat stays cohort-only, inside Help). */}
+          <Row icon="options-outline" label={t('profile_v3.notification_settings')} onPress={() => router.push('/notification-settings' as never)} testID="profile-notification-settings" />
+          <Row icon="logo-whatsapp" label={t('profile_v3.whatsapp')} onPress={() => router.push('/whatsapp-settings' as never)} testID="profile-whatsapp" />
+          <Row icon="lock-closed-outline" label={t('profile_v3.privacy')} onPress={() => router.push('/privacy' as never)} testID="profile-privacy" />
+          <Row icon="help-circle-outline" label={t('profile_v3.help')} onPress={() => router.push('/help' as never)} testID="profile-help" />
         </View>
         <View className="flex-row items-center justify-between px-4">
           <Text className="text-sm text-foreground">{t('profile_v3.language')}</Text>

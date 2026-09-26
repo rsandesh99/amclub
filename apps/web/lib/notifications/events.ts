@@ -1,10 +1,18 @@
 import 'server-only'
-import type { createAdminClient } from '@/lib/supabase/server'
-import type { MilestoneKind } from '@amclub/shared'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DisputeResolution, MilestoneKind, NotificationKind } from '@amclub/shared'
 import { createNotification } from './create'
+import { formatPaise, istDateTime } from './format'
+import { claimOnce } from './store'
 import { notifyText } from '@/lib/i18n/notify'
 
-type Admin = Awaited<ReturnType<typeof createAdminClient>>
+/**
+ * The order, payment and outcome notices (§5.9, ADR-030 §4). Each names its KIND; the registry decides the channels.
+ * Copy is the `notify` namespace of the message files; typed `values` (ref, amount, deadline …) feed the WhatsApp and
+ * SMS templates. Money is formatted here from integer paise (formatPaise), deadlines in IST.
+ */
+
+type Admin = SupabaseClient
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /** Resolve both parties' user ids for an order (for notification targeting). */
@@ -17,24 +25,28 @@ async function parties(admin: Admin, order: any): Promise<{ msmeUserId: string |
 }
 
 const ref = (o: any): string => o.order_number ?? o.title ?? 'your order'
+const isGoods = (o: any): boolean => o?.kind === 'goods'
+const buyerLink = (orderId: string) => `/app/orders/${orderId}`
+const providerLink = (orderId: string) => `/partner/orders/${orderId}`
 
 /**
- * Order placed (payment captured → order materialised). Notifies the provider
- * ("new order, please accept") and confirms to the buyer. Best-effort.
+ * Order placed (payment captured → order materialised). The provider hears "new order, accept within 24 h"; the buyer
+ * gets their own payment receipt (on WhatsApp too). Best-effort.
  */
 export async function notifyOrderPlaced(admin: Admin, orderId: string): Promise<void> {
   const { data: order } = await admin.from('orders').select('*').eq('id', orderId).maybeSingle()
   if (!order) return
   const { msmeUserId, providerUserId } = await parties(admin, order)
   const r = ref(order)
+  const amount = formatPaise(Number(order.total_paise))
   if (providerUserId) {
     await createNotification(admin, {
       userId: providerUserId,
       kind: 'order_placed',
       titleI18n: notifyText('order_placed_provider.title'),
       bodyI18n: notifyText('order_placed_provider.body', { ref: r }),
-      link: `/partner/orders/${orderId}`,
-      channels: ['email', 'sms', 'whatsapp'],
+      link: providerLink(orderId),
+      values: { ref: r },
     })
   }
   if (msmeUserId) {
@@ -42,40 +54,40 @@ export async function notifyOrderPlaced(admin: Admin, orderId: string): Promise<
       userId: msmeUserId,
       kind: 'order_placed',
       titleI18n: notifyText('order_placed_buyer.title'),
-      bodyI18n: notifyText('order_placed_buyer.body', { ref: r }),
-      link: `/app/orders/${orderId}`,
-      channels: ['email'],
+      bodyI18n: notifyText('order_placed_buyer.body', { ref: r, amount }),
+      link: buyerLink(orderId),
+      values: { ref: r, amount },
     })
   }
 }
 
 interface EventCopy {
   to: 'msme' | 'provider'
-  kind: string
+  kind: NotificationKind
   /** The `notify.<key>` pair (title / body with {ref}). */
   key: string
-  channels: string[]
 }
 
-/** Per-action notification copy + recipient. One place; mirrors §3.7 actions. Copy: messages `notify.*` (E14). */
-function copyFor(action: string): EventCopy | null {
+/** Per-action copy + recipient: one place, mirrors §3.7. Goods orders get their own words (dispatch, receipt, return). */
+function copyFor(action: string, goods: boolean): EventCopy | null {
   switch (action) {
     case 'accept':
-      return { to: 'msme', kind: 'order_accepted', key: 'order_accepted', channels: ['email', 'sms'] }
+      return { to: 'msme', kind: 'order_accepted', key: goods ? 'goods_order_accepted' : 'order_accepted' }
     case 'submit_requirements':
-      return { to: 'provider', kind: 'requirements_submitted', key: 'requirements_submitted', channels: ['email'] }
+      return { to: 'provider', kind: 'requirements_submitted', key: 'requirements_submitted' }
     case 'start':
-      return { to: 'msme', kind: 'order_in_progress', key: 'order_started', channels: ['email'] }
+      // goods: the dispatch action (accepted → requirements_submitted → in_progress)
+      return goods ? { to: 'msme', kind: 'goods_dispatched', key: 'goods_dispatched' } : { to: 'msme', kind: 'order_in_progress', key: 'order_started' }
     case 'deliver':
-      return { to: 'msme', kind: 'order_delivered', key: 'order_delivered', channels: ['email', 'sms'] }
+      return goods ? { to: 'msme', kind: 'goods_delivered', key: 'goods_delivered' } : { to: 'msme', kind: 'order_delivered', key: 'order_delivered' }
     case 'accept_delivery':
-      return { to: 'provider', kind: 'order_completed', key: 'order_completed', channels: ['email', 'sms'] }
+      return { to: 'provider', kind: 'order_completed', key: goods ? 'goods_received' : 'order_completed' }
     case 'request_revision':
-      return { to: 'provider', kind: 'revision_requested', key: 'revision_requested', channels: ['email'] }
+      return { to: 'provider', kind: 'revision_requested', key: 'revision_requested' }
     case 'resume':
-      return { to: 'msme', kind: 'order_in_progress', key: 'revision_in_progress', channels: ['email'] }
+      return { to: 'msme', kind: 'order_in_progress', key: 'revision_in_progress' }
     case 'cancel':
-      return { to: 'provider', kind: 'order_cancelled', key: 'order_cancelled', channels: ['email'] }
+      return { to: 'provider', kind: 'order_cancelled', key: 'order_cancelled' }
     default:
       return null
   }
@@ -86,21 +98,25 @@ function copyFor(action: string): EventCopy | null {
  * `accept_delivery` also fires the review prompt to the buyer (separately).
  */
 export async function notifyOrderTransition(admin: Admin, order: any, action: string): Promise<void> {
-  const c = copyFor(action)
+  const goods = isGoods(order)
+  const c = copyFor(action, goods)
   if (!c) {
     if (action === 'raise_dispute') await notifyDispute(admin, order)
     return
   }
   const { msmeUserId, providerUserId } = await parties(admin, order)
   const userId = c.to === 'msme' ? msmeUserId : providerUserId
+  const r = ref(order)
+  // Delivery starts the 72-hour auto-accept: the deadline is part of the notice.
+  const deadline = action === 'deliver' && order.auto_accept_at ? istDateTime(order.auto_accept_at) : null
   if (userId) {
     await createNotification(admin, {
       userId,
       kind: c.kind,
       titleI18n: notifyText(`${c.key}.title`),
-      bodyI18n: notifyText(`${c.key}.body`, { ref: ref(order) }),
-      link: c.to === 'msme' ? `/app/orders/${order.id}` : `/partner/orders/${order.id}`,
-      channels: c.channels,
+      bodyI18n: notifyText(`${c.key}.body`, { ref: r, ...(deadline ? { deadline } : {}) }),
+      link: c.to === 'msme' ? buyerLink(order.id) : providerLink(order.id),
+      values: { ref: r, ...(deadline ? { deadline } : {}) },
     })
   }
   if (action === 'accept_delivery') await notifyReviewPrompt(admin, order)
@@ -108,15 +124,15 @@ export async function notifyOrderTransition(admin: Admin, order: any, action: st
 
 async function notifyDispute(admin: Admin, order: any): Promise<void> {
   const { msmeUserId, providerUserId } = await parties(admin, order)
-  const both = [msmeUserId, providerUserId].filter(Boolean) as string[]
-  for (const userId of both) {
+  const key = isGoods(order) ? 'goods_return_opened' : 'order_disputed'
+  for (const userId of [msmeUserId, providerUserId].filter(Boolean) as string[]) {
     await createNotification(admin, {
       userId,
       kind: 'order_disputed',
-      titleI18n: notifyText('order_disputed.title'),
-      bodyI18n: notifyText('order_disputed.body', { ref: ref(order) }),
-      link: userId === msmeUserId ? `/app/orders/${order.id}` : `/partner/orders/${order.id}`,
-      channels: ['email'],
+      titleI18n: notifyText(`${key}.title`),
+      bodyI18n: notifyText(`${key}.body`, { ref: ref(order) }),
+      link: userId === msmeUserId ? buyerLink(order.id) : providerLink(order.id),
+      values: { ref: ref(order) },
     })
   }
 }
@@ -134,12 +150,11 @@ export async function notifyQuoteWindowLapsed(admin: Admin, rfq: any, counts: { 
     titleI18n: notifyText('providers_unavailable.title'),
     bodyI18n: notifyText('providers_unavailable.body', { unavailable: counts.unavailable, total: counts.total, title }),
     link: `/app/rfq/${rfq.id}`,
-    channels: ['email'],
+    values: { title, unavailable: counts.unavailable, total: counts.total },
   })
 }
 
-/** Services evidence engine (S0.3): notify the buyer on each milestone. Best-effort.
- *  WhatsApp is added once S0.5 lands (email + in-app for now). */
+/** Services evidence engine (S0.3): notify the buyer on each milestone. Best-effort. */
 export async function notifyMilestone(admin: Admin, order: any, kind: MilestoneKind): Promise<void> {
   const { msmeUserId } = await parties(admin, order)
   if (!msmeUserId) return
@@ -149,8 +164,8 @@ export async function notifyMilestone(admin: Admin, order: any, kind: MilestoneK
     kind: 'milestone_added',
     titleI18n: notifyText('milestone.title', { label }),
     bodyI18n: notifyText('milestone.body', { ref: ref(order), label }),
-    link: `/app/orders/${order.id}`,
-    channels: ['email'],
+    link: buyerLink(order.id),
+    values: { ref: ref(order), label },
   })
 }
 
@@ -163,8 +178,8 @@ export async function notifyReviewPrompt(admin: Admin, order: any): Promise<void
     kind: 'review_prompt',
     titleI18n: notifyText('review_prompt.title'),
     bodyI18n: notifyText('review_prompt.body', { ref: ref(order) }),
-    link: `/app/orders/${order.id}`,
-    channels: ['email'],
+    link: buyerLink(order.id),
+    values: { ref: ref(order) },
   })
 }
 
@@ -177,8 +192,8 @@ export async function notifyAutoCancelled(admin: Admin, order: any): Promise<voi
       kind: 'order_auto_cancelled',
       titleI18n: notifyText('auto_cancelled_buyer.title'),
       bodyI18n: notifyText('auto_cancelled_buyer.body', { ref: ref(order) }),
-      link: `/app/orders/${order.id}`,
-      channels: ['email', 'sms'],
+      link: buyerLink(order.id),
+      values: { ref: ref(order) },
     })
   }
   if (providerUserId) {
@@ -187,8 +202,8 @@ export async function notifyAutoCancelled(admin: Admin, order: any): Promise<voi
       kind: 'order_auto_cancelled',
       titleI18n: notifyText('auto_cancelled_provider.title'),
       bodyI18n: notifyText('auto_cancelled_provider.body', { ref: ref(order) }),
-      link: `/partner/orders/${order.id}`,
-      channels: ['email'],
+      link: providerLink(order.id),
+      values: { ref: ref(order) },
     })
   }
 }
@@ -202,8 +217,8 @@ export async function notifyAutoAccepted(admin: Admin, order: any): Promise<void
       kind: 'order_completed',
       titleI18n: notifyText('auto_completed_provider.title'),
       bodyI18n: notifyText('auto_completed_provider.body', { ref: ref(order) }),
-      link: `/partner/orders/${order.id}`,
-      channels: ['email'],
+      link: providerLink(order.id),
+      values: { ref: ref(order) },
     })
   }
   if (msmeUserId) {
@@ -212,14 +227,14 @@ export async function notifyAutoAccepted(admin: Admin, order: any): Promise<void
       kind: 'order_auto_accepted',
       titleI18n: notifyText('auto_accepted_buyer.title'),
       bodyI18n: notifyText('auto_accepted_buyer.body', { ref: ref(order) }),
-      link: `/app/orders/${order.id}`,
-      channels: ['email'],
+      link: buyerLink(order.id),
+      values: { ref: ref(order) },
     })
   }
   await notifyReviewPrompt(admin, order)
 }
 
-/** A provider withdrew their quote on the buyer's RFQ. In-app + SMS, like a new / revised quote. */
+/** A provider withdrew their quote on the buyer's RFQ: WhatsApp + email, like a new / revised quote. */
 export async function notifyQuoteWithdrawn(admin: Admin, rfqId: string): Promise<void> {
   const { data } = await admin.from('rfqs').select('id, title, msme:msme_profiles!inner(user_id)').eq('id', rfqId).maybeSingle()
   const r = data as any
@@ -232,7 +247,7 @@ export async function notifyQuoteWithdrawn(admin: Admin, rfqId: string): Promise
     titleI18n: notifyText('quote_withdrawn.title'),
     bodyI18n: notifyText('quote_withdrawn.body', { title }),
     link: `/app/rfq/${rfqId}`,
-    channels: ['sms'],
+    values: { title },
   })
 }
 
@@ -248,7 +263,7 @@ export async function notifyRfqExpired(admin: Admin, rfq: { id: string; title: s
     titleI18n: notifyText('rfq_expired.title'),
     bodyI18n: notifyText('rfq_expired.body', { title }),
     link: `/app/rfq/new?from=${rfq.id}`,
-    channels: ['email'],
+    values: { title },
   })
 }
 
@@ -271,18 +286,148 @@ export async function notifyQuotesExpired(admin: Admin, quotes: { providerId: st
   }
 }
 
-/** Provider payout marked paid (payouts cron). */
-export async function notifyPayoutPaid(admin: Admin, providerId: string, amountPaise: number, orderId: string): Promise<void> {
+async function orderNumber(admin: Admin, orderId: string | null | undefined): Promise<string> {
+  if (!orderId) return '—'
+  const { data } = await admin.from('orders').select('order_number').eq('id', orderId).maybeSingle()
+  return String((data as { order_number?: string } | null)?.order_number ?? '—')
+}
+
+/**
+ * Provider payout marked paid (payouts cron, a gateway confirmation). The exact amount in paise (never rounded to the
+ * rupee) and the transfer reference when the transfer was real.
+ */
+export async function notifyPayoutPaid(admin: Admin, providerId: string, amountPaise: number, orderId: string, transferRef?: string | null): Promise<void> {
   const { data: p } = await admin.from('provider_profiles').select('user_id').eq('id', providerId).maybeSingle()
   if (!p?.user_id) return
-  const rupees = (amountPaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  const amount = formatPaise(amountPaise)
+  const r = await orderNumber(admin, orderId)
+  const transfer = transferRef && !transferRef.startsWith('sim') ? transferRef : null
   await createNotification(admin, {
     userId: p.user_id,
     kind: 'payout_paid',
     titleI18n: notifyText('payout_paid.title'),
-    bodyI18n: notifyText('payout_paid.body', { amount: rupees }),
-    link: orderId ? `/partner/orders/${orderId}` : `/partner/earnings`,
-    channels: ['email', 'sms'],
+    bodyI18n: transfer ? notifyText('payout_paid.body_ref', { amount, ref: r, transfer }) : notifyText('payout_paid.body', { amount, ref: r }),
+    link: orderId ? providerLink(orderId) : `/partner/earnings`,
+    values: { amount, ref: r, ...(transfer ? { transfer } : {}) },
+  })
+}
+
+/** The provider-facing label for a payout blocker (payoutRunBlockers). Chargebacks stay unnamed (a payment check). */
+function holdReasonKey(blocker: string): string {
+  if (blocker.startsWith('order_status:') || blocker === 'dispute_open' || blocker === 'return_open') return 'dispute'
+  if (blocker === 'no_delivery_photo' || blocker === 'missing_work_complete_photo') return 'proof'
+  if (blocker === 'awaiting_receipt' || blocker === 'awaiting_buyer_confirmation') return 'buyer_confirmation'
+  if (blocker === 'return_window_open') return 'return_window'
+  if (blocker === 'refund_exists' || blocker === 'nothing_to_pay') return 'refund'
+  return 'review'
+}
+
+/**
+ * runPayouts held a payout at release (ADR 026): tell the provider why, once per payout and set of reasons.
+ */
+export async function notifyPayoutHeld(admin: Admin, payout: { id: string; order_id: string; provider_id: string; amount_paise: number | string }, blockers: string[]): Promise<void> {
+  const keys = [...new Set(blockers.map(holdReasonKey))].sort()
+  const claim = await claimOnce(admin, { kind: 'payout_held', entityId: payout.id, stage: keys.join(',').slice(0, 120) })
+  if (claim === 'taken') return
+  const { data: p } = await admin.from('provider_profiles').select('user_id').eq('id', payout.provider_id).maybeSingle()
+  if (!p?.user_id) return
+  const amount = formatPaise(Number(payout.amount_paise))
+  const r = await orderNumber(admin, payout.order_id)
+  const labels = keys.map((k) => notifyText(`payout_hold_reason.${k}`))
+  const reasons = {
+    en: labels.map((l) => l.en).join('; '),
+    hi: labels.map((l) => l.hi).join('; '),
+    ...(labels.every((l) => l.te) ? { te: labels.map((l) => l.te!).join('; ') } : {}),
+    ...(labels.every((l) => l.ta) ? { ta: labels.map((l) => l.ta!).join('; ') } : {}),
+  }
+  await createNotification(admin, {
+    userId: p.user_id,
+    kind: 'payout_held',
+    titleI18n: notifyText('payout_held.title'),
+    bodyI18n: notifyText('payout_held.body', { amount, ref: r, reasons }),
+    link: providerLink(payout.order_id),
+    values: { amount, ref: r, reasons },
+  })
+}
+
+/**
+ * A buyer's refund went through (the cancellation settlement, the gateway webhook) or came back failed. Each outcome
+ * is told once per order (notification_reminders claim; without 0087 the callers' own once-guards hold).
+ */
+export async function notifyRefund(admin: Admin, orderOrId: any, outcome: 'processed' | 'failed', amountPaise: number | null): Promise<void> {
+  const order = typeof orderOrId === 'string' ? (await admin.from('orders').select('*').eq('id', orderOrId).maybeSingle()).data : orderOrId
+  if (!order) return
+  const claim = await claimOnce(admin, { kind: 'refund', entityId: order.id, stage: outcome })
+  if (claim === 'taken') return
+  const { msmeUserId } = await parties(admin, order)
+  if (!msmeUserId) return
+  const amount = amountPaise != null && amountPaise > 0 ? formatPaise(amountPaise) : formatPaise(Number(order.total_paise))
+  const r = ref(order)
+  await createNotification(admin, {
+    userId: msmeUserId,
+    kind: outcome === 'processed' ? 'refund_processed' : 'refund_failed',
+    titleI18n: notifyText(`refund_${outcome}.title`),
+    bodyI18n: notifyText(`refund_${outcome}.body`, { amount, ref: r }),
+    link: buyerLink(order.id),
+    values: { amount, ref: r },
+  })
+}
+
+/** Mark a refund as already announced (a dispute resolution names the amount itself), so the webhook stays quiet. */
+export async function markRefundAnnounced(admin: Admin, orderId: string): Promise<void> {
+  await claimOnce(admin, { kind: 'refund', entityId: orderId, stage: 'processed' })
+}
+
+/**
+ * A dispute (or a goods return) was resolved: both parties hear the outcome, with the refund and payout amounts
+ * formatted from paise on the server.
+ */
+export async function notifyDisputeResolved(
+  admin: Admin,
+  d: { order: any; resolution: DisputeResolution; refundPaise: number; providerPaidPaise: number },
+): Promise<void> {
+  const { msmeUserId, providerUserId } = await parties(admin, d.order)
+  const r = ref(d.order)
+  const goods = isGoods(d.order) ? 'yes' : 'no'
+  const amount = formatPaise(d.refundPaise)
+  const payout = formatPaise(d.providerPaidPaise)
+  const outcome = d.resolution === 'refund_full' ? 'refund_full' : d.resolution === 'refund_partial' ? 'refund_partial' : 'release'
+  const values = { ref: r, amount, payout, outcome }
+  if (msmeUserId) {
+    await createNotification(admin, {
+      userId: msmeUserId,
+      kind: 'dispute_resolved',
+      titleI18n: notifyText('dispute_resolved.title', { ref: r, goods }),
+      bodyI18n: notifyText(`dispute_resolved.buyer_${outcome}`, { amount }),
+      link: buyerLink(d.order.id),
+      values,
+    })
+  }
+  if (providerUserId) {
+    await createNotification(admin, {
+      userId: providerUserId,
+      kind: 'dispute_resolved',
+      titleI18n: notifyText('dispute_resolved.title', { ref: r, goods }),
+      bodyI18n: notifyText(`dispute_resolved.provider_${outcome}`, { amount, payout }),
+      link: providerLink(d.order.id),
+      values,
+    })
+  }
+}
+
+/** The admin verification queue decided (approve / reject with the reason / needs more information). */
+export async function notifyVerificationDecision(admin: Admin, providerId: string, decision: 'approve' | 'reject' | 'needs_info', reason?: string | null): Promise<void> {
+  const { data: p } = await admin.from('provider_profiles').select('user_id').eq('id', providerId).maybeSingle()
+  if (!p?.user_id) return
+  const why = String(reason ?? '').trim().slice(0, 500)
+  const kind: NotificationKind = decision === 'approve' ? 'provider_verified' : decision === 'reject' ? 'provider_rejected' : 'provider_needs_info'
+  await createNotification(admin, {
+    userId: p.user_id as string,
+    kind,
+    titleI18n: notifyText(`${kind}.title`),
+    bodyI18n: decision === 'approve' ? notifyText(`${kind}.body`) : notifyText(`${kind}.body`, { reason: why }),
+    link: decision === 'needs_info' ? '/partner/onboarding' : '/partner',
+    values: decision === 'approve' ? {} : { reason: why },
   })
 }
 
@@ -295,15 +440,14 @@ export async function notifyReviewReply(admin: Admin, review: any): Promise<void
     kind: 'review_reply',
     titleI18n: notifyText('review_reply.title'),
     bodyI18n: notifyText('review_reply.body'),
-    link: `/app/orders/${review.order_id}`,
-    channels: ['email'],
+    link: buyerLink(review.order_id),
   })
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * S1.7 — a party stated their side on an open dispute: the counter-party is
- * told (in-app + email) and the ops user in-app when set. Never the body.
+ * told and the ops user in-app when set. Never the body.
  */
 export async function notifyDisputeStatement(
   admin: Admin,
@@ -312,15 +456,14 @@ export async function notifyDisputeStatement(
   const { msmeUserId, providerUserId } = await parties(admin, d.order)
   const counterparty = d.role === 'buyer' ? providerUserId : msmeUserId
   const r = ref(d.order)
-  const who = d.role === 'buyer' ? { en: 'The buyer', hi: 'खरीदार' } : { en: 'The provider', hi: 'प्रदाता' }
   if (counterparty) {
     await createNotification(admin, {
       userId: counterparty,
       kind: 'dispute_statement',
       titleI18n: notifyText('dispute_statement.title', { who: d.role, edited: d.edited ? 'yes' : 'no', ref: r }),
       bodyI18n: notifyText('dispute_statement.body'),
-      link: d.role === 'buyer' ? `/partner/orders/${d.order.id}` : `/app/orders/${d.order.id}`,
-      channels: ['email'],
+      link: d.role === 'buyer' ? providerLink(d.order.id) : buyerLink(d.order.id),
+      values: { ref: r },
     })
   }
   const { data: ops } = await admin.from('agent_settings').select('value').eq('key', 'ops_user_id').maybeSingle()
@@ -329,9 +472,10 @@ export async function notifyDisputeStatement(
     await createNotification(admin, {
       userId: opsUserId,
       kind: 'dispute_statement',
-      titleI18n: { en: `${who.en} stated their side on ${r}`, hi: `${who.hi} ने ${r} पर पक्ष दर्ज किया` },
-      bodyI18n: { en: 'Open the dispute console to read both statements.', hi: 'दोनों पक्ष पढ़ने के लिए विवाद कंसोल खोलें।' },
+      titleI18n: notifyText('dispute_statement_ops.title', { who: d.role, ref: r }),
+      bodyI18n: notifyText('dispute_statement_ops.body'),
       link: `/admin/disputes/${d.disputeId}`,
+      values: { ref: r },
     })
   }
 }
@@ -348,35 +492,29 @@ export async function notifyDisputeTriageReady(
   await createNotification(admin, {
     userId: d.opsUserId,
     kind: 'dispute_triage_ready',
-    titleI18n: { en: `Dispute triage for ${d.orderNumber} — suggests: ${rec} (${d.confidence})`, hi: `${d.orderNumber} का विवाद ट्रायेज — सुझाव: ${rec} (${d.confidence})` },
-    bodyI18n: { en: 'The card lists the timeline, each party\'s claims with evidence and the gaps. Nothing is resolved until you click.', hi: 'कार्ड में समयरेखा, दोनों पक्षों के दावे और साक्ष्य, और कमियाँ हैं। आपके क्लिक के बिना कुछ नहीं बदलेगा।' },
+    titleI18n: notifyText('dispute_triage_ready.title', { ref: d.orderNumber, rec, confidence: d.confidence }),
+    bodyI18n: notifyText('dispute_triage_ready.body'),
     link: `/admin/disputes/${d.disputeId}?triage=${d.triageId}`,
-    channels: ['email', 'whatsapp'],
+    values: { ref: d.orderNumber, rec, confidence: d.confidence },
   })
 }
 
 /**
  * S1.4 — a payout dossier is ready for the founder's one-tap. Sent to the ops
  * user (agent_settings.ops_user_id) once per dossier (the notify route claims
- * notified_at first). Channels by KIND: email today; WhatsApp the moment the
- * S0.5 rails are live (template payout_dossier_ready, opt-in gated).
+ * notified_at first).
  */
 export async function notifyPayoutDossierReady(
   admin: Admin,
   d: { opsUserId: string; dossierId: string; orderNumber: string; amountPaise: number; recommendation: 'approve' | 'hold' },
 ): Promise<void> {
-  const rupees = `₹${(d.amountPaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-  const recEn = d.recommendation === 'approve' ? 'approve' : 'hold'
-  const recHi = d.recommendation === 'approve' ? 'स्वीकृत करें' : 'रोकें'
+  const amount = formatPaise(d.amountPaise)
   await createNotification(admin, {
     userId: d.opsUserId,
     kind: 'payout_dossier_ready',
-    titleI18n: { en: `Payout ${rupees} for ${d.orderNumber} — recommendation: ${recEn}`, hi: `${d.orderNumber} का भुगतान ${rupees} — सिफ़ारिश: ${recHi}` },
-    bodyI18n: {
-      en: `The evidence dossier is ready. Approve releases the payout; Hold keeps it held. Nothing moves until you tap.`,
-      hi: `साक्ष्य डोज़ियर तैयार है। स्वीकृत करने पर भुगतान जारी होगा; रोकने पर रुका रहेगा। आपके टैप के बिना कुछ नहीं बदलेगा।`,
-    },
+    titleI18n: notifyText('payout_dossier_ready.title', { amount, ref: d.orderNumber, rec: d.recommendation }),
+    bodyI18n: notifyText('payout_dossier_ready.body'),
     link: `/admin/payouts?dossier=${d.dossierId}`,
-    channels: ['email', 'whatsapp'],
+    values: { amount, ref: d.orderNumber, rec: d.recommendation },
   })
 }

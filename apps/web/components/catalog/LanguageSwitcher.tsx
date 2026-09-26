@@ -38,7 +38,20 @@ export function LanguageSwitcher({ className }: { className?: string }) {
 
   function switchTo(next: AppLocale) {
     if (next === locale) return
-    analytics.capture('locale_changed', { from: locale, to: next, device: 'web' }) // E14
+    // Audit §5 item 10 — a signed-in person's choice goes to the account too, so
+    // email, SMS and WhatsApp follow it. The root layout's pre-paint script marks
+    // <html data-auth> when a session cookie exists; a stale mark only earns a 401.
+    let persisted = false
+    try { persisted = document.documentElement.hasAttribute('data-auth') } catch { /* no DOM */ }
+    if (persisted) {
+      void fetch('/api/v1/profile/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferredLocale: next }),
+        keepalive: true,
+      }).catch(() => undefined)
+    }
+    analytics.capture('locale_changed', { from: locale, to: next, device: 'web', persisted }) // E14
     router.replace(pathname, { locale: next })
   }
 

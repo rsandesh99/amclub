@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { agentAvailability } from '@/lib/agent/availability'
 import { ASKS_FIRST, NEVER, capabilitiesFor } from '@/lib/agent/capabilities'
 import { AgentGrantsSection } from '@/components/agent/AgentGrantsSection'
-import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
+import { WhatsAppSettingsSection } from '@/components/settings/WhatsAppSettingsSection'
 import { AssistantHomeViewed } from './AssistantHomeViewed'
 import { CapabilityIcon } from './CapabilityIcon'
 import { LauncherPreference } from './LauncherPreference'
@@ -111,7 +111,7 @@ export async function AssistantHome({ persona, userId }: { persona: 'buyer' | 'p
       <section aria-labelledby="settings" className="space-y-4">
         <h2 id="settings" className="t-title-3 text-foreground">{t('section_settings')}</h2>
         <AgentGrantsSection persona={persona} />
-        <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />
+        <WhatsAppSettingsSection />
         <LauncherPreference persona={persona} />
       </section>
 

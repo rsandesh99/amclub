@@ -225,7 +225,8 @@ async function http() {
       return p!.id as string
     }
     async function mkProvider(label: string) {
-      const u = await mkUser(label, ['provider'])
+      // real roles (audit B3): every account starts as msme and provider signup appends provider
+      const u = await mkUser(label, ['msme', 'provider'])
       return { ...u, providerId: await addProvider(u, label) }
     }
     let orderSeq = 0
@@ -313,25 +314,27 @@ async function http() {
     }
 
     if (!flagOn) {
-      // WhatsApp: support not enabled → the S0.5 holding reply only (runtime in-process, AGENT_ENABLED on in THIS process)
-      if (!has0041) skip('flag OFF WhatsApp: granted user text → holding reply only', NEEDS_0041)
+      // WhatsApp: support not enabled → the ADR-030 HELP menu only (runtime in-process, AGENT_ENABLED on in THIS process)
+      if (!has0041) skip('flag OFF WhatsApp: granted user text → the HELP menu only', NEEDS_0041)
       else {
         await remember('agents_enabled')
         const en = (settingsBefore.get('agents_enabled')?.value ?? {}) as Record<string, boolean>
-        if (en['support']) skip('flag OFF WhatsApp holding reply', 'agents_enabled.support is already true on this DB — not a dark baseline')
+        if (en['support']) skip('flag OFF WhatsApp HELP menu', 'agents_enabled.support is already true on this DB — not a dark baseline')
         else {
           process.env['AGENT_ENABLED'] = 'true'
           process.env['WHATSAPP_DRIVER'] = 'stub'
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const inbound = require('../../agent-runtime/src/whatsapp/inbound') as typeof import('../../agent-runtime/src/whatsapp/inbound')
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const outboundMod = require('../../agent-runtime/src/whatsapp/outbound') as typeof import('../../agent-runtime/src/whatsapp/outbound')
           const { data: c } = await admin.from('wa_conversations').insert({ phone_e164: `91${b1.digits}`, user_id: b1.uid, locale: 'en', last_inbound_at: new Date().toISOString(), window_open_until: new Date(Date.now() + 86400 * 1000).toISOString() }).select('id').single()
           created.convIds.push(c!.id)
           await admin.from('agent_grants').insert({ user_id: b1.uid, persona: 'buyer', scopes: [], channel: 'whatsapp', channel_identity: `+91${b1.digits}`, consent: { locale: 'en', surface: 'whatsapp', keyword: 'START', text_version: 'v1', at: new Date().toISOString() } })
           const { data: m } = await admin.from('wa_messages').insert({ conversation_id: c!.id, direction: 'in', vendor_message_id: `${tag}-off-1`, kind: 'text', body: 'where is my order', status: 'received', payload: { type: 'text', text: { body: 'where is my order' } } }).select('id').single()
           let enq = 0
-          await inbound.handleWaInbound(m!.id, { enqueueSupportReply: async () => { enq++; return 'x' }, enqueueSupportDecide: async () => { enq++; return 'x' } })
-          const { data: outs } = await admin.from('wa_messages').select('kind, template_name').eq('conversation_id', c!.id).eq('direction', 'out')
-          check('flag OFF WhatsApp: a granted user\'s text (support not enabled) → exactly ONE outbound, the S0.5 holding template; nothing enqueued for support', enq === 0 && (outs ?? []).length === 1 && /holding/.test(String((outs as any[])[0]?.template_name ?? '')), JSON.stringify(outs))
+          const sysKinds: string[] = []
+          await inbound.handleWaInbound(m!.id, { enqueueSupportReply: async () => { enq++; return 'x' }, enqueueSupportDecide: async () => { enq++; return 'x' } }, { send: async (conv, kind, locale, opts) => { sysKinds.push(kind); return outboundMod.sendSystem(conv, kind, locale, opts) } })
+          check('flag OFF WhatsApp: a granted user\'s text (support not enabled) → exactly ONE system reply, the HELP menu (ADR-030, no model); nothing enqueued for support', enq === 0 && sysKinds.length === 1 && sysKinds[0] === 'wa_menu', JSON.stringify(sysKinds))
         }
       }
       skip('flag ON legs', 'server is dark')
@@ -493,6 +496,14 @@ async function http() {
     const rt = require('../../agent-runtime/src/agents/support/index') as typeof import('../../agent-runtime/src/agents/support/index')
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const inbound = require('../../agent-runtime/src/whatsapp/inbound') as typeof import('../../agent-runtime/src/whatsapp/inbound')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const outboundMod = require('../../agent-runtime/src/whatsapp/outbound') as typeof import('../../agent-runtime/src/whatsapp/outbound')
+    // ADR-030: the dispatcher's own replies (menu, consent) go through sendSystem — recorded here per conversation
+    const sysSent: Array<{ conv: string; kind: string }> = []
+    const sysSend: typeof outboundMod.sendSystem = async (conv, kind, locale, opts) => { sysSent.push({ conv: conv.id, kind }); return outboundMod.sendSystem(conv, kind, locale, opts) }
+    const sysKindsOf = (conv: string) => sysSent.filter((s) => s.conv === conv).map((s) => s.kind)
+    const { error: consentProbe } = await admin.from('wa_phone_consents').select('phone_e164').limit(1)
+    const has0086 = !missingRelation(consentProbe)
     loadDefaultPrompts()
     const whatsapp = makeStubDriver(() => undefined)
     const store = new Map<string, number>()
@@ -535,7 +546,7 @@ async function http() {
       const { data, error } = await admin.from('wa_messages').insert({ conversation_id: conv, direction: 'in', vendor_message_id: `${tag}-${++vendorSeq}`, kind: m.kind, body: m.body ?? m.payload ?? null, status: 'received', payload: raw }).select('id').single()
       if (error) throw new Error(`waSay: ${error.message}`)
       if (opts.openWindow !== false) await admin.from('wa_conversations').update({ last_inbound_at: new Date().toISOString(), window_open_until: new Date(Date.now() + 86400 * 1000).toISOString() }).eq('id', conv)
-      await inbound.handleWaInbound(data!.id as string, hooks)
+      await inbound.handleWaInbound(data!.id as string, hooks, { send: sysSend })
       return { id: data!.id as string, results: await drain() }
     }
     const outbound = async (conv: string) => ((await admin.from('wa_messages').select('id, kind, body, template_name, status, payload, created_at').eq('conversation_id', conv).eq('direction', 'out').order('created_at', { ascending: true })).data ?? []) as any[]
@@ -585,7 +596,8 @@ async function http() {
     if (!RIG_RUNTIME_SECRET) skip('the runtime-credential ticket route (POST /agent/admin/support/tickets)', 'set AGENT_RUNTIME_SECRET to the same throwaway value on this rig and the local server')
     const outBeforeQuiet = (await outbound(convW)).length
     const t6 = await waSay(convW, { kind: 'text', body: 'hello? anyone?' })
-    check('while the ticket is open: the next inbound is stored, NO job, NO reply, NO holding reply', t6.results.length === 0 && (await outbound(convW)).length === outBeforeQuiet)
+    const sysBeforeQuiet = sysKindsOf(convW).length
+    check('while the ticket is open: the next inbound is stored, NO job, NO reply, NO menu', t6.results.length === 0 && (await outbound(convW)).length === outBeforeQuiet && sysKindsOf(convW).length === sysBeforeQuiet)
     const resW = await api(adminU.token, `/api/v1/agent/admin/support/tickets/${(tkW as any)?.id ?? NIL}`, { action: 'resolve', note: 'Spoke to the provider; work resumes tomorrow.' }, 'PATCH')
     await json(resW)
     const { data: convAfter } = await admin.from('wa_conversations').select('support_ticket_id').eq('id', convW).single()
@@ -598,18 +610,17 @@ async function http() {
     const runP = tp.results[0]?.detail?.run_id as string | undefined
     const { data: runPRow } = await admin.from('agent_runs').select('persona').eq('id', runP ?? NIL).maybeSingle()
     check('a provider-only WhatsApp user: the run persona and every delegated-token mint are provider (the grant persona) → payout_status answered from their own orders', tp.results[0]?.status === 'ok' && (runPRow as any)?.persona === 'provider' && tokenPersonas.length > 0 && tokenPersonas.every((x) => x === `${p1.uid}:provider`) && String(tp.results[0]?.detail?.reply_key ?? '').startsWith('payout_status.') && tp.results[0]?.detail?.reply_key !== 'payout_status.none', JSON.stringify({ r: tp.results[0], persona: (runPRow as any)?.persona, tokenPersonas: [...new Set(tokenPersonas)] }))
-    // no grant → holding reply only
+    // no grant → the HELP menu (no model, no support job)
     const convN = await mkConv(n, false)
     const tn = await waSay(convN, { kind: 'text', body: 'where is my order' })
-    const outN = await outbound(convN)
-    check('a cohorted user WITHOUT a WhatsApp grant → the S0.5 holding reply only (no support job)', tn.results.length === 0 && outN.length === 1 && /holding/.test(String(outN[0]?.template_name ?? '')), JSON.stringify(outN.map((m) => m.template_name)))
-    // STOP → grant revoked → holding reply only
+    check('a cohorted user WITHOUT a WhatsApp grant → the ADR-030 HELP menu only (no support job)', tn.results.length === 0 && JSON.stringify(sysKindsOf(convN)) === '["wa_menu"]', JSON.stringify(sysKindsOf(convN)))
+    // STOP → grants revoked, the one confirmation → afterwards nothing (0086: the phone is opted out) or the menu (before 0086)
     await waSay(convW, { kind: 'text', body: 'STOP' })
     const { data: gW } = await admin.from('agent_grants').select('id').eq('user_id', w.uid).eq('channel', 'whatsapp').is('revoked_at', null)
+    const sysAfterStop = sysKindsOf(convW).length
     const ts = await waSay(convW, { kind: 'text', body: 'where is my order' })
-    const lastS = (await outbound(convW)).at(-1)
-    check('STOP → the WhatsApp grant is revoked → the next text gets the holding reply only (no support job)', (gW ?? []).length === 0 && ts.results.length === 0 && /holding/.test(String(lastS?.template_name ?? '')), JSON.stringify([lastS?.kind, lastS?.template_name]))
-
+    const afterStop = sysKindsOf(convW).slice(sysAfterStop)
+    check(`STOP → every WhatsApp grant revoked, the opt-out confirmation → the next text gets ${has0086 ? 'NOTHING (the phone is opted out)' : 'the menu only (0086 not applied: the grant-only fallback)'} and no support job`, (gW ?? []).length === 0 && ts.results.length === 0 && sysKindsOf(convW)[sysAfterStop - 1] === 'wa_opt_out_confirmed' && JSON.stringify(afterStop) === (has0086 ? '[]' : '["wa_menu"]'), JSON.stringify({ afterStop, all: sysKindsOf(convW) }))
     // RLS through the runtime lookups: another user's order number never resolves (B1's token asks for B2's order)
     const rlsDeps = { ...deps, core: { ...core, ledger: { ...core.ledger, appendEvent: async () => undefined } } } as typeof deps
     const lk = rt.runtimeSupportLookups(rlsDeps, { runId: NIL, userId: b1.uid }, async () => false)
@@ -687,6 +698,9 @@ async function http() {
       await del('wa_messages', admin.from('wa_messages').delete().in('conversation_id', convIds))
       await del('wa_conversations', admin.from('wa_conversations').delete().in('id', convIds))
       await del('grants', admin.from('agent_grants').delete().in('user_id', users))
+      // ADR-030: the phone's current consent state goes; the consent EVENTS are append-only evidence (0086) and stay,
+      // their user_id nulled when the user row is deleted
+      await del('wa_phone_consents', admin.from('wa_phone_consents').delete().in('user_id', users))
       await del('audit', admin.from('audit_logs').delete().in('actor_id', users))
       await del('provider_categories', admin.from('provider_categories').delete().in('provider_id', pids))
       await del('provider_profiles', admin.from('provider_profiles').delete().in('id', pids))

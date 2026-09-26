@@ -65,7 +65,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     titleI18n: notifyText('rfq_answer.title'),
     bodyI18n: sameText(answer),
     link: `/partner/rfqs/${rfqId}`,
-    channels: ['whatsapp'],
   })
   captureServerEvent(userId, 'rfq_question_answered', { rfq_id: rfqId, hours_to_answer: hoursToAnswer(row.asked_at, now), redacted, notified: audience.length, role: 'msme' })
 

@@ -78,6 +78,11 @@ export async function PublicFooter() {
                 {t('legal.grievance_link')}
               </Link>
             </li>
+            <li>
+              <Link href="/help/whatsapp-safety" className="hover:text-primary">
+                {t('help.footer_safety')}
+              </Link>
+            </li>
           </ul>
         </div>
       </div>

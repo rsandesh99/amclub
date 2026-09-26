@@ -10,7 +10,6 @@ import {
   munshiReplyAgent,
   runAgent,
   signRuntimeCredential,
-  templateFor,
   type AgentDefinition,
   type MunshiStubContext,
   type RunAgentDeps,
@@ -34,6 +33,7 @@ import {
   renderMunshiDraft,
   renderMunshiReply,
   toMunshiLocale,
+  waLocaleFor,
   type ApprovalIntent,
   type MunshiDraft,
   type MunshiDraftKind,
@@ -42,6 +42,7 @@ import {
 } from '@amclub/shared'
 import { readAgentSettings } from '../../settings'
 import { boundConversationFor, currentWhatsAppGrants, phoneDigits } from '../../whatsapp/binding'
+import { runtimeSend, sentMessageId } from '../../whatsapp/outbound'
 import { GROWTH_INTERVAL_DAYS, PROVIDER_COMPONENTS, SCORE_VERSION, growthNudgeLine, pickGrowthNudge, pickLocale, weakestComponents, type ComponentResult, type GrowthFacts, type GrowthNudge, type GrowthProfileField, type ProviderComponent } from '@amclub/shared'
 import { transcribeVoiceNote } from '../onboarding/stt'
 import { buttonPayloadOf } from '../onboarding/index'
@@ -241,67 +242,76 @@ async function conversationFor(admin: SupabaseClient, userId: string): Promise<C
   return boundConversationFor(admin, userId)
 }
 
-async function recordOutbound(deps: MunshiRuntimeDeps, conv: ConversationRow, kind: 'text' | 'button' | 'template', body: string | null, r: { ok: boolean; vendorMessageId: string | null; detail: string }, extra: Record<string, unknown>): Promise<string | null> {
-  const { data } = await deps.admin
-    .from('wa_messages')
-    .insert({
-      conversation_id: conv.id,
-      direction: 'out',
-      vendor_message_id: r.vendorMessageId,
-      kind,
-      body,
-      status: r.ok ? (r.detail === 'stub' ? 'stub' : 'sent') : 'failed',
-      payload: { detail: r.detail, ...extra },
-      ...(kind === 'template' && typeof extra['template_name'] === 'string' ? { template_name: extra['template_name'] } : {}),
-    })
-    .select('id')
-    .single()
-  if (r.ok) await deps.admin.from('wa_conversations').update({ last_outbound_at: (deps.now ?? (() => new Date()))().toISOString() }).eq('id', conv.id)
-  return (data as { id: string } | null)?.id ?? null
+/** A Munshi WhatsApp send: its idempotency key (run / inbound message) and who wrote first. */
+interface MunshiSend {
+  key: string
+  /** `reply` when answering the provider's own button / message (a decide job); `business` when Munshi writes first. */
+  initiation?: 'business' | 'reply'
 }
 
 function waLocale(l: MunshiLocale): WaLocale {
-  return l === 'ta' ? 'en' : l
+  return waLocaleFor(l)
 }
 
-function inWindow(deps: MunshiRuntimeDeps, conv: ConversationRow): boolean {
-  return !!conv.window_open_until && new Date(conv.window_open_until).getTime() > (deps.now ?? (() => new Date()))().getTime()
-}
-
-/** Text inside the 24 h window; a template outside it (needs the WhatsApp grant, which `whatsapp` already asserts). */
-async function sendToProvider(deps: MunshiRuntimeDeps, st: Pick<ProviderState, 'user_id' | 'locale' | 'whatsapp'>, text: string, template: { kind: string; params: string[] } | null, extra: Record<string, unknown>): Promise<string | null> {
+/**
+ * Text inside the 24 h window; the kind's template outside it (ADR-030: through the one send path — consent for the
+ * assistant purpose, the window with its margin, the ledger row under the key). Returns the outbound row id.
+ */
+async function sendToProvider(deps: MunshiRuntimeDeps, st: Pick<ProviderState, 'user_id' | 'locale' | 'whatsapp'>, text: string, template: { kind: string; values: Record<string, string> } | null, extra: Record<string, unknown>, send: MunshiSend): Promise<string | null> {
   if (!deps.agentEnabled || !st.whatsapp) return null
   const conv = await conversationFor(deps.admin, st.user_id)
   if (!conv) return null
-  if (inWindow(deps, conv)) {
-    const r = await deps.whatsapp.sendText(conv.phone_e164, text)
-    return recordOutbound(deps, conv, 'text', text, r, extra)
-  }
-  if (!template) return null
-  const tpl = templateFor(template.kind, waLocale(st.locale))
-  if (!tpl) return null
-  const r = await deps.whatsapp.sendTemplate(conv.phone_e164, tpl.name, waLocale(st.locale), template.params)
-  return recordOutbound(deps, conv, 'template', null, r, { ...extra, template_name: tpl.name, params: template.params })
+  const r = await runtimeSend(
+    { admin: deps.admin, whatsapp: deps.whatsapp, ...(deps.now ? { now: deps.now } : {}) },
+    {
+      conv,
+      userId: st.user_id,
+      kind: template?.kind ?? 'munshi_message',
+      purpose: 'assistant',
+      initiation: send.initiation ?? 'business',
+      idempotencyKey: send.key,
+      text,
+      ...(template ? { template: { kind: template.kind, locale: waLocale(st.locale), values: template.values } } : {}),
+      runId: typeof extra['run_id'] === 'string' ? extra['run_id'] : null,
+      meta: extra,
+    },
+  )
+  return sentMessageId(r)
 }
 
-async function sendButtons(deps: MunshiRuntimeDeps, st: Pick<ProviderState, 'user_id' | 'locale' | 'whatsapp'>, runId: string, text: string, template: { kind: string; params: string[] }, extra: Record<string, unknown>): Promise<string | null> {
+async function sendButtons(deps: MunshiRuntimeDeps, st: Pick<ProviderState, 'user_id' | 'locale' | 'whatsapp'>, runId: string, text: string, template: { kind: string; values: Record<string, string> }, extra: Record<string, unknown>, send: MunshiSend): Promise<string | null> {
   if (!deps.agentEnabled || !st.whatsapp) return null
   const conv = await conversationFor(deps.admin, st.user_id)
   if (!conv) return null
-  if (inWindow(deps, conv)) {
-    const t = MUNSHI_BUTTON_TITLES[st.locale]
-    const buttons = [
-      { id: `approve:${runId}`, title: t.approve },
-      { id: `edit:${runId}`, title: t.edit },
-      { id: `skip:${runId}`, title: t.skip },
-    ]
-    const r = await deps.whatsapp.sendButtons(conv.phone_e164, text, buttons)
-    return recordOutbound(deps, conv, 'button', text, r, { ...extra, buttons: buttons.map((b) => b.id) })
-  }
-  const tpl = templateFor(template.kind, waLocale(st.locale))
-  if (!tpl) return null
-  const r = await deps.whatsapp.sendTemplate(conv.phone_e164, tpl.name, waLocale(st.locale), template.params)
-  return recordOutbound(deps, conv, 'template', null, r, { ...extra, template_name: tpl.name, params: template.params })
+  const t = MUNSHI_BUTTON_TITLES[st.locale]
+  const buttons = [
+    { id: `approve:${runId}`, title: t.approve },
+    { id: `edit:${runId}`, title: t.edit },
+    { id: `skip:${runId}`, title: t.skip },
+  ]
+  // the run id rides on the row either way (buttons in the window, the template outside it): a quoted reply binds to it
+  const r = await runtimeSend(
+    { admin: deps.admin, whatsapp: deps.whatsapp, ...(deps.now ? { now: deps.now } : {}) },
+    {
+      conv,
+      userId: st.user_id,
+      kind: template.kind,
+      purpose: 'assistant',
+      initiation: send.initiation ?? 'business',
+      idempotencyKey: send.key,
+      text,
+      buttons,
+      template: { kind: template.kind, locale: waLocale(st.locale), values: template.values },
+      runId,
+      meta: extra,
+    },
+  )
+  return sentMessageId(r)
+}
+
+/** A result after the provider tapped on WhatsApp answers them (reply); after a web approval Munshi writes first. */
+function resultInitiation(via: string): 'business' | 'reply' {
+  return via.startsWith('whatsapp') || via === 'voice_yes' ? 'reply' : 'business'
 }
 
 async function notifyWeb(deps: MunshiRuntimeDeps, args: { draftId: string; runId: string; userId: string }): Promise<boolean> {
@@ -322,8 +332,8 @@ async function deliverDraft(deps: MunshiRuntimeDeps, st: ProviderState, d: { dra
   delivered['notification'] = await notifyWeb(deps, { draftId: d.draftId, runId: d.runId, userId: st.user_id })
   const text = d.kind === 'reply' ? renderMunshiReply(d.draft as ThreadReplyDraft, st.locale, d.rfqTitle) : renderMunshiDraft(d.draft as MunshiDraft, st.locale, d.rfqTitle)
   const q = d.kind === 'quote' ? (d.draft as MunshiDraft).quote : null
-  const template = d.kind === 'reply' ? { kind: 'munshi_reply_draft', params: [d.rfqTitle.slice(0, 60)] } : { kind: 'munshi_draft', params: [d.rfqTitle.slice(0, 60), q ? `${formatRupees(q.price_paise)} · ${q.delivery_days}d` : '—'] }
-  const waId = await sendButtons(deps, st, d.runId, text, template, { munshi_draft_id: d.draftId, run_id: d.runId })
+  const template = d.kind === 'reply' ? { kind: 'munshi_reply_draft', values: { title: d.rfqTitle.slice(0, 60) } } : { kind: 'munshi_draft', values: { title: d.rfqTitle.slice(0, 60), price: q ? `${formatRupees(q.price_paise)} · ${q.delivery_days}d` : '—' } }
+  const waId = await sendButtons(deps, st, d.runId, text, template, { munshi_draft_id: d.draftId, run_id: d.runId }, { key: `${d.runId}:munshi:card` })
   if (waId) delivered['whatsapp'] = waId
   await deps.admin.from('munshi_drafts').update({ delivered, updated_at: new Date().toISOString() }).eq('id', d.draftId)
 }
@@ -524,7 +534,7 @@ export async function finalizeMunshiRun(deps: MunshiRuntimeDeps, runId: string, 
     await deps.admin.from('munshi_drafts').update({ decision_id: (dec as { id: string } | null)?.id ?? null, updated_at: now }).eq('id', d.id).eq('status', 'approved')
     const copy = d.kind === 'quote' ? 'sent_quote' : d.kind === 'ask' ? 'sent_ask' : 'sent_reply'
     deps.capture?.(d.user_id, 'munshi_draft_decided', { via, outcome: 'approved', kind: d.kind })
-    await sendToProvider(deps, st, munshiCopy(copy, st.locale), { kind: 'munshi_result', params: [munshiCopy(copy, st.locale).slice(0, 120)] }, { munshi_draft_id: d.id, run_id: runId, outcome: 'approved' })
+    await sendToProvider(deps, st, munshiCopy(copy, st.locale), { kind: 'munshi_result', values: { line: munshiCopy(copy, st.locale).slice(0, 120) } }, { munshi_draft_id: d.id, run_id: runId, outcome: 'approved' }, { key: `${runId}:munshi:result:approved`, initiation: resultInitiation(via) })
     return
   }
   if (d.status !== 'proposed') return
@@ -563,7 +573,7 @@ export async function finalizeMunshiRun(deps: MunshiRuntimeDeps, runId: string, 
   }
   const outcomeLabel = status === 'approved' ? 'approved' : status
   deps.capture?.(d.user_id, 'munshi_draft_decided', { via, outcome: outcomeLabel, kind: d.kind })
-  await sendToProvider(deps, st, munshiCopy(copy, st.locale), { kind: 'munshi_result', params: [munshiCopy(copy, st.locale).slice(0, 120)] }, { munshi_draft_id: d.id, run_id: runId, outcome: outcomeLabel })
+  await sendToProvider(deps, st, munshiCopy(copy, st.locale), { kind: 'munshi_result', values: { line: munshiCopy(copy, st.locale).slice(0, 120) } }, { munshi_draft_id: d.id, run_id: runId, outcome: outcomeLabel }, { key: `${runId}:munshi:result:${outcomeLabel}`, initiation: resultInitiation(via) })
 }
 
 /** The decision route said approved but could not reach the runtime (or we ARE the runtime, in-process): resume here. */
@@ -619,7 +629,7 @@ export async function runMunshiDecide(deps: MunshiRuntimeDeps, job: MunshiDecide
   const st = await providerStateFor(deps, d.provider_id, d.user_id)
   const rfqTitle = d.rfq?.title ?? ''
   if (d.status !== 'proposed') {
-    await sendToProvider(deps, st, munshiCopy('draft_gone', st.locale), null, { munshi_draft_id: d.id })
+    await sendToProvider(deps, st, munshiCopy('draft_gone', st.locale), null, { munshi_draft_id: d.id }, { key: `${job.messageId}:munshi:draft_gone`, initiation: 'reply' })
     return { status: 'ok', detail: { outcome: 'draft_gone' } }
   }
   const scopes = await scopesFor(deps.admin, d.user_id)
@@ -670,14 +680,14 @@ export async function runMunshiDecide(deps: MunshiRuntimeDeps, job: MunshiDecide
     // outbound row lets a quoted reply bind to it
     const draftText = d.kind === 'reply' ? renderMunshiReply(d.draft as ThreadReplyDraft, st.locale, rfqTitle) : renderMunshiDraft(d.draft as MunshiDraft, st.locale, rfqTitle)
     const text = `${munshiCopy('reask', st.locale)}\n\n${draftText}`
-    if (d.run_id) await sendButtons(deps, st, d.run_id, text, { kind: 'munshi_draft', params: [rfqTitle.slice(0, 60), '—'] }, { munshi_draft_id: d.id, run_id: d.run_id, reask: true })
+    if (d.run_id) await sendButtons(deps, st, d.run_id, text, { kind: 'munshi_draft', values: { title: rfqTitle.slice(0, 60), price: '—' } }, { munshi_draft_id: d.id, run_id: d.run_id, reask: true }, { key: `${job.messageId}:munshi:reask:${d.run_id}`, initiation: 'reply' })
     return { status: 'ok', detail: { outcome: 'reask', bound: textBound } }
   }
   if (action === 'skip') {
     const r = await postDecision(deps, d, { approve: false, reason: 'skipped', input_refs: inputRefs })
     await deps.admin.from('munshi_drafts').update({ status: 'skipped', result_ref: { skipped_via: via, decision_status: r.status }, updated_at: new Date().toISOString() }).eq('id', d.id).eq('status', 'proposed')
     deps.capture?.(d.user_id, 'munshi_draft_decided', { via, outcome: 'skipped', kind: d.kind })
-    await sendToProvider(deps, st, munshiCopy('skipped', st.locale), null, { munshi_draft_id: d.id })
+    await sendToProvider(deps, st, munshiCopy('skipped', st.locale), null, { munshi_draft_id: d.id }, { key: `${job.messageId}:munshi:skipped`, initiation: 'reply' })
     return { status: 'ok', detail: { outcome: 'skipped' } }
   }
   if (action === 'edit') {
@@ -686,7 +696,7 @@ export async function runMunshiDecide(deps: MunshiRuntimeDeps, job: MunshiDecide
     deps.capture?.(d.user_id, 'munshi_draft_decided', { via, outcome: 'edited', kind: d.kind })
     const link = d.kind === 'reply' ? `${deps.apiUrl}/partner/rfqs/${d.rfq_id ?? ''}` : `${deps.apiUrl}/partner/rfqs/${d.rfq_id ?? ''}?munshi=${d.id}`
     const text = munshiCopy('edited', st.locale, { link }) + (editInstructions ? `\n\n“${editInstructions.slice(0, 300)}”` : '')
-    await sendToProvider(deps, st, text, { kind: 'munshi_result', params: [munshiCopy('edited', st.locale, { link }).slice(0, 120)] }, { munshi_draft_id: d.id })
+    await sendToProvider(deps, st, text, { kind: 'munshi_result', values: { line: munshiCopy('edited', st.locale, { link }).slice(0, 120) } }, { munshi_draft_id: d.id }, { key: `${job.messageId}:munshi:edited`, initiation: 'reply' })
     return { status: 'ok', detail: { outcome: 'edited' } }
   }
   // approve
@@ -698,7 +708,7 @@ export async function runMunshiDecide(deps: MunshiRuntimeDeps, job: MunshiDecide
     decisionId = (dec as { id: string } | null)?.id ?? null
   }
   if (!r.ok && !decisionId) {
-    await sendToProvider(deps, st, munshiCopy('failed_other', st.locale), null, { munshi_draft_id: d.id, decision_error: r.error })
+    await sendToProvider(deps, st, munshiCopy('failed_other', st.locale), null, { munshi_draft_id: d.id, decision_error: r.error }, { key: `${job.messageId}:munshi:failed`, initiation: 'reply' })
     return { status: 'failed', error: `decision_failed:${r.status}:${r.error ?? ''}` }
   }
   if (!r.resumed) await resumeInProcess(deps, d, decisionId, scopes, via)
@@ -846,7 +856,7 @@ export async function runMunshiFollowup(deps: MunshiRuntimeDeps): Promise<Munshi
     const reminders = { ...st.munshi_reminders }
     for (const w of parent.output.warnings) {
       const text = munshiCopy('window_warning', st.locale, { title: w.title.slice(0, 80), hours: w.hoursLeft })
-      const sent = await sendToProvider(deps, st, text, { kind: 'munshi_window_warning', params: [w.title.slice(0, 60), String(w.hoursLeft)] }, { rfq_id: w.rfqId, reminder: true })
+      const sent = await sendToProvider(deps, st, text, { kind: 'munshi_window_warning', values: { title: w.title.slice(0, 60), hours: String(w.hoursLeft) } }, { rfq_id: w.rfqId, reminder: true }, { key: `${w.rfqId}:${st.user_id}:munshi:window_warning` })
       await notifyWebReminder(deps, st, w)
       reminders[w.rfqId] = { warned_at: nowIso }
       detail.warnings++
@@ -1042,7 +1052,7 @@ export async function runMunshiGrowth(deps: MunshiRuntimeDeps): Promise<MunshiJo
       categoryName = cat ? pickLocale((cat as { name_i18n: { en: string; hi?: string; te?: string } }).name_i18n, st.locale) : null
     }
     const line = growthNudgeLine(nudge, st.locale, categoryName)
-    const wa = await sendToProvider(deps, st, line, { kind: 'munshi_growth', params: [line] }, { growth: nudge.kind, run_id: r.runId })
+    const wa = await sendToProvider(deps, st, line, { kind: 'munshi_growth', values: { line } }, { growth: nudge.kind, run_id: r.runId }, { key: `${r.runId}:munshi:growth` })
     const inApp = await notifyWebGrowth(deps, st, nudge)
     await bumpState(deps.admin, st, { last_growth_at: now.toISOString() })
     detail.sent++

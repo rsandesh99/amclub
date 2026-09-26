@@ -245,7 +245,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // on (flag-off stays byte-identical). Data, not money; failures only logged.
   if (AGENT_ENABLED) await recordPriceBookEntry(admin, { quoteId: quote.id })
 
-  // Notify the buyer of the new quote.
+  // Notify the buyer of the new quote (ADR-030 §4: WhatsApp + email by the registry, SMS as the WhatsApp fallback).
   const rfq = await loadRfqForNotify(admin, rfqId)
   if (rfq?.buyerUserId) {
     await createNotification(admin, {
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       titleI18n: notifyText('new_quote.title'),
       bodyI18n: sameText(rfq.title),
       link: `/app/rfq/${rfqId}`,
-      channels: ['sms'],
+      values: { title: rfq.title, count: newCount },
     })
   }
 
@@ -366,7 +366,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       titleI18n: notifyText('quote_revised.title'),
       bodyI18n: sameText(rfq.title),
       link: `/app/rfq/${rfqId}`,
-      channels: ['sms'],
+      values: { title: rfq.title },
     })
   }
 

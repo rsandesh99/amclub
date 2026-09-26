@@ -1,3 +1,5 @@
+import { DEFAULT_WA_GRAPH_VERSION, WA_GRAPH_VERSION_RE } from '@amclub/agent-core'
+
 /**
  * Runtime environment. Everything is optional so the process boots for a health
  * check even when unconfigured (dark build); real work needs the secrets set.
@@ -11,7 +13,11 @@
  * residency guard — REQUIRED in production with AGENT_ENABLED=true, audit M23; /health
  * reports the posture), WA_MEDIA_MAX_BYTES / WA_MEDIA_TIMEOUT_MS (inbound media caps, M34),
  * AGENT_MODEL_RATES (cost estimate when the vendor reports none),
- * AGENT_MAX_TOKENS_<TIER> (output caps).
+ * AGENT_MAX_TOKENS_<TIER> (output caps), and the WhatsApp driver (ADR-030: Meta's Cloud API
+ * direct) — WHATSAPP_DRIVER (meta_cloud | stub), WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN,
+ * WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN, WHATSAPP_WABA_ID, WHATSAPP_GRAPH_VERSION (vNN.0,
+ * default v24.0), WHATSAPP_TIMEOUT_MS (1000–60000, default 10000). A named driver with a missing
+ * credential is logged at boot, reported by /health and refused by the webhook (503).
  */
 export const RUNTIME_ENV = {
   /** The AMClub web app (API of record) the runtime calls back into. */
@@ -27,6 +33,8 @@ export const RUNTIME_ENV = {
   /** S0.5 — outbound WhatsApp replies from the inbound job are gated on this (webhook always stores). */
   AGENT_ENABLED: process.env['AGENT_ENABLED'] === 'true',
   WA_MEDIA_BUCKET: process.env['WA_MEDIA_BUCKET'] ?? 'wa-media',
+  /** ADR-030 / audit B5 — the pinned Graph API version (validated `vNN.0`; an invalid value falls back and /health says so). */
+  WHATSAPP_GRAPH_VERSION: WA_GRAPH_VERSION_RE.test(process.env['WHATSAPP_GRAPH_VERSION'] ?? '') ? (process.env['WHATSAPP_GRAPH_VERSION'] as string) : DEFAULT_WA_GRAPH_VERSION,
 } as const
 
 export function missingRuntimeConfig(): string[] {

@@ -21,6 +21,7 @@ export function RevealFooter() {
     { href: '/privacy', label: t('legal.privacy_title') },
     { href: '/refund-policy', label: t('legal.refund_title') },
     { href: '/grievance', label: t('legal.grievance_link') },
+    { href: '/help/whatsapp-safety', label: t('help.footer_safety') },
   ]
 
   return (

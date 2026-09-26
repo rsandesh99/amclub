@@ -73,7 +73,7 @@ export async function fanoutRfq(admin: Admin, rfqId: string): Promise<{ matched:
     titleI18n: notifyText('rfq_matched.title'),
     bodyI18n: sameText(rfq.title),
     link: `/partner/rfqs/${rfqId}`,
-    channels: ['sms', 'whatsapp'],
+    values: { title: rfq.title },
   })
 
   return { matched: providers.length }

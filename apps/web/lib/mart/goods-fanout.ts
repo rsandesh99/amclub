@@ -1,6 +1,7 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { createNotificationsBulk } from '@/lib/notifications/create'
+import { notifyText, sameText } from '@/lib/i18n/notify'
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
@@ -45,10 +46,10 @@ export async function fanoutGoodsRfq(admin: Admin, rfq: { id: string; msme_id: s
     .upsert(chosen.map((p) => ({ rfq_id: rfq.id, provider_id: p.id })), { onConflict: 'rfq_id,provider_id', ignoreDuplicates: true })
   await createNotificationsBulk(admin, chosen.map((p) => p.user_id), {
     kind: 'rfq_matched',
-    titleI18n: { en: 'New goods request for you', hi: 'आपके लिए नया माल अनुरोध' },
-    bodyI18n: { en: rfq.title, hi: rfq.title },
+    titleI18n: notifyText('rfq_matched_goods.title'),
+    bodyI18n: sameText(rfq.title),
     link: `/partner/rfqs/${rfq.id}`,
-    channels: ['sms', 'whatsapp'],
+    values: { title: rfq.title },
   })
   return { matched: chosen.length }
 }

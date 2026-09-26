@@ -50,7 +50,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       te: `"${title}" కోసం ${kind === 'quote' ? 'కొటేషన్' : kind === 'question' ? 'ప్రశ్న' : 'జవాబు'} డ్రాఫ్ట్ మీ ఆమోదం కోసం వేచి ఉంది.`,
     },
     link: '/partner/munshi',
-    channels: [],
   })
   await admin.from('munshi_drafts').update({ delivered: { ...(d.delivered ?? {}), notification: true }, updated_at: new Date().toISOString() }).eq('id', d.id)
   return NextResponse.json({ ok: true, notified: true })

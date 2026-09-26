@@ -15,6 +15,7 @@ import { GroupedSection, GroupedRow } from '@/components/ui-v3/GroupedList'
 import { PickUpShelf } from './PickUpShelf'
 import { BuyAgainShelf } from './BuyAgainShelf'
 import { CompletenessCard } from './CompletenessCard'
+import { WhatsAppOptInCard } from '@/components/settings/WhatsAppOptInCard'
 import { HomeViewed } from './HomeViewed'
 import { HomeSnapshot } from './HomeSnapshot'
 import { WhyAmclub } from '@/components/usp/WhyAmclub'
@@ -77,6 +78,9 @@ export async function HomeV3({
         <h1 className="t-large-title">{tHome(greetingKey)}{firstName ? `, ${firstName}` : ''}</h1>
 
         {completeness < HOME_COMPLETENESS_THRESHOLD && <CompletenessCard completeness={completeness} />}
+
+        {/* PRD_WHATSAPP W1 — one-time "Get order updates on WhatsApp" for accounts that never chose. */}
+        <WhatsAppOptInCard persona="buyer" />
 
         <div data-testid="home-actions" data-count={items.length}>
           <ActionList items={items} max={HOME_ACTION_MAX} seeAllHref="/app/actions" trackEvent="home_action_clicked" />
