@@ -1087,6 +1087,21 @@ async function main() {
         denied('buyer token → POST /profile/msme', (await api(delegated(buyerA.uid, 'buyer'), '/api/v1/profile/msme', { business_name: 'agent-renamed', state: 'KA' })).status)
         denied('provider token → PATCH /profile/provider/settings', (await api(delegated(provA.uid, 'provider'), '/api/v1/profile/provider/settings', { capacityPaused: false }, 'PATCH')).status)
         denied('a delegated token cannot mint another (token endpoint session path)', (await api(delegated(buyerA.uid, 'buyer'), '/api/v1/agent/token', { persona: 'buyer' })).status)
+        // 2026-09-26 sweep: write routes no tool wraps refuse a delegated token BEFORE anything else (exactly 403, so a
+        // 404 from a missing row cannot pass for the guard). Mart, /agent/grants and /agent/onboarding/start are probed
+        // in verify-mart, on the server with agents + Mart on.
+        const asBuyer = delegated(buyerA.uid, 'buyer')
+        const asProvider = delegated(provA.uid, 'provider')
+        const someId = '00000000-0000-4000-8000-000000000000'
+        eq('buyer token → POST /legal/accept', (await api(asBuyer, '/api/v1/legal/accept', { doc: 'terms' })).status, 403)
+        eq('buyer token → POST /saved', (await api(asBuyer, '/api/v1/saved', { kind: 'package', id: someId })).status, 403)
+        eq('buyer token → POST /notifications/read', (await api(asBuyer, '/api/v1/notifications/read', { all: true })).status, 403)
+        eq('buyer token → POST /reviews/{id}/flag', (await api(asBuyer, `/api/v1/reviews/${someId}/flag`, { reason: 'spam' })).status, 403)
+        eq('provider token → POST /reviews/{id}/reply', (await api(asProvider, `/api/v1/reviews/${someId}/reply`, { body: 'agent reply' })).status, 403)
+        eq('provider token → POST /partner/packages', (await api(asProvider, '/api/v1/partner/packages', { title: 'agent listing' })).status, 403)
+        eq('provider token → PATCH /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, { price_paise: 1 }, 'PATCH')).status, 403)
+        eq('provider token → POST /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, { action: 'publish' })).status, 403)
+        eq('provider token → DELETE /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, undefined, 'DELETE')).status, 403)
       } else {
         console.log('  (AUTHZ_JWT_SECRET unset — delegated-token probes skipped; CI sets it)')
       }

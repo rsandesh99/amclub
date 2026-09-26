@@ -6,11 +6,15 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { notifyReviewReply } from '@/lib/notifications/events'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 const bodySchema = z.object({ reply: z.string().trim().min(1).max(1000) })
 
 /** POST — the provider posts ONE reply to a review on their work (§5.5). */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /reviews/[id]/reply')
+  if (delegated) return delegated
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

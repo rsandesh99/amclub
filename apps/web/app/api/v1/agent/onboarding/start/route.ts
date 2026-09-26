@@ -8,6 +8,7 @@ import { activeOnboardingSession, getOnboardingTtlHours, isOnboardingEnabledFor 
 import { enqueueRuntimeJob } from '@/lib/agent/runtime-client'
 import { captureServerEvent } from '@/lib/analytics/server'
 import { env } from '@/lib/env'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * POST /api/v1/agent/onboarding/start (S1.6) — "Finish on WhatsApp" from the
@@ -25,6 +26,9 @@ const NO_STORE = { 'Cache-Control': 'private, no-store' }
 export async function POST() {
   const gate = agentApiGate()
   if (gate) return gate
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /agent/onboarding/start')
+  if (delegated) return delegated
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const rl = await enforce(limiters.authed, `onboarding-start:${userId}`)

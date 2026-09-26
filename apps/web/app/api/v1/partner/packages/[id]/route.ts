@@ -8,6 +8,7 @@ import { toPackageRow } from '@/lib/partner/packageRow'
 import { revalidateCatalog } from '@/lib/catalog/revalidate'
 import { serverError } from '@/lib/api/errors'
 import { getAuthedSupabase } from '@/lib/auth/request'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 // Edit accepts the full package shape; status may also be 'paused'.
 const editSchema = packageSchema.extend({
@@ -42,6 +43,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('PATCH /partner/packages/[id]')
+  if (delegated) return delegated
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
@@ -104,6 +108,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /partner/packages/[id]')
+  if (delegated) return delegated
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
@@ -130,6 +137,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('DELETE /partner/packages/[id]')
+  if (delegated) return delegated
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params

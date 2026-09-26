@@ -4,6 +4,7 @@ import { agentGrantSchema } from '@amclub/shared'
 import { agentApiGate } from '@/lib/agent/gate'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { enforce, limiters, tooManyRequests, clientIp } from '@/lib/rate-limit'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * Delegation grants (ADR-009 §6). A user grants an agent persona + scopes on a
@@ -34,6 +35,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const gate = agentApiGate()
   if (gate) return gate
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /agent/grants')
+  if (delegated) return delegated
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const rl = await enforce(limiters.authed, `agent-grant:${userId}`)
@@ -83,6 +87,9 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const gate = agentApiGate()
   if (gate) return gate
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('DELETE /agent/grants')
+  if (delegated) return delegated
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const id = request.nextUrl.searchParams.get('id')
