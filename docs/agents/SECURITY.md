@@ -188,6 +188,11 @@ discloses this, and the programme holds itself to these terms before any cohort 
   that neither collect nor retain prompts serve it — whatever the account setting says. A model with no such
   endpoint answers 404; the gateway reports `provider_policy_unmatched` (logged, no retry: a 4xx is final) and
   the fix is a ZDR-capable model for that tier (`AGENT_MODEL_<TIER>`).
+  **Recommendation (ADR-030, D-WA8): set `AGENT_OPENROUTER_ZDR=true` on Vercel AND the runtime (Fly) now**, before any
+  WhatsApp cohort and independent of the residency decision: it forces the no-collection / zero-retention preference on
+  every request, so WhatsApp-originated text (support turns, procurement turns, Munshi replies, voice transcripts) never
+  reaches an endpoint that keeps it. Sarvam is called directly (outside the gateway): its retention setting is recorded
+  in the table below, not enforced by this flag.
 - **Support prompts are masked (audit M23).** `buildSupportIntentParts` / `buildTicketSummaryParts` run
   `redactContactInfo` on the live message, the previous one and every user transcript turn before they are
   enveloped; the stored copies already were.
@@ -197,9 +202,38 @@ discloses this, and the programme holds itself to these terms before any cohort 
 | OpenRouter (default gateway) and each upstream it routes to | live / routine / reasoning / frontier | FOUNDER_FILL | FOUNDER_FILL | Founder → counsel |
 | Sarvam (speech-to-text) | live (STT) | FOUNDER_FILL | FOUNDER_FILL | Founder → counsel |
 | In-India inference endpoint (if adopted) | per `AGENT_LLM_BASE_URL_<TIER>` | FOUNDER_FILL | FOUNDER_FILL | Founder |
+| Meta Platforms (WhatsApp Business Platform, Cloud API; ADR-030) — processor for every WhatsApp message, template and media file; Meta states it keeps Cloud API messages up to 30 days unless the number uses local storage | channel (not a model) | n/a (not a model provider; our own no-training rule is the section below) · Meta's retention and the local-storage / in-India option, confirmed on Meta's page: FOUNDER_FILL | WhatsApp Business Solution Terms + Meta Data Processing Terms accepted with the WABA: FOUNDER_FILL (date, WABA id) | Founder → counsel |
+| MSG91 (SMS: OTP via the Supabase hook, DLT transactional SMS and the WhatsApp fallback) | channel (not a model) | n/a (no model); message-log retention period: FOUNDER_FILL | FOUNDER_FILL | Founder → counsel |
 
-A signed DPA with no-training terms for every provider in this table is a **blocker for enabling any agent
-cohort** (`docs/COMPLIANCE.md`).
+A signed DPA with no-training terms for every model provider in this table is a **blocker for enabling any agent
+cohort** (`docs/COMPLIANCE.md`); the Meta and MSG91 rows are **blockers for a live WhatsApp number / live SMS**
+(audit §1, PRD_WHATSAPP go-live checklist).
+
+## WhatsApp data rule — no training, eval or corpus from WhatsApp content (ADR-030 §5)
+
+Meta's WhatsApp Business Solution Terms bar using WhatsApp content to train or improve AI models, **including derived
+or aggregate data**, and bar general-purpose assistants. Our rule, which every agent PR restates in its §7 checklist:
+
+- **Nothing that came from WhatsApp enters a corpus, an eval set, a golden conversation, a fine-tune or a
+  benchmark** — not the message text, not a voice transcript, not a photo or PDF, not an extraction, parse or summary
+  made from them, not counts or statistics built from them. Golden and red-team cases are written by hand or from web
+  / mobile sessions with the user's consent; never exported from `wa_messages`, `procurement_turns` of a WhatsApp
+  session, `support_tickets` of channel `whatsapp`, or `agent_runs` with `surface = 'whatsapp'`.
+- **Enforced at the one corpus writer.** The procurement agent tags a request drafted on WhatsApp
+  (`voice_meta.channel = 'whatsapp'`, `rfqCreateBody`); `apps/web/lib/corpus` refuses a write when the voice metadata
+  says WhatsApp **or** the request runs under a delegated token whose agent run is on WhatsApp (shared
+  `corpusSourceAllowed`, unit-tested in `wa-ops.test.ts` and `procurement/channel.test.ts`); an unreadable run counts
+  as WhatsApp. The web / mobile corpus opt-in (`users.corpus_consent_at`) does not extend to WhatsApp.
+- **Model calls on WhatsApp content are for answering that user only**, through the gateway with the retention
+  preference above (`AGENT_OPENROUTER_ZDR=true`), inside the assistant's fixed scope (off-topic text gets the fixed
+  steer-back, never a model answer).
+- **Exports and analytics:** any new export or offline analysis script must exclude WhatsApp-originated rows (the
+  `voice_meta.channel` tag, `agent_runs.surface`, `support_tickets.channel`). Operational aggregates the console shows
+  (delivery, spend, consent counts) are metadata about sending, not content, and are never fed to a model.
+- **Retention and access:** message text is redacted after `wa_retention_text_days`, media after
+  `wa_retention_media_days`, never-registered numbers are deleted after `wa_retention_unknown_days` (the `wa-retention`
+  cron); every ops read of a message or a ticket transcript is audit-logged (`wa_message_read`, `wa_transcript_read`) and
+  a transcript shows only the current holder's own chat since their bind time. Runbook: `docs/agents/WHATSAPP_OPS.md`.
 
 | Residency decision (audit M23) | Env | Recorded by / date | Review by |
 |---|---|---|---|

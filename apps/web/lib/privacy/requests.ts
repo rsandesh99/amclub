@@ -93,7 +93,7 @@ export async function resolveAccount(admin: Admin, identifier: string): Promise<
   const s = identifier.trim()
   let q
   if (/^[0-9a-f-]{36}$/i.test(s)) q = admin.from('users').select('id, phone').eq('id', s)
-  else if (s.includes('@')) q = admin.from('users').select('id, phone').ilike('email', s)
+  else if (s.includes('@')) q = admin.from('users').select('id, phone').in('email', [...new Set([s, s.toLowerCase()])]) // exact: never a LIKE pattern
   else {
     const d = phoneDigits(s)
     if (d.length < 10) return null
