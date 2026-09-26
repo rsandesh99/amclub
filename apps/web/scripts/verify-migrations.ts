@@ -506,8 +506,8 @@ const MANIFEST: Entry[] = [
   {
     file: '0086_whatsapp_ledger.sql',
     tables: ['wa_consent_events', 'wa_phone_consents', 'wa_suppressions', 'wa_templates', 'wa_account_events'],
-    triggers: [['wa_messages', 'wa_messages_status_forward'], ['wa_consent_events', 'wa_consent_events_append_only']],
-    note: 'ADR-030: WhatsApp consent ledger (append-only events + per phone/purpose state via record_wa_consent, service role only), delivery suppressions, the outbound ledger columns on wa_messages (idempotency key, error code, pricing, cost in millipaise; statuses never move backwards), BSUID / entry window / referral / bind time on wa_conversations, the template registry and account events',
+    triggers: [['wa_messages', 'wa_messages_status_forward'], ['wa_consent_events', 'wa_consent_events_append_only'], ['users', 'users_phone_change_wa_consent']],
+    note: 'ADR-030: WhatsApp consent ledger (append-only events + per phone/purpose state via record_wa_consent, service role only), delivery suppressions, the outbound ledger columns on wa_messages (idempotency key, error code, pricing, cost in millipaise; statuses never move backwards), BSUID / entry window / referral / bind time on wa_conversations, the template registry and account events; a phone change withdraws the old number\'s opt-ins',
   },
   {
     file: '0087_notification_outbox.sql',
