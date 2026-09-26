@@ -206,6 +206,20 @@ jobs:
         working-directory: apps/web
         run: pnpm exec tsx scripts/verify-experience.ts
 
+      # ADR-030 §4 — the registry decides channels, preferences / quiet hours / the essential floor, the outbox
+      # (idempotent, retry, WhatsApp → SMS / email fallback), reminders sent once, and the dispute / verification
+      # notices. Drives notify-dispatch and notify-reminders with the job's CRON_SECRET.
+      - name: Notifications (ADR-030 §4 — registry, preferences, outbox, fallback, reminders)
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/verify-notifications.ts
+
+      # ADR-030 — the WhatsApp ops console and privacy operations (flag-default server). Runs once the rig exists.
+      - name: WhatsApp ops (ADR-030 §6 — console, templates, DPDP requests)
+        if: ${{ !cancelled() && steps.app.outcome == 'success' && hashFiles('apps/web/scripts/verify-whatsapp-ops.ts') != '' }}
+        working-directory: apps/web
+        run: pnpm exec tsx scripts/verify-whatsapp-ops.ts
+
       # Agent surfaces (S3.4, ADR 024) exist only with AGENT_ENABLED=true, and Mart only with MART_ENABLED=true. A
       # second server runs the SAME build with both on (:3001), as production does since 2026-09-24. Both switches are
       # read at runtime. Every rig above keeps proving the code default (both off) on :3000.
@@ -234,6 +248,16 @@ jobs:
           BASE_URL: http://localhost:3001
           FLAG_OFF_BASE_URL: http://localhost:3000
         run: pnpm exec tsx scripts/verify-pools.ts
+
+      # ADR-030 §2 — WhatsApp consent, STOP for every purpose, keywords and grants per persona, on the production-flags
+      # server (agents on). Runs once the rig exists.
+      - name: WhatsApp consent (ADR-030 §2 — consent ledger, STOP, keywords, grants; agent on)
+        if: ${{ !cancelled() && steps.agentapp.outcome == 'success' && hashFiles('apps/web/scripts/verify-whatsapp-consent.ts') != '' }}
+        working-directory: apps/web
+        env:
+          BASE_URL: http://localhost:3001
+          AGENT_BASE_URL: http://localhost:3001
+        run: pnpm exec tsx scripts/verify-whatsapp-consent.ts
 
       - name: Assistant home (E18 — agent on; /app/ai, /partner/ai, the launcher API)
         if: ${{ !cancelled() && steps.agentapp.outcome == 'success' }}
