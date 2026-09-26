@@ -86,7 +86,7 @@ export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app', consent,
               requestOtp={requestOtp}
               captchaReady={captchaReady}
               onSuccess={(p) => { setPhone(p); setStep('otp') }}
-              onSwitchToEmail={() => setMethod('email')}
+              onSwitchToEmail={() => { whatsapp?.onChange(false); setMethod('email') }}
             />
           ) : (
             <EmailStep requestOtp={requestOtp} captchaReady={captchaReady} onSuccess={(e) => { setEmail(e); setStep('otp') }} />
