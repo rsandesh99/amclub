@@ -2,6 +2,7 @@
 
 **Question:** can our architecture carry the founder's WhatsApp strategy (market research report "AMClub WhatsApp Strategy", 25 Sep 2026: build our own layer directly on Meta's Cloud API, no BSP), and which features will users expect on top of it?
 **Scope:** master `1ecc652` — `packages/agent-core/src/whatsapp`, `apps/agent-runtime` (webhook, dispatcher, agents), `apps/web/lib/notifications`, the agent routes and consent, Mart and pools, mobile, the i18n and legal copy, migrations 0030 / 0036 / 0041 / 0045 / 0079.
+**Production state:** read-only aggregate counts on 2026-09-26 found 0 `wa_conversations`, 0 `wa_messages`, 0 WhatsApp grants and 0 `wa-media` objects — nothing has been sent or stored on WhatsApp yet, so every finding below is a pre-launch fix and no data needs cleaning up.
 **Method:** six read-only auditors in parallel (transport, consent and privacy, the assistant, commerce and campaigns, user expectations, a web fact-check of the report), then every High finding re-checked by hand in the code. Meta's own pages were blocked by this environment's egress proxy, so the Meta facts below come from search results that quote Meta's documentation and from several independent secondary sources. Each is marked, and each should be confirmed with one click on Meta's page before it goes into configuration.
 
 ## Verdict
@@ -153,7 +154,12 @@ Legal points state the requirement as we read it; counsel must confirm them.
 | Grievance path reachable from WhatsApp | Partial | A grievance page exists (web only); no keyword, and mobile has no grievance entry outside the cohort. |
 | Recycled numbers (telcos reissue numbers after ~90 days) | Partial | Binding follows `users.phone`, so a reissued number that is still some old user's phone receives that user's order updates; Meta's "user changed number" system message is ignored. Dormant accounts should re-confirm before WhatsApp binding. |
 | Sensitive data typed into chat (OTP, UPI PIN, card) | Missing | Stored raw; add patterns to the one contact masker and redact before storing. |
-| Access to chats | Built | `wa_conversations` / `wa_messages` are admin / ops read only; no client grant; media in a private bucket behind signed URLs. Ops reads are not audit-logged. |
+| Access to chats | Built | `wa_conversations` / `wa_messages` are admin / ops read only; no client grant; media in a private bucket behind signed URLs. Ops reads are not audit-logged, and a ticket transcript is "the last N messages on this phone", so after a phone change it shows (and sends to the summary model) the previous holder's messages. |
+| Ledger integrity | **Fixed in this PR (0085, to apply)** | 0027 left `authenticated` with INSERT and UPDATE (`revoked_at`) under policies with no rule on the values, so any token for the user — a delegated agent token included — could insert a grant with wider scopes (e.g. `place_order`, which `/checkout` honours for delegated tokens), forge a consent snapshot, revive a revoked grant or backdate a withdrawal straight through PostgREST. 0085 withdraws every client write, drops the self insert / revoke policies, and adds a trigger (only `revoked_at` may change; a revoked grant stays revoked). `/api/v1/agent/grants` now writes on the service role after checking the persona is one the user holds and taking a WhatsApp grant's phone from the account. |
+| Model providers keep no WhatsApp data | Not guaranteed | OpenRouter's `{ data_collection: 'deny', zdr: true }` preference is sent only once a residency decision is recorded or `AGENT_OPENROUTER_ZDR=true` is set (`packages/agent-core/src/llm/gateway.ts:306`); the residency setting is on hold, and the DPAs for OpenRouter and Sarvam are `FOUNDER_FILL` in `docs/agents/SECURITY.md`. Sarvam is called directly, outside the gateway. Set `AGENT_OPENROUTER_ZDR=true` on Vercel and Fly and record the DPAs before any WhatsApp cohort. |
+| WhatsApp content kept out of our own corpus and eval sets | Missing | A buyer who opted into the voice corpus on the web and then records a WhatsApp voice request has the transcript written to `corpus_voice_triples` (`procurement/agent.ts` → `POST /rfq` → `lib/corpus`), with `corpus_consent_enabled` on in production. Tag the origin channel and skip WhatsApp content. |
+| Processing stops after STOP | Partial | STOP revokes grants but does not clear an active onboarding or procurement session, so a voice note sent after STOP is still transcribed and sent to a model; onboarding replies in-window without a grant check. |
+| Where messages are stored | Needs a decision | The privacy page says stored data stays in India, but Cloud API messages pass through Meta (Meta states it keeps them up to 30 days) unless the number is registered with local storage; whether India is offered was not verified. |
 
 ## 7. Found in passing
 
@@ -163,7 +169,7 @@ Legal points state the requirement as we read it; counsel must confirm them.
 - **`/agent/grants` POST / DELETE**: a delegated token could write a new grant for itself with scopes the design withholds (`place_order`, `accept_quote`), or manufacture a WhatsApp consent row.
 - `/agent/onboarding/start`, `/legal/accept` (an agent accepting terms for a user), `/reviews/[id]/reply` and `/flag`, `/saved`, `/notifications/read`, `/partner/packages` POST and `/partner/packages/[id]` PATCH / POST / DELETE.
 
-Exploiting any of these needed a delegated token (the runtime secret or a runtime bug), so this was a missing defence layer rather than an open door. Each handler now calls `requireNotDelegated` first. `verify-authz` §10 probes the non-agent routes for an exact 403; `verify-mart` F2 probes the Mart routes and the consent route on the production-flags server and checks the order did not move.
+Exploiting any of these needed a delegated token (the runtime secret or a runtime bug), so this was a missing defence layer rather than an open door. The consent route also had a table-level twin: `agent_grants` itself was client-writable (section 6), which migration **0085** closes; it needs applying to production after this PR is live (the route already writes on the service role, so the order is safe). Each handler now calls `requireNotDelegated` first. `verify-authz` §10 probes the non-agent routes for an exact 403; `verify-mart` F2 probes the Mart routes and the consent route on the production-flags server and checks the order did not move.
 
 **Open, not WhatsApp-specific (for the next wave):**
 
@@ -209,5 +215,7 @@ Each phase is one or more PRs in the usual way (flag, i18n, PostHog, rig criteri
 | D-WA5 | Retention of chats and media | For example 180 days for text, 90 for media, unless attached to an order or dispute; confirm with counsel. |
 | D-WA6 | WhatsApp OTP when SMS fails | Useful and cheap (₹0.115 vs SMS), but it is an auth change: ADR first. |
 | D-WA7 | Invoice "TEST MODE" line | Needs the CA's sign-off on the GST structure; then remove it. |
+| D-WA8 | Model data terms | Set `AGENT_OPENROUTER_ZDR=true` on Vercel and Fly now (independent of the residency decision you are holding), and record the OpenRouter and Sarvam DPAs in `docs/agents/SECURITY.md` before any WhatsApp cohort. |
+| D-WA9 | Where WhatsApp messages rest | Ask Meta / check the number's local-storage option for India, and align the privacy page's "data remains in India" line with the answer (counsel). |
 
 Also still open from 2026-09-24: `obligations_enabled` (licence reminders) is presumably on in production under "every boolean switch is true" without the D-PRD5 counsel sign-off it waits on; and the bundles / tenders question (audit L6).

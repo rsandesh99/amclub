@@ -498,6 +498,11 @@ const MANIFEST: Entry[] = [
     file: '0084_rfq_template_te_ta_labels.sql',
     note: 'QA F4 (data only): label_te / label_ta on each categories.rfq_template field, per (slug, field name); never overwrites a set label',
   },
+  {
+    file: '0085_agent_grants_server_written.sql',
+    triggers: [['agent_grants', 'agent_grants_immutable']],
+    note: 'WhatsApp readiness audit: agent_grants server-written only (no client INSERT / UPDATE; self insert / revoke policies dropped); agent_grants_immutable trigger (a revoked grant stays revoked; only revoked_at changes); default TRUNCATE / REFERENCES / TRIGGER withdrawn on agent_grants and wa_*',
+  },
   // Not a migration, but bootstrap applies it last and its views must exist.
   { file: 'rls/policies.sql', views: ['order_safe_view', 'public_providers'] },
 ]

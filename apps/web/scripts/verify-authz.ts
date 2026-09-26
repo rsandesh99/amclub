@@ -1106,6 +1106,24 @@ async function main() {
         console.log('  (AUTHZ_JWT_SECRET unset — delegated-token probes skipped; CI sets it)')
       }
 
+      // 0085 — agent_grants is server-written only: consent evidence and the scopes a delegated token is minted from.
+      // A token for the user (their session, or a delegated agent token, both role=authenticated) cannot insert, revive
+      // or edit a grant through PostgREST, and the immutability trigger holds even for the service role.
+      {
+        const own = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${buyerA.token}` } }, auth: { persistSession: false } })
+        const ins = await own.from('agent_grants').insert({ user_id: buyerA.uid, persona: 'buyer', scopes: ['place_order'], channel: 'web', consent: { surface: 'forged', at: '2020-01-01T00:00:00Z' } }).select('id')
+        eq('buyerA INSERTs a grant with place_order directly → refused', Boolean(ins.error) || (ins.data ?? []).length === 0, true)
+        const { data: g } = await admin.from('agent_grants').insert({ user_id: buyerA.uid, persona: 'buyer', scopes: [], channel: 'mobile', consent: { surface: 'authz', at: new Date().toISOString() }, revoked_at: new Date().toISOString() }).select('id').single()
+        const gid = (g as { id: string } | null)?.id ?? ''
+        const revive = await own.from('agent_grants').update({ revoked_at: null }).eq('id', gid).select('id')
+        eq('buyerA revives its revoked grant directly → refused', Boolean(revive.error) || (revive.data ?? []).length === 0, true)
+        eq('the service role cannot revive a revoked grant either (trigger)', Boolean((await admin.from('agent_grants').update({ revoked_at: null }).eq('id', gid)).error), true)
+        eq('the service role cannot widen a grant in place (trigger)', Boolean((await admin.from('agent_grants').update({ scopes: ['place_order'] }).eq('id', gid)).error), true)
+        const { data: after } = await admin.from('agent_grants').select('scopes, revoked_at').eq('id', gid).single()
+        eq('the grant is unchanged', JSON.stringify(after), JSON.stringify({ scopes: [], revoked_at: (after as { revoked_at: string } | null)?.revoked_at ?? 'missing' }))
+        await admin.from('agent_grants').delete().eq('id', gid)
+      }
+
       // M13 — a suspended provider has no provider identity until reactivated.
       const suspAdmin2 = await mkUser('adminSuspProv', ['msme', 'admin'])
       eq('provA reads OWN order before suspension (control)', (await api(provA.token, `/api/v1/orders/${orderA}`, undefined, 'GET')).status, 200)

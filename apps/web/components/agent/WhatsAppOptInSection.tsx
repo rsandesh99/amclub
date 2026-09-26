@@ -32,10 +32,12 @@ export function WhatsAppOptInSection({ businessNumber }: { businessNumber: strin
   async function revoke() {
     if (!grant) return
     setBusy(true)
-    const res = await fetch(`/api/v1/agent/grants?id=${grant.id}`, { method: 'DELETE' })
-    await res.json().catch(() => ({}))
+    // Stop means every WhatsApp grant (a provider who is also a buyer can hold one per persona), not just the one shown.
+    const d = await fetch('/api/v1/agent/grants', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { grants: [] }))
+    const ids = ((d.grants ?? []) as Grant[]).filter((g) => g.channel === 'whatsapp').map((g) => g.id)
+    const results = await Promise.all((ids.length ? ids : [grant.id]).map((id) => fetch(`/api/v1/agent/grants?id=${id}`, { method: 'DELETE' })))
     setBusy(false)
-    if (res.ok) { toast(t('whatsapp_revoked')); await load() } else { toast(t('action_failed')) }
+    if (results.every((r) => r.ok || r.status === 404)) { toast(t('whatsapp_revoked')); await load() } else { toast(t('action_failed')) }
   }
 
   const masked = grant?.channel_identity ? grant.channel_identity.replace(/\d(?=\d{4})/g, '•') : null

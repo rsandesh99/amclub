@@ -486,7 +486,10 @@ CREATE POLICY "agent_settings: admin read" ON agent_settings
 
 REVOKE INSERT, UPDATE, DELETE ON agent_settings FROM anon, authenticated;
 
--- ─── agent_grants (0027) — delegated-identity consent; self read/insert/revoke ─
+-- ─── agent_grants (0027, 0085) — delegated-identity consent; self read, server-written ─
+-- 0085: consent evidence and the source of delegated-token scopes, so no client role writes it (a delegated token is
+-- role=authenticated). Writers: /api/v1/agent/grants and the enable routes on the service role, the WhatsApp runtime,
+-- the 0079 phone-change trigger. The agent_grants_immutable trigger (0085) allows only revoke.
 ALTER TABLE agent_grants ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "agent_grants: self read" ON agent_grants;
@@ -494,20 +497,13 @@ CREATE POLICY "agent_grants: self read" ON agent_grants
   FOR SELECT USING (user_id = auth_user_id());
 
 DROP POLICY IF EXISTS "agent_grants: self insert" ON agent_grants;
-CREATE POLICY "agent_grants: self insert" ON agent_grants
-  FOR INSERT WITH CHECK (user_id = auth_user_id());
-
 DROP POLICY IF EXISTS "agent_grants: self revoke" ON agent_grants;
-CREATE POLICY "agent_grants: self revoke" ON agent_grants
-  FOR UPDATE USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
 
 DROP POLICY IF EXISTS "agent_grants: admin read" ON agent_grants;
 CREATE POLICY "agent_grants: admin read" ON agent_grants
   FOR SELECT USING (has_role('admin') OR has_role('ops'));
 
--- Self may INSERT own rows and UPDATE only revoked_at (column-scoped grant); never DELETE.
-REVOKE UPDATE, DELETE ON agent_grants FROM anon, authenticated;
-GRANT UPDATE (revoked_at) ON agent_grants TO authenticated;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON agent_grants FROM anon, authenticated;
 
 -- ─── dispute_statements / dispute_triages (0037, S1.7) ────────────────────────
 -- Statements: the order's parties (the "disputes: parties all" predicate) and
