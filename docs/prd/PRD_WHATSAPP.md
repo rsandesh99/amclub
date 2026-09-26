@@ -50,8 +50,12 @@ Reach = active accounts touched per quarter (pilot ~550); Impact 0.25–3; Confi
 
 ## Rollout
 
-Everything ships behind switches (`WHATSAPP_DRIVER`, `agent_settings`, `NOTIFY_OUTBOX`), default off, with
-migrations 0086 / 0087 applied after each build is live. Go-live checklist: Meta number + INR account, templates
+WhatsApp ships dark: nothing reaches Meta until `WHATSAPP_DRIVER=meta_cloud` and its credentials are set, and every
+business-initiated message needs the phone's recorded opt-in; SMS sends only for kinds with a DLT template in
+`agent_settings.sms_dlt_templates` (none by default). The notification outbox (`NOTIFY_OUTBOX`, default on; `off` is
+the kill switch back to the direct send) is live once 0087 is applied, with the kind registry deciding the channels
+(email for the transactional kinds, as before for the existing ones). Migrations 0086 / 0087 are applied after each
+build is live. Go-live checklist: Meta number + INR account, templates
 approved (generated list in `docs/PRE_LAUNCH_CHECKLIST.md` 1.3), MSG91 DLT templates, env set, a pilot cohort.
 
 ## Metrics

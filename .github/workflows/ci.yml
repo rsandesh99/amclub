@@ -69,6 +69,9 @@ jobs:
       - name: Unit tests (agent-core — runner, confirm gate, budget, envelope)
         run: pnpm --filter @amclub/agent-core test
 
+      - name: WhatsApp send path (ADR-030 — consent, STOP, window, ledger, error classes; offline)
+        run: pnpm --filter @amclub/web whatsapp:verify
+
       - name: Component tests (mobile — Experience v3 E13 screens, jest-expo)
         run: pnpm --filter @amclub/mobile test
 
