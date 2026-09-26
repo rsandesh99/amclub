@@ -30,7 +30,7 @@
  */
 import { config } from 'dotenv'
 import path from 'path'
-import { randomUUID } from 'crypto'
+import { createHmac, randomUUID } from 'crypto'
 config({ path: path.resolve(__dirname, '../.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { computeGoodsOrderAmounts } from '@amclub/shared'
@@ -264,6 +264,50 @@ async function main() {
     denied('seller B edits A’s product', (await api(sellerB.token, `/api/v1/mart/seller/products/${p1}`, productBody(`${tag}-hold`, 'x'), 'PATCH')).status)
     denied('anon seller status', (await api(null, '/api/v1/mart/seller/status')).status)
     denied('anon checkout', (await api(null, '/api/v1/mart/checkout', { items: [{ product_id: p1, qty: 100 }], delivery, idempotencyKey: randomUUID() })).status)
+
+    // ── F2. Delegated agent tokens (audit wave 3, 2026-09-26 sweep) ─────────
+    // No agent tool wraps a goods write route (accept_delivery schedules a payout) or the consent route (a token that
+    // could write agent_grants could widen its own scopes). This server runs production's flags (agents + Mart on), so
+    // neither gate 404s first: the refusal must be exactly 403 tool_out_of_scope. Signed like lib/agent/token.ts mints them.
+    const jwtSecret = process.env['AUTHZ_JWT_SECRET']
+    if (jwtSecret) {
+      console.log('F2. Delegated agent tokens refused on goods writes and on the consent route:')
+      const b64u = (v: string | Buffer) => Buffer.from(v).toString('base64url')
+      const delegated = (sub: string, persona: string, scopes?: string[]) => {
+        const iat = Math.floor(Date.now() / 1000)
+        const head = b64u(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+        const body = b64u(JSON.stringify({ sub, role: 'authenticated', aud: 'authenticated', iat, exp: iat + 600, amc_persona: persona, ...(scopes ? { amc_scopes: scopes } : {}) }))
+        return `${head}.${body}.${createHmac('sha256', jwtSecret).update(`${head}.${body}`).digest('base64url')}`
+      }
+      const refused = async (name: string, res: Response) => {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        ok(`${name} → ${res.status}`, res.status === 403 && b.error === 'tool_out_of_scope', JSON.stringify(b))
+      }
+      const asBuyer = delegated(buyer.uid, 'buyer')
+      const asScopedBuyer = delegated(buyer.uid, 'buyer', ['draft_dispute'])
+      const asSeller = delegated(sellerA.uid, 'provider')
+      const { data: before } = await admin.from('orders').select('status').eq('id', orderB).single()
+      await refused('buyer token → accept_delivery on own goods order', await api(asBuyer, `/api/v1/mart/orders/${orderB}/transition`, { action: 'accept_delivery' }))
+      await refused('scoped buyer token → open_return on own goods order', await api(asScopedBuyer, `/api/v1/mart/orders/${orderB}/transition`, { action: 'open_return', return: { reason: 'damaged' } }))
+      const { data: after } = await admin.from('orders').select('status').eq('id', orderB).single()
+      ok('the goods order did not move', before?.status === after?.status, `${before?.status} → ${after?.status}`)
+      await refused('buyer token → POST /mart/checkout', await api(asBuyer, '/api/v1/mart/checkout', { items: [{ product_id: p1, qty: 100 }], delivery, idempotencyKey: randomUUID() }))
+      await refused('buyer token → POST /mart/pools/{id}/join', await api(asBuyer, `/api/v1/mart/pools/${randomUUID()}/join`, { qty: 100, delivery }))
+      await refused('buyer token → POST /mart/pools/{id}/leave', await api(asBuyer, `/api/v1/mart/pools/${randomUUID()}/leave`, {}))
+      await refused('buyer token → POST /mart/pools/{id}/checkout', await api(asBuyer, `/api/v1/mart/pools/${randomUUID()}/checkout`, {}))
+      await refused('buyer token → POST /mart/reorder/reminders', await api(asBuyer, '/api/v1/mart/reorder/reminders', { product_id: p1, on: true }))
+      await refused('seller token → POST /mart/seller/products', await api(asSeller, '/api/v1/mart/seller/products', productBody(`${tag}-hold`, 'agent listing')))
+      await refused('seller token → PATCH /mart/seller/products/{id}', await api(asSeller, `/api/v1/mart/seller/products/${p1}`, productBody(`${tag}-hold`, 'agent edit'), 'PATCH'))
+      await refused('seller token → POST /mart/seller/products/{id}', await api(asSeller, `/api/v1/mart/seller/products/${p1}`, { action: 'submit' }))
+      await refused('seller token → POST /mart/seller/products/draft', await api(asSeller, '/api/v1/mart/seller/products/draft', { text: 'M8 bolts' }))
+      await refused('seller token → POST /mart/seller/images', await api(asSeller, '/api/v1/mart/seller/images', {}))
+      await refused('seller token → POST /mart/seller/activate', await api(asSeller, '/api/v1/mart/seller/activate', {}))
+      await refused('buyer token → POST /agent/grants (widen its own scopes)', await api(asBuyer, '/api/v1/agent/grants', { persona: 'buyer', scopes: ['place_order', 'accept_quote'], channel: 'web' }))
+      await refused('buyer token → DELETE /agent/grants', await api(asBuyer, '/api/v1/agent/grants', { persona: 'buyer', channel: 'web' }, 'DELETE'))
+      await refused('seller token → POST /agent/onboarding/start', await api(asSeller, '/api/v1/agent/onboarding/start', {}))
+    } else {
+      console.log('F2. (AUTHZ_JWT_SECRET unset — delegated-token probes skipped; CI sets it)')
+    }
 
     // ── G. Services inertness on the same server ───────────────────────────
     console.log('G. Services path on the same server (inertness):')

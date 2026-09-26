@@ -5,6 +5,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { isProviderAccount, missingLegalDocs, recordLegalAcceptances } from '@/lib/legal/acceptance'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
 
@@ -15,6 +16,9 @@ const NO_STORE = { 'Cache-Control': 'private, no-store' }
  * (403 legal_acceptance_required) until the required docs are on record.
  */
 export async function POST(request: NextRequest) {
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /legal/accept')
+  if (delegated) return delegated
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: NO_STORE })
 

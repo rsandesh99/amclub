@@ -1087,8 +1087,41 @@ async function main() {
         denied('buyer token → POST /profile/msme', (await api(delegated(buyerA.uid, 'buyer'), '/api/v1/profile/msme', { business_name: 'agent-renamed', state: 'KA' })).status)
         denied('provider token → PATCH /profile/provider/settings', (await api(delegated(provA.uid, 'provider'), '/api/v1/profile/provider/settings', { capacityPaused: false }, 'PATCH')).status)
         denied('a delegated token cannot mint another (token endpoint session path)', (await api(delegated(buyerA.uid, 'buyer'), '/api/v1/agent/token', { persona: 'buyer' })).status)
+        // 2026-09-26 sweep: write routes no tool wraps refuse a delegated token BEFORE anything else (exactly 403, so a
+        // 404 from a missing row cannot pass for the guard). Mart, /agent/grants and /agent/onboarding/start are probed
+        // in verify-mart, on the server with agents + Mart on.
+        const asBuyer = delegated(buyerA.uid, 'buyer')
+        const asProvider = delegated(provA.uid, 'provider')
+        const someId = '00000000-0000-4000-8000-000000000000'
+        eq('buyer token → POST /legal/accept', (await api(asBuyer, '/api/v1/legal/accept', { doc: 'terms' })).status, 403)
+        eq('buyer token → POST /saved', (await api(asBuyer, '/api/v1/saved', { kind: 'package', id: someId })).status, 403)
+        eq('buyer token → POST /notifications/read', (await api(asBuyer, '/api/v1/notifications/read', { all: true })).status, 403)
+        eq('buyer token → POST /reviews/{id}/flag', (await api(asBuyer, `/api/v1/reviews/${someId}/flag`, { reason: 'spam' })).status, 403)
+        eq('provider token → POST /reviews/{id}/reply', (await api(asProvider, `/api/v1/reviews/${someId}/reply`, { body: 'agent reply' })).status, 403)
+        eq('provider token → POST /partner/packages', (await api(asProvider, '/api/v1/partner/packages', { title: 'agent listing' })).status, 403)
+        eq('provider token → PATCH /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, { price_paise: 1 }, 'PATCH')).status, 403)
+        eq('provider token → POST /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, { action: 'publish' })).status, 403)
+        eq('provider token → DELETE /partner/packages/{id}', (await api(asProvider, `/api/v1/partner/packages/${someId}`, undefined, 'DELETE')).status, 403)
       } else {
         console.log('  (AUTHZ_JWT_SECRET unset — delegated-token probes skipped; CI sets it)')
+      }
+
+      // 0085 — agent_grants is server-written only: consent evidence and the scopes a delegated token is minted from.
+      // A token for the user (their session, or a delegated agent token, both role=authenticated) cannot insert, revive
+      // or edit a grant through PostgREST, and the immutability trigger holds even for the service role.
+      {
+        const own = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${buyerA.token}` } }, auth: { persistSession: false } })
+        const ins = await own.from('agent_grants').insert({ user_id: buyerA.uid, persona: 'buyer', scopes: ['place_order'], channel: 'web', consent: { surface: 'forged', at: '2020-01-01T00:00:00Z' } }).select('id')
+        eq('buyerA INSERTs a grant with place_order directly → refused', Boolean(ins.error) || (ins.data ?? []).length === 0, true)
+        const { data: g } = await admin.from('agent_grants').insert({ user_id: buyerA.uid, persona: 'buyer', scopes: [], channel: 'mobile', consent: { surface: 'authz', at: new Date().toISOString() }, revoked_at: new Date().toISOString() }).select('id').single()
+        const gid = (g as { id: string } | null)?.id ?? ''
+        const revive = await own.from('agent_grants').update({ revoked_at: null }).eq('id', gid).select('id')
+        eq('buyerA revives its revoked grant directly → refused', Boolean(revive.error) || (revive.data ?? []).length === 0, true)
+        eq('the service role cannot revive a revoked grant either (trigger)', Boolean((await admin.from('agent_grants').update({ revoked_at: null }).eq('id', gid)).error), true)
+        eq('the service role cannot widen a grant in place (trigger)', Boolean((await admin.from('agent_grants').update({ scopes: ['place_order'] }).eq('id', gid)).error), true)
+        const { data: after } = await admin.from('agent_grants').select('scopes, revoked_at').eq('id', gid).single()
+        eq('the grant is unchanged', JSON.stringify(after), JSON.stringify({ scopes: [], revoked_at: (after as { revoked_at: string } | null)?.revoked_at ?? 'missing' }))
+        await admin.from('agent_grants').delete().eq('id', gid)
       }
 
       // M13 — a suspended provider has no provider identity until reactivated.

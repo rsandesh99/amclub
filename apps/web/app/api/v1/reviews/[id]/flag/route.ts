@@ -5,6 +5,7 @@ import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { enforce, limiters, tooManyRequests } from '@/lib/rate-limit'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 const bodySchema = z.object({ reason: z.string().trim().max(500).optional() })
 
@@ -20,6 +21,9 @@ const HIDE_AFTER_REPORTERS = 3
  * restored it: ops makes the final call (remove/restore).
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /reviews/[id]/flag')
+  if (delegated) return delegated
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

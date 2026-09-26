@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { serverError } from '@/lib/api/errors'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 const bodySchema = z.object({
   providerId: z.string().uuid(),
@@ -43,6 +44,9 @@ export async function GET() {
 
 /** Toggle a saved provider. RLS saved_providers owner-all enforces ownership. */
 export async function POST(request: NextRequest) {
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /saved')
+  if (delegated) return delegated
   const { supabase, userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

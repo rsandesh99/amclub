@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { GOODS_ORDER_ACTIONS } from '@amclub/shared'
 import { martApiGate } from '@/lib/mart/gate'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { resolveActor } from '@/lib/orders/actor'
@@ -19,6 +20,9 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = martApiGate()
   if (gate) return gate
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /mart/orders/[id]/transition')
+  if (delegated) return delegated
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params

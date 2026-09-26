@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { productInputSchema, aiDecisionSchema, validateProductAttributes } from '@amclub/shared'
 import { martApiGate } from '@/lib/mart/gate'
+import { requireNotDelegated } from '@/lib/agent/scope'
 import { getAuthedSupabase } from '@/lib/auth/request'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSellerCtx } from '@/lib/mart/seller'
@@ -37,6 +38,9 @@ const createSchema = productInputSchema.extend({
 export async function POST(request: NextRequest) {
   const gate = martApiGate()
   if (gate) return gate
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /mart/seller/products')
+  if (delegated) return delegated
   const { userId } = await getAuthedSupabase()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const rl = await enforce(limiters.authed, `mart-seller:${userId}`)

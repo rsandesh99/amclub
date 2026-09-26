@@ -10,6 +10,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActor } from '@/lib/orders/actor'
 import { isOnFor } from '@/lib/experiments'
 import { pickLocale } from '@amclub/shared'
+import { requireNotDelegated } from '@/lib/agent/scope'
 
 /**
  * GET /api/v1/partner/packages (PRD Experience v3 E13, flag `mobile`) — the
@@ -55,6 +56,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Audit wave 3: no agent tool wraps this route, so a delegated agent token is refused.
+  const delegated = await requireNotDelegated('POST /partner/packages')
+  if (delegated) return delegated
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!user.roles.includes('provider')) {
