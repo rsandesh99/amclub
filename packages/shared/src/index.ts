@@ -161,6 +161,8 @@ export * from './onboarding-copy'
 
 // ADR-030 — WhatsApp channel vocabulary (locales, consent purposes / sources, the keyword classifier)
 export * from './whatsapp'
+// ADR-030 §2 — every line the WhatsApp runtime sends without a model (consent, HELP menu, language, data requests)
+export * from './whatsapp-copy'
 // ADR-030 §4 — the notification registry contract, preferences and IST quiet hours
 export * from './notify'
 

@@ -43,6 +43,8 @@ export const AGENT_WRITE_ALLOWLIST: Readonly<Record<string, string>> = {
   procurement_sessions: 'the buyer procurement agent\'s session (S3.1) — draft / pending / labels / the open proposal; every RFQ / quote / message write is an ordinary buyer route after the buyer\'s tap',
   procurement_turns: 'the procurement thread the web mirror shows (S3.1) — user text masked, agent text = the rendered template',
   content_translations: 'E14 N32b translation DRAFTS of a provider\'s own copy — a draft never renders; the provider\'s approve (lib/translations, a spine path) writes the package / profile slot',
+  // ADR-030 consent
+  dpdp_requests: 'DPDP requests the person made on WhatsApp (ADR-030 §6: MY DATA / DELETE MY DATA) — recorded with a due date; ops work them from the admin console',
 }
 
 /**
@@ -58,6 +60,9 @@ export const AGENT_WRITE_COLUMN_EXCEPTIONS: Readonly<Record<string, readonly str
   // S3.2 — the benchmark_explain sentence is cached on the aggregate row; the numbers are written only by the nightly compute
   // (lib/benchmarks/compute.ts → replace_price_benchmarks), never by the note path.
   price_benchmarks: ['notes'],
+  // ADR-030 — the person's OWN language switch on WhatsApp (LANGUAGE / a language name / the list): one language across
+  // web, mobile and WhatsApp. Nothing else on users is ever written by agent code.
+  users: ['preferred_locale'],
 }
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -129,9 +134,13 @@ describe('S2.1 agent-writes audit', () => {
     expect(offenders.map((h) => `${h.file}:${h.line} ${h.op} ${h.table} {${h.columns.join(',')}}`)).toEqual([])
   })
 
-  it('never writes orders, quotes, payouts, provider_profiles, msme_profiles, users or payments', () => {
+  it('never writes orders, quotes, payouts, provider_profiles, msme_profiles, users (beyond its own preferred_locale) or payments', () => {
     const forbidden = ['orders', 'quotes', 'payouts', 'provider_profiles', 'msme_profiles', 'users', 'payments', 'refunds', 'invoices']
-    expect(hits.filter((h) => forbidden.includes(h.table)).map((h) => `${h.file}:${h.line} ${h.op} ${h.table}`)).toEqual([])
+    const excepted = (h: WriteHit) => {
+      const cols = AGENT_WRITE_COLUMN_EXCEPTIONS[h.table]
+      return !!cols && h.op === 'update' && h.columns.length > 0 && h.columns.every((c) => c === 'updated_at' || cols.includes(c))
+    }
+    expect(hits.filter((h) => forbidden.includes(h.table) && !excepted(h)).map((h) => `${h.file}:${h.line} ${h.op} ${h.table}`)).toEqual([])
   })
 
   it('the allow-list carries a reason per table', () => {

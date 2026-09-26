@@ -67,6 +67,19 @@ const AGENTS_ENABLED_DEFAULT: AgentsEnabled = Object.fromEntries(
   AGENT_NAMES.map((n) => [n, false]),
 ) as AgentsEnabled
 
+// ── ADR-030 consent — the cohort rule (audit B8), read by the runtime and the web availability checks ──
+export const COHORT_MODES = ['list', 'all'] as const
+export type CohortMode = (typeof COHORT_MODES)[number]
+
+/**
+ * Is this user in the agents' cohort? `cohort_mode = 'all'` → everyone; otherwise (the default, and any unreadable value)
+ * the `cohort_user_ids` allowlist. Callers still check the agent's own switch (agents_enabled) and the user's grant.
+ */
+export function inAgentCohort(mode: unknown, cohortUserIds: unknown, userId: string): boolean {
+  if (mode === 'all') return true
+  return Array.isArray(cohortUserIds) && cohortUserIds.includes(userId)
+}
+
 export interface AgentSettingDef {
   schema: z.ZodTypeAny
   /** The launch value when the key is unset in the DB. */
@@ -421,6 +434,17 @@ export const AGENT_SETTING_DEFS = {
     schema: z.number().int().min(1).max(48),
     default: 12,
     hint: "S3.4 hours between a group's close and the earliest member request's expiry, so every group price can still be paid.",
+  },
+  // ── ADR-030 consent (WhatsApp: who the assistant serves, recycled numbers) ──
+  cohort_mode: {
+    schema: z.enum(COHORT_MODES),
+    default: 'list' as CohortMode,
+    hint: "Audit B8 / D-WA2: 'list' = an enabled agent runs only for cohort_user_ids (today's allowlist); 'all' = every user, still subject to each agent's own switch in agents_enabled and the user's own grant. The non-AI WhatsApp HELP menu serves everyone either way. Budgets: the open envelope (budget_month_open_paise) still follows the explicit list.",
+  },
+  wa_rebind_dormant_days: {
+    schema: z.number().int().min(0).max(3650),
+    default: 90,
+    hint: 'ADR-030 recycled numbers: before WhatsApp acts for an account not signed in for this many days (users.last_seen_at, else its creation), it asks the person to sign in first ("confirm it is you") and does nothing else for that account. Telcos reissue numbers after about 90 days. 0 = off.',
   },
 } as const satisfies Record<string, AgentSettingDef>
 
