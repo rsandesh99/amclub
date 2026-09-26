@@ -147,7 +147,7 @@ export const NOTIFICATION_KINDS = {
   pool_met: essentialKind('orders', true),
   pool_unmet: updateKind('orders'),
   pool_cancelled: updateKind('orders'),
-  pool_defaulted: updateKind('orders', ['email']),
+  pool_defaulted: updateKind('orders'),
   pool_met_seller: updateKind('orders'),
   pool_ordered: updateKind('orders'),
 

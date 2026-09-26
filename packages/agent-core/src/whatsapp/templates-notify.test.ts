@@ -29,7 +29,7 @@ describe('NOTIFY_TEMPLATES', () => {
   it('every new WhatsApp kind of the notification work has a template', () => {
     for (const kind of [
       'order_auto_accepted', 'goods_dispatched', 'goods_delivered', 'dispute_resolved', 'order_duplicate_payment', 'payment_refunded_no_order',
-      'pool_met', 'pool_unmet', 'pool_cancelled', 'pool_met_seller', 'pool_ordered', 'payout_held', 'refund_processed', 'refund_failed',
+      'pool_met', 'pool_unmet', 'pool_cancelled', 'pool_defaulted', 'pool_met_seller', 'pool_ordered', 'payout_held', 'refund_processed', 'refund_failed',
       'rfq_digest', 'quote_withdrawn', 'order_accept_reminder', 'order_review_reminder', 'rfq_expiring_reminder', 'pool_pay_reminder',
       'provider_verified', 'provider_rejected', 'provider_needs_info',
     ]) {

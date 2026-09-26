@@ -121,6 +121,16 @@ export const NOTIFY_TEMPLATES: WaTemplateRegistry = {
     params: (v) => [s(v['title'])],
     urlButton: { label: VIEW_GROUP, suffix: path },
   }),
+  pool_defaulted: tpl('pool_defaulted', {
+    body: {
+      en: 'Your share of the group buy {{1}} was not paid inside the window, so the commitment has lapsed and is noted on your buyer record.',
+      hi: 'ग्रुप बाय {{1}} में आपके हिस्से का भुगतान समय सीमा में नहीं हुआ, इसलिए प्रतिबद्धता समाप्त हो गई है और यह आपके खरीदार रिकॉर्ड में दर्ज है।',
+      te: 'గ్రూప్ కొనుగోలు {{1}}లో మీ వాటా గడువులో చెల్లించబడలేదు, కాబట్టి నిబద్ధత ముగిసింది, ఇది మీ కొనుగోలుదారు రికార్డులో నమోదైంది.',
+      ta: 'குழு வாங்குதல் {{1}}-இல் உங்கள் பங்கு காலக்கெடுவுக்குள் செலுத்தப்படவில்லை, எனவே உறுதிமொழி காலாவதியானது, இது உங்கள் வாங்குபவர் பதிவில் பதிவாகியுள்ளது.',
+    },
+    params: (v) => [s(v['title'])],
+    urlButton: { label: VIEW_GROUP, suffix: path },
+  }),
   pool_met_seller: tpl('pool_met_seller', {
     body: {
       en: 'Your group buy {{1}} reached its minimum: {{2}} buyers committed {{3}}. Their orders arrive as they pay over the next two days.',
