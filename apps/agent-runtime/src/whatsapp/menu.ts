@@ -309,11 +309,18 @@ export function dpdpRefFromId(id: string): string {
 export async function dataRequest(turn: WaTurn, kind: 'access' | 'erasure', dueDays: number): Promise<void> {
   const due = new Date(turn.now.getTime() + dueDays * 24 * 3600 * 1000)
   const digits = /^\d{8,15}$/.test(turn.conv.phone_e164) ? turn.conv.phone_e164 : null
-  const { data, error } = await turn.db
+  let { data, error } = await turn.db
     .from('dpdp_requests')
     .insert({ user_id: turn.conv.user_id, phone_e164: digits, kind, source: 'whatsapp', details: `WhatsApp keyword (${kind === 'access' ? 'MY DATA' : 'DELETE MY DATA'})`, due_at: due.toISOString() })
     .select('id')
     .single()
+  // dpdp_requests_one_open_per_kind: the person already has this request open (web or an earlier keyword) — confirm
+  // that one rather than failing
+  if (error && (error as { code?: string }).code === '23505' && turn.conv.user_id) {
+    const again = await turn.db.from('dpdp_requests').select('id').eq('user_id', turn.conv.user_id).eq('kind', kind).in('status', ['open', 'in_progress']).is('deleted_at', null).limit(1).maybeSingle()
+    data = again.data as typeof data
+    error = again.error
+  }
   if (error || !data) {
     if (error && isMissingSchemaError(error)) logMissingOnce('dpdp_requests', error.message)
     else if (error) console.error('[wa] dpdp_requests insert failed', error.message)

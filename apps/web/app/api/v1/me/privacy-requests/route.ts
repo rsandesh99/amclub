@@ -114,6 +114,11 @@ export async function POST(request: NextRequest) {
     .single()
   if (error) {
     if (tableMissing(error)) return NextResponse.json({ error: 'not_ready' }, { status: 503 })
+    // dpdp_requests_one_open_per_kind: a concurrent request of the same kind won the insert — answer as the check above
+    if ((error as { code?: string }).code === '23505') {
+      const { data: again } = await admin.from('dpdp_requests').select('id, due_at').eq('user_id', userId).eq('kind', kind).in('status', ['open', 'in_progress']).is('deleted_at', null).limit(1).maybeSingle()
+      if (again) return NextResponse.json({ error: 'already_open', id: (again as { id: string }).id, dueAt: (again as { due_at: string }).due_at }, { status: 409 })
+    }
     return serverError('[me/privacy-requests POST insert]', error)
   }
   return NextResponse.json({ request: view(row as Record<string, unknown>) }, { status: 201 })

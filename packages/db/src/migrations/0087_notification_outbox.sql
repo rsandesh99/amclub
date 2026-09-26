@@ -110,6 +110,10 @@ CREATE TABLE IF NOT EXISTS dpdp_requests (
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS dpdp_requests_open_idx ON dpdp_requests (due_at) WHERE status IN ('open', 'in_progress') AND deleted_at IS NULL;
 --> statement-breakpoint
+-- One open request per kind per person: a double submit (web + WhatsApp, or two taps) lands on the same request.
+CREATE UNIQUE INDEX IF NOT EXISTS dpdp_requests_one_open_per_kind ON dpdp_requests (user_id, kind)
+  WHERE user_id IS NOT NULL AND deleted_at IS NULL AND status IN ('open', 'in_progress');
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS dpdp_requests_user_idx ON dpdp_requests (user_id, created_at DESC) WHERE user_id IS NOT NULL;
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS dpdp_requests_set_updated_at ON dpdp_requests;
