@@ -124,6 +124,17 @@ export const AGENT_SETTING_DEFS = {
     default: 'v1',
     hint: 'Version tag of the WhatsApp consent text captured in agent_grants.consent (S0.5). Bump when the wording changes.',
   },
+  // ── ADR-030 transport (the one WhatsApp send path + the delivery ledger) ──
+  wa_window_margin_seconds: {
+    schema: z.number().int().min(0).max(3600),
+    default: 120,
+    hint: 'ADR-030 seconds before the 24-hour customer-service window closes from which free-form WhatsApp (text, buttons, links, media) is no longer sent; a template goes instead (or nothing). Guards against a message landing just after the window shut (Meta error 131047).',
+  },
+  wa_rate_millipaise: {
+    schema: z.record(z.string().min(1).max(40), z.number().int().min(0).max(10_000_000)),
+    default: { utility: 11_500, marketing: 86_310, authentication: 11_500, service: 11_500 },
+    hint: 'ADR-030 WhatsApp list price per billable message by Meta pricing category, in MILLIPAISE (1/1000 paise), excl. 18 % GST. The status webhook records cost_millipaise from it; a non-billable message costs 0, an unknown category stays null. Update when Meta changes the India rate card.',
+  },
   // ── S0.4 trust mechanics ─────────────────────────────────────────────────
   rfq_max_quotes: {
     // null = unset => the route falls back to the legacy 7 (effectiveQuoteCap),

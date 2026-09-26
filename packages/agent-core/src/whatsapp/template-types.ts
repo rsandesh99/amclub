@@ -25,6 +25,8 @@ export interface WaTemplateSpec {
   urlButton?: { label: Partial<Record<WaLocale, string>> & { en: string }; suffix: (v: WaTemplateValues) => string | null }
   /** Optional quick-reply buttons (≤ 3): the payload id comes back as the button reply. */
   quickReplies?: ReadonlyArray<{ id: string; label: Partial<Record<WaLocale, string>> & { en: string } }>
+  /** Sample values Meta asks for at submission (the approval list prints the body filled with them). */
+  example?: WaTemplateValues
 }
 
 export type WaTemplateRegistry = Record<string, WaTemplateSpec>
