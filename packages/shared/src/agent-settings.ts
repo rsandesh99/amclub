@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { VOICE_SEARCH_LANGUAGES, voiceLanguageEvalsSchema } from './voice-languages'
+import { NOTIFICATION_KIND_NAMES, type NotificationKind } from './notify'
 
 /**
  * Agent config registry (ADR-009 §7, ARCHITECTURE.md §8). Every key the runtime
@@ -477,6 +478,17 @@ export const AGENT_SETTING_DEFS = {
     schema: z.number().int().min(1).max(90),
     default: 30,
     hint: 'ADR-030 §6 days within which a DPDP request (access, correction, erasure, withdrawal, grievance) is answered; the due date is set when the request is recorded and /admin/privacy flags overdue ones.',
+  },
+  // ── ADR-030 notifications ─────────────────────────────────────────────────
+  sms_dlt_templates: {
+    // Partial map notification kind → the MSG91 Flow template registered on DLT and the ordered value keys it takes
+    // (sent as VAR1…VARn). A kind with no entry never sends SMS (skipped: no-dlt-template), so nothing bills by default.
+    schema: z.record(
+      z.enum(NOTIFICATION_KIND_NAMES as [NotificationKind, ...NotificationKind[]]),
+      z.object({ templateId: z.string().min(1).max(64), vars: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/)).max(10) }).strict(),
+    ),
+    default: {} as Partial<Record<NotificationKind, { templateId: string; vars: string[] }>>,
+    hint: 'ADR-030 §4: the MSG91 Flow (DLT) template per notification kind for the SMS channel and the WhatsApp fallback — { "<kind>": { "templateId": "…", "vars": ["ref", "amount"] } }; the values go as VAR1…VARn (each ≤ 30 characters, DLT). A kind without a template never sends SMS. Values available: title, body, link and the kind\'s own (ref, amount, deadline, count …).',
   },
 } as const satisfies Record<string, AgentSettingDef>
 
