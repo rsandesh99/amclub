@@ -226,6 +226,8 @@ export function rfqCreateBody(args: {
   parser?: string | null
   clarified: ProcurementDraftState['clarified']
   docs: readonly ProcurementDocIntake[]
+  /** ADR-030 §5 — the surface the buyer's words came from; 'whatsapp' keeps them out of the corpus and eval sets. */
+  channel?: 'whatsapp' | 'web' | 'mobile'
 }): Record<string, unknown> {
   const facts = args.docs.flatMap((d) => d.facts)
   const details: Record<string, unknown> = { additional_details: args.description.slice(0, 2000) }
@@ -246,6 +248,7 @@ export function rfqCreateBody(args: {
       duration_ms: 20000,
       edited_fields: [],
       vendor: { stt: args.sttStub ? 'stub' : 'sarvam', parser: (args.parser ?? 'agent').slice(0, 80) },
+      ...(args.channel ? { channel: args.channel } : {}),
       ...(args.clarified ? { clarify: { question: args.clarified.question.slice(0, 200), gap: args.clarified.gap.slice(0, 60), answer_transcript: args.clarified.answer.slice(0, 2000), answered_by: args.clarified.via === 'audio' ? 'voice' : 'text' } } : {}),
     }
   }
@@ -405,7 +408,9 @@ export const procurementTurnAgent: AgentDefinition<ProcurementTurnInput, Procure
         say(P('proposal_cap', { link: `${input.appUrl}/app/rfq/new` }))
         return out
       }
-      const payload = rfqCreateBody({ categorySlug: category, description, via: draft.via ?? via, parse, transcript, sttStub, parser, clarified: draft.clarified ?? null, docs: draft.docs ?? [] })
+      // ADR-030 §5: a request drafted from WhatsApp is tagged so its voice never enters the corpus or eval sets
+      const channel = s.surface === 'whatsapp' || input.message.channel === 'whatsapp' ? 'whatsapp' : s.surface
+      const payload = rfqCreateBody({ categorySlug: category, description, via: draft.via ?? via, parse, transcript, sttStub, parser, clarified: draft.clarified ?? null, docs: draft.docs ?? [], channel })
       draft.payload = payload
       await propose('create_rfq', payload)
       out.patch = { ...out.patch, states: ['awaiting_create'], draft, pending: null, title: String(payload['title']) }

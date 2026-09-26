@@ -150,7 +150,22 @@ export function waPhoneFromVendor(from: string | null | undefined): string | nul
 // A user sometimes pastes an OTP, a UPI PIN or a card number into WhatsApp. Stored text never keeps them: the webhook
 // stores the redacted body and the job warns the user (never ask for these; the "official AMClub" page says so).
 const CARD_RE = /\b\d(?:[ -]?\d){12,18}\b/g
-const SECRET_CONTEXT_RE = /\b(otp|one[- ]time|pin|upi pin|mpin|cvv|cvc|password|passcode)\b[^\d]{0,20}(\d{3,8})\b/gi
+// Words that make the number next to them a secret (en / hi / te / ta; longest first so "upi pin" wins over "pin").
+// A postal "pin code" / "पिन कोड" is never a secret. Word edges are Unicode-aware (JS \b is ASCII-only).
+const SECRET_WORDS = [
+  'one[- ]time (?:password|passcode|code|pin)', 'verification code', 'security code', 'upi[- ]?pin', 'atm pin', 'mpin',
+  'otp', 'cvv2?', 'cvc', 'passcode', 'password', 'pin(?![\\s-]*code)',
+  'ओटीपी', 'यूपीआई पिन', 'पिन(?![\\s-]*कोड)', 'पासवर्ड', 'ఓటీపీ', 'యూపీఐ పిన్', 'పిన్(?![\\s-]*కోడ్)', 'పాస్‌వర్డ్', 'ஓடிபி', 'கடவுச்சொல்',
+].join('|')
+const L = '(?<![\\p{L}\\p{M}\\p{N}])'
+const R = '(?![\\p{L}\\p{M}\\p{N}])'
+// what may sit between the word and the code: separators and a couple of filler words ("OTP is 482913", "pin no: 1234")
+const GAP = '[\\s:=#.\\-]*(?:(?:is|was|number|no|code|hai|है|ఇది|இது)[\\s:=#.\\-]*){0,2}'
+const SECRET_CONTEXT_RE = new RegExp(`${L}(${SECRET_WORDS})${R}${GAP}(\\d{3,8})(?![\\p{L}\\p{N}-])`, 'giu')
+// the code first: "482913 is your OTP", "1234 = my upi pin"
+const SECRET_BEFORE_RE = new RegExp(`(?<![\\p{L}\\p{N}-])(\\d{3,8})(?![\\p{L}\\p{N}-])(\\s*(?:is|was|=|:|-)?\\s*(?:the|my|your|ur|मेरा|आपका)?\\s*)(${SECRET_WORDS})${R}`, 'giu')
+// a password is not always digits: "password: Abc@1234" (a token with a digit or symbol, 4–64 chars)
+const PASSWORD_RE = new RegExp(`${L}(password|passcode|पासवर्ड|పాస్‌వర్డ్|கடவுச்சொல்)${R}${GAP}((?=[^\\s]*[\\d@#$%^&*!?_])[^\\s]{4,64})`, 'giu')
 function luhnOk(digits: string): boolean {
   let sum = 0
   let dbl = false
@@ -163,7 +178,13 @@ function luhnOk(digits: string): boolean {
   return sum % 10 === 0
 }
 export interface ChatRedaction { text: string; redacted: Array<'card' | 'secret_code'> }
-/** Replace card numbers (Luhn-valid, 13–19 digits) and codes next to OTP / PIN / CVV / password words with [removed]. */
+/** "Pin: 560001" in an address is a postal PIN code: a bare "pin" next to six digits starting 1–9 is kept (a UPI / ATM
+ *  PIN is named as such, or has four digits). */
+function postalPin(word: string, code: string): boolean {
+  return /^(pin|पिन|పిన్)$/iu.test(word.trim()) && /^[1-9]\d{5}$/.test(code)
+}
+/** Replace card numbers (Luhn-valid, 13–19 digits), codes next to OTP / PIN / CVV / password words (either side, en / hi /
+ *  te / ta) and passwords with [removed]. Order numbers, phones, amounts and postal PIN codes are left alone. */
 export function redactChatSecrets(text: string | null | undefined): ChatRedaction {
   const kinds = new Set<'card' | 'secret_code'>()
   let out = String(text ?? '')
@@ -172,6 +193,16 @@ export function redactChatSecrets(text: string | null | undefined): ChatRedactio
     if (d.length >= 13 && d.length <= 19 && luhnOk(d)) { kinds.add('card'); return '[removed]' }
     return m
   })
-  out = out.replace(SECRET_CONTEXT_RE, (m, word: string) => { kinds.add('secret_code'); return `${word} [removed]` })
+  out = out.replace(PASSWORD_RE, (_m, word: string) => { kinds.add('secret_code'); return `${word} [removed]` })
+  out = out.replace(SECRET_CONTEXT_RE, (m, word: string, code: string) => {
+    if (postalPin(word, code)) return m
+    kinds.add('secret_code')
+    return `${word} [removed]`
+  })
+  out = out.replace(SECRET_BEFORE_RE, (m, code: string, gap: string, word: string) => {
+    if (postalPin(word, code)) return m
+    kinds.add('secret_code')
+    return `[removed]${gap}${word}`
+  })
   return { text: out, redacted: [...kinds] }
 }

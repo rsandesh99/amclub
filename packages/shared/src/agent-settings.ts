@@ -446,6 +446,27 @@ export const AGENT_SETTING_DEFS = {
     default: 90,
     hint: 'ADR-030 recycled numbers: before WhatsApp acts for an account not signed in for this many days (users.last_seen_at, else its creation), it asks the person to sign in first ("confirm it is you") and does nothing else for that account. Telcos reissue numbers after about 90 days. 0 = off.',
   },
+  // ── ADR-030 privacy ops (D-WA5 retention, DPDP requests) ─────────────────
+  wa_retention_text_days: {
+    schema: z.number().int().min(30).max(1825),
+    default: 180,
+    hint: 'ADR-030 §6 days after which the wa-retention cron redacts WhatsApp message text, transcripts and payloads (unless on legal hold, or the user has an open ticket, open dispute or an order not yet done).',
+  },
+  wa_retention_media_days: {
+    schema: z.number().int().min(7).max(1825),
+    default: 90,
+    hint: 'ADR-030 §6 days after which WhatsApp media (voice notes, photos, documents in the wa-media bucket) are deleted, with the same holds as text.',
+  },
+  wa_retention_unknown_days: {
+    schema: z.number().int().min(7).max(365),
+    default: 30,
+    hint: 'ADR-030 §6 days after which the conversation of a number that never bound to an AMClub account is deleted with its messages and media (consent events stay as proof).',
+  },
+  dpdp_due_days: {
+    schema: z.number().int().min(1).max(90),
+    default: 30,
+    hint: 'ADR-030 §6 days within which a DPDP request (access, correction, erasure, withdrawal, grievance) is answered; the due date is set when the request is recorded and /admin/privacy flags overdue ones.',
+  },
 } as const satisfies Record<string, AgentSettingDef>
 
 export type AgentSettingKey = keyof typeof AGENT_SETTING_DEFS

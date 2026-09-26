@@ -235,6 +235,8 @@ export const voiceMetaSchema = z.object({
   }),
   /** S1.8 — the clarify round, when one happened (or was skipped). */
   clarify: voiceMetaClarifySchema.optional(),
+  /** ADR-030 §5 — where the voice came from. 'whatsapp' content never enters the corpus or eval sets (lib/corpus). */
+  channel: z.enum(['web', 'mobile', 'whatsapp']).optional(),
 })
 export type VoiceMeta = z.infer<typeof voiceMetaSchema>
 
