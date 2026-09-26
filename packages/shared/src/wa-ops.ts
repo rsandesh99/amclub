@@ -187,7 +187,7 @@ export function waPreview(text: string | null | undefined, max = 80): string {
 // ── the corpus rule (Meta Business Solution Terms) ───────────────────────────
 
 /** Surfaces a turn / request can come from. */
-export type SourceChannel = 'web' | 'mobile' | 'whatsapp'
+export type CorpusSourceChannel = 'web' | 'mobile' | 'whatsapp'
 
 /** WhatsApp content never enters our corpus or eval sets — neither the text nor anything derived from it. A write is
  *  allowed only when neither the voice metadata nor the delegated run says WhatsApp. */
@@ -200,8 +200,8 @@ export function corpusSourceAllowed(src: { voiceChannel?: string | null | undefi
 /** Meta language code per template locale (as the driver sends it). */
 export const WA_META_LANGUAGE: Record<WaLocale, string> = { en: 'en', hi: 'hi', te: 'te', ta: 'ta' }
 
-export const WA_TEMPLATE_STATUSES = ['unknown', 'pending', 'approved', 'rejected', 'paused', 'disabled', 'in_appeal', 'deleted'] as const
-export type WaTemplateStatus = (typeof WA_TEMPLATE_STATUSES)[number]
+export const WA_META_TEMPLATE_STATUSES = ['unknown', 'pending', 'approved', 'rejected', 'paused', 'disabled', 'in_appeal', 'deleted'] as const
+export type WaMetaTemplateStatus = (typeof WA_META_TEMPLATE_STATUSES)[number]
 
 export interface WaCodeTemplate {
   kind: string
@@ -289,7 +289,7 @@ export function compareWaTemplates(code: readonly WaCodeTemplate[], db: readonly
   return rows.sort((a, b) => order[a.flag] - order[b.flag] || a.name.localeCompare(b.name) || a.language.localeCompare(b.language))
 }
 
-const META_STATUS: Record<string, WaTemplateStatus> = {
+const META_STATUS: Record<string, WaMetaTemplateStatus> = {
   APPROVED: 'approved', PENDING: 'pending', IN_REVIEW: 'pending', REJECTED: 'rejected', PAUSED: 'paused',
   DISABLED: 'disabled', IN_APPEAL: 'in_appeal', PENDING_DELETION: 'deleted', DELETED: 'deleted', ARCHIVED: 'deleted',
 }
@@ -298,7 +298,7 @@ export interface WaTemplateUpsert {
   name: string
   language: string
   category: WaTemplateCategory | null
-  status: WaTemplateStatus
+  status: WaMetaTemplateStatus
   rejection_reason: string | null
   meta_template_id: string | null
   components: unknown
