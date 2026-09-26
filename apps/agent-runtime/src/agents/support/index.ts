@@ -5,7 +5,6 @@ import {
   signRuntimeCredential,
   stubSupportIntent,
   supportIntentSchema,
-  templateFor,
   type AgentDefinition,
   type RunAgentDeps,
   type SupportLookups,
@@ -20,6 +19,7 @@ import {
   rfqIsActive,
   ticketRefFromId,
   toSupportLocale,
+  waLocaleFor,
   type SupportIntent,
   type SupportIntentOutput,
   type SupportLocale,
@@ -28,6 +28,7 @@ import {
 } from '@amclub/shared'
 import { isAgentEnabledForUser, readAgentSettings } from '../../settings'
 import { channelIdentityOf, conversationServesUser } from '../../whatsapp/binding'
+import { runtimeSend, sentMessageId } from '../../whatsapp/outbound'
 import { PROCUREMENT_BUTTON_TITLES, hasProcurementScopes, procurementButtonId, toProcurementLocale } from '@amclub/shared'
 import { transcribeVoiceNote } from '../onboarding/stt'
 import { buttonPayloadOf } from '../onboarding/index'
@@ -189,34 +190,31 @@ interface ConversationRow {
 }
 
 function waLocale(l: SupportLocale): WaLocale {
-  return l === 'ta' ? 'en' : l
-}
-function inWindow(deps: SupportRuntimeDeps, conv: ConversationRow): boolean {
-  return !!conv.window_open_until && new Date(conv.window_open_until).getTime() > (deps.now ?? (() => new Date()))().getTime()
+  return waLocaleFor(l)
 }
 
-async function recordOutbound(deps: SupportRuntimeDeps, conv: ConversationRow, kind: 'text' | 'button' | 'template', body: string | null, r: { ok: boolean; vendorMessageId: string | null; detail: string }, extra: Record<string, unknown>): Promise<string | null> {
-  const { data } = await deps.admin
-    .from('wa_messages')
-    .insert({ conversation_id: conv.id, direction: 'out', vendor_message_id: r.vendorMessageId, kind, body, status: r.ok ? (r.detail === 'stub' ? 'stub' : 'sent') : 'failed', payload: { detail: r.detail, support: true, ...extra }, ...(kind === 'template' && typeof extra['template_name'] === 'string' ? { template_name: extra['template_name'] } : {}) })
-    .select('id')
-    .single()
-  if (r.ok) await deps.admin.from('wa_conversations').update({ last_outbound_at: (deps.now ?? (() => new Date()))().toISOString() }).eq('id', conv.id)
-  return (data as { id: string } | null)?.id ?? null
-}
+const sendDeps = (deps: SupportRuntimeDeps) => ({ admin: deps.admin, whatsapp: deps.whatsapp, ...(deps.now ? { now: deps.now } : {}) })
 
-/** Text inside the 24 h window; the `support_reply` template outside it. */
-async function sendReply(deps: SupportRuntimeDeps, conv: ConversationRow, locale: SupportLocale, text: string, extra: Record<string, unknown>): Promise<string | null> {
+/**
+ * Text inside the 24 h window; the `support_reply` template outside it — through the one send path (ADR-030: a reply
+ * to the user's own message, purpose assistant; `key` = the inbound message answered). Returns the outbound row id.
+ */
+async function sendReply(deps: SupportRuntimeDeps, conv: ConversationRow, locale: SupportLocale, text: string, extra: Record<string, unknown>, key: string): Promise<string | null> {
   if (!deps.agentEnabled) return null
-  if (inWindow(deps, conv)) {
-    const r = await deps.whatsapp.sendText(conv.phone_e164, text)
-    return recordOutbound(deps, conv, 'text', text, r, extra)
-  }
-  const tpl = templateFor('support_reply', waLocale(locale))
-  if (!tpl) return null
   const title = text.split(/[.\n]/)[0]?.slice(0, 60) ?? 'AMClub'
-  const r = await deps.whatsapp.sendTemplate(conv.phone_e164, tpl.name, waLocale(locale), [title, text.slice(0, 600)])
-  return recordOutbound(deps, conv, 'template', null, r, { ...extra, template_name: tpl.name })
+  const r = await runtimeSend(sendDeps(deps), {
+    conv,
+    userId: conv.user_id,
+    kind: 'support_reply',
+    purpose: 'assistant',
+    initiation: 'reply',
+    idempotencyKey: key,
+    text,
+    template: { kind: 'support_reply', locale: waLocale(locale), values: { title, body: text.slice(0, 600) } },
+    runId: typeof extra['run_id'] === 'string' ? extra['run_id'] : null,
+    meta: { support: true, ...extra },
+  })
+  return sentMessageId(r)
 }
 
 const YES_NO: Record<SupportLocale, { yes: string; no: string }> = {
@@ -226,12 +224,28 @@ const YES_NO: Record<SupportLocale, { yes: string; no: string }> = {
   ta: { yes: 'ஆம், அனுப்பு', no: 'வேண்டாம்' },
 }
 
-async function sendNudgeButtons(deps: SupportRuntimeDeps, conv: ConversationRow, locale: SupportLocale, runId: string, text: string): Promise<string | null> {
-  if (!deps.agentEnabled || !inWindow(deps, conv)) return sendReply(deps, conv, locale, text, { nudge_offer: true })
+/** The nudge offer: Yes / No buttons inside the window (the run id on the row); outside it the plain reply template
+ *  WITHOUT the run id (a quoted reply to the template must not bind to the offer). */
+async function sendNudgeButtons(deps: SupportRuntimeDeps, conv: ConversationRow, locale: SupportLocale, runId: string, text: string, key: string): Promise<string | null> {
+  if (!deps.agentEnabled) return null
   const t = YES_NO[locale]
   const buttons = [{ id: `nudge:yes:${runId}`, title: t.yes }, { id: `nudge:no:${runId}`, title: t.no }]
-  const r = await deps.whatsapp.sendButtons(conv.phone_e164, text, buttons)
-  return recordOutbound(deps, conv, 'button', text, r, { buttons: buttons.map((b) => b.id), run_id: runId })
+  const title = text.split(/[.\n]/)[0]?.slice(0, 60) ?? 'AMClub'
+  const r = await runtimeSend(sendDeps(deps), {
+    conv,
+    userId: conv.user_id,
+    kind: 'support_reply',
+    purpose: 'assistant',
+    initiation: 'reply',
+    idempotencyKey: key,
+    text,
+    buttons,
+    template: { kind: 'support_reply', locale: waLocale(locale), values: { title, body: text.slice(0, 600) } },
+    runId,
+    meta: { support: true, run_id: runId },
+    fallbackMeta: { support: true, nudge_offer: true },
+  })
+  return sentMessageId(r)
 }
 
 /** S3.1 — AGENT on for procurement + cohort + a buyer grant carrying the procurement scopes. */
@@ -243,10 +257,22 @@ async function procurementOnFor(admin: SupabaseClient, userId: string): Promise<
 
 /** S3.1 — "Shall I start a request for this?" with ONE button: the tap re-runs THIS message in a new procurement session. */
 async function sendStartOffer(deps: SupportRuntimeDeps, conv: ConversationRow, locale: SupportLocale, messageId: string, text: string): Promise<string | null> {
-  if (!deps.agentEnabled || !inWindow(deps, conv)) return sendReply(deps, conv, locale, text, { reply_key: 'new_need.offer' })
+  if (!deps.agentEnabled) return null
   const buttons = [{ id: procurementButtonId({ kind: 'session', choice: 'new', messageId }), title: PROCUREMENT_BUTTON_TITLES[toProcurementLocale(locale)].start }]
-  const r = await deps.whatsapp.sendButtons(conv.phone_e164, text, buttons)
-  return recordOutbound(deps, conv, 'button', text, r, { reply_key: 'new_need.offer', buttons: buttons.map((b) => b.id) })
+  const title = text.split(/[.\n]/)[0]?.slice(0, 60) ?? 'AMClub'
+  const r = await runtimeSend(sendDeps(deps), {
+    conv,
+    userId: conv.user_id,
+    kind: 'support_reply',
+    purpose: 'assistant',
+    initiation: 'reply',
+    idempotencyKey: `${messageId}:support:new_need.offer`,
+    text,
+    buttons,
+    template: { kind: 'support_reply', locale: waLocale(locale), values: { title, body: text.slice(0, 600) } },
+    meta: { support: true, reply_key: 'new_need.offer' },
+  })
+  return sentMessageId(r)
 }
 
 // ── the agent definition: one run per turn ───────────────────────────────────
@@ -389,15 +415,15 @@ export async function runSupportReply(deps: SupportRuntimeDeps, job: SupportRepl
     // the halt must hold even when the web is unreachable: a bare ticket row (support table, service role) marks the conversation
     const ticket = (await openTicketViaWeb(deps, { ...ticketArgs, persona })) ?? (await openTicketFallback(deps, ticketArgs))
     const replyText = renderSupportReply('escalated', { sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days, contact: CONTACT, ticket_ref: ticket?.ref ?? '' }, locale)
-    await sendReply(deps, conv, locale, replyText, { support: true, escalated: true })
+    await sendReply(deps, conv, locale, replyText, { support: true, escalated: true }, `${job.messageId}:support:escalated`)
     await deps.admin.from('wa_conversations').update({ support_last_intents: [...(conv.support_last_intents ?? []), (out.intent ?? 'other') as SupportIntent].slice(-5), support_unclear_streak: 0 }).eq('id', conv.id)
     deps.capture?.(conv.user_id, 'support_turn', { channel: 'whatsapp', intent: out.intent, escalated: true, reply_key: 'escalated' })
     return { status: 'ok', detail: { outcome: 'escalated', ticket: ticket?.ref ?? null } }
   }
 
-  if (out.action) await sendNudgeButtons(deps, conv, locale, result.runId, out.replyText)
+  if (out.action) await sendNudgeButtons(deps, conv, locale, result.runId, out.replyText, `${job.messageId}:support:nudge_offer`)
   else if (out.replyKey === 'new_need.offer') await sendStartOffer(deps, conv, locale, job.messageId, out.replyText)
-  else await sendReply(deps, conv, locale, out.replyText, { support: true, reply_key: out.replyKey })
+  else await sendReply(deps, conv, locale, out.replyText, { support: true, reply_key: out.replyKey }, `${job.messageId}:support:${out.replyKey}`)
   await deps.admin.from('wa_conversations').update({ support_last_intents: [...(conv.support_last_intents ?? []), (out.intent ?? 'other') as SupportIntent].slice(-5), support_unclear_streak: out.unclearStreak }).eq('id', conv.id)
   deps.capture?.(conv.user_id, 'support_turn', { channel: 'whatsapp', intent: out.intent, escalated: false, reply_key: out.replyKey })
   return { status: 'ok', detail: { outcome: out.action ? 'nudge_offered' : 'answered', reply_key: out.replyKey, run_id: result.runId } }
@@ -459,7 +485,7 @@ export async function runSupportDecide(deps: SupportRuntimeDeps, job: SupportDec
   if (!conv?.user_id || conv.user_id !== run.userId) return { status: 'failed', error: 'message_conversation_mismatch' }
   const locale = toSupportLocale(conv.locale)
   if (run.status !== 'awaiting_confirmation') {
-    await sendReply(deps, conv, locale, renderSupportReply('nudge.out_of_window', { contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true, stale: true })
+    await sendReply(deps, conv, locale, renderSupportReply('nudge.out_of_window', { contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true, stale: true }, `${job.messageId}:nudge:stale`)
     return { status: 'ok', detail: { outcome: 'stale' } }
   }
   // the proposal's payload is the subject
@@ -479,7 +505,7 @@ export async function runSupportDecide(deps: SupportRuntimeDeps, job: SupportDec
     return { status: 'ok', detail: { outcome: 'declined' } }
   }
   if (!decision.ok && !body?.decision_id) {
-    await sendReply(deps, conv, locale, renderSupportReply('nudge.out_of_window', { contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true })
+    await sendReply(deps, conv, locale, renderSupportReply('nudge.out_of_window', { contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true }, `${job.messageId}:nudge:decision_failed`)
     return { status: 'failed', error: `decision_failed:${decision.status}` }
   }
   // the resume runs the ORDINARY nudge route (the web ping does it when the runtime URL is set; else in-process)
@@ -493,13 +519,13 @@ export async function runSupportDecide(deps: SupportRuntimeDeps, job: SupportDec
       capped = outcome.status === 'done' && outcome.result.status === 429
     } catch (e) {
       await agentRun.fail((e as Error).message)
-      await sendReply(deps, conv, locale, renderSupportReply('nudge.out_of_window', { contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true })
+      await sendReply(deps, conv, locale, renderSupportReply('nudge.out_of_window', { contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true }, `${job.messageId}:nudge:resume_failed`)
       return { status: 'failed', error: (e as Error).message }
     }
   }
   const key = capped ? 'nudge.capped' : 'nudge.sent'
   const { nudgeCooldownHours } = await supportSettings(deps.admin)
-  await sendReply(deps, conv, locale, renderSupportReply(key, { hours: nudgeCooldownHours, contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true, reply_key: key })
+  await sendReply(deps, conv, locale, renderSupportReply(key, { hours: nudgeCooldownHours, contact: CONTACT, sla_hours: SLA.acknowledge_hours, sla_days: SLA.resolve_days }, locale), { support: true, reply_key: key }, `${job.messageId}:nudge:${key}`)
   deps.capture?.(conv.user_id, 'support_nudge_decided', { outcome: capped ? 'capped' : 'sent' })
   return { status: 'ok', detail: { outcome: capped ? 'capped' : 'sent' } }
 }

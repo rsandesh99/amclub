@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { templateFor, type ProcurementAgentOutput, type ProcurementButtons, type ProcurementReply, type WaLocale } from '@amclub/agent-core'
+import type { ProcurementAgentOutput, ProcurementButtons, ProcurementReply, WaLocale } from '@amclub/agent-core'
 import {
   PROCUREMENT_BUTTON_TITLES,
   procurementButtonId,
@@ -7,16 +7,19 @@ import {
   renderSupportReply,
   toProcurementLocale,
   toSupportLocale,
+  waLocaleFor,
   type ProcurementLocale,
 } from '@amclub/shared'
 import { nowOf, recordTurn, type ProcurementRuntimeDeps, type SessionRow } from './store'
 import { boundConversationFor, conversationServesUser } from '../../whatsapp/binding'
+import { runtimeSend, sentMessageId } from '../../whatsapp/outbound'
 
 /**
  * S3.1 — delivery. Every reply is a template rendered by code (the model never writes a sentence the buyer reads).
  * It is recorded as an agent turn (the web mirror shows it, with the proposal's buttons) and, when the buyer holds a
- * WhatsApp grant carrying the procurement scopes, sent there: text / reply buttons inside the 24 h window, the
- * `procurement_update` template (one line + the assistant link) outside it — decisions then happen in the app.
+ * WhatsApp grant carrying the procurement scopes, sent there through the one send path (ADR-030): text / reply buttons
+ * inside the 24 h window, the `procurement_update` template (one line + the assistant link) outside it — decisions
+ * then happen in the app.
  */
 
 interface ConversationRow { id: string; phone_e164: string; window_open_until: string | null }
@@ -39,7 +42,7 @@ export function renderReply(r: ProcurementReply, locale: ProcurementLocale): str
 }
 
 function waLocale(l: ProcurementLocale): WaLocale {
-  return l === 'ta' ? 'en' : l
+  return waLocaleFor(l)
 }
 
 function buttonsFor(b: ProcurementButtons, locale: ProcurementLocale, ctx: { runId: string | null; sessionId: string; messageId: string | null }): { id: string; title: string }[] {
@@ -64,44 +67,41 @@ function buttonsFor(b: ProcurementButtons, locale: ProcurementLocale, ctx: { run
   return []
 }
 
-async function recordOutbound(deps: ProcurementRuntimeDeps, conv: ConversationRow, kind: 'text' | 'button' | 'template', body: string | null, r: { ok: boolean; vendorMessageId: string | null; detail: string }, extra: Record<string, unknown>): Promise<string | null> {
-  const { data } = await deps.admin
-    .from('wa_messages')
-    .insert({ conversation_id: conv.id, direction: 'out', vendor_message_id: r.vendorMessageId, kind, body, status: r.ok ? (r.detail === 'stub' ? 'stub' : 'sent') : 'failed', payload: { detail: r.detail, procurement: true, ...extra }, ...(kind === 'template' && typeof extra['template_name'] === 'string' ? { template_name: extra['template_name'] } : {}) })
-    .select('id')
-    .single()
-  if (r.ok) await deps.admin.from('wa_conversations').update({ last_outbound_at: nowOf(deps).toISOString() }).eq('id', conv.id)
-  return (data as { id: string } | null)?.id ?? null
-}
-
-/** Send one reply on WhatsApp (window-aware). Returns the wa_messages id, or null when nothing was sent. */
-async function sendWhatsApp(deps: ProcurementRuntimeDeps, row: SessionRow, text: string, buttons: { id: string; title: string }[], extra: Record<string, unknown>): Promise<string | null> {
+/**
+ * Send one reply on WhatsApp through the one send path (ADR-030): text / reply buttons inside the 24 h window, the
+ * `procurement_update` template (one line + the assistant link) outside it. `key` is the agent turn it mirrors, so a
+ * retried job never sends it twice. Returns the wa_messages id, or null when nothing was sent.
+ */
+async function sendOnWhatsApp(deps: ProcurementRuntimeDeps, row: SessionRow, text: string, buttons: { id: string; title: string }[], extra: Record<string, unknown>, send: { key: string; initiation: 'business' | 'reply' }): Promise<string | null> {
   if (!deps.agentEnabled) return null
   const conv = await conversationFor(deps.admin, row)
   if (!conv) return null
   const locale = toProcurementLocale(row.locale)
-  const inWindow = !!conv.window_open_until && new Date(conv.window_open_until).getTime() > nowOf(deps).getTime()
-  if (inWindow) {
-    if (buttons.length) {
-      const r = await deps.whatsapp.sendButtons(conv.phone_e164, text.slice(0, 1024), buttons)
-      return recordOutbound(deps, conv, 'button', text, r, { ...extra, buttons: buttons.map((b) => b.id) })
-    }
-    const r = await deps.whatsapp.sendText(conv.phone_e164, text)
-    return recordOutbound(deps, conv, 'text', text, r, extra)
-  }
-  const tpl = templateFor('procurement_update', waLocale(locale))
-  if (!tpl) return null
   const line = text.split('\n')[0]!.replace(/\s+/g, ' ').slice(0, 300)
-  const params = [line, `${deps.apiUrl}/app/assistant`]
-  const r = await deps.whatsapp.sendTemplate(conv.phone_e164, tpl.name, waLocale(locale), params)
-  return recordOutbound(deps, conv, 'template', null, r, { ...extra, template_name: tpl.name, params })
+  const r = await runtimeSend(
+    { admin: deps.admin, whatsapp: deps.whatsapp, now: () => nowOf(deps) },
+    {
+      conv,
+      userId: row.user_id,
+      kind: 'procurement_update',
+      purpose: 'assistant',
+      initiation: send.initiation,
+      idempotencyKey: send.key,
+      text: buttons.length ? text.slice(0, 1024) : text,
+      ...(buttons.length ? { buttons } : {}),
+      template: { kind: 'procurement_update', locale: waLocale(locale), values: { line, link: `${deps.apiUrl}/app/assistant` } },
+      runId: typeof extra['run_id'] === 'string' ? extra['run_id'] : null,
+      meta: { procurement: true, ...extra },
+    },
+  )
+  return sentMessageId(r)
 }
 
 /**
  * Deliver an agent output: each reply → an agent turn (+ WhatsApp when `whatsapp`). A proposal's card carries the
  * run id so the web mirror and the buttons resolve the same parked run.
  */
-export async function deliver(deps: ProcurementRuntimeDeps, row: SessionRow, out: Pick<ProcurementAgentOutput, 'replies' | 'proposal'>, ctx: { runId: string | null; whatsapp: boolean; messageId: string | null }): Promise<{ sent: number; whatsapp: number }> {
+export async function deliver(deps: ProcurementRuntimeDeps, row: SessionRow, out: Pick<ProcurementAgentOutput, 'replies' | 'proposal'>, ctx: { runId: string | null; whatsapp: boolean; messageId: string | null; initiation?: 'business' | 'reply' }): Promise<{ sent: number; whatsapp: number }> {
   const locale = toProcurementLocale(row.locale)
   let sent = 0
   let whatsapp = 0
@@ -110,10 +110,12 @@ export async function deliver(deps: ProcurementRuntimeDeps, row: SessionRow, out
     const isCard = !!out.proposal && i === out.replies.length - 1 && x.buttons?.kind === 'decision'
     const buttons = buttonsFor(x.buttons, locale, { runId: isCard ? ctx.runId : null, sessionId: row.id, messageId: ctx.messageId })
     const proposal = isCard && out.proposal ? { run_id: ctx.runId, tool: out.proposal.tool, status: 'open', edit: x.buttons?.kind === 'decision' && x.buttons.edit } : x.buttons?.kind === 'labels' ? { labels: x.buttons.labels, status: 'open' } : x.buttons?.kind === 'session' ? { session_choice: true, message_id: ctx.messageId, status: 'open' } : null
-    await recordTurn(deps, { sessionId: row.id, userId: row.user_id, role: 'agent', surface: row.surface, body: text, runId: isCard ? ctx.runId : null, proposal: proposal ? { ...proposal, key: x.reply.key } : { key: x.reply.key } })
+    const turnId = await recordTurn(deps, { sessionId: row.id, userId: row.user_id, role: 'agent', surface: row.surface, body: text, runId: isCard ? ctx.runId : null, proposal: proposal ? { ...proposal, key: x.reply.key } : { key: x.reply.key } })
     sent++
     if (ctx.whatsapp) {
-      const id = await sendWhatsApp(deps, row, text, buttons, { procurement_session_id: row.id, reply_key: x.reply.key, ...(isCard ? { run_id: ctx.runId } : {}) })
+      // one WhatsApp message per recorded agent turn; a reply to the buyer's message, else the agent writes first (the chase)
+      const key = turnId ? `pt:${turnId}` : `ps:${row.id}:${ctx.runId ?? ctx.messageId ?? 'x'}:${x.reply.key}:${i}:${nowOf(deps).getTime()}`
+      const id = await sendOnWhatsApp(deps, row, text, buttons, { procurement_session_id: row.id, reply_key: x.reply.key, ...(isCard ? { run_id: ctx.runId } : {}) }, { key, initiation: ctx.initiation ?? (ctx.messageId ? 'reply' : 'business') })
       if (id) whatsapp++
     }
   }

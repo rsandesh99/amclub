@@ -48,6 +48,8 @@ export interface PhoneUser {
 
 /** The user holding this phone now (users.phone is UNIQUE). Matches the '+' form and bare digits. */
 export async function userByPhone(admin: SupabaseClient, digits: string): Promise<PhoneUser | null> {
+  // ADR-030 / audit 2.9: a BSUID-only conversation is keyed `u:<bsuid>` — never a phone, never reduced to digits
+  if (String(digits ?? '').startsWith('u:')) return null
   const d = phoneDigits(digits)
   if (!d) return null
   const { data } = await admin.from('users').select('id, phone, preferred_locale, roles').in('phone', [`+${d}`, d]).limit(1).maybeSingle()

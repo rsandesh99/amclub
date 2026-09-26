@@ -1,15 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   MediaRefusedError,
-  PENDING_MEDIA_KEY,
   createSupabaseLedger,
-  createWhatsAppProvider,
   mediaExtension,
   mediaLimitsFromEnv,
-  metaVerifyChallenge,
   pendingMediaRef,
-  whatsappConfigFromEnv,
-  whatsappIsLive,
   type Ledger,
   type WaLocale,
   type WhatsAppProvider,
@@ -57,15 +52,18 @@ import {
   type SendSystemFn,
   type WaTurn,
 } from './menu'
-import { sendSystem } from './outbound'
+import { type EnqueueFn } from './ingest'
+import { runtimeWhatsApp, sendSystem } from './outbound'
+
+// ADR-030: the webhook half (verify → store → enqueue, statuses, account events) lives in ./ingest.
+export { acceptsUnsignedWebhooks, ingestWaWebhook, isStaleInbound, waVerifyChallenge, type EnqueueFn, type IngestResult } from './ingest'
 
 /**
  * WhatsApp inbound (S0.5). Two halves:
- *  - ingestWaWebhook: verify → parse → upsert conversation → insert message
- *    idempotently on vendor_message_id → enqueue wa.inbound. Status callbacks
- *    update wa_messages.status. Never replies, never downloads media (audit M34:
- *    the vendor media id is stored in the payload and the JOB fetches it). A
- *    store failure answers 5xx so the vendor retries (audit M33).
+ *  - ingestWaWebhook (./ingest.ts): verify → parse → upsert conversation → insert
+ *    the redacted message idempotently on vendor_message_id → enqueue wa.inbound;
+ *    statuses, pricing and account events. Never replies, never downloads media
+ *    (audit M34). A store failure answers 5xx so the vendor retries (audit M33).
  *  - handleWaInbound (the job): the dispatcher (ADR-030 §2, below) → mark the
  *    row processed (audit M33: `sweepUnprocessedInbound` re-enqueues rows the job
  *    never finished). Consent and the non-AI HELP menu answer everyone through
@@ -75,25 +73,6 @@ import { sendSystem } from './outbound'
  *    touches only wa_* + agent_grants (the user's own consent, from their own
  *    phone) + the agents' own tables (+ the user's own preferred_locale).
  */
-
-const WINDOW_MS = 24 * 3600 * 1000
-
-export function waVerifyChallenge(query: Record<string, string | undefined>): string | null {
-  const cfg = whatsappConfigFromEnv()
-  return metaVerifyChallenge(query, cfg.verifyToken)
-}
-
-export interface IngestResult {
-  ok: boolean
-  status: 200 | 400 | 401 | 500
-  error?: string
-  stored: number
-  statuses: number
-}
-
-/** Enqueue hook (injected by the server) so this module never imports the worker — no import cycle. */
-export type EnqueueFn = (messageId: string) => Promise<string | null>
-
 /** S1.6 — hooks the worker injects into the inbound job (no import cycle). */
 export interface InboundHooks {
   enqueueOnboarding?: (turn: { kind: 'start' | 'message'; sessionId: string; messageId?: string }) => Promise<string | null>
@@ -105,120 +84,6 @@ export interface InboundHooks {
   /** S3.1 — a procurement turn (a message in an active session, a label / session button) or a decision (pr:ok|edit|no). */
   enqueueProcurementTurn?: (job: Omit<ProcurementTurnJob, 'kind'>) => Promise<string | null>
   enqueueProcurementDecide?: (job: Omit<ProcurementDecideJob, 'kind'>) => Promise<string | null>
-}
-
-/** Unsigned (stub-driver) webhooks: only outside production, and only when a developer opts in. */
-export function acceptsUnsignedWebhooks(env: Record<string, string | undefined> = process.env): boolean {
-  return env['NODE_ENV'] !== 'production' && env['WHATSAPP_WEBHOOK_ALLOW_UNSIGNED'] === 'true'
-}
-
-export async function ingestWaWebhook(rawBody: string, headers: Record<string, string | undefined>, enqueue: EnqueueFn): Promise<IngestResult> {
-  const cfg = whatsappConfigFromEnv()
-  const provider = createWhatsAppProvider(cfg)
-  // A live driver must prove the vendor signature. The stub cannot, so it
-  // accepts nothing unless a developer opts in outside production (audit H4):
-  // otherwise anyone could post a message "from" any registered number.
-  if (whatsappIsLive(cfg)) {
-    if (!provider.verifySignature(rawBody, headers)) return { ok: false, status: 401, error: 'bad_signature', stored: 0, statuses: 0 }
-  } else if (!acceptsUnsignedWebhooks()) {
-    return { ok: false, status: 401, error: 'webhook_not_configured', stored: 0, statuses: 0 }
-  }
-  let body: unknown
-  try {
-    body = JSON.parse(rawBody)
-  } catch {
-    return { ok: false, status: 400, error: 'bad_json', stored: 0, statuses: 0 }
-  }
-  const parsed = provider.parseInbound(body)
-  const db = admin()
-  let stored = 0
-  let failed = 0
-  for (const m of parsed.messages) {
-    try {
-      const conv = await upsertConversation(db, m.fromE164, m.timestamp)
-      // audit M34: no download here — the vendor media ref rides in the payload; the job fetches it (capped) for a
-      // bound, opted-in number only
-      const raw = (m.raw && typeof m.raw === 'object' ? m.raw : { raw: m.raw }) as Record<string, unknown>
-      const payload = m.mediaRef ? { ...raw, [PENDING_MEDIA_KEY]: m.mediaRef } : raw
-      const { data: inserted, error } = await insertInbound(db, { conversation_id: conv.id, direction: 'in', vendor_message_id: m.vendorMessageId, kind: m.kind, body: m.body, media_ref: null, mime: m.mime, status: 'received', payload })
-      if (error) {
-        // 23505 = replayed webhook (vendor_message_id unique) → idempotent. If the first delivery never got processed
-        // (the enqueue failed), re-enqueue: the job id is the message id, so this can never create a second job.
-        if ((error as { code?: string }).code === '23505') {
-          await reenqueueIfUnprocessed(db, m.vendorMessageId, enqueue)
-          continue
-        }
-        throw new Error(`wa_messages insert: ${error.message}`)
-      }
-      if (inserted?.id) {
-        stored++
-        // the message is stored: an enqueue failure is logged and the sweep picks the row up
-        await enqueue(inserted.id as string).catch((e: Error) => console.error('[wa] enqueue failed (the sweep will retry)', e.message))
-      }
-    } catch (e) {
-      failed++
-      console.error('[wa] inbound store failed — answering 5xx so the vendor retries', (e as Error).message)
-    }
-  }
-  let statuses = 0
-  for (const s of parsed.statuses) {
-    const { error } = await db.from('wa_messages').update({ status: s.status }).eq('vendor_message_id', s.vendorMessageId)
-    if (!error) statuses++
-  }
-  if (failed > 0) return { ok: false, status: 500, error: 'store_failed', stored, statuses }
-  return { ok: true, status: 200, stored, statuses }
-}
-
-let processedColumnMissingOnInsert = false
-
-/**
- * Insert an inbound row as UNPROCESSED (processed_at null — 0079's column default
- * is now(), so rows written by anything else never enter the sweep). Before 0079
- * is applied the column is unknown: the row is stored without it (logged once) —
- * a store must never fail on the sweep's bookkeeping.
- */
-async function insertInbound(db: SupabaseClient, row: Record<string, unknown>): Promise<{ data: { id: string } | null; error: { message: string; code?: string } | null }> {
-  if (!processedColumnMissingOnInsert) {
-    const r = await db.from('wa_messages').insert({ ...row, processed_at: null }).select('id').maybeSingle()
-    const code = (r.error as { code?: string } | null)?.code
-    if (!r.error || code === '23505' || !/processed_at/.test(r.error.message)) return r as { data: { id: string } | null; error: { message: string; code?: string } | null }
-    processedColumnMissingOnInsert = true
-    console.error('[wa] wa_messages.processed_at missing — storing without it; apply migration 0079 (the inbound sweep is off until then)')
-  }
-  const r = await db.from('wa_messages').insert(row).select('id').maybeSingle()
-  return r as { data: { id: string } | null; error: { message: string; code?: string } | null }
-}
-
-async function reenqueueIfUnprocessed(db: SupabaseClient, vendorMessageId: string, enqueue: EnqueueFn): Promise<void> {
-  const { data, error } = await db.from('wa_messages').select('id, processed_at').eq('vendor_message_id', vendorMessageId).maybeSingle()
-  if (error || !data) return // (a database without 0079's processed_at: the sweep is off too; nothing to decide here)
-  if ((data as { processed_at: string | null }).processed_at) return
-  await enqueue((data as { id: string }).id).catch((e: Error) => console.error('[wa] re-enqueue failed', e.message))
-}
-
-async function upsertConversation(db: SupabaseClient, phoneE164: string, inboundAtIso: string): Promise<{ id: string; user_id: string | null; locale: string }> {
-  const windowUntil = new Date(new Date(inboundAtIso).getTime() + WINDOW_MS).toISOString()
-  const { data: existing, error: readErr } = await db.from('wa_conversations').select('id, user_id, locale').eq('phone_e164', phoneE164).maybeSingle()
-  if (readErr) throw new Error(`wa_conversations read: ${readErr.message}`)
-  if (existing) {
-    await db.from('wa_conversations').update({ last_inbound_at: inboundAtIso, window_open_until: windowUntil }).eq('id', existing.id)
-    // the binding is (re-)derived by the job before anything acts on it (audit M41)
-    return existing as { id: string; user_id: string | null; locale: string }
-  }
-  const user = await userByPhone(db, phoneE164)
-  const locale = user?.preferred_locale === 'hi' || user?.preferred_locale === 'te' ? user.preferred_locale : 'en'
-  const { data: created, error } = await db
-    .from('wa_conversations')
-    .insert({ phone_e164: phoneE164, user_id: user?.id ?? null, locale, last_inbound_at: inboundAtIso, window_open_until: windowUntil })
-    .select('id, user_id, locale')
-    .single()
-  if (error || !created) {
-    // a concurrent first message from the same phone created it: read it back
-    const { data: again } = await db.from('wa_conversations').select('id, user_id, locale').eq('phone_e164', phoneE164).maybeSingle()
-    if (again) return again as { id: string; user_id: string | null; locale: string }
-    throw new Error(`wa_conversations insert: ${error?.message}`)
-  }
-  return created as { id: string; user_id: string | null; locale: string }
 }
 
 // ── the wa.inbound job ───────────────────────────────────────────────────────
@@ -557,10 +422,6 @@ async function rebindNeeded(db: SupabaseClient, conversationId: string, userId: 
 
 // ── media (audit M34) ────────────────────────────────────────────────────────
 
-function provider(): WhatsAppProvider {
-  return createWhatsAppProvider(whatsappConfigFromEnv())
-}
-
 /**
  * Download the message's media into the private bucket — only for a number bound
  * to a user who opted in from it (an unknown or non-opted-in number's media is
@@ -577,7 +438,7 @@ export async function resolveInboundMedia(
 ): Promise<'none' | 'stored' | 'skipped_not_opted_in' | 'refused'> {
   const ref = pendingMediaRef(msg.payload)
   if (!ref || msg.media_ref) return 'none'
-  const p = deps.provider ?? provider()
+  const p = deps.provider ?? runtimeWhatsApp()
   if (p.name === 'stub') return 'none'
   const mark = async (status: string, detail?: string) => {
     await db.from('wa_messages').update({ payload: { ...(msg.payload ?? {}), amc_media_status: status, ...(detail ? { amc_media_detail: detail.slice(0, 200) } : {}) } }).eq('id', msg.id)

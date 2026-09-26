@@ -11,13 +11,15 @@ import {
   extractRuntimeCredential,
   residencyPosture,
   verifyRuntimeCredential,
+  waCircuitState,
+  whatsappDriverState,
   type RuntimeCredentialClaims,
 } from '@amclub/agent-core'
 import { agentToolNameSchema } from '@amclub/shared'
 import { missingRuntimeConfig, RUNTIME_ENV } from './env'
 import { buildRunContext } from './deps'
 import { enqueueJob, enqueueWaInbound, workerHealth } from './worker'
-import { ingestWaWebhook, waVerifyChallenge } from './whatsapp/inbound'
+import { ingestWaWebhook, waVerifyChallenge } from './whatsapp/ingest'
 
 /**
  * The runtime's HTTP surface (ADR-008 §2). Internal endpoints require the
@@ -37,9 +39,13 @@ function requireRuntime(authorization: string | undefined): RuntimeCredentialCla
 /**
  * Liveness + readiness (audit M33 / M23). `worker` = the pg-boss worker state,
  * whether DATABASE_URL is set, and the last inbound sweep (stored-but-unprocessed
- * WhatsApp messages); `residency` = the model gateway's data-residency posture.
- * 503 when agents are enabled but the worker is not running, so the platform
- * check turns red instead of the runtime silently storing messages nobody reads.
+ * WhatsApp messages); `residency` = the model gateway's data-residency posture;
+ * `whatsapp` = the driver state (ADR-030 §1: names only, never a value) and the
+ * account circuit breaker. 503 when agents are enabled but the worker is not
+ * running, so the platform check turns red instead of the runtime silently
+ * storing messages nobody reads. A named WhatsApp driver with a missing
+ * credential is `degraded: whatsapp_misconfigured` (and the webhook refuses to
+ * ingest).
  */
 app.get('/health', (c) => {
   const worker = workerHealth()
@@ -49,6 +55,10 @@ app.get('/health', (c) => {
   if (worker.lastSweep && (worker.lastSweep.requeued > 0 || worker.lastSweep.stale > 0)) degraded.push('inbound_unprocessed')
   if (worker.lastSweep?.error) degraded.push('inbound_sweep_failed')
   if (residency.mode === 'unconfigured') degraded.push(residency.refuses ? 'residency_unconfigured' : 'residency_undecided')
+  const wa = whatsappDriverState()
+  const circuit = waCircuitState()
+  if (!wa.configured || wa.invalid.length > 0) degraded.push('whatsapp_misconfigured')
+  if (circuit.open) degraded.push('whatsapp_circuit_open')
   const down = RUNTIME_ENV.AGENT_ENABLED && worker.state !== 'running'
   // public endpoint: states and counts only — error text, the waiver reason and hosts stay in the logs
   const body = {
@@ -58,6 +68,21 @@ app.get('/health', (c) => {
     degraded,
     worker: { state: worker.state, databaseUrl: worker.databaseUrl, since: worker.since, queues: worker.queues, lastErrorAt: worker.lastError?.at ?? null, lastSweep: worker.lastSweep },
     residency: { mode: residency.mode, required: residency.required, refuses: residency.refuses },
+    whatsapp: {
+      driver: wa.driver,
+      requested: wa.requested,
+      live: wa.live,
+      configured: wa.configured,
+      graphVersion: wa.graphVersion,
+      phoneNumberIdSet: wa.phoneNumberIdSet,
+      tokenSet: wa.tokenSet,
+      appSecretSet: wa.appSecretSet,
+      verifyTokenSet: wa.verifyTokenSet,
+      wabaIdSet: wa.wabaIdSet,
+      missing: wa.missing,
+      invalid: wa.invalid,
+      circuitOpenUntil: circuit.until,
+    },
     ts: Date.now(),
   }
   return c.json(body, down ? 503 : 200)
@@ -120,16 +145,18 @@ app.get('/webhooks/whatsapp', (c) => {
 const WEBHOOK_BODY_LIMIT = 256 * 1024
 app.post('/webhooks/whatsapp', bodyLimit({ maxSize: WEBHOOK_BODY_LIMIT, onError: (c) => c.json({ error: 'too_large' }, 413) }), async (c) => {
   const raw = await c.req.text()
-  const headers: Record<string, string | undefined> = {
-    'x-hub-signature-256': c.req.header('x-hub-signature-256'),
-    'x-interakt-secret': c.req.header('x-interakt-secret'),
-  }
+  const headers: Record<string, string | undefined> = { 'x-hub-signature-256': c.req.header('x-hub-signature-256') }
   const result = await ingestWaWebhook(raw, headers, enqueueWaInbound)
   if (!result.ok) return c.json({ error: result.error }, result.status)
-  return c.json({ ok: true, stored: result.stored, statuses: result.statuses })
+  return c.json({ ok: true, stored: result.stored, statuses: result.statuses, account: result.account ?? 0 })
 })
 
 export function startServer(): void {
+  // ADR-030 §1 — fail loud: a named driver without its credentials (or an invalid Graph version) is an error at boot
+  const wa = whatsappDriverState()
+  if (!wa.configured) console.error(`[whatsapp] WHATSAPP_DRIVER=meta_cloud but ${wa.missing.join(', ')} unset — the webhook refuses to ingest until they are set`)
+  if (wa.invalid.length) console.error(`[whatsapp] invalid ${wa.invalid.join(', ')} — using the defaults (Graph ${wa.graphVersion})`)
+  if (wa.live) console.log(`[whatsapp] meta_cloud live on Graph ${wa.graphVersion}`)
   serve({ fetch: app.fetch, port: RUNTIME_ENV.PORT })
   console.log(`[server] agent-runtime listening on :${RUNTIME_ENV.PORT}`)
 }

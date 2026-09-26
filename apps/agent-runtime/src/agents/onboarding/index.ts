@@ -7,11 +7,9 @@ import {
   onboardingDraftSchema,
   renderDraftSummary,
   runAgent,
-  templateFor,
   type AgentDefinition,
   type RunAgentDeps,
   type RunAgentResult,
-  type WaLocale,
   type WhatsAppProvider,
 } from '@amclub/agent-core'
 import {
@@ -22,6 +20,7 @@ import {
   onboardingCopy,
   redactContactInfo,
   toOnboardingLocale,
+  waLocaleFor,
   type CategorySlug,
   type OnboardingAnswer,
   type OnboardingDraft,
@@ -29,7 +28,8 @@ import {
 } from '@amclub/shared'
 import { businessNameOf, promptFor, reviewButtons, stepMachine, type MachineInbound, type MachineSession, type OutboundMsg } from './machine'
 import { transcribeVoiceNote } from './stt'
-import { conversationServesUser, currentWhatsAppGrants } from '../../whatsapp/binding'
+import { conversationServesUser } from '../../whatsapp/binding'
+import { runtimeSend, wasDelivered } from '../../whatsapp/outbound'
 
 /**
  * Onboarding agent (BUILD_PROMPTS S1.6). Persona provider. A SCRIPTED
@@ -210,49 +210,49 @@ function onboardingAgent(deps: OnboardingRuntimeDeps, session: SessionRow): Agen
     if (!conv || !(await conversationServesUser(admin, conv, session.user_id))) return null
     return { id: conv.id, phone_e164: conv.phone_e164, window_open_until: conv.window_open_until }
   }
-  /** A WhatsApp grant given from the provider's current phone. */
-  async function hasWhatsAppGrant(): Promise<boolean> {
-    return (await currentWhatsAppGrants(admin, session.user_id)).length > 0
-  }
-  async function recordOutbound(conv: ConversationRow, kind: 'text' | 'button' | 'template', body: string | null, r: { ok: boolean; vendorMessageId: string | null; detail: string }, extra: Record<string, unknown> = {}) {
-    await admin.from('wa_messages').insert({
-      conversation_id: conv.id,
-      direction: 'out',
-      vendor_message_id: r.vendorMessageId,
-      kind,
-      body,
-      status: r.ok ? (r.detail === 'stub' ? 'stub' : 'sent') : 'failed',
-      payload: { session_id: session.id, detail: r.detail, ...extra },
-      ...(kind === 'template' && typeof extra['template_name'] === 'string' ? { template_name: extra['template_name'] } : {}),
-    })
-    if (r.ok) await admin.from('wa_conversations').update({ last_outbound_at: now().toISOString() }).eq('id', conv.id)
-  }
   /**
-   * Send replies: inside the 24h window as text/buttons; outside it as the
-   * matching template (start / resume / expired), which needs the provider's
-   * WhatsApp grant. Gated on the runtime flag; every outbound is a wa_messages row.
+   * Idempotency for this turn's sends (ADR-030): a message turn keys on the inbound message, start / expire on the
+   * session; each send() call in the turn and each message in it gets its own suffix, so a retried job re-derives the
+   * same keys and never sends twice. start answers the provider's JOIN and message turns answer their message
+   * (`reply`); expire is the runtime writing first (`business`).
+   */
+  let turnKey = `${session.id}:ob`
+  let turnInitiation: 'business' | 'reply' = 'reply'
+  let sendSeq = 0
+  /**
+   * Send replies through the one send path: inside the 24h window as text / buttons; outside it the first message
+   * becomes the matching template (start / resume / expired) and carries the turn alone — which needs the provider's
+   * opt-in for the assistant (consent is checked by the send path). Gated on the runtime flag; every outbound is a
+   * wa_messages row (session_id in its payload).
    */
   async function send(msgs: OutboundMsg[], stateForTemplate: OnboardingStep, templateParam: string): Promise<number> {
     if (!deps.agentEnabled || msgs.length === 0) return 0
     const conv = await conversation()
     if (!conv) return 0
-    const inWindow = !!conv.window_open_until && new Date(conv.window_open_until).getTime() > now().getTime()
-    let sent = 0
-    if (inWindow) {
-      for (const m of msgs) {
-        const r = m.type === 'text' ? await deps.whatsapp.sendText(conv.phone_e164, m.text) : await deps.whatsapp.sendButtons(conv.phone_e164, m.text, m.buttons, m.listLabel)
-        await recordOutbound(conv, m.type === 'text' ? 'text' : 'button', m.text, r, m.type === 'buttons' ? { buttons: m.buttons.map((b) => b.id) } : {})
-        if (r.ok) sent++
-      }
-      return sent
-    }
-    if (!(await hasWhatsAppGrant())) return 0
     const kind = stateForTemplate === 'language' ? 'onboarding_start' : stateForTemplate === 'abandoned' ? 'onboarding_expired' : 'onboarding_resume'
-    const tpl = templateFor(kind, locale as WaLocale)
-    if (!tpl) return 0
-    const r = await deps.whatsapp.sendTemplate(conv.phone_e164, tpl.name, locale as WaLocale, [templateParam])
-    await recordOutbound(conv, 'template', null, r, { template_name: tpl.name, params: [templateParam] })
-    return r.ok ? 1 : 0
+    const base = `${turnKey}:s${++sendSeq}`
+    let sent = 0
+    for (const [i, m] of msgs.entries()) {
+      const r = await runtimeSend(
+        { admin, whatsapp: deps.whatsapp, now },
+        {
+          conv,
+          userId: session.user_id,
+          kind: i === 0 ? kind : 'onboarding_message',
+          purpose: 'assistant',
+          initiation: turnInitiation,
+          idempotencyKey: `${base}:${i}`,
+          text: m.text,
+          ...(m.type === 'buttons' ? { buttons: m.buttons, ...(m.listLabel ? { listLabel: m.listLabel } : {}) } : {}),
+          ...(i === 0 ? { template: { kind, locale: waLocaleFor(locale), values: { name: templateParam, step: templateParam, link } } } : {}),
+          meta: { session_id: session.id },
+        },
+      )
+      if (i === 0 && r.usedTemplate) return wasDelivered(r) ? 1 : 0
+      if (r.outcome === 'skipped') break
+      if (wasDelivered(r)) sent++
+    }
+    return sent
   }
   /** Guarded session update: only from the state we read (replay-safe across workers). */
   async function patchSession(fromState: OnboardingStep, patch: Record<string, unknown>): Promise<boolean> {
@@ -280,6 +280,9 @@ function onboardingAgent(deps: OnboardingRuntimeDeps, session: SessionRow): Agen
     name: 'onboarding',
     persona: 'provider',
     async run(run, turn) {
+      turnKey = turn.kind === 'message' ? `${turn.messageId ?? run.runId}:ob` : `${session.id}:ob:${turn.kind}`
+      turnInitiation = turn.kind === 'expire' ? 'business' : 'reply'
+      sendSeq = 0
       const ms = toMachineSession(session)
 
       // ── start: the root run; the welcome ──────────────────────────────────
