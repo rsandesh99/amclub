@@ -19,6 +19,7 @@ import { getLocale } from 'next-intl/server'
 import { summarizeProviderOrders } from '@amclub/shared'
 import { isOnFor } from '@/lib/experiments'
 import { PartnerTodayV3 } from '@/components/partner-v3/PartnerTodayV3'
+import { WhatsAppOptInCard } from '@/components/settings/WhatsAppOptInCard'
 
 export default async function PartnerDashboardPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const t = await getTranslations('partner_home')
@@ -69,6 +70,8 @@ export default async function PartnerDashboardPage({ searchParams }: { searchPar
                 <Link href="/partner/onboarding"><Button className="mt-3">{t('complete_onboarding')}</Button></Link>
               </div>
             )}
+            {/* PRD_WHATSAPP W1 — one-time "Get order updates on WhatsApp" for accounts that never chose. */}
+            <WhatsAppOptInCard persona="provider" />
             {scoreCard && <ProviderScoreCard card={scoreCard} />}
             {(munshiOn || supportOn) && (
               <div className="flex flex-wrap gap-2">
@@ -122,6 +125,8 @@ export default async function PartnerDashboardPage({ searchParams }: { searchPar
           </div>
         ))}
       </div>
+
+      <WhatsAppOptInCard persona="provider" />
 
       {scoreCard && <ProviderScoreCard card={scoreCard} />}
 

@@ -6,7 +6,8 @@ import { getSessionUser } from '@/lib/auth/session'
 import { Badge } from '@/components/ui/badge'
 import { ProviderProfileForm, type ProviderProfileInitial } from '@/components/profile/ProviderProfileForm'
 import { AssistantProfileLink } from '@/components/assistant/AssistantProfileLink'
-import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
+import { WhatsAppSettingsSection } from '@/components/settings/WhatsAppSettingsSection'
+import { SettingsLinks } from '@/components/settings/SettingsLinks'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { PROVIDER_LANGUAGES, type ProviderLanguage } from '@amclub/shared'
 import { isOnFor } from '@/lib/experiments'
@@ -89,8 +90,11 @@ export default async function ProviderProfilePage() {
 
       {trustInitial && <ProviderTrustSettings initial={trustInitial} />}
 
+      {/* PRD_WHATSAPP W1 — WhatsApp consent per purpose, for everyone (not gated on AGENT_ENABLED). */}
+      <WhatsAppSettingsSection />
+      <SettingsLinks persona="provider" />
+
       {AGENT_ENABLED && <AssistantProfileLink href="/partner/ai" />}
-      {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}
     </div>
   )
 }

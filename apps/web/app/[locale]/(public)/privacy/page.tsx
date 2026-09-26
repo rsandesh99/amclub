@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { Link } from '@/i18n/navigation'
 import { LegalArticle } from '@/components/legal/LegalArticle'
+import { PrivacyRequestLink } from '@/components/settings/PrivacyRequestLink'
 
 export const revalidate = 86400
 
@@ -18,6 +19,10 @@ export default async function PrivacyPage() {
         <Link href="/grievance" className="font-medium text-primary underline underline-offset-2 hover:no-underline">
           {t('grievance_link')} →
         </Link>
+      </p>
+      {/* ADR-030 §6 — the rights above, exercised from the account (DPDP requests). */}
+      <p className="text-sm text-foreground-secondary">
+        <PrivacyRequestLink />
       </p>
     </LegalArticle>
   )

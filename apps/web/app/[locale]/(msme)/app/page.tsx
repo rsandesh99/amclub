@@ -16,6 +16,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { isOnFor } from '@/lib/experiments'
 import { RecentlyViewed } from '@/components/recent-v3/RecentlyViewed'
 import { HomeV3 } from '@/components/home-v3/HomeV3'
+import { WhatsAppOptInCard } from '@/components/settings/WhatsAppOptInCard'
 
 function getGreeting(): 'greeting_morning' | 'greeting_afternoon' | 'greeting_evening' {
   const hour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getHours()
@@ -66,6 +67,9 @@ export default async function MsmeHomePage() {
         </h1>
         <p className="mt-1 text-sm text-foreground-secondary">{t('subtitle')}</p>
       </div>
+
+      {/* PRD_WHATSAPP W1 — one-time "Get order updates on WhatsApp" for accounts that never chose. */}
+      <WhatsAppOptInCard persona="buyer" />
 
       {/* CMS hero slot (campaigns/announcements) — same banners as mobile home. */}
       <BannerSlot slot="hero" className="space-y-3 [&_.mx-auto]:px-0 [&_.mx-auto]:py-0" />

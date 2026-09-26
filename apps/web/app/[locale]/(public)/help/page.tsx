@@ -1,7 +1,8 @@
 import { getTranslations } from 'next-intl/server'
-import { Mail, MessageCircle, Clock, ShieldCheck, Wallet, RotateCcw, ArrowDownUp, Landmark } from 'lucide-react'
+import { Mail, MessageCircle, Clock, ShieldCheck, Wallet, RotateCcw, ArrowDownUp, Landmark, ShieldAlert, Lock } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { GRIEVANCE_OFFICER, GRIEVANCE_SLA, SUPPORT_CONTACT, whatsappHref } from '@/lib/legal/grievance'
+import { PrivacyRequestLink } from '@/components/settings/PrivacyRequestLink'
 
 // Static — support content rarely changes.
 export const revalidate = 86400
@@ -78,6 +79,28 @@ export default async function HelpPage() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Audit §5 item 8 — the one official WhatsApp number and what we never ask for. */}
+      <section className="flex gap-3 rounded-card border border-primary/30 bg-primary/5 p-5" data-testid="help-safety">
+        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold">{t('safety_title')}</h2>
+          <p className="mt-1 text-sm text-foreground-secondary">{t('safety_body')}</p>
+          <Link href="/help/whatsapp-safety" className="mt-1 inline-flex min-h-[44px] items-center text-sm font-medium text-primary hover:underline">
+            {t('safety_link')}
+          </Link>
+        </div>
+      </section>
+
+      {/* ADR-030 §6 — DPDP requests: see, correct or erase your data. */}
+      <section className="flex gap-3 rounded-card border border-border bg-surface p-5">
+        <Lock className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold">{t('privacy_title')}</h2>
+          <p className="mt-1 text-sm text-foreground-secondary">{t('privacy_body')}</p>
+          <PrivacyRequestLink className="mt-1 inline-flex min-h-[44px] items-center text-sm font-medium text-primary hover:underline" />
         </div>
       </section>
 

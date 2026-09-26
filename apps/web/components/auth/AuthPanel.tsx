@@ -8,6 +8,7 @@ import { OtpStep } from './OtpStep'
 import { GoogleButton } from './GoogleButton'
 import { Captcha, captchaEnabled } from './Captcha'
 import { ConsentCheckbox } from './ConsentCheckbox'
+import { WhatsAppOptInCheckbox } from '@/components/settings/WhatsAppOptInCheckbox'
 import { sendOtp, type OtpChannel, type SendOtpResult } from '@/lib/auth/otp-client'
 
 /** Sends an OTP for the given identifier, returning a coarse result. Injected
@@ -26,6 +27,12 @@ interface AuthPanelProps {
    * changes.
    */
   consent?: { checked: boolean; onChange: (checked: boolean) => void }
+  /**
+   * Signup / checkout (audit §5 item 1): the unticked WhatsApp box under the
+   * consent, shown while signing up with a phone (the account's phone is the
+   * WhatsApp number). Switching to email unticks it. It never gates the OTP.
+   */
+  whatsapp?: { checked: boolean; onChange: (checked: boolean) => void }
 }
 
 /**
@@ -37,7 +44,7 @@ interface AuthPanelProps {
  * panel owns the Turnstile token: it's single-use, so we remount the widget
  * (via `captchaNonce`) after every send to get a fresh one.
  */
-export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app', consent }: AuthPanelProps) {
+export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app', consent, whatsapp }: AuthPanelProps) {
   const t = useTranslations('auth')
   const tCommon = useTranslations('common')
   const [method, setMethod] = useState<'phone' | 'email'>('phone')
@@ -87,7 +94,10 @@ export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app', consent 
 
           <button
             type="button"
-            onClick={() => setMethod((m) => (m === 'phone' ? 'email' : 'phone'))}
+            onClick={() => {
+              if (method === 'phone') whatsapp?.onChange(false)
+              setMethod((m) => (m === 'phone' ? 'email' : 'phone'))
+            }}
             className="text-center text-sm text-primary underline underline-offset-2 hover:no-underline"
           >
             {method === 'phone' ? t('use_email_instead') : t('use_phone_instead')}
@@ -104,8 +114,11 @@ export function AuthPanel({ onAuthenticated, googleRedirectTo = '/app', consent 
           </div>
 
           {consent ? (
-            /* Signup: explicit, blocking consent (Phase 2b). */
-            <ConsentCheckbox checked={consent.checked} onChange={consent.onChange} />
+            /* Signup: explicit, blocking consent (Phase 2b); the optional WhatsApp box below it. */
+            <>
+              <ConsentCheckbox checked={consent.checked} onChange={consent.onChange} />
+              {whatsapp && method === 'phone' && <WhatsAppOptInCheckbox checked={whatsapp.checked} onChange={whatsapp.onChange} id="wa-optin-auth" />}
+            </>
           ) : (
           /* Login: DPDP consent + contract formation line (B2). */
           <p className="text-center text-xs leading-relaxed text-foreground-secondary">

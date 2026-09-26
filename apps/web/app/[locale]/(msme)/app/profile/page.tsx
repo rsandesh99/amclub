@@ -4,7 +4,8 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { MsmeProfileForm, type MsmeProfileInitial } from '@/components/profile/MsmeProfileForm'
 import { AssistantProfileLink } from '@/components/assistant/AssistantProfileLink'
-import { WhatsAppOptInSection } from '@/components/agent/WhatsAppOptInSection'
+import { WhatsAppSettingsSection } from '@/components/settings/WhatsAppSettingsSection'
+import { SettingsLinks } from '@/components/settings/SettingsLinks'
 import { AGENT_ENABLED } from '@/lib/flags'
 import { CorpusConsentSection } from '@/components/profile/CorpusConsentSection'
 import { corpusConsentOffered } from '@/lib/corpus'
@@ -74,8 +75,11 @@ export default async function MsmeProfilePage() {
       {/* E17 (gated D-UX2) — "Privacy choices": the analytics choice, changeable any time. */}
       {ANALYTICS_CONSENT_REQUIRED && <PrivacyChoices />}
 
+      {/* PRD_WHATSAPP W1 — WhatsApp consent per purpose, for everyone (not gated on AGENT_ENABLED). */}
+      <WhatsAppSettingsSection />
+      <SettingsLinks persona="buyer" />
+
       {AGENT_ENABLED && <AssistantProfileLink href="/app/ai" />}
-      {AGENT_ENABLED && <WhatsAppOptInSection businessNumber={process.env['NEXT_PUBLIC_WHATSAPP_NUMBER'] ?? null} />}
     </div>
   )
 }

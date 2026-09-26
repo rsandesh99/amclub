@@ -12,6 +12,7 @@
     "partner_home", "partner_v3", "partner_munshi", "score_card", "trust_settings",
     "listings", "addons", "bundles", "tier_editor", "content_translate", "quote_v3", "earnings",
     "pools", "mart", "profile", "msme_signup", "provider_signup", "onboarding_v3", "licences_v3", "plans",
-    "auth", "gateway", "landing", "help", "grievance", "legal_gate", "suspended", "coming_soon"
+    "auth", "gateway", "landing", "help", "grievance", "legal_gate", "suspended", "coming_soon",
+    "whatsapp", "notification_settings", "privacy_requests", "wa_safety"
   ]
 }

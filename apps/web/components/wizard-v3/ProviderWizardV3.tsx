@@ -19,6 +19,8 @@ import {
 } from '@amclub/shared'
 import { useRouter } from '@/i18n/navigation'
 import { acceptLegalDocs } from '@/lib/legal/client'
+import { WhatsAppOptInCheckbox } from '@/components/settings/WhatsAppOptInCheckbox'
+import { rememberWhatsAppOptIn, sendPendingWhatsAppOptIn } from '@/lib/api/settings-client'
 import { useAnalytics } from '@/components/providers/posthog'
 import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
 import { Button } from '@/components/ui/button'
@@ -89,6 +91,9 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
   const [busy, setBusy] = useState<'gstin' | 'bank' | 'upload' | 'submit' | null>(null)
   const [tried, setTried] = useState(false)
   const [accepted, setAccepted] = useState(false)
+  // Audit §5 item 1 — the unticked WhatsApp box beside the legal consent; sent once the profile (and users row) exists.
+  const [waOptIn, setWaOptInState] = useState(false)
+  const setWaOptIn = (on: boolean) => { setWaOptInState(on); rememberWhatsAppOptIn('signup', on) }
   const enteredAt = useRef<number>(Date.now())
   // FR-10.4 — "Finish on WhatsApp" only while the S1.6 onboarding agent is on for this provider's cohort.
   const [wa, setWa] = useState<{ number: string | null; optIn: boolean } | 'error' | null>(null)
@@ -247,6 +252,8 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
       analytics.capture('onboarding_step_completed', { device: 'web', step: 'review', ms: Date.now() - enteredAt.current })
       analytics.capture('onboarding_submitted', { device: 'web', category: draft.primaryCategory, path: 'gstin' })
       try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+      // Fire-and-forget (retried, never blocks the application): the WhatsApp choice.
+      if (waOptIn) void sendPendingWhatsAppOptIn()
       setView('done')
     } catch (e) {
       setError(e instanceof Error ? e.message : tp('error_generic'))
@@ -492,6 +499,7 @@ export function ProviderWizardV3({ initialName, initialStep, next = null, waEnab
               })}
             </span>
           </label>
+          <WhatsAppOptInCheckbox checked={waOptIn} onChange={setWaOptIn} id="ob-wa-optin" />
           {error && <p className="text-sm text-danger" role="alert">{error}</p>}
           <div className="flex gap-3">
             <Button variant="ghost" onClick={() => go('credentials_bank')}>{tCommon('back')}</Button>

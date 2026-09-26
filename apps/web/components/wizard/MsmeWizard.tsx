@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress'
 import { loadBuyerDraft } from '@/components/gateway/draft'
 import { ConsentCheckbox } from '@/components/auth/ConsentCheckbox'
 import { acceptLegalDocs } from '@/lib/legal/client'
+import { rememberWhatsAppOptIn, sendPendingWhatsAppOptIn } from '@/lib/api/settings-client'
 import { useAnalytics } from '@/components/providers/posthog'
 import { BUYER_LEGAL_DOCS, indianStateOptions, SUPPORTED_LOCALES, type SupportedLocale } from '@amclub/shared'
 import { LOCALE_LABELS } from '@/components/catalog/LanguageSwitcher'
@@ -74,6 +75,9 @@ export function MsmeWizard({ skipAuth, next = null }: MsmeWizardProps) {
   // → /signup?complete=1). Written to terms_acceptances right before the
   // profile POST, which refuses without it.
   const [consented, setConsented] = useState(false)
+  // Audit §5 item 1 — the unticked WhatsApp box on the phone sign-up; sent once the profile (and users row) exists.
+  const [waOptIn, setWaOptInState] = useState(false)
+  const setWaOptIn = (on: boolean) => { setWaOptInState(on); rememberWhatsAppOptIn('signup', on) }
 
   // Phase 8a — prefill from the gateway wizard's draft profile (biz → sector,
   // state → stateCode; both enums match 1:1). Effect, not initial state:
@@ -101,7 +105,11 @@ export function MsmeWizard({ skipAuth, next = null }: MsmeWizardProps) {
   async function handleAuthenticated() {
     const { isNew, destination } = await resolvePostAuthRoute()
     if (isNew) setStep('profile')
-    else router.push(next ?? destination)
+    else {
+      // An existing account ticked the WhatsApp box here: its users row exists, so send it now.
+      if (waOptIn) void sendPendingWhatsAppOptIn()
+      router.push(next ?? destination)
+    }
   }
 
   async function submitBusiness(skip = false) {
@@ -134,6 +142,8 @@ export function MsmeWizard({ skipAuth, next = null }: MsmeWizardProps) {
         const d = await res.json().catch(() => ({}))
         throw new Error(typeof d.error === 'string' ? d.error : t('save_failed'))
       }
+      // Fire-and-forget (retried, never blocks sign-up): the WhatsApp choice from the phone step.
+      if (waOptIn) void sendPendingWhatsAppOptIn()
       if (next) {
         analytics.capture('signup_intent_restored', {
           intent: next.startsWith('/app/checkout') ? 'checkout' : next.startsWith('/app/rfq') || next.startsWith('/app/requirements') ? 'requirement' : 'other',
@@ -162,6 +172,7 @@ export function MsmeWizard({ skipAuth, next = null }: MsmeWizardProps) {
             onAuthenticated={handleAuthenticated}
             googleRedirectTo={next ?? '/signup?complete=1'}
             consent={{ checked: consented, onChange: setConsented }}
+            whatsapp={{ checked: waOptIn, onChange: setWaOptIn }}
           />
         </>
       )}
